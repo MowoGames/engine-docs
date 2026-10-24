@@ -1,0 +1,172 @@
+---
+title: Platform services
+description: Desktop services in the Platform module - stored credentials, single instance, start at login, tray icons, URL schemes, shortcuts and file associations.
+order: 10
+sources:
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformCredentialStore.h
+  - Engine/Source/Runtime/Platform/Private/Windows/WindowsCredentialStore.cpp
+  - Engine/Source/Runtime/Platform/Private/Posix/PosixCredentialStore.cpp
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformSingleInstance.h
+  - Engine/Source/Runtime/Platform/Private/Windows/WindowsSingleInstance.cpp
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformAutoStart.h
+  - Engine/Source/Runtime/Platform/Private/Windows/WindowsAutoStart.cpp
+  - Engine/Source/Runtime/Platform/Private/Posix/PosixAutoStart.cpp
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformTrayIcon.h
+  - Engine/Source/Runtime/Platform/Private/Posix/PosixTrayIcon.cpp
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformShellIntegration.h
+  - Engine/Source/Runtime/Platform/Private/Windows/WindowsShellIntegration.cpp
+  - Engine/Source/Runtime/Platform/Private/Posix/PosixShellIntegration.cpp
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformFileAssociation.h
+  - Engine/Source/Runtime/Platform/Private/Windows/WindowsFileAssociation.cpp
+  - Engine/Source/Runtime/Platform/Private/Posix/PosixFileAssociation.cpp
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformDeviceInfo.h
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformPrerequisites.h
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformUserInterface.h
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformScreenReader.h
+  - Engine/Source/Runtime/Platform/Private/Posix/PosixScreenReader.cpp
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformWindowTracking.h
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformAtomicFile.h
+verifiedAt: 7f075daaf
+---
+
+Beside the `FPlatform` interfaces (see [Platform abstraction](/docs/programming/platform-abstraction/)), the Platform module has a set of static services for desktop apps that live next to a game: launchers, installers and tools. The Mowo Games Launcher uses most of them. Each is one header in `Platform/` with a Windows backend and a POSIX one, and each registers for the current user only, so nothing needs elevation.
+
+| Service | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| Credential store | Credential Manager | Protected file | Protected file |
+| Single instance | Yes | Yes | Yes |
+| Start at login | Yes | Yes | No |
+| Tray icon with your own menu | Yes | No | No |
+| URL schemes, shortcuts, uninstall entry | Yes | Yes | From the app bundle |
+| File associations | Yes | Yes | No |
+
+## Credential store
+
+`FPlatformCredentialStore` keeps small secrets, such as a refresh token, per user: <Source symbol="FPlatformCredentialStore" />
+
+```cpp wrap
+#include "Platform/PlatformCredentialStore.h"
+
+#include <string>
+
+const std::string token = "opaque-refresh-token";
+Mowo::FPlatformCredentialStore::Write("My Launcher", "refresh_token", token);
+
+std::string stored;
+if (Mowo::FPlatformCredentialStore::Read("My Launcher", "refresh_token", stored)) {
+	Mowo::FPlatformCredentialStore::Delete("My Launcher", "refresh_token");
+}
+```
+
+| Host | Storage | `IsProtectedByOS()` |
+| --- | --- | --- |
+| Windows | A generic credential in Credential Manager, protected per user by the OS | true |
+| Linux, macOS | A file under the user state folder's `Credentials/`, readable only by the user (`0600`), written atomically | false |
+
+Secrets are opaque bytes up to `MaxSecretBytes` (2048); a larger write is refused rather than truncated. Deleting a secret that does not exist succeeds. On macOS and Linux the secret is protected only by file permissions; Keychain and libsecret are not used. <Source path="Engine/Source/Runtime/Platform/Private/Posix/PosixCredentialStore.cpp" />
+
+## Single instance
+
+`FPlatformSingleInstance` lets an app refuse to run twice: <Source symbol="FPlatformSingleInstance" />
+
+```cpp wrap
+#include "Platform/PlatformSingleInstance.h"
+
+Mowo::FPlatformSingleInstance instance;
+if (!instance.Acquire("MyLauncher")) {
+	return;
+}
+```
+
+Windows holds a named mutex in the session namespace; POSIX holds an exclusive `flock` on a lock file in the user state folder. The OS releases both when the process dies, so a crash never leaves the name taken. The object releases it on destruction or `Release()`.
+
+Telling the running instance to show itself is up to you: for example, the first instance writes a loopback port to a file and a second start connects to it.
+
+## Start at login
+
+```cpp wrap
+#include "Platform/PlatformAutoStart.h"
+
+#include <string>
+
+const std::string exe = "C:/Program Files/MyLauncher/MyLauncher.exe";
+if (Mowo::FPlatformAutoStart::IsSupported()) {
+	Mowo::FPlatformAutoStart::Enable("My Launcher", exe, { "--hidden" });
+}
+```
+
+Windows writes the user's `Run` key in the registry; Linux writes an XDG autostart `.desktop` file. `IsSupported()` is false on macOS and Android. `IsEnabled` and `Disable` take the same name. <Source symbol="FPlatformAutoStart" />
+
+## Tray icon
+
+`FPlatformTrayIcon` puts an icon in the notification area and reports clicks instead of opening a native menu, so your app can draw its own popup at the icon. <Source symbol="FPlatformTrayIcon" />
+
+```cpp nocompile
+Mowo::FPlatformTrayIcon icon;
+icon.Create("My Launcher", rgba, 64, 64);
+
+Mowo::FPlatformTrayIcon::FClick click;
+while (icon.PollClick(click)) {
+}
+```
+
+- `Create` takes a tooltip and a straight-alpha RGBA8 image.
+- `PollClick` returns queued clicks: `Kind` is `Select` (left click or keyboard), `Menu` (right click) or `DoubleClick`. `Icon` is the icon's rectangle on the taskbar (empty when the icon sits in the overflow flyout; then `X` and `Y` are the anchor), and `WorkArea` is its monitor minus the taskbar, which tells you where the taskbar is. Coordinates are physical pixels.
+- Call `Create` and `PollClick` from the same thread; clicks arrive through that thread's message pump.
+
+`IsSupported()` is true only on Windows. Elsewhere, keep SDL's tray with its native menu.
+
+## URL schemes, shortcuts and uninstall entries
+
+`FPlatformShellIntegration` registers what an installer needs: <Source symbol="FPlatformShellIntegration" />
+
+| Call | Does |
+| --- | --- |
+| `RegisterUrlScheme(scheme, displayName, executable, args)` | Opens `scheme://…` links with your app; `"{url}"` in `args` is replaced by the link |
+| `IsUrlSchemeRegistered`, `UnregisterUrlScheme` | Check or remove it |
+| `CreateShortcut(location, name, executable, args, icon, description)` | A desktop or Start menu shortcut |
+| `RemoveShortcut` | Removes it |
+| `RegisterUninstallEntry(FPlatformUninstallEntry)`, `RemoveUninstallEntry` | The entry in Windows' installed-apps list; succeeds with nothing to write elsewhere |
+| `DeleteDirectoryAfterExit(directory)` | Lets an uninstaller remove the folder its own executable runs from |
+| `FindInstallerProduct`, `UninstallInstallerProduct` | Find and silently remove a Windows Installer package of an upgrade family |
+
+On Linux, a URL scheme is a `.desktop` handler plus a `mimeapps.list` default, and shortcuts are `.desktop` files. On macOS `InstallsAsAppBundle()` is true: the app's URL schemes come from its bundle's `Info.plist`, and there is no uninstall entry or shortcut to register, so an installer skips these calls. <Source path="Engine/Source/Runtime/Platform/Private/Posix/PosixShellIntegration.cpp" />
+
+## File associations
+
+`FPlatformFileAssociations` makes double-clicking a file open your app: <Source symbol="FPlatformFileAssociations" />
+
+```cpp wrap
+#include "Platform/PlatformFileAssociation.h"
+
+Mowo::FPlatformFileVerb open;
+open.Id = "open";
+open.Label = "Open";
+open.Executable = "C:/Program Files/MyTool/MyTool.exe";
+open.Args = { "%1" };
+
+Mowo::FPlatformFileAssociation association;
+association.Extension = ".mylevel";
+association.ProgId = "MyStudio.Level";
+association.Description = "My Tool Level";
+association.Verbs.push_back(open);
+
+if (Mowo::FPlatformFileAssociations::IsSupported()) {
+	Mowo::FPlatformFileAssociations::Register(association);
+}
+```
+
+The first verb is the double-click action, and the shell replaces `%1` with the clicked file. Windows writes the user's `Software\Classes`; Linux writes a MIME type (`application/x-<progid>`) and a `.desktop` entry. `IsSupported()` is false on macOS. `QueryDefaultExecutable(extension)` returns what currently opens the extension for this user. <Source path="Engine/Source/Runtime/Platform/Private/Posix/PosixFileAssociation.cpp" />
+
+## Other services
+
+| Header | Class | What it is for |
+| --- | --- | --- |
+| `PlatformDeviceInfo.h` | `FPlatformDeviceInfo` | Computer name, OS name and version, for logs, crash reports and user agents |
+| `PlatformPrerequisites.h` | `FPlatformPrerequisites` | Checks for and installs the Visual C++ 2015-2022 x64 runtime, the fallback when a package's app-local copy is missing |
+| `PlatformUserInterface.h` | `FPlatformUI` | Desktop preferences a UI toolkit should not hard-code: double-click speed, the shortcut key, high contrast, reduced motion |
+| `PlatformScreenReader.h` | `FPlatformScreenReader` | The bridge that exposes a UI's widgets to the OS screen reader; Windows only today (`IsSupported()`) |
+| `PlatformWindowTracking.h` | `FPlatformWindowTracking` | Follows another process's window so an overlay can sit on top of it |
+| `PlatformAtomicFile.h` | `FPlatformAtomicFile` | Replaces a file atomically and durably, for code below Core |
+
+The [Platform API page](/docs/api/platform/) lists every member.

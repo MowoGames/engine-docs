@@ -1,0 +1,2724 @@
+{
+	"name": "MowoEngine.VoiceChat",
+	"displayName": "VoiceChat",
+	"slug": "voicechat",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/VoiceChat/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceAdpcmCodec.h",
+			"include": "VoiceChat/FVoiceAdpcmCodec.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVoiceAdpcmCodec",
+					"namespace": "Mowo",
+					"bases": "public IVoiceCodec",
+					"line": 19,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kSampleRate",
+							"signature": "static constexpr uint32_t kSampleRate = 16000",
+							"static": true,
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "kFrameSamples",
+							"signature": "static constexpr uint32_t kFrameSamples = 320",
+							"static": true,
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "kHeaderBytes",
+							"signature": "static constexpr uint32_t kHeaderBytes = 3",
+							"static": true,
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "FVoiceAdpcmCodec",
+							"signature": "FVoiceAdpcmCodec() = default",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "~FVoiceAdpcmCodec",
+							"signature": "~FVoiceAdpcmCodec() override = default",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "GetCodecId",
+							"signature": "EVoiceCodecId GetCodecId() const override",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "const char* GetName() const override",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "GetSampleRate",
+							"signature": "uint32_t GetSampleRate() const override",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameSamples",
+							"signature": "uint32_t GetFrameSamples() const override",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "GetMaxEncodedBytes",
+							"signature": "uint32_t GetMaxEncodedBytes() const override",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "CreateDecoder",
+							"signature": "std::unique_ptr<IVoiceDecoder> CreateDecoder() const override",
+							"doc": "ADPCM is self-seeded per frame, so its decoder is stateless and only\nexists to satisfy the per-stream seam.",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "EncodeFrame",
+							"signature": "bool EncodeFrame(const int16_t* samples, uint32_t sampleCount, std::vector<uint8_t>& out) override",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "DecodeFrame",
+							"signature": "bool DecodeFrame(const uint8_t* data, size_t len, std::vector<int16_t>& out) override",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "BlockRms",
+							"signature": "static float BlockRms(const int16_t* samples, uint32_t sampleCount)",
+							"static": true,
+							"doc": "Root-mean-square of a block, normalised to 0..1. The open-mic gate and\nthe speaking indicator both key off it.",
+							"line": 53
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceChatSystem.h",
+			"include": "VoiceChat/FVoiceChatSystem.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EVoiceMode",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 72,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "PushToTalk",
+							"signature": "PushToTalk",
+							"line": 73
+						},
+						{
+							"kind": "enumerator",
+							"name": "OpenMic",
+							"signature": "OpenMic",
+							"line": 74
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "EVoiceCodecPreference",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "What the player asked for, which is not always what they get: Auto takes\nOpus when the binaries are there and ADPCM when they are not, and an\nexplicit Opus request on a build without them is refused rather than\nsilently downgraded.",
+					"line": 81,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Auto",
+							"signature": "Auto = 0",
+							"line": 82
+						},
+						{
+							"kind": "enumerator",
+							"name": "Opus",
+							"signature": "Opus = 1",
+							"line": 83
+						},
+						{
+							"kind": "enumerator",
+							"name": "Adpcm",
+							"signature": "Adpcm = 2",
+							"line": 84
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "EVoiceTransmitChannel",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Which audibility rule a transmission follows. Proximity is distance-culled\nand spatialized; Radio reaches every carrier and plays out of their radios.",
+					"line": 89,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Proximity",
+							"signature": "Proximity = 0",
+							"line": 90
+						},
+						{
+							"kind": "enumerator",
+							"name": "Radio",
+							"signature": "Radio = 1",
+							"line": 91
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FVoiceDeviceInfo",
+					"namespace": "Mowo",
+					"line": 94,
+					"members": [
+						{
+							"kind": "field",
+							"name": "id",
+							"signature": "std::string id",
+							"line": 95
+						},
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "std::string name",
+							"line": 96
+						},
+						{
+							"kind": "field",
+							"name": "isDefault",
+							"signature": "bool isDefault = false",
+							"line": 97
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FVoiceStats",
+					"namespace": "Mowo",
+					"line": 100,
+					"members": [
+						{
+							"kind": "field",
+							"name": "framesCaptured",
+							"signature": "uint64_t framesCaptured = 0",
+							"line": 101
+						},
+						{
+							"kind": "field",
+							"name": "framesGated",
+							"signature": "uint64_t framesGated = 0",
+							"line": 102
+						},
+						{
+							"kind": "field",
+							"name": "framesEncoded",
+							"signature": "uint64_t framesEncoded = 0",
+							"line": 103
+						},
+						{
+							"kind": "field",
+							"name": "framesSent",
+							"signature": "uint64_t framesSent = 0",
+							"line": 104
+						},
+						{
+							"kind": "field",
+							"name": "framesBudgetDropped",
+							"signature": "uint64_t framesBudgetDropped = 0",
+							"line": 105
+						},
+						{
+							"kind": "field",
+							"name": "bytesSent",
+							"signature": "uint64_t bytesSent = 0",
+							"line": 106
+						},
+						{
+							"kind": "field",
+							"name": "framesReceived",
+							"signature": "uint64_t framesReceived = 0",
+							"line": 107
+						},
+						{
+							"kind": "field",
+							"name": "framesRejected",
+							"signature": "uint64_t framesRejected = 0",
+							"line": 108
+						},
+						{
+							"kind": "field",
+							"name": "framesMuted",
+							"signature": "uint64_t framesMuted = 0",
+							"line": 109
+						},
+						{
+							"kind": "field",
+							"name": "framesRelayed",
+							"signature": "uint64_t framesRelayed = 0",
+							"line": 110
+						},
+						{
+							"kind": "field",
+							"name": "framesRelaySuppressed",
+							"signature": "uint64_t framesRelaySuppressed = 0",
+							"line": 111
+						},
+						{
+							"kind": "field",
+							"name": "framesPlayed",
+							"signature": "uint64_t framesPlayed = 0",
+							"line": 112
+						},
+						{
+							"kind": "field",
+							"name": "captureSamplesDropped",
+							"signature": "uint64_t captureSamplesDropped = 0",
+							"line": 113
+						},
+						{
+							"kind": "field",
+							"name": "framesDtx",
+							"signature": "uint64_t framesDtx = 0",
+							"line": 114
+						},
+						{
+							"kind": "field",
+							"name": "framesFecRecovered",
+							"signature": "uint64_t framesFecRecovered = 0",
+							"line": 115
+						},
+						{
+							"kind": "field",
+							"name": "framesRedundancyRecovered",
+							"signature": "uint64_t framesRedundancyRecovered = 0",
+							"line": 116
+						},
+						{
+							"kind": "field",
+							"name": "framesConcealed",
+							"signature": "uint64_t framesConcealed = 0",
+							"line": 117
+						},
+						{
+							"kind": "field",
+							"name": "framesCodecMismatch",
+							"signature": "uint64_t framesCodecMismatch = 0",
+							"line": 118
+						},
+						{
+							"kind": "field",
+							"name": "framesProcessed",
+							"signature": "uint64_t framesProcessed = 0",
+							"line": 119
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FVoiceSpeakerInfo",
+					"namespace": "Mowo",
+					"line": 122,
+					"members": [
+						{
+							"kind": "field",
+							"name": "peerId",
+							"signature": "uint32_t peerId = 0",
+							"line": 123
+						},
+						{
+							"kind": "field",
+							"name": "speaking",
+							"signature": "bool speaking = false",
+							"line": 124
+						},
+						{
+							"kind": "field",
+							"name": "positional",
+							"signature": "bool positional = false",
+							"line": 125
+						},
+						{
+							"kind": "field",
+							"name": "channel",
+							"signature": "EVoiceTransmitChannel channel = EVoiceTransmitChannel::Proximity",
+							"line": 126
+						},
+						{
+							"kind": "field",
+							"name": "distance",
+							"signature": "float distance = 0.0f",
+							"line": 127
+						},
+						{
+							"kind": "field",
+							"name": "audibility",
+							"signature": "float audibility = 0.0f",
+							"line": 128
+						},
+						{
+							"kind": "field",
+							"name": "occlusion",
+							"signature": "float occlusion = 0.0f",
+							"doc": "0 with nothing in the way, toward 1 as the walls take more of the voice\n(1 minus the occlusion gain) — a thin wall reads ~0.65, a thick one ~0.87.",
+							"line": 131
+						},
+						{
+							"kind": "field",
+							"name": "grain",
+							"signature": "float grain = 0.0f",
+							"doc": "The third layer: how far the voice has broken up, 0..1.",
+							"line": 133
+						},
+						{
+							"kind": "field",
+							"name": "cutoffHz",
+							"signature": "float cutoffHz = 20000.0f",
+							"doc": "The low-pass the voice plays through: the darker of the distance curve\nand the occlusion cutoff.",
+							"line": 136
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FVoiceRadioCarrier",
+					"namespace": "Mowo",
+					"doc": "Who carries a radio, and where it hangs.",
+					"line": 140,
+					"members": [
+						{
+							"kind": "field",
+							"name": "peerId",
+							"signature": "uint32_t peerId = 0",
+							"line": 141
+						},
+						{
+							"kind": "field",
+							"name": "position",
+							"signature": "Vec3 position = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 142
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FVoiceRadioEmitterInfo",
+					"namespace": "Mowo",
+					"doc": "One radio a transmission is currently coming out of, as this listener\nhears it.",
+					"line": 147,
+					"members": [
+						{
+							"kind": "field",
+							"name": "carrierPeerId",
+							"signature": "uint32_t carrierPeerId = 0",
+							"line": 148
+						},
+						{
+							"kind": "field",
+							"name": "position",
+							"signature": "Vec3 position = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 149
+						},
+						{
+							"kind": "field",
+							"name": "distance",
+							"signature": "float distance = 0.0f",
+							"line": 150
+						},
+						{
+							"kind": "field",
+							"name": "audibility",
+							"signature": "float audibility = 0.0f",
+							"line": 151
+						},
+						{
+							"kind": "field",
+							"name": "occlusion",
+							"signature": "float occlusion = 0.0f",
+							"line": 152
+						},
+						{
+							"kind": "field",
+							"name": "own",
+							"signature": "bool own = false",
+							"line": 153
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FVoiceChatSystem",
+					"namespace": "Mowo",
+					"bases": "public System",
+					"line": 156,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kSampleRate",
+							"signature": "static constexpr uint32_t kSampleRate = 16000",
+							"static": true,
+							"doc": "The ADPCM format, and the format the system runs at before a codec is\nchosen. GetSampleRate()/GetFrameSamples() report what is ACTUALLY\nrunning; anything sizing a buffer must ask those.",
+							"line": 161
+						},
+						{
+							"kind": "field",
+							"name": "kFrameSamples",
+							"signature": "static constexpr uint32_t kFrameSamples = 320",
+							"static": true,
+							"line": 162
+						},
+						{
+							"kind": "field",
+							"name": "kFrameSeconds",
+							"signature": "static constexpr float kFrameSeconds = static_cast<float>(kFrameSamples) / static_cast<float>(kSampleRate)",
+							"static": true,
+							"line": 163
+						},
+						{
+							"kind": "field",
+							"name": "kPacketHeaderBytes",
+							"signature": "static constexpr size_t kPacketHeaderBytes = 14",
+							"static": true,
+							"line": 164
+						},
+						{
+							"kind": "field",
+							"name": "kPacketMagic0",
+							"signature": "static constexpr uint8_t kPacketMagic0 = 'M'",
+							"static": true,
+							"line": 165
+						},
+						{
+							"kind": "field",
+							"name": "kPacketMagic1",
+							"signature": "static constexpr uint8_t kPacketMagic1 = 'V'",
+							"static": true,
+							"line": 166
+						},
+						{
+							"kind": "field",
+							"name": "kPacketVersion",
+							"signature": "static constexpr uint8_t kPacketVersion = 1",
+							"static": true,
+							"line": 167
+						},
+						{
+							"kind": "field",
+							"name": "kInvalidPeerId",
+							"signature": "static constexpr uint32_t kInvalidPeerId = 0xFFFFFFFFu",
+							"static": true,
+							"line": 168
+						},
+						{
+							"kind": "alias",
+							"name": "FPacketSink",
+							"signature": "using FPacketSink = std::function<void(uint32_t peerId, const uint8_t* data, size_t len, NetworkChannel channel)>",
+							"line": 170
+						},
+						{
+							"kind": "alias",
+							"name": "FPositionProvider",
+							"signature": "using FPositionProvider = std::function<bool(uint32_t peerId, Vec3& outPosition)>",
+							"line": 171
+						},
+						{
+							"kind": "alias",
+							"name": "FOcclusionProvider",
+							"signature": "using FOcclusionProvider = std::function<FSoundOcclusionResult(const Vec3& from, const Vec3& to)>",
+							"line": 172
+						},
+						{
+							"kind": "alias",
+							"name": "FSpeakingChangedHandler",
+							"signature": "using FSpeakingChangedHandler = std::function<void(const FVoiceSpeakerInfo& info)>",
+							"line": 173
+						},
+						{
+							"kind": "alias",
+							"name": "FRadioCarrierProvider",
+							"signature": "using FRadioCarrierProvider = std::function<void(std::vector<FVoiceRadioCarrier>& outCarriers)>",
+							"line": 174
+						},
+						{
+							"kind": "alias",
+							"name": "FRadioNoiseHandler",
+							"signature": "using FRadioNoiseHandler = std::function<void(const Vec3& position, float loudness)>",
+							"line": 175
+						},
+						{
+							"kind": "alias",
+							"name": "FGrainProvider",
+							"signature": "using FGrainProvider = std::function<float(uint32_t peerId, const Vec3& speaker, const Vec3& listener)>",
+							"doc": "Extra grain for a voice travelling from speaker to listener, 0..1 — the\ngame's own reason a voice breaks up (darkness, interference) on top of\ndistance. The larger of this and the distance grain applies.",
+							"line": 179
+						},
+						{
+							"kind": "field",
+							"name": "kMaxRadioEmitters",
+							"signature": "static constexpr uint32_t kMaxRadioEmitters = 4",
+							"static": true,
+							"doc": "A listener hears a transmission from its own radio plus at most this\nmany of the nearest others.",
+							"line": 183
+						},
+						{
+							"kind": "method",
+							"name": "FVoiceChatSystem",
+							"signature": "FVoiceChatSystem()",
+							"doc": "Both defined out of line: the capture device, the capture ring and the\nper-speaker playback source are all incomplete here.",
+							"line": 187
+						},
+						{
+							"kind": "method",
+							"name": "~FVoiceChatSystem",
+							"signature": "~FVoiceChatSystem() override",
+							"line": 188
+						},
+						{
+							"kind": "method",
+							"name": "FVoiceChatSystem",
+							"signature": "FVoiceChatSystem(const FVoiceChatSystem&) = delete",
+							"line": 190
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FVoiceChatSystem& operator=(const FVoiceChatSystem&) = delete",
+							"line": 191
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "void Initialize(World* world) override",
+							"line": 193
+						},
+						{
+							"kind": "method",
+							"name": "Update",
+							"signature": "void Update(float deltaTime) override",
+							"line": 194
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown() override",
+							"line": 195
+						},
+						{
+							"kind": "method",
+							"name": "GetSampleRate",
+							"signature": "uint32_t GetSampleRate() const",
+							"doc": "The active codec's format. Every frame the system captures, encodes,\nbuffers and plays is this many samples at this rate.",
+							"line": 199
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameSamples",
+							"signature": "uint32_t GetFrameSamples() const",
+							"line": 202
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameSeconds",
+							"signature": "float GetFrameSeconds() const",
+							"line": 205
+						},
+						{
+							"kind": "method",
+							"name": "EnumerateInputDevices",
+							"signature": "static std::vector<FVoiceDeviceInfo> EnumerateInputDevices()",
+							"static": true,
+							"doc": "Capture devices",
+							"line": 210
+						},
+						{
+							"kind": "method",
+							"name": "SetInputDevice",
+							"signature": "bool SetInputDevice(const std::string& deviceId)",
+							"line": 211
+						},
+						{
+							"kind": "method",
+							"name": "GetInputDevice",
+							"signature": "const std::string& GetInputDevice() const",
+							"line": 212
+						},
+						{
+							"kind": "method",
+							"name": "StartCapture",
+							"signature": "bool StartCapture()",
+							"line": 215
+						},
+						{
+							"kind": "method",
+							"name": "StopCapture",
+							"signature": "void StopCapture()",
+							"line": 216
+						},
+						{
+							"kind": "method",
+							"name": "IsCapturing",
+							"signature": "bool IsCapturing() const",
+							"line": 217
+						},
+						{
+							"kind": "method",
+							"name": "PushCapturedSamples",
+							"signature": "void PushCapturedSamples(const int16_t* samples, uint32_t count)",
+							"doc": "Feeds captured PCM into the lock-free ring. Called from the miniaudio\ncapture callback, which is why it neither allocates nor locks; also the\ninjection point for headless drivers and tests.",
+							"line": 224
+						},
+						{
+							"kind": "method",
+							"name": "SetMode",
+							"signature": "void SetMode(EVoiceMode mode)",
+							"doc": "Transmission",
+							"line": 227
+						},
+						{
+							"kind": "method",
+							"name": "GetMode",
+							"signature": "EVoiceMode GetMode() const",
+							"line": 230
+						},
+						{
+							"kind": "method",
+							"name": "SetPushToTalkHeld",
+							"signature": "void SetPushToTalkHeld(bool held)",
+							"line": 233
+						},
+						{
+							"kind": "method",
+							"name": "IsPushToTalkHeld",
+							"signature": "bool IsPushToTalkHeld() const",
+							"line": 236
+						},
+						{
+							"kind": "method",
+							"name": "SetRadioKeyHeld",
+							"signature": "void SetRadioKeyHeld(bool held)",
+							"line": 239
+						},
+						{
+							"kind": "method",
+							"name": "IsRadioKeyHeld",
+							"signature": "bool IsRadioKeyHeld() const",
+							"line": 242
+						},
+						{
+							"kind": "method",
+							"name": "GetActiveTransmitChannel",
+							"signature": "EVoiceTransmitChannel GetActiveTransmitChannel() const",
+							"line": 245
+						},
+						{
+							"kind": "method",
+							"name": "SetEnergyGate",
+							"signature": "void SetEnergyGate(float openRms, float closeRms, float holdSeconds)",
+							"doc": "Open-mic energy gate. Opens at openRms, closes only below closeRms\n(hysteresis against a voice sitting on the threshold) and holds open for\nholdSeconds after the last loud frame so word gaps do not chop.",
+							"line": 250
+						},
+						{
+							"kind": "method",
+							"name": "GetGateOpenRms",
+							"signature": "float GetGateOpenRms() const",
+							"line": 251
+						},
+						{
+							"kind": "method",
+							"name": "GetGateCloseRms",
+							"signature": "float GetGateCloseRms() const",
+							"line": 254
+						},
+						{
+							"kind": "method",
+							"name": "IsGateOpen",
+							"signature": "bool IsGateOpen() const",
+							"line": 257
+						},
+						{
+							"kind": "method",
+							"name": "GetLastCaptureRms",
+							"signature": "float GetLastCaptureRms() const",
+							"line": 260
+						},
+						{
+							"kind": "method",
+							"name": "SetInputGain",
+							"signature": "void SetInputGain(float gain)",
+							"doc": "Linear gain applied to captured samples before the gate reads their\nenergy, so raising it opens the gate on a quiet microphone instead of\nonly making an already-transmitting voice louder.",
+							"line": 267
+						},
+						{
+							"kind": "method",
+							"name": "GetInputGain",
+							"signature": "float GetInputGain() const",
+							"line": 268
+						},
+						{
+							"kind": "method",
+							"name": "SetProcessorSettings",
+							"signature": "void SetProcessorSettings(const FVoiceProcessorSettings& settings)",
+							"doc": "Echo cancellation, noise suppression and automatic gain, run on every\ncaptured frame before the gate reads it and before it is encoded — the\ngate then opens on speech rather than on a fan, and nobody hears\nthemselves come back out of someone's speakers.",
+							"line": 276
+						},
+						{
+							"kind": "method",
+							"name": "GetProcessorSettings",
+							"signature": "const FVoiceProcessorSettings& GetProcessorSettings() const",
+							"line": 277
+						},
+						{
+							"kind": "method",
+							"name": "GetProcessor",
+							"signature": "const FVoiceProcessor& GetProcessor() const",
+							"line": 280
+						},
+						{
+							"kind": "method",
+							"name": "SetSelfMuted",
+							"signature": "void SetSelfMuted(bool muted)",
+							"line": 284
+						},
+						{
+							"kind": "method",
+							"name": "IsSelfMuted",
+							"signature": "bool IsSelfMuted() const",
+							"line": 287
+						},
+						{
+							"kind": "method",
+							"name": "IsPlatformMuted",
+							"signature": "bool IsPlatformMuted() const",
+							"doc": "Mute and deafen mirrored from the player's platform voice client\n(Discord) while voice.FollowPlatformMute is on. Kept apart from the\nin-game mute so unmuting in Discord never unmutes a player who muted\nhere as well.",
+							"line": 295
+						},
+						{
+							"kind": "method",
+							"name": "IsPlatformDeafened",
+							"signature": "bool IsPlatformDeafened() const",
+							"line": 298
+						},
+						{
+							"kind": "method",
+							"name": "ApplyPlatformVoiceState",
+							"signature": "void ApplyPlatformVoiceState(bool muted, bool deafened)",
+							"line": 301
+						},
+						{
+							"kind": "method",
+							"name": "SetPeerMuted",
+							"signature": "void SetPeerMuted(uint32_t peerId, bool muted)",
+							"doc": "Playback. Muting takes effect on what is already in flight too: the\nspeaker's queued packets and the samples waiting in its playback stream\nare dropped, its radios close, and anything kept of its voice for\nmimicry is forgotten.",
+							"line": 307
+						},
+						{
+							"kind": "method",
+							"name": "IsPeerMuted",
+							"signature": "bool IsPeerMuted(uint32_t peerId) const",
+							"line": 308
+						},
+						{
+							"kind": "method",
+							"name": "SetPeerVolume",
+							"signature": "void SetPeerVolume(uint32_t peerId, float volume)",
+							"line": 309
+						},
+						{
+							"kind": "method",
+							"name": "GetPeerVolume",
+							"signature": "float GetPeerVolume(uint32_t peerId) const",
+							"line": 310
+						},
+						{
+							"kind": "method",
+							"name": "SetMasterVoiceVolume",
+							"signature": "void SetMasterVoiceVolume(float volume)",
+							"line": 311
+						},
+						{
+							"kind": "method",
+							"name": "GetMasterVoiceVolume",
+							"signature": "float GetMasterVoiceVolume() const",
+							"line": 312
+						},
+						{
+							"kind": "method",
+							"name": "SetHearingRange",
+							"signature": "void SetHearingRange(float minDistance, float maxDistance)",
+							"doc": "Proximity",
+							"line": 317
+						},
+						{
+							"kind": "method",
+							"name": "GetHearingMinDistance",
+							"signature": "float GetHearingMinDistance() const",
+							"line": 318
+						},
+						{
+							"kind": "method",
+							"name": "GetHearingMaxDistance",
+							"signature": "float GetHearingMaxDistance() const",
+							"line": 321
+						},
+						{
+							"kind": "method",
+							"name": "SetRolloff",
+							"signature": "void SetRolloff(float rolloff)",
+							"line": 324
+						},
+						{
+							"kind": "method",
+							"name": "GetRolloff",
+							"signature": "float GetRolloff() const",
+							"line": 325
+						},
+						{
+							"kind": "method",
+							"name": "SetProximityHysteresis",
+							"signature": "void SetProximityHysteresis(float fraction)",
+							"doc": "Fraction of MaxDistance added to the LEAVE threshold. 0.15 means a peer\nenters the relay set at MaxDistance and only leaves past 1.15x it.",
+							"line": 331
+						},
+						{
+							"kind": "method",
+							"name": "GetProximityHysteresis",
+							"signature": "float GetProximityHysteresis() const",
+							"line": 332
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateAttenuation",
+							"signature": "float EvaluateAttenuation(float distance) const",
+							"doc": "Gain a listener at `distance` hears a proximity speaker at, 0..1. The\nsame inverse-with-rolloff curve miniaudio's default attenuation applies,\nevaluated on the CPU so the relay decision and the test can agree with\nwhat the mixer does.",
+							"line": 340
+						},
+						{
+							"kind": "method",
+							"name": "IsAudibleTo",
+							"signature": "bool IsAudibleTo(uint32_t speakerPeerId, uint32_t listenerPeerId, EVoiceTransmitChannel channel)",
+							"doc": "True when `listenerPeerId` is inside the speaker's hearing range,\nhysteresis included. Radio always returns true. Unresolvable positions\nfail OPEN — a missing pawn must not silence a player.",
+							"line": 345
+						},
+						{
+							"kind": "method",
+							"name": "SetDistanceLowPass",
+							"signature": "void SetDistanceLowPass(float nearHz, float farHz)",
+							"doc": "Three layers, each a different cue, so a listener can tell a far voice\nfrom a walled one: distance takes level and top end (the low-pass slides\nfrom nearHz at MinDistance to farHz at MaxDistance, interpolated in log\nfrequency), occlusion takes level and top end by the wall's material,\nand grain takes fidelity — past startFraction of the hearing range the\nvoice breaks up, reaching maxAmount at its edge. A nearHz at or above\n19999 Hz with an equal farHz switches the distance low-pass off; a\nmaxAmount of 0 switches grain off.",
+							"line": 355
+						},
+						{
+							"kind": "method",
+							"name": "GetDistanceLowPassNear",
+							"signature": "float GetDistanceLowPassNear() const",
+							"line": 356
+						},
+						{
+							"kind": "method",
+							"name": "GetDistanceLowPassFar",
+							"signature": "float GetDistanceLowPassFar() const",
+							"line": 359
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateDistanceCutoff",
+							"signature": "float EvaluateDistanceCutoff(float distance) const",
+							"line": 362
+						},
+						{
+							"kind": "method",
+							"name": "SetGrainRange",
+							"signature": "void SetGrainRange(float startFraction, float maxAmount)",
+							"line": 364
+						},
+						{
+							"kind": "method",
+							"name": "GetGrainStart",
+							"signature": "float GetGrainStart() const",
+							"line": 365
+						},
+						{
+							"kind": "method",
+							"name": "GetGrainMax",
+							"signature": "float GetGrainMax() const",
+							"line": 368
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateDistanceGrain",
+							"signature": "float EvaluateDistanceGrain(float distance) const",
+							"line": 371
+						},
+						{
+							"kind": "method",
+							"name": "SetGrainProvider",
+							"signature": "void SetGrainProvider(FGrainProvider provider)",
+							"line": 372
+						},
+						{
+							"kind": "method",
+							"name": "SetOcclusionEnabled",
+							"signature": "void SetOcclusionEnabled(bool enabled)",
+							"doc": "Occlusion",
+							"line": 377
+						},
+						{
+							"kind": "method",
+							"name": "IsOcclusionEnabled",
+							"signature": "bool IsOcclusionEnabled() const",
+							"line": 380
+						},
+						{
+							"kind": "method",
+							"name": "SetRadioCarrierProvider",
+							"signature": "void SetRadioCarrierProvider(FRadioCarrierProvider provider)",
+							"doc": "Radio speakers. The provider lists every carrier and where their radio\nhangs; without one the only radio is the listener's own, at the listener.\nAnother carrier's radio is audible out to the speaker range.",
+							"line": 386
+						},
+						{
+							"kind": "method",
+							"name": "SetRadioNoiseHandler",
+							"signature": "void SetRadioNoiseHandler(FRadioNoiseHandler handler)",
+							"line": 389
+						},
+						{
+							"kind": "method",
+							"name": "SetRadioSpeakerRange",
+							"signature": "void SetRadioSpeakerRange(float meters)",
+							"line": 392
+						},
+						{
+							"kind": "method",
+							"name": "GetRadioSpeakerRange",
+							"signature": "float GetRadioSpeakerRange() const",
+							"line": 393
+						},
+						{
+							"kind": "method",
+							"name": "SetRadioVolume",
+							"signature": "void SetRadioVolume(float volume)",
+							"line": 396
+						},
+						{
+							"kind": "method",
+							"name": "GetRadioVolume",
+							"signature": "float GetRadioVolume() const",
+							"line": 397
+						},
+						{
+							"kind": "method",
+							"name": "SetRadioBandPassEnabled",
+							"signature": "void SetRadioBandPassEnabled(bool enabled)",
+							"line": 400
+						},
+						{
+							"kind": "method",
+							"name": "IsRadioBandPassEnabled",
+							"signature": "bool IsRadioBandPassEnabled() const",
+							"line": 403
+						},
+						{
+							"kind": "method",
+							"name": "GetRadioEmitters",
+							"signature": "std::vector<FVoiceRadioEmitterInfo> GetRadioEmitters(uint32_t speakerPeerId) const",
+							"line": 406
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateRadioAttenuation",
+							"signature": "float EvaluateRadioAttenuation(float distance) const",
+							"doc": "Gain a listener at `distance` hears another carrier's radio at: full out\nto a metre, the inverse law to the speaker range, silence past it.",
+							"line": 410
+						},
+						{
+							"kind": "method",
+							"name": "SetOcclusionSmoothing",
+							"signature": "void SetOcclusionSmoothing(float ratePerSecond)",
+							"doc": "How fast a voice glides onto a new occlusion target, per second. Zero or\nless means the shared rate from the occlusion table.",
+							"line": 414
+						},
+						{
+							"kind": "method",
+							"name": "GetOcclusionSmoothing",
+							"signature": "float GetOcclusionSmoothing() const",
+							"line": 417
+						},
+						{
+							"kind": "method",
+							"name": "SetBytesPerSecondBudget",
+							"signature": "void SetBytesPerSecondBudget(uint32_t bytesPerSecond)",
+							"doc": "Bandwidth. A hard per-client cap in bytes/second over the outgoing voice\nstream; frames over budget are DROPPED, never queued — a queued voice\nframe is a stale voice frame.",
+							"line": 422
+						},
+						{
+							"kind": "method",
+							"name": "GetBytesPerSecondBudget",
+							"signature": "uint32_t GetBytesPerSecondBudget() const",
+							"line": 423
+						},
+						{
+							"kind": "method",
+							"name": "GetByteTokens",
+							"signature": "float GetByteTokens() const",
+							"line": 426
+						},
+						{
+							"kind": "method",
+							"name": "SetLocalPeerId",
+							"signature": "void SetLocalPeerId(uint32_t peerId)",
+							"doc": "Networking",
+							"line": 431
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalPeerId",
+							"signature": "uint32_t GetLocalPeerId() const",
+							"line": 434
+						},
+						{
+							"kind": "method",
+							"name": "SetIsServer",
+							"signature": "void SetIsServer(bool isServer)",
+							"line": 437
+						},
+						{
+							"kind": "method",
+							"name": "IsServer",
+							"signature": "bool IsServer() const",
+							"line": 440
+						},
+						{
+							"kind": "method",
+							"name": "RegisterPeer",
+							"signature": "void RegisterPeer(uint32_t peerId)",
+							"line": 443
+						},
+						{
+							"kind": "method",
+							"name": "UnregisterPeer",
+							"signature": "void UnregisterPeer(uint32_t peerId)",
+							"line": 444
+						},
+						{
+							"kind": "method",
+							"name": "GetPeerIds",
+							"signature": "std::vector<uint32_t> GetPeerIds() const",
+							"line": 445
+						},
+						{
+							"kind": "method",
+							"name": "SetPacketSink",
+							"signature": "void SetPacketSink(FPacketSink sink)",
+							"line": 447
+						},
+						{
+							"kind": "method",
+							"name": "ClearPacketSink",
+							"signature": "void ClearPacketSink()",
+							"line": 450
+						},
+						{
+							"kind": "alias",
+							"name": "FPlaybackTap",
+							"signature": "using FPlaybackTap = std::function<void(uint32_t peerId, const int16_t* samples, uint32_t sampleCount, bool realFrame)>",
+							"doc": "Every frame handed to a speaker's playback stream, after decode and\nloss recovery. Tools and tests listen here; it runs whether or not an\naudio device exists.",
+							"line": 457
+						},
+						{
+							"kind": "method",
+							"name": "SetPlaybackTap",
+							"signature": "void SetPlaybackTap(FPlaybackTap tap)",
+							"line": 458
+						},
+						{
+							"kind": "method",
+							"name": "SetPlaybackTap",
+							"signature": "void SetPlaybackTap(const char* owner, FPlaybackTap tap)",
+							"doc": "Keyed taps for features that live with the scene (auto-subtitles): one\nper owner, re-registering replaces, null removes. They hear what the\nplayer hears — a muted or deafened speaker is silence here too.",
+							"line": 465
+						},
+						{
+							"kind": "method",
+							"name": "SetMimicryConsent",
+							"signature": "void SetMimicryConsent(bool consent)",
+							"doc": "Mimicry. The local player's consent to have their voice kept as short\nfragments by whoever hosts the creature (voice.MimicryConsent, on by\ndefault — the opt-out lives on the player's settings screen), stamped on\nevery frame this client sends. Capture is the receiving side's choice\n(voice.MimicryCapture, off by default): only a host that runs a mimic\nturns it on, and it keeps only consenting, unmuted talkers.",
+							"line": 473
+						},
+						{
+							"kind": "method",
+							"name": "GetMimicryConsent",
+							"signature": "bool GetMimicryConsent() const",
+							"line": 476
+						},
+						{
+							"kind": "method",
+							"name": "SetFragmentCaptureEnabled",
+							"signature": "void SetFragmentCaptureEnabled(bool enabled)",
+							"line": 479
+						},
+						{
+							"kind": "method",
+							"name": "IsFragmentCaptureEnabled",
+							"signature": "bool IsFragmentCaptureEnabled() const",
+							"line": 480
+						},
+						{
+							"kind": "method",
+							"name": "HasPeerMimicryConsent",
+							"signature": "bool HasPeerMimicryConsent(uint32_t peerId) const",
+							"line": 483
+						},
+						{
+							"kind": "method",
+							"name": "GetFragmentBuffer",
+							"signature": "FVoiceFragmentBuffer& GetFragmentBuffer()",
+							"line": 484
+						},
+						{
+							"kind": "method",
+							"name": "GetFragmentBuffer",
+							"signature": "const FVoiceFragmentBuffer& GetFragmentBuffer() const",
+							"line": 487
+						},
+						{
+							"kind": "method",
+							"name": "SetPositionProvider",
+							"signature": "void SetPositionProvider(FPositionProvider provider)",
+							"line": 490
+						},
+						{
+							"kind": "method",
+							"name": "SetOcclusionProvider",
+							"signature": "void SetOcclusionProvider(FOcclusionProvider provider)",
+							"line": 493
+						},
+						{
+							"kind": "method",
+							"name": "OcclusionLayerMask",
+							"signature": "static uint32_t OcclusionLayerMask()",
+							"static": true,
+							"doc": "The layers a voice occlusion ray may stop on — FSoundOcclusion's, so a\nvoice and a world sound stop on the same bodies.",
+							"line": 499
+						},
+						{
+							"kind": "method",
+							"name": "SetListenerPosition",
+							"signature": "void SetListenerPosition(const Vec3& position)",
+							"line": 500
+						},
+						{
+							"kind": "method",
+							"name": "HandleIncomingPacket",
+							"signature": "bool HandleIncomingPacket(uint32_t senderPeerId, const uint8_t* data, size_t len)",
+							"doc": "Decodes one voice packet. On a server it also relays the frame to the\npeers that can hear it. Returns false when the packet was refused.",
+							"line": 504
+						},
+						{
+							"kind": "method",
+							"name": "OnIncomingPacket",
+							"signature": "bool OnIncomingPacket(const NetworkEvent& evt)",
+							"doc": "The NetworkManager data-observer entry point — true means consumed.",
+							"line": 507
+						},
+						{
+							"kind": "method",
+							"name": "IsSpeaking",
+							"signature": "bool IsSpeaking(uint32_t peerId) const",
+							"doc": "Speaking state",
+							"line": 510
+						},
+						{
+							"kind": "method",
+							"name": "IsLocalSpeaking",
+							"signature": "bool IsLocalSpeaking() const",
+							"line": 511
+						},
+						{
+							"kind": "method",
+							"name": "IsAnyoneSpeakingNearby",
+							"signature": "bool IsAnyoneSpeakingNearby() const",
+							"line": 514
+						},
+						{
+							"kind": "method",
+							"name": "TryGetSpeakerInfo",
+							"signature": "bool TryGetSpeakerInfo(uint32_t peerId, FVoiceSpeakerInfo& out) const",
+							"line": 515
+						},
+						{
+							"kind": "method",
+							"name": "GetSpeakers",
+							"signature": "std::vector<FVoiceSpeakerInfo> GetSpeakers() const",
+							"line": 516
+						},
+						{
+							"kind": "method",
+							"name": "AddSpeakingChangedHandler",
+							"signature": "int32_t AddSpeakingChangedHandler(FSpeakingChangedHandler handler)",
+							"line": 518
+						},
+						{
+							"kind": "method",
+							"name": "RemoveSpeakingChangedHandler",
+							"signature": "void RemoveSpeakingChangedHandler(int32_t handle)",
+							"line": 519
+						},
+						{
+							"kind": "method",
+							"name": "ClearSpeakingChangedHandlers",
+							"signature": "void ClearSpeakingChangedHandlers()",
+							"line": 520
+						},
+						{
+							"kind": "method",
+							"name": "SetSpeakingChangedHandler",
+							"signature": "void SetSpeakingChangedHandler(const char* owner, FSpeakingChangedHandler handler)",
+							"doc": "Keyed registration for scene-lifetime handlers: re-registering the\nsame owner REPLACES its handler instead of appending, so idempotent\nattach passes (Scene wiring, plugin hooks) never accumulate\nduplicates and never need a Clear whose ordering could drop another\nowner's hook — the bug shape that forced WireVoiceChat to run\nbefore the modular attach pass.",
+							"line": 528
+						},
+						{
+							"kind": "method",
+							"name": "GetCodec",
+							"signature": "IVoiceCodec* GetCodec() const",
+							"doc": "Codec",
+							"line": 531
+						},
+						{
+							"kind": "method",
+							"name": "SetCodec",
+							"signature": "void SetCodec(std::unique_ptr<IVoiceCodec> codec)",
+							"line": 534
+						},
+						{
+							"kind": "method",
+							"name": "SelectCodec",
+							"signature": "bool SelectCodec(EVoiceCodecPreference preference)",
+							"doc": "Installs the codec the preference names. False when the preference\nnamed Opus and this build has no Opus — the caller learns the request\nwas refused instead of finding out from the pitch of the session.",
+							"line": 539
+						},
+						{
+							"kind": "method",
+							"name": "GetCodecPreference",
+							"signature": "EVoiceCodecPreference GetCodecPreference() const",
+							"line": 540
+						},
+						{
+							"kind": "method",
+							"name": "ParseCodecPreference",
+							"signature": "static EVoiceCodecPreference ParseCodecPreference(const std::string& name)",
+							"static": true,
+							"doc": "\"auto\" / \"opus\" / \"adpcm\" — the spelling the voice.Codec cvar and the\nsettings screen both use. Anything else reads as Auto.",
+							"line": 546
+						},
+						{
+							"kind": "method",
+							"name": "CodecPreferenceName",
+							"signature": "static const char* CodecPreferenceName(EVoiceCodecPreference preference)",
+							"static": true,
+							"line": 547
+						},
+						{
+							"kind": "method",
+							"name": "GetStats",
+							"signature": "const FVoiceStats& GetStats() const",
+							"line": 549
+						},
+						{
+							"kind": "method",
+							"name": "ResetStats",
+							"signature": "void ResetStats()",
+							"line": 552
+						},
+						{
+							"kind": "method",
+							"name": "FindJitterBuffer",
+							"signature": "const FVoiceJitterBuffer* FindJitterBuffer(uint32_t peerId) const",
+							"line": 556
+						},
+						{
+							"kind": "method",
+							"name": "GetQueuedCaptureSamples",
+							"signature": "uint32_t GetQueuedCaptureSamples() const",
+							"line": 557
+						},
+						{
+							"kind": "method",
+							"name": "SetJitterDepth",
+							"signature": "void SetJitterDepth(uint32_t targetFrames, uint32_t maxFrames)",
+							"doc": "Jitter tuning — target lead in frames and the hard queue ceiling.",
+							"line": 560
+						},
+						{
+							"kind": "method",
+							"name": "GetActive",
+							"signature": "static FVoiceChatSystem* GetActive()",
+							"static": true,
+							"line": 562
+						},
+						{
+							"kind": "method",
+							"name": "WritePacketHeader",
+							"signature": "static void WritePacketHeader(uint8_t* out, EVoiceCodecId codec, EVoiceTransmitChannel channel, uint32_t speakerPeerId, uint16_t sequence, uint16_t payloadLen, uint8_t flags = 0)",
+							"static": true,
+							"doc": "Header writer/reader, exposed so a test can build a malformed packet\nwithout duplicating the layout.",
+							"line": 566
+						},
+						{
+							"kind": "field",
+							"name": "kFlagMimicryConsent",
+							"signature": "static constexpr uint8_t kFlagMimicryConsent = 0x01",
+							"static": true,
+							"doc": "Header byte 5. The talker's own client sets it on every frame, so a\nchange of mind takes effect on the next 20 ms, and the relay copies it\nthrough untouched.",
+							"line": 571
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceFragmentBuffer.h",
+			"include": "VoiceChat/FVoiceFragmentBuffer.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVoiceFragmentBuffer",
+					"namespace": "Mowo",
+					"doc": "FVoiceFragmentBuffer — short clips of what other players actually said, for\na creature that answers in their voices. It keeps utterances, not a stream:\na run of voiced frames becomes one fragment when the talker pauses, a run\ntoo short to be a word is thrown away, and each player keeps only their\nlast few.\n\nWhat it promises, because this is the one place voice is kept at all:\n- memory only: nothing here writes, logs or uploads a sample;\n- only from a talker whose own client stamped consent on the frame — a\nframe without it drops everything held for that talker at once;\n- never from a muted talker, and never while the listener is deafened\n(FVoiceChatSystem gates both before a frame gets here);\n- gone with the session: Shutdown, a peer leaving and a mute all forget.",
+					"line": 26,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Configure",
+							"signature": "void Configure(uint32_t sampleRate, float minFragmentSeconds = 0.4f, float maxFragmentSeconds = 3.0f, uint32_t maxFragmentsPerPeer = 6)",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "PushFrame",
+							"signature": "void PushFrame(uint32_t peerId, const int16_t* samples, uint32_t count, bool realFrame)",
+							"doc": "One playout frame of a talker. `realFrame` is false for concealment and\nsilence the jitter buffer made up; those end an utterance.",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "ForgetPeer",
+							"signature": "void ForgetPeer(uint32_t peerId)",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "GetFragmentCount",
+							"signature": "uint32_t GetFragmentCount(uint32_t peerId) const",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "GetTotalFragmentCount",
+							"signature": "uint32_t GetTotalFragmentCount() const",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "GetHeldSamples",
+							"signature": "uint64_t GetHeldSamples() const",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "TakeNewestFragment",
+							"signature": "bool TakeNewestFragment(uint32_t peerId, std::vector<int16_t>& out)",
+							"doc": "Hands the newest finished fragment over and removes it, so the same clip\nis not replayed until the talker says something new.",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "GetSampleRate",
+							"signature": "uint32_t GetSampleRate() const",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "kVoicedRms",
+							"signature": "static constexpr float kVoicedRms = 0.01f",
+							"static": true,
+							"doc": "A frame quieter than this RMS (of full scale) counts as a pause.",
+							"line": 50
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceGrainFilter.h",
+			"include": "VoiceChat/FVoiceGrainFilter.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVoiceGrainFilter",
+					"namespace": "Mowo",
+					"doc": "FVoiceGrainFilter — the third layer of proximity voice, after distance and\nwalls: the voice breaking up as it reaches the edge of what carries. Lower\nfidelity rather than lower level, so a far voice is still there but the\nwords smear: the sample rate is held down (sample-and-hold), the word length\nis cut, and a crackle rides the voice's own envelope so silence stays silent.\n\nAmount 0 is a bit-exact copy, so a near voice pays nothing for the layer.\nDeterministic for a given seed and input: the noise is a xorshift, not the\nC library's generator, so the same frames come out on every machine.\n\nStateful per stream, like the radio filter.",
+					"line": 21,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Configure",
+							"signature": "void Configure(uint32_t sampleRate, uint32_t seed)",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset()",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Process",
+							"signature": "void Process(const int16_t* in, int16_t* out, uint32_t count, float amount)",
+							"doc": "`in` and `out` may be the same buffer. `amount` is 0..1.",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "GetSampleRate",
+							"signature": "uint32_t GetSampleRate() const",
+							"line": 29
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceJitterBuffer.h",
+			"include": "VoiceChat/FVoiceJitterBuffer.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FVoiceJitterStats",
+					"namespace": "Mowo",
+					"line": 32,
+					"members": [
+						{
+							"kind": "field",
+							"name": "pushed",
+							"signature": "uint32_t pushed = 0",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "popped",
+							"signature": "uint32_t popped = 0",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "duplicates",
+							"signature": "uint32_t duplicates = 0",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "tooLate",
+							"signature": "uint32_t tooLate = 0",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "overflowed",
+							"signature": "uint32_t overflowed = 0",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "concealed",
+							"signature": "uint32_t concealed = 0",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "reordered",
+							"signature": "uint32_t reordered = 0",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "fecRecovered",
+							"signature": "uint32_t fecRecovered = 0",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "redundancyRecovered",
+							"signature": "uint32_t redundancyRecovered = 0",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "codecConcealed",
+							"signature": "uint32_t codecConcealed = 0",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "decodeFailed",
+							"signature": "uint32_t decodeFailed = 0",
+							"line": 43
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FVoiceJitterBuffer",
+					"namespace": "Mowo",
+					"line": 46,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FVoiceJitterBuffer",
+							"signature": "FVoiceJitterBuffer() = default",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "Configure",
+							"signature": "void Configure(uint32_t frameSamples, uint32_t targetFrames, uint32_t maxFrames)",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset()",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameSamples",
+							"signature": "uint32_t GetFrameSamples() const",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "GetTargetFrames",
+							"signature": "uint32_t GetTargetFrames() const",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "GetMaxFrames",
+							"signature": "uint32_t GetMaxFrames() const",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "GetQueuedFrames",
+							"signature": "size_t GetQueuedFrames() const",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "IsPrimed",
+							"signature": "bool IsPrimed() const",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "Push",
+							"signature": "bool Push(uint16_t sequence, const int16_t* samples, uint32_t sampleCount)",
+							"doc": "Inserts one raw decoded frame at its sequence position. False when the\nframe was refused — a duplicate, a frame older than what has already\nplayed, or an overflow past maxFrames (the oldest is dropped to make room).",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "PushPacket",
+							"signature": "bool PushPacket(uint16_t sequence, const uint8_t* payload, size_t len)",
+							"doc": "Inserts one encoded packet, decoded later by Pop(decoder, ...).",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "Pop",
+							"signature": "bool Pop(std::vector<int16_t>& out)",
+							"doc": "Fills `out` with the next raw frame. True when a real frame was\ndelivered, false when the buffer concealed (hole or starvation) — `out`\nis still filled in both cases, so the playback path never has to branch.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "Pop",
+							"signature": "bool Pop(IVoiceDecoder& decoder, std::vector<int16_t>& out)",
+							"doc": "Decodes the next packet through `decoder`. A hole is rebuilt from the\npacket after it (FEC for one frame, deep redundancy further back) when\nthat packet is already here, and concealed by the decoder otherwise.\nTrue for a real or rebuilt frame, false for a concealed one.",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "GetStats",
+							"signature": "const FVoiceJitterStats& GetStats() const",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "ResetStats",
+							"signature": "void ResetStats()",
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "SequenceDelta",
+							"signature": "static int32_t SequenceDelta(uint16_t a, uint16_t b)",
+							"static": true,
+							"doc": "Sequence distance that treats the 16-bit counter as circular, so a\nwrap does not read as a 65000-frame jump backwards.",
+							"line": 97
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceOpusCodec.h",
+			"include": "VoiceChat/FVoiceOpusCodec.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVoiceOpusCodec",
+					"namespace": "Mowo",
+					"bases": "public IVoiceCodec",
+					"line": 32,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kSampleRate",
+							"signature": "static constexpr uint32_t kSampleRate = 48000",
+							"static": true,
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "kFrameSamples",
+							"signature": "static constexpr uint32_t kFrameSamples = 960",
+							"static": true,
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "kDefaultBitrate",
+							"signature": "static constexpr uint32_t kDefaultBitrate = 32000",
+							"static": true,
+							"doc": "32 kbps, not the 24 speech alone would need: deep redundancy takes its\nshare out of the same budget, and at 24 kbps libopus decides it cannot\nafford two DRED chunks and sends none at all.",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "kDefaultRedundancyMs",
+							"signature": "static constexpr uint32_t kDefaultRedundancyMs = 500",
+							"static": true,
+							"doc": "Half a second of deep redundancy covers the loss bursts a relayed session\nactually sees (a Wi-Fi retry storm, a route change) for a few kbps.",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "kMaxEncodedBytes",
+							"signature": "static constexpr uint32_t kMaxEncodedBytes = 400",
+							"static": true,
+							"doc": "The ceiling handed to opus_encode, so a VBR peak can never write past\nthe reserve or overflow the wire header's 16-bit payload length. 400\nbytes is Opus's own recommendation for a 20 ms mono packet.",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "kDtxMaxBytes",
+							"signature": "static constexpr size_t kDtxMaxBytes = 2",
+							"static": true,
+							"doc": "Opus emits one or two bytes for a frame it decided not to transmit.",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "IsAvailable",
+							"signature": "static bool IsAvailable()",
+							"static": true,
+							"doc": "False when the Opus binaries were not vendored for this platform. The\nclass still links; every call simply fails.",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "TryCreate",
+							"signature": "static std::unique_ptr<FVoiceOpusCodec> TryCreate(uint32_t bitsPerSecond = kDefaultBitrate)",
+							"static": true,
+							"doc": "nullptr when Opus is unavailable or the encoder/decoder refused to come\nup. Never silently degrades — the caller picks the fallback.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "~FVoiceOpusCodec",
+							"signature": "~FVoiceOpusCodec() override",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "FVoiceOpusCodec",
+							"signature": "FVoiceOpusCodec(const FVoiceOpusCodec&) = delete",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FVoiceOpusCodec& operator=(const FVoiceOpusCodec&) = delete",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "GetCodecId",
+							"signature": "EVoiceCodecId GetCodecId() const override",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "const char* GetName() const override",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "GetSampleRate",
+							"signature": "uint32_t GetSampleRate() const override",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameSamples",
+							"signature": "uint32_t GetFrameSamples() const override",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "GetMaxEncodedBytes",
+							"signature": "uint32_t GetMaxEncodedBytes() const override",
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "CreateDecoder",
+							"signature": "std::unique_ptr<IVoiceDecoder> CreateDecoder() const override",
+							"doc": "A stream decoder with its own Opus state, FEC, deep redundancy and\npacket-loss concealment. nullptr when Opus is unavailable.",
+							"line": 84
+						},
+						{
+							"kind": "method",
+							"name": "EncodeFrame",
+							"signature": "bool EncodeFrame(const int16_t* samples, uint32_t sampleCount, std::vector<uint8_t>& out) override",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "DecodeFrame",
+							"signature": "bool DecodeFrame(const uint8_t* data, size_t len, std::vector<int16_t>& out) override",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "SupportsInbandFec",
+							"signature": "bool SupportsInbandFec() const override",
+							"line": 89
+						},
+						{
+							"kind": "method",
+							"name": "DecodeFecFrame",
+							"signature": "bool DecodeFecFrame(const uint8_t* nextPacket, size_t len, std::vector<int16_t>& out) override",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "SetBitrate",
+							"signature": "void SetBitrate(uint32_t bitsPerSecond)",
+							"doc": "Target bitrate for the VBR encoder, redundancy included. It leaves the\n12 KB/s per-client budget mostly unspent.",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "GetBitrate",
+							"signature": "uint32_t GetBitrate() const",
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "SetInbandFecEnabled",
+							"signature": "void SetInbandFecEnabled(bool enabled)",
+							"line": 99
+						},
+						{
+							"kind": "method",
+							"name": "IsInbandFecEnabled",
+							"signature": "bool IsInbandFecEnabled() const",
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "SetDtxEnabled",
+							"signature": "void SetDtxEnabled(bool enabled)",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "IsDtxEnabled",
+							"signature": "bool IsDtxEnabled() const",
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "SetExpectedPacketLoss",
+							"signature": "void SetExpectedPacketLoss(uint32_t percent)",
+							"doc": "What the encoder assumes about the channel. FEC only spends bits when\nthis is non-zero, so a session with no loss pays nothing for it.",
+							"line": 111
+						},
+						{
+							"kind": "method",
+							"name": "GetExpectedPacketLoss",
+							"signature": "uint32_t GetExpectedPacketLoss() const",
+							"line": 112
+						},
+						{
+							"kind": "method",
+							"name": "SetRedundancyMilliseconds",
+							"signature": "bool SetRedundancyMilliseconds(uint32_t milliseconds)",
+							"doc": "Deep redundancy (DRED): up to this many milliseconds of past speech ride\nin every packet at a low bitrate, so a burst of loss is rebuilt from the\nfirst packet after it instead of concealed. 0 turns it off. Returns false\nwhen the linked Opus was built without DRED.",
+							"line": 120
+						},
+						{
+							"kind": "method",
+							"name": "GetRedundancyMilliseconds",
+							"signature": "uint32_t GetRedundancyMilliseconds() const",
+							"line": 121
+						},
+						{
+							"kind": "method",
+							"name": "GetDtxFrameCount",
+							"signature": "uint64_t GetDtxFrameCount() const",
+							"line": 125
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceProcessor.h",
+			"include": "VoiceChat/FVoiceProcessor.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FVoiceProcessorSettings",
+					"namespace": "Mowo",
+					"doc": "What the microphone path cleans up before a frame is encoded. Each stage can\nbe switched off on its own: a headset user has no echo to cancel, a studio\nmicrophone wants no noise gate fighting it.",
+					"line": 18,
+					"members": [
+						{
+							"kind": "field",
+							"name": "echoCancellation",
+							"signature": "bool echoCancellation = true",
+							"doc": "Cancels the other players' voices coming back in through the microphone\nfrom open speakers — the echo everyone else hears as themselves.",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "noiseSuppression",
+							"signature": "bool noiseSuppression = true",
+							"doc": "Stationary noise (fans, hum, hiss) learned and subtracted.",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "autoGain",
+							"signature": "bool autoGain = true",
+							"doc": "Levels a quiet or a loud microphone toward one speaking level.",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "noiseSuppressDb",
+							"signature": "int32_t noiseSuppressDb = -25",
+							"doc": "How far noise is pushed down, dB below its level (negative).",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "autoGainTarget",
+							"signature": "float autoGainTarget = 0.25f",
+							"doc": "The speaking level automatic gain aims for, as a fraction of full scale.",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "autoGainMaxDb",
+							"signature": "int32_t autoGainMaxDb = 30",
+							"doc": "The most automatic gain will ever add, in dB.",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "echoTailSeconds",
+							"signature": "float echoTailSeconds = 0.2f",
+							"doc": "How long an echo the canceller can model — speaker-to-microphone path\nplus the device buffers.",
+							"line": 34
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FVoiceProcessor",
+					"namespace": "Mowo",
+					"doc": "FVoiceProcessor — SpeexDSP's echo canceller and speech preprocessor around\none voice capture stream, 20 ms frame in, 20 ms frame out.\n\nThe far end the canceller subtracts is fed in by the caller, one frame per\nframe of voice it played; this processor keeps a short queue of them and\ntakes one per captured frame, so small drift between the playback and\ncapture clocks is absorbed rather than warned about. With nothing played\nthere is nothing to cancel, and the canceller is skipped rather than run\nagainst silence.",
+					"line": 46,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kMaxFarEndFrames",
+							"signature": "static constexpr uint32_t kMaxFarEndFrames = 16",
+							"static": true,
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "FVoiceProcessor",
+							"signature": "FVoiceProcessor()",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "~FVoiceProcessor",
+							"signature": "~FVoiceProcessor()",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "FVoiceProcessor",
+							"signature": "FVoiceProcessor(const FVoiceProcessor&) = delete",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FVoiceProcessor& operator=(const FVoiceProcessor&) = delete",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "Configure",
+							"signature": "bool Configure(uint32_t sampleRate, uint32_t frameSamples, const FVoiceProcessorSettings& settings)",
+							"doc": "Rebuilds the states for a format; false when the format is unusable.\nEvery stage off leaves the processor inactive and Process a no-op.",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown()",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset()",
+							"doc": "Forgets what the canceller and the noise estimate have learned — after a\ndevice change the room and the microphone are different.",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "IsActive",
+							"signature": "bool IsActive() const",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "GetSettings",
+							"signature": "const FVoiceProcessorSettings& GetSettings() const",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameSamples",
+							"signature": "uint32_t GetFrameSamples() const",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "GetSampleRate",
+							"signature": "uint32_t GetSampleRate() const",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "PushFarEnd",
+							"signature": "void PushFarEnd(const int16_t* samples, uint32_t count)",
+							"doc": "One frame of what the speakers played. A frame of the wrong size is\nignored.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "GetQueuedFarEnd",
+							"signature": "uint32_t GetQueuedFarEnd() const",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "Process",
+							"signature": "bool Process(int16_t* frame, uint32_t count)",
+							"doc": "In place, on one captured frame. False when the frame is the wrong size\nand was left alone.",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "GetAutoGainDb",
+							"signature": "int32_t GetAutoGainDb() const",
+							"doc": "What the automatic gain is currently adding, in dB, and the speech\nprobability of the last frame, 0-100.",
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "GetSpeechProbability",
+							"signature": "int32_t GetSpeechProbability() const",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "GetFramesProcessed",
+							"signature": "uint64_t GetFramesProcessed() const",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "GetFramesEchoCancelled",
+							"signature": "uint64_t GetFramesEchoCancelled() const",
+							"line": 96
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceRadioFilter.h",
+			"include": "VoiceChat/FVoiceRadioFilter.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVoiceRadioFilter",
+					"namespace": "Mowo",
+					"doc": "FVoiceRadioFilter — what makes a voice sound like it came out of a handheld:\nthe telephone band, 300 Hz to 3.4 kHz. One low-pass cannot do it (the\nlow end is the half that says \"small speaker\"), so this is a high-pass and a\nlow-pass in series, each a second-order Butterworth section, followed by a\nsoft clip that leaves speech alone and flattens a shout, the overdriven edge\na radio speaker has.\n\nStateful per stream: a filter shared between two talkers would smear one\nvoice's history into the other's first samples.",
+					"line": 19,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kDefaultLowHz",
+							"signature": "static constexpr float kDefaultLowHz = 300.0f",
+							"static": true,
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "kDefaultHighHz",
+							"signature": "static constexpr float kDefaultHighHz = 3400.0f",
+							"static": true,
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "Configure",
+							"signature": "void Configure(uint32_t sampleRate, float lowHz = kDefaultLowHz, float highHz = kDefaultHighHz, float drive = 1.4f)",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset()",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "Process",
+							"signature": "void Process(const int16_t* in, int16_t* out, uint32_t count)",
+							"doc": "`in` and `out` may be the same buffer.",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "GetSampleRate",
+							"signature": "uint32_t GetSampleRate() const",
+							"line": 30
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceSettings.h",
+			"include": "VoiceChat/FVoiceSettings.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FVoiceSettingsState",
+					"namespace": "Mowo",
+					"doc": "What a settings screen needs to draw one voice section. Read with Read(),\nwritten back with Apply(); every field maps to exactly one cvar.",
+					"line": 29,
+					"members": [
+						{
+							"kind": "field",
+							"name": "InputDeviceId",
+							"signature": "std::string InputDeviceId",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "InputGain",
+							"signature": "float InputGain = 1.0f",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "OutputVolume",
+							"signature": "float OutputVolume = 1.0f",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "ActivationThreshold",
+							"signature": "float ActivationThreshold = 0.035f",
+							"doc": "Capture RMS, 0..1, that opens the open-mic gate. Ignored in\npush-to-talk, which is why the screen greys it there rather than\nhiding it.",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "Mode",
+							"signature": "EVoiceMode Mode = EVoiceMode::PushToTalk",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "Codec",
+							"signature": "EVoiceCodecPreference Codec = EVoiceCodecPreference::Auto",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "Enabled",
+							"signature": "bool Enabled = true",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "EchoCancellation",
+							"signature": "bool EchoCancellation = true",
+							"doc": "The capture clean-up, stage by stage (FVoiceProcessor).",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "NoiseSuppression",
+							"signature": "bool NoiseSuppression = true",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "AutoGain",
+							"signature": "bool AutoGain = true",
+							"line": 46
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FVoiceSettings",
+					"namespace": "Mowo",
+					"line": 49,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kEnabled",
+							"signature": "static constexpr const char* kEnabled = \"voice.Enabled\"",
+							"static": true,
+							"doc": "The cvar names a UI layer binds to directly. Stable: renaming one\nbreaks a settings screen that cannot be compiled against this header.",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "kInputDevice",
+							"signature": "static constexpr const char* kInputDevice = \"voice.InputDevice\"",
+							"static": true,
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "kInputDeviceList",
+							"signature": "static constexpr const char* kInputDeviceList = \"voice.InputDeviceList\"",
+							"static": true,
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "kInputGain",
+							"signature": "static constexpr const char* kInputGain = \"voice.InputGain\"",
+							"static": true,
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "kOutputVolume",
+							"signature": "static constexpr const char* kOutputVolume = \"voice.OutputVolume\"",
+							"static": true,
+							"line": 57
+						},
+						{
+							"kind": "field",
+							"name": "kMode",
+							"signature": "static constexpr const char* kMode = \"voice.Mode\"",
+							"static": true,
+							"line": 58
+						},
+						{
+							"kind": "field",
+							"name": "kActivationThreshold",
+							"signature": "static constexpr const char* kActivationThreshold = \"voice.GateOpenRms\"",
+							"static": true,
+							"line": 59
+						},
+						{
+							"kind": "field",
+							"name": "kCodec",
+							"signature": "static constexpr const char* kCodec = \"voice.Codec\"",
+							"static": true,
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "kOpusBitrate",
+							"signature": "static constexpr const char* kOpusBitrate = \"voice.OpusBitrate\"",
+							"static": true,
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "kEchoCancellation",
+							"signature": "static constexpr const char* kEchoCancellation = \"voice.EchoCancellation\"",
+							"static": true,
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "kNoiseSuppression",
+							"signature": "static constexpr const char* kNoiseSuppression = \"voice.NoiseSuppression\"",
+							"static": true,
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "kAutoGain",
+							"signature": "static constexpr const char* kAutoGain = \"voice.AutoGain\"",
+							"static": true,
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "Read",
+							"signature": "static FVoiceSettingsState Read()",
+							"static": true,
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "Apply",
+							"signature": "static void Apply(const FVoiceSettingsState& state)",
+							"static": true,
+							"doc": "Writes every field at its cvar. The live system picks the change up on\nits next Update, so this is safe to call from anywhere, including\nbefore a system exists.",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "SetEnabled",
+							"signature": "static void SetEnabled(bool enabled)",
+							"static": true,
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "SetInputDevice",
+							"signature": "static void SetInputDevice(const std::string& deviceId)",
+							"static": true,
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "SetInputGain",
+							"signature": "static void SetInputGain(float gain)",
+							"static": true,
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "SetOutputVolume",
+							"signature": "static void SetOutputVolume(float volume)",
+							"static": true,
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "SetActivationThreshold",
+							"signature": "static void SetActivationThreshold(float rms)",
+							"static": true,
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "SetMode",
+							"signature": "static void SetMode(EVoiceMode mode)",
+							"static": true,
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "SetEchoCancellation",
+							"signature": "static void SetEchoCancellation(bool enabled)",
+							"static": true,
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "SetNoiseSuppression",
+							"signature": "static void SetNoiseSuppression(bool enabled)",
+							"static": true,
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "SetAutoGain",
+							"signature": "static void SetAutoGain(bool enabled)",
+							"static": true,
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "SetCodecPreference",
+							"signature": "static bool SetCodecPreference(EVoiceCodecPreference preference)",
+							"static": true,
+							"doc": "False when Opus was asked for and this build has none — the screen\nshould say so rather than showing a codec that is not running.",
+							"line": 85
+						},
+						{
+							"kind": "method",
+							"name": "IsOpusAvailable",
+							"signature": "static bool IsOpusAvailable()",
+							"static": true,
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "ActiveCodecName",
+							"signature": "static const char* ActiveCodecName()",
+							"static": true,
+							"doc": "The codec actually running, or nullptr when no system is live.",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "EnumerateInputDevices",
+							"signature": "static std::vector<FVoiceDeviceInfo> EnumerateInputDevices()",
+							"static": true,
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "PublishInputDevices",
+							"signature": "static void PublishInputDevices()",
+							"static": true,
+							"doc": "Packs the device list into the voice.InputDeviceList cvar as\n`id|name` rows separated by newlines, so a UI layer that cannot link\nthis plugin can still populate a device dropdown. Called once when the\nplugin registers; call it again after a device hot-plug.",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "ParsePublishedDevices",
+							"signature": "static std::vector<FVoiceDeviceInfo> ParsePublishedDevices(const std::string& packed)",
+							"static": true,
+							"line": 100
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/IVoiceCodec.h",
+			"include": "VoiceChat/IVoiceCodec.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EVoiceCodecId",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 25,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "None",
+							"signature": "None = 0",
+							"line": 26
+						},
+						{
+							"kind": "enumerator",
+							"name": "Adpcm",
+							"signature": "Adpcm = 1",
+							"line": 27
+						},
+						{
+							"kind": "enumerator",
+							"name": "Opus",
+							"signature": "Opus = 2",
+							"line": 28
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "IVoiceDecoder",
+					"namespace": "Mowo",
+					"doc": "One speaker's decoding state. A stateful codec (Opus predicts each frame\nfrom the ones before it) needs a decoder per stream: a single decoder fed\nseveral speakers interleaved predicts every frame from someone else's voice,\nwhich degrades audibly from the third player on and leaves loss recovery\nwith nothing coherent to recover from. Frames must reach it in sequence\norder, which is why the jitter buffer holds packets and decodes at playout.",
+					"line": 37,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IVoiceDecoder",
+							"signature": "virtual ~IVoiceDecoder() = default",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "Decode",
+							"signature": "virtual bool Decode(const uint8_t* data, size_t len, std::vector<int16_t>& out) = 0",
+							"doc": "Decodes one payload into exactly the codec's frame size.",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "DecodeFec",
+							"signature": "virtual bool DecodeFec(const uint8_t* nextPacket, size_t len, std::vector<int16_t>& out)",
+							"doc": "Rebuilds the frame immediately BEFORE `nextPacket` from its inband FEC.",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "DecodeRedundancy",
+							"signature": "virtual bool DecodeRedundancy(const uint8_t* packet, size_t len, uint32_t framesBack, std::vector<int16_t>& out)",
+							"doc": "Rebuilds the frame `framesBack` frames before `packet` from its deep\nredundancy (Opus DRED). False when the packet carries none, or not that\nfar back.",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Conceal",
+							"signature": "virtual bool Conceal(std::vector<int16_t>& out)",
+							"doc": "Synthesises a frame for a hole nothing covers (packet-loss concealment\nthat continues the decoder's own signal). False when the codec has none\nand the caller should fall back to its own concealment.",
+							"line": 66
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "IVoiceCodec",
+					"namespace": "Mowo",
+					"line": 72,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IVoiceCodec",
+							"signature": "virtual ~IVoiceCodec() = default",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "GetCodecId",
+							"signature": "virtual EVoiceCodecId GetCodecId() const = 0",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "virtual const char* GetName() const = 0",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "GetSampleRate",
+							"signature": "virtual uint32_t GetSampleRate() const = 0",
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameSamples",
+							"signature": "virtual uint32_t GetFrameSamples() const = 0",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "CreateDecoder",
+							"signature": "virtual std::unique_ptr<IVoiceDecoder> CreateDecoder() const = 0",
+							"doc": "A fresh per-stream decoder. Never shared between speakers.",
+							"line": 82
+						},
+						{
+							"kind": "method",
+							"name": "GetMaxEncodedBytes",
+							"signature": "virtual uint32_t GetMaxEncodedBytes() const = 0",
+							"doc": "Upper bound on the encoded size of one frame. Callers reserve against\nthis once so the steady state never reallocates.",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "EncodeFrame",
+							"signature": "virtual bool EncodeFrame(const int16_t* samples, uint32_t sampleCount, std::vector<uint8_t>& out) = 0",
+							"doc": "Encodes exactly GetFrameSamples() samples into `out` (cleared first,\nnever grown past GetMaxEncodedBytes). False on a wrong sample count.",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "DecodeFrame",
+							"signature": "virtual bool DecodeFrame(const uint8_t* data, size_t len, std::vector<int16_t>& out) = 0",
+							"doc": "Decodes one payload back into exactly GetFrameSamples() samples.\nFalse on a truncated or malformed payload — a hostile peer must not be\nable to talk the decoder into writing an unbounded block.",
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "SupportsInbandFec",
+							"signature": "virtual bool SupportsInbandFec() const",
+							"doc": "True when the codec embeds a coarse copy of the previous frame in every\npayload, so one lost frame can be rebuilt from its successor instead of\nconcealed.",
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "DecodeFecFrame",
+							"signature": "virtual bool DecodeFecFrame(const uint8_t*, size_t, std::vector<int16_t>&)",
+							"doc": "Reconstructs the frame that PRECEDES `nextPacket` out of the redundancy\ninside it, and must run before `nextPacket` itself is decoded — the\ndecoder walks the two in order. False when the codec carries no\nredundancy, or this packet happens to carry none.",
+							"line": 108
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/MVoiceChatStatics.h",
+			"include": "VoiceChat/MVoiceChatStatics.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MVoiceChatStatics",
+					"namespace": "Mowo",
+					"bases": "public MObject",
+					"reflected": true,
+					"doc": "The player-facing voice controls for Loom and game UI: a scoreboard's mute\nbutton, a per-player volume slider, the mimicry opt-out. Until these existed\na player had no way to reach SetPeerMuted at all. Every call is a no-op (or\nfalse) while no voice system is running.",
+					"line": 21,
+					"members": [
+						{
+							"kind": "method",
+							"name": "SetPlayerVoiceMuted",
+							"signature": "bool SetPlayerVoiceMuted(int32_t peerId, bool muted)",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "IsPlayerVoiceMuted",
+							"signature": "bool IsPlayerVoiceMuted(int32_t peerId) const",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "SetPlayerVoiceVolume",
+							"signature": "bool SetPlayerVoiceVolume(int32_t peerId, float volume)",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "GetPlayerVoiceVolume",
+							"signature": "float GetPlayerVoiceVolume(int32_t peerId) const",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "IsPlayerSpeaking",
+							"signature": "bool IsPlayerSpeaking(int32_t peerId) const",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "SetMimicryConsent",
+							"signature": "void SetMimicryConsent(bool consent)",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "GetMimicryConsent",
+							"signature": "bool GetMimicryConsent() const",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "ResolveSystem",
+							"signature": "static FVoiceChatSystem* ResolveSystem()",
+							"static": true,
+							"line": 41
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VoiceChat/Public/VoiceChat/VoiceChatModule.h",
+			"include": "VoiceChat/VoiceChatModule.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [],
+			"free": [
+				{
+					"kind": "function",
+					"name": "RegisterVoiceChatModule",
+					"signature": "void RegisterVoiceChatModule()",
+					"doc": "Registers the voice scene system (with its position/occlusion/Loom-pin\nattach wiring) and the push-to-talk character extension. Idempotent.\nCalled by the plugin loader's InitializeModule / the monolithic static\nregistrar; headless tests call it directly.",
+					"line": 12
+				}
+			]
+		}
+	]
+}

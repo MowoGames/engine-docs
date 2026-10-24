@@ -1,0 +1,71 @@
+---
+title: Save games
+description: Save player progress in save-game objects, save and load the world state of a level in numbered slots, checkpoints, autosave, migrations and cloud saves.
+order: 7
+sources:
+  - Engine/Source/Runtime/Game/Public/SaveGame/SaveGame.h
+  - Engine/Source/Runtime/Game/Public/Game/MSaveGame.h
+  - Engine/Source/Runtime/Game/Public/Game/MSaveStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/PersistentStateComponent.h
+  - Engine/Source/Runtime/Game/Public/WorldState/WorldStateJournal.h
+  - Engine/Source/Runtime/Game/Public/Travel/FTravelManager.h
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+verifiedAt: 08e26df3d
+---
+
+Mowo separates two kinds of saved data, the way Unreal does:
+
+- **Save-game objects** hold the player's progress: unlocks, settings that follow a profile, a trophy record. They never contain the level, so a patched level still loads from the package.
+- **World-state slots** hold the state of a level: which entities moved, opened, broke or were collected, quest state, and so on.
+
+Both are written to `Saved/SaveGames` under the per-user folder in a packaged game. <Source symbol="SaveGameManager" />
+
+## Save-game objects
+
+`MSaveGame` is a reflected object written to a named slot as a `.msavegame` file. <Source symbol="MSaveGame" />
+
+From Visual Scripting, get the object with `MSaveStatics::GetSaveGame(slotName)` and use its named values (`SetInt`, `GetInt`, `SetString`, `SetBool` and so on), then `SaveGameToSlot(slotName)`. In C++, subclass `MSaveGame` and declare `MPROPERTY` fields; every field is written by name, so a field added later keeps its default on an older save and a removed one is ignored.
+
+| Function on `MSaveStatics` | Effect |
+| --- | --- |
+| `CreateSaveGame(slot, className)`, `GetSaveGame(slot)` | Create or load the object |
+| `SaveGameToSlot(slot)`, `LoadGameFromSlot(slot)` | Write or reload it |
+| `DoesSaveGameExist(slot)`, `DeleteGameInSlot(slot)` | Manage slots |
+
+<Source symbol="MSaveStatics" />
+
+## World state
+
+A level's state is saved to numbered slots as `.mwsave` files. Only entities that changed are recorded, against the level as it ships, so loading a save over an updated level keeps the update. Mark an entity with a `PersistentState` component to have its transform (`persistTransform`) and components (`persistComponents`) saved. <Source symbol="PersistentStateComponent" />
+
+| Function on `MSaveStatics` | Effect |
+| --- | --- |
+| `SaveToSlot(n)`, `LoadFromSlot(n)` | Save or load the current level's state |
+| `HasSave(n)`, `DeleteSlot(n)` | Manage slots |
+| `GetSlotCount()`, `GetSlotIndexAt(i)`, `GetSlotSceneName(n)`, `GetSlotAgeSeconds(n)` | List slots for a load screen |
+| `SaveCheckpoint()`, `LoadCheckpoint()` | The checkpoint slot |
+
+Each slot also carries metadata (player name, timestamp, scene, play time and a screenshot) that a load screen reads without loading the whole save. Quest state, scanned point clouds and other system state are saved in the same slot. In multiplayer, only the host writes world state.
+
+Place an `ACheckpointActor` to save a checkpoint when a player reaches it.
+
+### Autosave
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `save.AutosaveInterval` | 300 | Seconds between autosaves into the autosave slot; 0 turns it off |
+| `save.AutosaveOnTravel` | 1 | Saves the outgoing level's state before a level change, so returning later finds it as you left it |
+
+## Versioning your saves
+
+Set your save schema with `SaveGameManager::SetCurrentSchema(version)` and register a migration for each step with `RegisterMigration(from, to, fn)`; an older save is migrated when it loads. Engine-owned parts of a save are versioned separately, so an engine update and a game update cannot be confused. A damaged save falls back to its backup. <Source symbol="SaveGameManager::RegisterMigration" />
+
+## Cloud saves
+
+When an online platform with cloud storage is active, `SaveGameManager::UploadSlotToCloud(slot)` and `DownloadSlotFromCloud(slot)` sync a slot, and `IsCloudAvailable()` says whether that is possible. See [Multiplayer](/docs/multiplayer/) for the platforms.
+
+## Related
+
+- [Actors and the world](/docs/gameplay/actors-and-world/) for carrying data across level changes
+- [Time rewind](/docs/gameplay/time-rewind/)
+- API: [Game module](/docs/api/game/)

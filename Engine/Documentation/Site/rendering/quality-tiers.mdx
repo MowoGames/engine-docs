@@ -1,0 +1,272 @@
+---
+title: Quality tiers
+description: The five scalability tiers, what each one turns on, how the auto-tier picks one, and the cvars, sg groups and Scalability.ini that override it.
+order: 4
+sources:
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/SceneRenderer.h
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
+  - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/QualityAutoTier.h
+  - Engine/Source/Runtime/SceneRenderer/Private/QualityAutoTier.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/DeviceProfiles.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SynthBenchmark.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRenderer.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Runtime/Core/Private/ConfigIni.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/QualityMenu.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ScalabilitySettingsPage.cpp
+  - Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+verifiedAt: 08e26df3d
+---
+
+A quality tier is one setting that decides which rendering features run and how much each one may spend. Mowo has five tiers: **Low, Medium, High, Epic and Cinematic** (<Source symbol="EQualityPreset" />). High is the code default.
+
+The rule is **the tier sets, the cvar refines**. A tier writes a whole row of values into `SceneRenderer::Options`; any `r.*` cvar that is not `-1` then overrides its one value. A tier change applies at the next `BeginScene`, and resources that change size, such as the shadow atlas or the probe grid, are recreated then. No restart is needed.
+
+## Pick a tier
+
+<Steps>
+<Step title="In the editor">
+Open **Edit > Engine Quality** and choose Low, Medium, High, Epic or Cinematic. **Auto (GPU-detected)** removes your choice and runs the detection again. The choice is saved to your user config and reapplied at every launch.
+</Step>
+<Step title="From the viewport">
+Click **Quality** on the viewport toolbar. The card shows the active preset, a Low to Cinematic selector, one override row per category (View distance, Shadows, Global illum., Reflections, Textures, Effects, Foliage, Post process), the upscaler, and **Auto**, **Benchmark** and **Reset** buttons.
+</Step>
+<Step title="In Project Settings">
+Open **Project Settings > Engine > Scalability**. It lists the preset and each category with its tier value and lets you pin individual ones.
+</Step>
+<Step title="In a shipped game">
+The player settings screen has a **Quality Preset** row in the **Graphics** category that writes `r.Quality`, and rows for the most important single knobs (<Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />). A row the player sets stays where they put it when the preset changes.
+</Step>
+<Step title="From code or the console">
+Set `r.Quality`: `0` is Low, `4` is Cinematic, `-1` means not set.
+</Step>
+</Steps>
+
+<Screenshot id="rendering-quality-viewport-menu" alt="Mowo Editor viewport with the Quality card open from the viewport toolbar, showing the preset selector with High active, the Overrides section with the View distance, Shadows, Global illum., Reflections, Textures, Effects, Foliage and Post process rows, the Resolution section with the Upscaler dropdown, and the Auto, Benchmark and Reset buttons in the footer" caption="The viewport Quality card." />
+
+```cpp title="SetQuality.cpp" wrap
+#include "Core/IConsoleManager.h"
+
+Mowo::IConsoleManager::Get().SetByName("r.Quality", "3");
+```
+
+To inspect what a tier would set without a GPU, call the static `ApplyQualityPreset`:
+
+```cpp title="InspectTier.cpp" wrap
+#include "Renderer/SceneRenderer.h"
+
+Mowo::SceneRenderer::Options opts;
+Mowo::SceneRenderer::ApplyQualityPreset(opts, Mowo::EQualityPreset::Epic);
+
+const bool vsm = opts.EnableVSM;
+const bool rtReflections = opts.RTReflections;
+const uint32_t cascades = opts.ShadowCascadeCount;
+
+(void)vsm;
+(void)rtReflections;
+(void)cascades;
+```
+
+## Where the tier comes from
+
+The active tier is resolved in this order, highest first:
+
+1. An explicit `r.Quality`: the user config, `Scalability.ini`, the editor menu, the in-game settings or `--cvar=r.Quality=N` in a development build.
+2. A tier the platform recommends for the device. On Steam this is the recommended profile the developer set for that hardware.
+3. The auto-tier, which fills only an unset slot.
+4. The code default, High.
+
+The editor and the game run the same auto-tier, so the editor viewport, Play In Editor and the shipped game pick the same tier on the same machine. Each logs a `[Quality]` line with the tier and why it was chosen.
+
+## The auto-tier
+
+<Source symbol="FQualityAutoTier" /> decides from a measurement when it has one and from the GPU's name and memory when it does not.
+
+### Measured
+
+On the first launch on a machine the engine runs a short synthetic GPU and CPU benchmark once and stores the result; later launches read it. The **Benchmark** button in the viewport Quality card runs it again. The GPU index maps to a tier, with 100 as a reference mid-range card:
+
+| GPU index | Tier |
+|---|---|
+| Under 25 | Low |
+| 25 to 55 | Medium |
+| 55 to 150 | High |
+| 150 to 240 | Epic |
+| 240 and up | Cinematic |
+
+VRAM still caps a measured tier: under 4 GB caps it at Medium, under 6 GB at High. `r.AutoQuality.Benchmark 0` ignores the measurement.
+
+### From the device
+
+Without a measurement:
+
+| Device | Tier |
+|---|---|
+| Apple silicon Max or Ultra | Epic |
+| Other Apple silicon | High |
+| Integrated GPU | Low |
+| Under 4 GB VRAM | Low |
+| Under 6 GB VRAM | Medium |
+| Older discrete GPUs matched by name | Medium |
+| 20 GB or more, and a known high-end GPU or mesh shaders plus ray query | Cinematic |
+| 12 GB or more, and a known high-end GPU or mesh shaders plus ray query | Epic |
+| Anything else | High |
+
+### Caps
+
+- A device without mesh shaders is capped at High; one without ray query is capped at Epic.
+- A slow CPU caps the tier: by its measured index when there is one, otherwise 4 or fewer logical cores cap at Medium and 8 or fewer at High.
+- Under 8 GB of system RAM drops to Low; under 16 GB caps at High.
+
+An unknown core count or RAM size never lowers the tier.
+
+<Callout type="tip">
+Simulate another machine with `r.AutoQuality.ForceVRAMMB`, `r.AutoQuality.ForceIntegrated`, `r.AutoQuality.ForceName`, `r.AutoQuality.ForceCores` and `r.AutoQuality.ForceRamMB`. Forcing a device skips the stored measurement.
+</Callout>
+
+### Device profiles
+
+After the tier is known, a device profile can adjust a few values that nothing else has claimed. The Steam Deck profile applies at Low: it moves `sg.GlobalIlluminationQuality` to Medium so the Deck keeps Global Illumination, caps the frame rate at 40 with `t.MaxFPS`, and sets the dynamic-resolution target to 22 ms (<Source path="Engine/Source/Runtime/SceneRenderer/Private/DeviceProfiles.cpp" />). A value you set explicitly always wins over a profile.
+
+### Upscaler choice
+
+The auto-tier also picks the anti-aliasing method. It chooses the engine's TSR, or TAA when the tier renders at native resolution (Cinematic). Vendor upscalers (DLSS, FSR, XeSS, MetalFX) are picked automatically only when `r.AutoQuality.VendorUpscalers` is 1. See [Upscaling and anti-aliasing](/docs/rendering/upscaling-and-anti-aliasing/).
+
+## What each tier turns on
+
+Values come from the tier rows in <Source path="Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp" />.
+
+| Feature | cvar | Low | Medium | High | Epic | Cinematic |
+|---|---|---|---|---|---|---|
+| Clustered lighting | — | on | on | on | on | on |
+| Auto-exposure | — | on | on | on | on | on |
+| Bloom, motion blur, contact shadows | — | off | on | on | on | on |
+| Global Illumination | `r.DDGI` | off | on | on | on | on |
+| Screen-space reflections | `r.SSR` | off | on | on | on | on |
+| GTAO | `r.GTAO` | off | on | on | on | on |
+| Screen-space subsurface scattering | — | off | on | on | on | on |
+| SDF far sun shadows | `r.Shadow.SdfFar` | off | on | on | on | on |
+| Screen-probe final gather | — | off | off | on | on | on |
+| Depth prepass | `r.DepthPrepass` | off | off | on | on | on |
+| PCSS soft shadows | `r.Shadow.Soft` | off | off | on | on | on |
+| Translucent reflections | `r.Reflections.Translucent` | off | off | on | on | on |
+| Terrain runtime virtual texture | `r.Terrain.RVT` | off | off | on | on | on |
+| Cloud shadows | `r.Clouds.Shadows` | off | off | on | on | on |
+| Virtual shadow maps | `r.VSM` | off | off | off | on | on |
+| MegaLights | `r.MegaLights` | off | off | off | on | on |
+| Ray-traced reflections | `r.RTReflections` | off | off | off | on | on |
+| Ray-traced AO | `r.RTAO` | off | off | off | on | on |
+| Hardware ray-traced GI gather | `r.GI.HWRTGather` | off | off | off | on | on |
+| SDF reflections and the near radiance cascade | `r.GI.NearCascade` | off | off | off | on | on |
+| Volumetric fog | `r.VolumetricFog` | off | off | off | on | on |
+| Meshlet G-Buffer | `r.MeshletGBuffer` | off | off | off | on | on |
+| Ray-traced sun shadows | `r.RTShadows` | off | off | off | off | on |
+
+Most of these cvars take `-1` for the tier value and `0` or `1` to force the feature. `r.GI.NearCascade` and `r.Reflections.Translucent` are gates instead: they default to `1` and let the tier's choice through; set `0` to turn the feature off.
+
+Ray-traced rows need ray query on the device, and the meshlet path needs mesh shaders. Without them the feature falls back each frame, see [Ray tracing](/docs/rendering/ray-tracing/). SSGI is off at every tier; `r.SSGI 1` forces it.
+
+## Numeric budgets per tier
+
+Every row has an `r.*` cvar that defaults to `-1` (the tier value).
+
+| Knob | cvar | Low | Medium | High | Epic | Cinematic |
+|---|---|---|---|---|---|---|
+| Sun shadow map size | `r.Shadow.Resolution` | 1024 | 2048 | 2048 | 4096 | 4096 |
+| Sun shadow cascades | `r.Shadow.Cascades` | 2 | 3 | 4 | 4 | 4 |
+| PCSS penumbra ceiling (texels) | `r.Shadow.MaxPenumbraTexels` | 8 | 16 | 20 | 48 | 64 |
+| Local shadow view budget | `r.Shadow.MaxLocalViews` | 16 | 32 | 48 | 128 | 128 |
+| Largest local shadow tile | `r.Shadow.LocalTileSize` | 512 | 1024 | 1024 | 1024 | 2048 |
+| Contact shadow steps | `r.ContactShadowSteps` | 6 | 8 | 12 | 16 | 20 |
+| Probe rays per probe | `r.DDGI.RaysPerProbe` | 16 | 24 | 32 | 48 | 64 |
+| Probes per axis | `r.DDGI.ProbesPerAxis` | 8 | 12 | 16 | 16 | 16 |
+| Radiance cache interval (frames) | `r.GI.RadianceInterval` | 8 | 8 | 8 | 2 | 1 |
+| Screen-probe rays | `r.GI.ScreenProbes.Rays` | 32 | 32 | 48 | 64 | 96 |
+| SSR max steps | `r.SSR.MaxSteps` | 32 | 64 | 96 | 128 | 160 |
+| GTAO slices | `r.GTAO.Slices` | 2 | 3 | 4 | 4 | 4 |
+| AO resolution divisor | `r.AO.Divisor` | 2 | 2 | 2 | 1 | 1 |
+| Bloom mips | `r.Bloom.Mips` | 4 | 5 | 5 | 6 | 6 |
+| Depth of field kernel | `r.DoF.Bokeh` | gaussian | gaussian | gaussian | disk | disk |
+| Render scale | `r.RenderScale` | 0.75 | 1.0 | 1.0 | 1.0 | 1.0 |
+| Upscaler quality | `r.UpscalerQuality` | Performance | Balanced | Quality | Quality | Native |
+| Mesh LOD bias | `r.MeshLODBias` | +2 | +1 | 0 | 0 | 0 |
+| Small-object cull (fraction of vertical FOV) | `r.MinScreenCoverage` | 0.0025 | 0.0015 | 0.001 | 0.0006 | off |
+| Hi-Z occlusion cull | `r.OcclusionCull` | on | on | on | on | off |
+| Max anisotropy | `r.MaxAnisotropy` | 4 | 8 | 16 | 16 | 16 |
+| View distance scale | `r.ViewDistanceScale` | 0.6 | 0.8 | 1.0 | 1.0 | 1.5 |
+| Foliage density | `r.Foliage.DensityScale` | 0.4 | 0.7 | 1.0 | 1.0 | 1.0 |
+| Ray-traced sun shadow samples | `r.RTShadows.Samples` | 2 | 2 | 2 | 3 | 4 |
+| MegaLights samples per pixel | `r.MegaLights.Samples` | — | — | — | 2 | 3 |
+| Particle spawn rate scale | `r.Effects.SpawnRateScale` | 0.35 | 0.6 | 1.0 | 1.0 | 1.0 |
+| Emitters per view | `r.Effects.MaxActiveEmitters` | 16 | 32 | 64 | unlimited | unlimited |
+
+<Callout type="note">
+The upscaler-quality row only matters when a scaling method (TSR, FSR, DLSS, XeSS, MetalFX or Spatial) is active. TAA and None render at full resolution. An explicit `r.RenderScale` wins over the quality mode.
+</Callout>
+
+## Scalability groups
+
+One dial is sometimes too blunt: a machine can be short of fill rate and long on memory. The `sg.*` cvars pick which tier row a group of settings comes from, while everything else follows `r.Quality` (<Source symbol="FScalabilityGroups" />).
+
+| cvar | Controls |
+|---|---|
+| `sg.ViewDistanceQuality` | LOD thresholds and bias, small-object and occlusion culling, view distance, meshlet G-Buffer, depth prepass |
+| `sg.ShadowQuality` | Clustered lighting, sun and local shadows, contact shadows, PCSS, VSM, MegaLights, SDF far and ray-traced sun shadows |
+| `sg.GlobalIlluminationQuality` | Global Illumination on or off and its budgets, GTAO and ray-traced AO |
+| `sg.ReflectionQuality` | SSR, SDF, ray-traced and translucent reflections |
+| `sg.PostProcessQuality` | Bloom, motion blur, depth of field kernel, auto-exposure, subsurface scattering |
+| `sg.AntiAliasingQuality` | Render scale and upscaler quality |
+| `sg.TextureQuality` | Anisotropy, terrain virtual texture |
+| `sg.EffectsQuality` | Particle budgets, volumetric fog, clouds |
+| `sg.FoliageQuality` | Foliage density |
+
+Each group defaults to `-1` (follow `r.Quality`). Set one to `0` through `4` to pin it. For example, `sg.GlobalIlluminationQuality=0` keeps everything else at the base tier and turns Global Illumination off, because its on/off switch is part of the row.
+
+## Scalability.ini
+
+A project can tune tiers and groups in config. The engine reads `Scalability.ini` through the usual layers: `Engine/Config/BaseScalability.ini`, the project's `Config/DefaultScalability.ini`, a platform folder, then `Saved/Config/Scalability.ini` (<Source path="Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp" />).
+
+```ini title="Config/DefaultScalability.ini"
+[ConsoleVariables]
+r.Quality=2
+
+[ScalabilityGroups]
+sg.ShadowQuality=3
+
+[ShadowQuality@3]
+r.Shadow.MaxDistance=250
+```
+
+- `[ConsoleVariables]` sets cvars.
+- `[ScalabilityGroups]` pins `sg.*` groups.
+- A `[<Group>@<Level>]` section sets extra cvars while that group is pinned to that level. The group name drops the `sg.` prefix.
+
+Values from this file sit below every other INI and below the player's own settings.
+
+## Dynamic resolution
+
+`r.DynamicRes 1` steers the render scale toward a GPU frame-time target between `r.DynamicRes.MinScale` and `r.DynamicRes.MaxScale`. The default, `-1`, turns it on in the shipped game and off in the editor viewport.
+
+| cvar | Default | Meaning |
+|---|---|---|
+| `r.DynamicRes` | -1 | -1 auto, 0 off, 1 on |
+| `r.DynamicRes.TargetMs` | 16.6 | GPU frame-time target in milliseconds |
+| `r.DynamicRes.MinScale` | 0.6 | Lowest render scale |
+| `r.DynamicRes.MaxScale` | 1.0 | Highest render scale |
+
+A scale step reallocates nothing: passes render into a sub-rectangle of full-size targets, so temporal histories survive it.
+
+## Troubleshooting
+
+- **A tier change does not show.** Setting `r.Quality` back to `-1` at runtime leaves the current options in place. Set `0` to `4`, or pick **Auto** in the editor menu to run detection again.
+- **An RT feature is on but nothing changes.** The device or backend has no ray query, so the raster fallback runs. D3D11 never has it.
+- **Every knob jumps when you pick a preset in the game's settings.** Only rows still at their tier value follow the preset; a row the player changed keeps its value.
+
+## API reference
+
+- [SceneRenderer module](/docs/api/scenerenderer/): `EQualityPreset`, `SceneRenderer::Options`, `FScalabilityTiers`, `FScalabilityTierValues`, `FScalabilityGroups`, `FQualityAutoTier`
+- [Core module](/docs/api/core/): `IConsoleManager`
+- [Console variables](/docs/reference/console-variables/)

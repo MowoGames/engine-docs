@@ -1,0 +1,67 @@
+---
+title: Procedural content (PCG)
+sidebarTitle: Procedural content
+description: Scatter foliage, meshes, actors and level instances over the landscape or a volume with a deterministic node graph, in the editor or at runtime.
+order: 30
+sources:
+  - Engine/Source/Runtime/PCG/Public/PCG/PcgGraph.h
+  - Engine/Source/Runtime/PCG/Private/PcgGraph.cpp
+  - Engine/Source/Runtime/PCG/Public/PCG/PcgExecutor.h
+  - Engine/Source/Runtime/PCG/Public/PCG/PcgComponent.h
+  - Engine/Source/Runtime/PCG/Public/PCG/PcgGeneratedComponent.h
+  - Engine/Source/Runtime/PCG/Public/PCG/PcgGeneration.h
+  - Engine/Source/Runtime/PCG/Public/PCG/MPcgStatics.h
+verifiedAt: 08e26df3d
+---
+
+A PCG graph (`.pcg`) scatters content over the landscape or through a volume: foliage, mesh actors, gameplay actors and whole level instances. The same seed always produces the same result, on every machine.
+
+## The graph
+
+Every node outputs one set of points. A point has a position, a surface normal, a density, a yaw, a scale and its own seed, plus up to eight named attributes. Nodes that read or write a value name it: `density`, `scale`, `yaw`, `height`, `x`, `z`, the read-only `slope`, `seed`, or an attribute. <Source symbol="FPcgExecutor" />
+
+| Category | Nodes |
+| --- | --- |
+| Input | Landscape Surface, Volume, Grid, Poisson Disk, Spline |
+| Subgraph | Subgraph, Graph Input, Graph Output |
+| Density | Density Noise, Density Remap |
+| Attribute | Attribute Noise, Attribute Math |
+| Filter | Attribute Filter, Random Filter, Spline Distance Filter, Bounds Filter, Density Filter, Slope Filter, Height Filter, Self Pruning, Difference |
+| Set | Merge |
+| Point | Transform (random scale, yaw and height offset) |
+| Spawner | Foliage Spawner, Mesh Spawner, Weighted Mesh Spawner, Actor Spawner, Level Instance Spawner |
+
+<Source path="Engine/Source/Runtime/PCG/Private/PcgGraph.cpp" />
+
+Spawners pass their input through, so one point set can feed several spawners. A Subgraph node runs another `.pcg`, so you can build a library of reusable scatter rules.
+
+Create a graph from the Content Browser's **New › PCG Graph**. The graph editor shows each node's point count from a dry run as you edit, and **Generate** regenerates every PCG volume in the open level.
+
+<Screenshot id="gameplay-pcg-graph-editor" alt="Mowo Editor PCG graph editor with Forest.pcg open: Landscape Surface feeding Density Noise, Slope Filter, Self Pruning and Transform into a Foliage Spawner and a Weighted Mesh Spawner; each node shows its point count under the title" caption="Each node shows how many points it produced in the dry run." />
+
+## A PCG volume
+
+Add a `PCG` component (category **Environment**) to an entity. <Source symbol="PcgComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `graph` | The `.pcg` to run |
+| `seed` | Mixed into every random choice |
+| `extents` | The volume around the entity; zero covers the whole landscape |
+| `landscape` | Which terrain to sample; empty uses the first |
+| `generateInEditor`, `generateAtRuntime` | When it runs |
+| `maxPoints`, `maxMeshActors` | Safety caps |
+
+In the editor, a volume regenerates on its own when anything it depends on changes: the graph or a subgraph, the level's splines, the seed, the volume or the terrain. Before generating, it removes its previous output: foliage goes onto the volume's own painted-foliage component, and every spawned actor carries a `PcgGenerated` component naming the volume, so the next run removes exactly what it made. <Source symbol="PcgGeneratedComponent" />
+
+## At runtime
+
+With `generateAtRuntime`, volumes generate once when play begins, in play-in-editor and in a packaged game. For a different world each run, call `MPcgStatics::RegenerateWithSeed(seed)`; `RegenerateAll()` reruns with the current seeds. `GetVolumeCount`, `GetGeneratedFoliageCount`, `GetGeneratedMeshCount` and `GetGeneratedLevelInstanceCount` report the result. <Source symbol="MPcgStatics" />
+
+For whole levels built from rooms, see [Level generation](/docs/gameplay/level-generation/). For parametric single props, see [Smart Props](/docs/gameplay/smart-props/).
+
+## Related
+
+- [World building](/docs/editor/world-building/) for painting foliage by hand
+- [World environment](/docs/gameplay/world-environment/)
+- API: [PCG module](/docs/api/pcg/)

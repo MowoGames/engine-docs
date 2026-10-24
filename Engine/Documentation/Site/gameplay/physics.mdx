@@ -1,0 +1,250 @@
+---
+title: Physics
+description: Rigid bodies, colliders, collision channels, character movement, scene queries and constraints on top of Jolt Physics.
+order: 8
+sources:
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsSystem.h
+  - Engine/Source/Runtime/Physics/Private/PhysicsSystem.cpp
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsWorld.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsQuery.h
+  - Engine/Source/Runtime/Physics/Public/Physics/CollisionChannel.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/RigidBodyComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/ColliderComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/ConstraintComponent.h
+  - Engine/Source/Runtime/Core/Public/Core/Constants.h
+  - Engine/Source/Runtime/Game/Public/Game/MTriggerComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MGameplayStatics.h
+  - Engine/Source/Runtime/Game/Private/Gameplay/PhysicsInteractableSystem.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsMaterial.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsMaterialAsset.h
+  - Engine/Source/Runtime/Physics/Public/Physics/SurfaceType.h
+  - Engine/Source/Runtime/Physics/Public/Physics/MeshCollision.h
+  - Engine/Source/Runtime/Physics/Public/Physics/CollisionCooking.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/FPhysicsInteractableComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MPhysicsInteractableStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/MPhysicsStatics.h
+verifiedAt: 08e26df3d
+---
+
+Mowo simulates physics with [Jolt Physics](https://github.com/jrouwe/JoltPhysics). You describe bodies with reflected ECS components, a `PhysicsSystem` steps the simulation at a fixed rate, and a `PhysicsWorld` answers ray casts, sweeps and overlaps. Each scene has its own physics world.
+
+## How a frame is simulated
+
+The physics step runs at a fixed 1/60 s. Frame time accumulates, and the system takes as many fixed steps as fit, up to a cap. <Source path="Engine/Source/Runtime/Core/Public/Core/Constants.h" />
+
+<Flow steps={["Frame delta", "Accumulator", "Sync kinematic poses", "Jolt step (1/60 s)", "Character controllers", "Interpolate render poses", "Collision events"]} highlight={3} caption="Up to p.MaxSubsteps fixed steps per frame. Time beyond the cap is dropped, not banked." />
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `p.MaxSubsteps` | 8 | Maximum fixed steps per frame. Extra time is discarded so a long hitch cannot snowball. <Source path="Engine/Source/Runtime/Physics/Private/PhysicsSystem.cpp" /> |
+| `p.AsyncTick` | off | Steps Jolt on a worker thread. Poses arrive one frame late, and any call that reaches Jolt in between waits for the step. <Source path="Engine/Source/Runtime/Physics/Private/PhysicsSystem.cpp" /> |
+| `p.Deterministic` | off | Single-threaded Jolt jobs and contact events sorted by body pair, for bit-identical replays on the same binary and CPU <Source path="Engine/Source/Runtime/Physics/Private/PhysicsSystem.cpp" /> |
+| `p.Threads` | -1 | Upper bound on Jolt worker threads; -1 uses the whole engine pool |
+| `p.OverlapDuringPhysics` | on | Runs the frame's physics steps on a worker while the `DuringPhysics` actor tick group runs |
+| `p.Debug` | off | Master switch for the physics debug visualizer; `p.DebugShapes`, `p.DebugContacts`, `p.DebugCOM`, `p.DebugAABB`, `p.DebugVelocity` and `p.DebugConstraints` pick what it draws |
+| `p.Stats` | 0 | Logs a physics stats snapshot every N frames |
+
+**Max Substeps** and **Async Physics Tick** are also on the **Engine › Physics** page of Project Settings. <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp" />
+
+Dynamic bodies render at a pose interpolated between the last two physics steps, so motion stays smooth at any refresh rate. Kinematic bodies, static bodies and character controllers are written without interpolation. <Source symbol="PhysicsSystem" />
+
+<Callout type="engine">
+Determinism is a same-machine guarantee for replays and server rewind. Multiplayer is server-authoritative; nothing promises that two machines step to the same bits.
+</Callout>
+
+## Make something physical
+
+A physical object needs a collider for its shape. Add a rigid body to make it move.
+
+<Steps>
+<Step title="Add a Collider">
+Pick a shape: `Box`, `Sphere`, `Capsule`, `Mesh`, `ConvexHull` or `HeightField`, and size it. <Source symbol="ColliderComponent" />
+</Step>
+<Step title="Add a RigidBody">
+Choose `Static`, `Kinematic` or `Dynamic` and set mass, friction, restitution and damping. <Source symbol="RigidBodyComponent" />
+</Step>
+<Step title="Pick a collision preset">
+Set **Collision Preset** on the collider (see below). `Custom` exposes the per-channel responses.
+</Step>
+<Step title="Play">
+Press Play; dynamic bodies fall and collide. Turn on `p.Debug` to see shapes.
+</Step>
+</Steps>
+
+<Screenshot id="gameplay-rigidbody-details" alt="Mowo Editor Details panel for a crate entity showing the Collider component (Shape Box, Half Extents, Collision Preset PhysicsActor, Physics Material) and the RigidBody component (Type Dynamic, Mass, Friction, Restitution, Use Gravity, Use CCD, Freeze Pos and Freeze Rot toggles)" caption="Collider and RigidBody are ordinary reflected components, edited in the Details panel." />
+
+Useful `RigidBodyComponent` fields:
+
+| Field | Notes |
+| --- | --- |
+| `type` | `Static`, `Kinematic` or `Dynamic` |
+| `mass` | In kilograms |
+| `friction`, `restitution` | Override the collider's material only when moved off their defaults (0.5 and 0.2) |
+| `linearDamping`, `angularDamping` | Per second |
+| `useGravity`, `useCCD` | Gravity and continuous collision detection |
+| `freezePositionX/Y/Z`, `freezeRotationX/Y/Z` | Lock individual axes |
+
+<Callout type="warning">
+Bodies with a `Mesh` or `HeightField` collider are forced to `Static`, because Jolt cannot simulate them, and a warning is logged. Use `ConvexHull` for moving objects. <Source path="Engine/Source/Runtime/Physics/Private/PhysicsSystem.cpp" />
+</Callout>
+
+## Collision channels
+
+Colliders use an Unreal-style channel model. <Source path="Engine/Source/Runtime/Physics/Public/Physics/CollisionChannel.h" />
+
+- **Object channels** say what a body is: `WorldStatic`, `WorldDynamic`, `Pawn`, `PhysicsBody`, `Projectile`, `Trigger`.
+- **Trace channels** are for gameplay queries: `Visibility`, `Camera`, `Weapon`.
+- **Responses** are `Ignore`, `Overlap` or `Block`, one per channel.
+- **Presets** are named response sets: `NoCollision`, `WorldStatic`, `WorldDynamic`, `Pawn`, `PhysicsActor`, `Trigger`, `Projectile`, `Ragdoll`, or `Custom`.
+
+When two bodies meet, the pair ignores if either side ignores, blocks only if both block, and otherwise overlaps. An overlapping pair produces trigger events, not a physical response. A trace channel lets the same wall stop a `Visibility` trace while a `Camera` trace passes through it.
+
+## Characters
+
+Characters do not use rigid bodies. They move with a kinematic character controller and a movement component with walking, falling, swimming, ladder and mantling modes. See [Character movement](/docs/gameplay/character-movement/).
+
+## Scene queries
+
+For new code, use the filtered query API on `PhysicsWorld`: `QueryRay`, `QueryRayMulti`, `QuerySweep`, `QuerySweepMulti` and `QueryOverlap`. <Source symbol="PhysicsWorld" /> An `FQueryFilter` selects a trace channel (or a layer mask), a list of bodies to ignore, whether sensors count, and whether static or dynamic bodies are included. Each `FQueryHit` already carries the entity behind the body and the surface type. <Source path="Engine/Source/Runtime/Physics/Public/Physics/PhysicsQuery.h" />
+
+```cpp title="TraceAhead.cpp"
+#include "Core/Platform.h"
+#include "ECS/World.h"
+#include "Game/AActor.h"
+#include "Game/MWorld.h"
+#include "Physics/PhysicsQuery.h"
+#include "Physics/PhysicsSystem.h"
+
+static bool TraceAhead(Mowo::AActor* self, const Mowo::Vec3& direction, float range, Mowo::FQueryHit& hit) {
+	Mowo::MWorld* world = self->GetWorld();
+	Mowo::World* ecs = world ? world->GetECSWorld() : nullptr;
+	Mowo::PhysicsSystem* physics = ecs ? ecs->GetSystem<Mowo::PhysicsSystem>() : nullptr;
+
+	if (!physics) {
+		return false;
+	}
+
+	Mowo::FQueryFilter filter;
+	filter.channel = Mowo::ECollisionChannel::Weapon;
+	filter.Ignore(physics->GetQueryBodyForEntity(self->GetBackingEntity()));
+
+	return physics->GetPhysicsWorld().QueryRay(self->GetLocation(), direction, range, filter, hit);
+}
+```
+
+<Callout type="warning">
+A ray that starts inside a shape hits it at distance 0. Any trace fired from a character, such as a weapon or sight line, must ignore that character's own body. `PhysicsSystem::GetQueryBodyForEntity` returns the right body for both rigid bodies and characters. <Source symbol="PhysicsSystem" />
+</Callout>
+
+Multi queries report every overlap the trace passed through, in order, followed by the blocking hit. For hundreds of rays per frame, `FTraceBatch` sets up the filter once and spreads the rays across worker threads.
+
+For quick checks from gameplay code and Visual Scripting, `MGameplayStatics` offers `LineTraceByChannel`, `SphereTraceByChannel`, their multi-hit forms, and `OverlapSphereActors` and `OverlapBoxActors`, which resolve hits to actors. <Source symbol="MGameplayStatics" />
+
+## Contact events
+
+For gameplay volumes, use `MTriggerComponent` or the placeable `ATriggerActor`; see [Components](/docs/gameplay/components/).
+
+For contacts between bodies, subscribe to `PhysicsSystem::OnCollisionEnterEvents()`. Each event names the entity and carries a `CollisionInfo` with the other entity, the contact point and normal, the relative velocity and the estimated impact impulse. <Source symbol="PhysicsSystem::OnCollisionEnterEvents" />
+
+```cpp title="ImpactListener.cpp" wrap
+#include "Physics/PhysicsSystem.h"
+
+Mowo::PhysicsSystem* physics = nullptr;
+
+physics->OnCollisionEnterEvents().Add([](uint64_t entityId, const Mowo::CollisionInfo& info) {
+	if (info.impulse > 50.0f) {
+	}
+});
+```
+
+<Callout type="warning">
+`SetOnCollisionEnter` and its siblings hold a single callback each, and engine systems already claim them. Setting your own replaces theirs. Use the multicast event above. <Source path="Engine/Source/Runtime/Game/Private/Gameplay/PhysicsInteractableSystem.cpp" />
+</Callout>
+
+## Push a body
+
+`PhysicsWorld` applies forces and impulses to a body handle: `AddForce`, `AddImpulse`, `AddForceAtPosition` and `AddImpulseAtPosition`. Combine it with a trace to make a prop react to a shot at the point it was hit. <Source symbol="PhysicsWorld" />
+
+```cpp title="ShootProp.cpp"
+#include "Physics/PhysicsQuery.h"
+#include "Physics/PhysicsSystem.h"
+
+static void ShootProp(Mowo::PhysicsSystem& physics, const Mowo::Vec3& from, const Mowo::Vec3& direction) {
+	Mowo::FQueryFilter filter;
+	filter.channel = Mowo::ECollisionChannel::Weapon;
+
+	Mowo::FQueryHit hit;
+
+	if (!physics.GetPhysicsWorld().QueryRay(from, direction, 100.0f, filter, hit)) {
+		return;
+	}
+
+	physics.GetPhysicsWorld().AddImpulseAtPosition(hit.bodyID, direction * 30.0f, hit.location);
+}
+```
+
+The prop needs a `Dynamic` rigid body. Static and kinematic bodies ignore impulses.
+
+## Constraints
+
+A `ConstraintComponent` joins an entity's rigid body to another entity, or to the world when none is connected. Types are `Fixed`, `Hinge`, `BallSocket`, `Distance`, `Slider` and `SixDOF`. <Source symbol="ConstraintComponent" />
+
+- Anchors are local to each body, measured from its center of mass.
+- `SixDOF` sets each linear and angular axis to `Free`, `Limited` or `Locked`, and each axis can have a position or velocity motor.
+- `breakForce` and `breakTorque` (0 means unbreakable) let a joint snap. A break sets the component's `broken` flag and broadcasts `PhysicsSystem::OnConstraintBroken()`. <Source symbol="PhysicsSystem" />
+
+## Physics materials and surfaces
+
+Each collider carries a physics material: `friction`, `restitution`, `density` and a surface type. When `RigidBodyComponent::mass` is 0, the mass comes from the collider's volume and density. `frictionCombine` and `restitutionCombine` (`Average`, `Minimum`, `Maximum`, `Multiply`) decide how two touching materials blend. <Source symbol="PhysicsMaterial" />
+
+To author a material once and reuse it, save it as a `.physmat` asset and reference it from the collider. A referenced asset replaces the collider's inline values. <Source symbol="FPhysicsMaterialAsset" />
+
+The surface type answers "what is this made of": `Default`, `Concrete`, `Stone`, `Metal`, `Wood`, `Dirt`, `Grass`, `Gravel`, `Sand`, `Snow`, `Ice`, `Water`, `Mud`, `Glass`, `Carpet` or `Flesh`. Footsteps, impact effects, decals and the scanner all read it from the hit. A mesh collider can carry one surface per triangle, and a terrain takes each collision square's surface from its heaviest painted layer. <Source path="Engine/Source/Runtime/Physics/Public/Physics/SurfaceType.h" />
+
+| Where | Read |
+| --- | --- |
+| A scene query | `FQueryHit` |
+| Under a character | `CharacterControllerComponent::groundSurface` |
+| Any body and sub-shape | `PhysicsWorld::GetSurfaceAt` |
+
+Visual Scripting can read and change an actor's material, friction, restitution and surface through `MPhysicsStatics`. <Source symbol="MPhysicsStatics" />
+
+## Static-mesh collision
+
+A `Mesh` or `ConvexHull` collider with no vertices of its own takes its geometry from a mesh asset: the path in `collisionMeshPath`, or the entity's own mesh when that is empty. Sub-meshes named with Unreal's collision prefixes become collision instead of geometry and are never drawn: <Source path="Engine/Source/Runtime/Physics/Public/Physics/MeshCollision.h" />
+
+| Prefix | Becomes |
+| --- | --- |
+| `UCX_` | A convex hull |
+| `UBX_` | A box sized from the piece's bounds |
+| `USP_` | A sphere that encloses the piece |
+| `UCP_` | A capsule along local Y |
+
+A hull collider on a concave mesh with no authored collision is split into several hulls automatically. Set the hull budget in the Static Mesh editor's collision view. Cooked shapes are shared between every instance of the same mesh. <Source path="Engine/Source/Runtime/Physics/Public/Physics/CollisionCooking.h" />
+
+## Physics interactables
+
+One reflected component, `PhysicsInteractable`, turns a body into a door on a real hinge, a lever or valve with a progress threshold, a mass-gated pushable, or a breakable that reacts to weapon damage and hard impacts. Place `APhysicsInteractableActor` for a ready-made one. <Source path="Engine/Source/Runtime/Game/Public/Game/Components/FPhysicsInteractableComponent.h" />
+
+From Visual Scripting or C++, `MPhysicsInteractableStatics` opens and closes doors (`SetDoorOpen`, `IsDoorOpen`), engages levers, reads progress, and breaks objects (`BreakObject`, `IsBroken`). <Source symbol="MPhysicsInteractableStatics" />
+
+## Simulation level of detail
+
+When the scene has a focus point (the main camera by default), dynamic bodies farther than `p.LODSleepRadius` (150 m) are put to sleep and stay asleep until the focus comes back within `p.LODWakeRadius` (120 m). Bodies that were already asleep are left alone. `p.LOD 0` turns this off. Set the focus yourself with `PhysicsSystem::SetSimulationFocus`. <Source symbol="PhysicsSystem::SetSimulationFocus" />
+
+## More physics
+
+- [Character movement](/docs/gameplay/character-movement/): the character controller and its movement modes
+- [Vehicles, cloth and ragdolls](/docs/gameplay/vehicles-cloth-and-ragdolls/): wheeled and tracked vehicles, cloth and soft bodies, ragdolls and physical animation
+- [Destruction](/docs/gameplay/destruction/): fractured and voxel destructibles
+
+<Screenshot id="gameplay-physics-debug" alt="Mowo Editor during play-in-editor with p.Debug 1: collider wireframes drawn over a stack of crates, contact normals at the crate contacts and a velocity arrow on a falling crate" caption="p.Debug draws colliders, contacts and velocities over the running scene." />
+
+## Related
+
+- [Components](/docs/gameplay/components/) for how reflected components work
+- [Entity-component system](/docs/gameplay/ecs/) for systems and phases
+- [Project settings](/docs/editor/project-settings/)
+- [Console variables](/docs/reference/console-variables/)
+- API: [Physics module](/docs/api/physics/), [Game module](/docs/api/game/)

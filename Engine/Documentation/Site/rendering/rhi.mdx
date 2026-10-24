@@ -1,0 +1,178 @@
+---
+title: RHI programming
+sidebarTitle: RHI
+description: Create GPU resources and pipelines, record draws and dispatches, use the render graph and async compute through the backend-neutral RHI.
+order: 3
+sources:
+  - Engine/Source/Runtime/RHI/Public/RHI/Renderer.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RendererTypes.h
+  - Engine/Source/Runtime/RHI/Public/RHI/Pipeline.h
+  - Engine/Source/Runtime/RHI/Public/RHI/Shader.h
+  - Engine/Source/Runtime/RHI/Public/RHI/StorageBuffer.h
+  - Engine/Source/Runtime/RHI/Public/RHI/DescriptorSet.h
+  - Engine/Source/Runtime/RHI/Public/RHI/Image.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RenderGraph.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RenderGraphExecutor.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RHIFactory.h
+  - Engine/Source/Runtime/RHI/Public/RHI/GpuTimings.h
+  - Engine/Source/Runtime/RHI/Public/RHI/AsyncReadback.h
+  - Engine/Source/Runtime/RHI/Private/GpuTimings.cpp
+  - Engine/Source/Runtime/RHI/Private/RenderGraphExecutor.cpp
+verifiedAt: 08e26df3d
+---
+
+The RHI module is the engine's GPU abstraction. Its public headers name no backend type: you create resources through static `Create` functions, record work through the static `Renderer` facade, and the active backend (<Fact id="rhiBackends" />) does the rest. Most game code never touches the RHI; use it when you write a [render-pass extension](/docs/rendering/extending-the-renderer/), a tool or a custom renderer.
+
+## How backends plug in
+
+Each backend module registers a factory with `FRHIFactory` when it loads. Every abstract `Create()` call dispatches through that table to the live backend. You never include a backend header. Ask [`FRHIApiCeiling` and `RendererCapabilities`](/docs/rendering/backends/#what-each-api-can-do) before you use an optional feature such as ray query, mesh shaders or bindless tables.
+
+## Resources
+
+| Type | Create with | Use |
+|---|---|---|
+| `VertexBuffer`, `IndexBuffer` | `Create(data, size)`; `VertexBuffer::CreateDynamic(size)` for per-frame data | Geometry |
+| `UniformBuffer` | `Create(size)` | Small constant data |
+| `StorageBuffer` | `Create(size, usage)` with `GPUOnly`, `CPUToGPU` or `GPUToCPU` | Structured data, compute input and output |
+| `Image2D`, `Image3D`, `ImageCube` | `Create(ImageSpecification)` | Render targets, storage images, volumes |
+| `Texture2D`, `TextureCube` | `Create(path)` or `Create(spec, data, size)` | Sampled textures |
+| `Sampler` | `Create(SamplerSpecification)` | Filtering and addressing |
+| `Shader` | `Create(path)` | A compiled shader from the shader archive |
+| `Pipeline`, `ComputePipeline` | `Create(spec)` | Graphics and compute state |
+| `DescriptorSet` | `pipeline->AllocateDescriptorSet(set)` or `Create(spec)` | Bind resources to a pipeline |
+
+Every resource is reference-counted (`Ref<T>`).
+
+`Shader::Create` takes a blob key such as `GBuffer/GBufferFill` or a virtual source path such as `/Engine/Private/GBuffer/GBufferFill.hlsl`. See [Shaders](/docs/rendering/shaders/) for how sources become blobs.
+
+## Record a compute dispatch
+
+This example creates a storage buffer, a compute pipeline and a descriptor set, and records a dispatch into the current frame:
+
+```cpp title="ComputeExample.cpp"
+#include "RHI/DescriptorSet.h"
+#include "RHI/Pipeline.h"
+#include "RHI/Renderer.h"
+#include "RHI/Shader.h"
+#include "RHI/StorageBuffer.h"
+
+#include <cstdint>
+
+struct FClearParams {
+	uint32_t Count = 0;
+	uint32_t Value = 0;
+};
+
+void RecordClear(uint32_t count) {
+	static Mowo::Ref<Mowo::StorageBuffer> s_Buffer = Mowo::StorageBuffer::Create(count * sizeof(uint32_t), Mowo::StorageBufferUsage::GPUOnly, "ClearTarget");
+
+	Mowo::DescriptorBinding binding;
+	binding.Binding = 0;
+	binding.Type = Mowo::DescriptorType::StorageBuffer;
+	binding.Stage = Mowo::ShaderStage::Compute;
+
+	Mowo::DescriptorSetLayoutDescription layout;
+	layout.SetIndex = 0;
+	layout.Bindings = { binding };
+
+	Mowo::PushConstantRange push;
+	push.Stage = Mowo::ShaderStage::Compute;
+	push.Size = sizeof(FClearParams);
+
+	Mowo::ComputePipelineSpecification spec;
+	spec.Shader = Mowo::Shader::Create("/Plugin/MyPlugin/ClearBuffer.hlsl");
+	spec.DebugName = "ClearBuffer";
+	spec.DescriptorSetLayouts = { layout };
+	spec.PushConstants = { push };
+
+	static Mowo::Ref<Mowo::ComputePipeline> s_Pipeline = Mowo::ComputePipeline::Create(spec);
+	static Mowo::Ref<Mowo::DescriptorSet> s_Set = s_Pipeline->AllocateDescriptorSet(0, "ClearSet");
+
+	s_Set->SetStorageBuffer(0, s_Buffer);
+	s_Set->Update();
+
+	FClearParams params;
+	params.Count = count;
+
+	Mowo::Renderer::BindComputeDescriptorSet(s_Pipeline, s_Set, 0);
+	Mowo::Renderer::ComputePushConstants(s_Pipeline, &params, sizeof(params));
+	Mowo::Renderer::Dispatch(s_Pipeline, (count + 63) / 64, 1, 1);
+	Mowo::Renderer::ComputeToGraphicsBarrier();
+}
+```
+
+Graphics work follows the same shape: `Pipeline::Create(GraphicsPipelineSpecification)`, then `Renderer::BeginRenderPass`, `BindDescriptorSet`, `PushConstants`, `Draw` or `DrawIndexed`, and `EndRenderPass`. Indirect forms (`DrawIndexedIndirect`, `DrawIndexedIndirectCount`, `DispatchIndirect`) read their arguments from a buffer. Check `RendererCapabilities::SupportsDrawIndirectCount` before you use the count form: D3D11 and Metal report it as unsupported.
+
+## The render graph
+
+<Source symbol="RenderGraph" /> orders passes and emits the barriers between them. You declare resources and passes, compile the graph, then hand it to a <Source symbol="RenderGraphExecutor" /> that allocates the transient images, inserts the transitions and runs the pass bodies:
+
+```cpp title="GraphExample.cpp" wrap
+#include "RHI/RenderGraph.h"
+#include "RHI/RenderGraphExecutor.h"
+#include "RHI/Image.h"
+#include "RHI/StorageBuffer.h"
+
+Mowo::RenderGraph graph;
+const Mowo::RGResource color = graph.CreateTexture("Color", Mowo::ImageFormat::RGBA16F, 1920, 1080);
+const Mowo::RGResource blurred = graph.CreateTexture("Blurred", Mowo::ImageFormat::RGBA16F, 1920, 1080);
+
+graph.AddPass("Draw", {}, { { color, Mowo::RGState::RenderTarget } }, [](const Mowo::RenderGraphExecutor& exec) {
+	(void)exec;
+});
+graph.AddPass("Blur", { { color, Mowo::RGState::ShaderRead } }, { { blurred, Mowo::RGState::UnorderedAccess } }, [blurred](const Mowo::RenderGraphExecutor& exec) {
+	(void)exec.GetImage(blurred);
+});
+
+if (graph.Compile()) {
+	Mowo::RenderGraphExecutor executor;
+	executor.Execute(graph);
+}
+```
+
+Inside a pass body, `exec.GetImage(handle)` returns the image behind a graph resource. Import a texture you own with `ImportTexture` and bind it with `SetImported` before you execute.
+
+What the graph does today:
+
+- It orders passes by their declared dependencies and emits each transition. With `r.RDG.BatchBarriers` (on by default) a pass's transitions go out as one barrier call.
+- Transients whose lifetimes do not overlap can share an image. `r.RDG.PlacedAliasing` (off by default) packs them into shared heaps on D3D12 and Vulkan.
+- `r.RDG.SplitBarriers` (off by default) splits transitions so the GPU retires them behind the passes in between.
+- A pass marked with `SetAsyncCompute` runs on the async-compute lane where the backend has one and `r.RDG.AsyncCompute` is on.
+
+Dead-pass culling is implemented (`SetCullDeadPasses`) but the scene renderer does not turn it on.
+
+## Async compute
+
+D3D12, Vulkan and Metal can run compute on a second queue while graphics work continues. Bracket the work and wait before its first consumer:
+
+```cpp title="AsyncCompute.cpp" wrap
+#include "RHI/Renderer.h"
+
+if (Mowo::Renderer::BeginAsyncCompute()) {
+	Mowo::Renderer::EndAsyncCompute();
+}
+
+Mowo::Renderer::WaitAsyncCompute();
+```
+
+`BeginAsyncCompute` returns false when the backend has no second queue, a lane is already open or a render pass is recording; record the same work inline then and you get the same result without the overlap. A lane pass may only read what was finished before the lane opened, and nothing on the graphics queue between the open and the wait may touch what the lane writes. `Renderer::EndFrame` waits for a lane you forgot, so a mistake costs a stall, not a race. Passes on the lane are not GPU-timed.
+
+## Readback
+
+`AsyncReadback` copies a pixel or a region of an image back to the CPU without stalling the frame: call `RequestPixelReadback` or `RequestRegionReadback`, poll `IsComplete` or `IsRegionComplete` on later frames, then take the result. For buffers, create a `StorageBuffer` with `GPUToCPU` usage and read it with `ReadBack`.
+
+## GPU timing and capture tools
+
+| Variable | Default | Effect |
+|---|---|---|
+| `r.GpuTimings` | On in Debug and Development, off in Shipping | Record per-pass GPU timestamps for the profiler. |
+| `r.LogGpuTimings` | 0 | Log resolved pass timings every N frames. |
+| `r.LogGpuScopes` | 0 | Log per-scope GPU averages every N frames. |
+| `r.GpuMarkers` | 1 | Name every GPU scope for PIX, RenderDoc, Nsight and Xcode captures. |
+| `r.Metal.CaptureFrame` | 0 | Capture the next Metal frame to a `.gputrace`. Needs `MTL_CAPTURE_ENABLED=1`. |
+
+The full list is at [Console variables](/docs/reference/console-variables/).
+
+## API reference
+
+- [RHI module](/docs/api/rhi/): `Renderer`, `RenderGraph`, `RenderGraphExecutor`, `Pipeline`, `ComputePipeline`, `Shader`, `StorageBuffer`, `DescriptorSet`, `Image2D`, `AsyncReadback`, `GpuTimings`

@@ -1,0 +1,165 @@
+---
+title: Content protection
+sidebarTitle: Content protection
+description: Project content keys, encrypted and signed archives, signed modules, where the signing private key lives, and what protection does not cover.
+order: 3
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CryptoCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/CryptoSettings.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/EmbeddedCryptoBlock.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ModuleSigner.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ConfigIniStager.cs
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/MEAFFormat.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/MeafCrypto.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/MeafKeyRing.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/EmbeddedCryptoKeys.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/FModuleSignature.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/ProjectCryptoSettings.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/PackagePaks.h
+  - Engine/Source/Runtime/Filesystem/Private/MEAFFileSystem.cpp
+  - Engine/Source/Runtime/MowoGame/Private/MowoGame.cpp
+  - Engine/Source/Programs/MeafBuilder/Private/main.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/CryptoSettingsPage.cpp
+verifiedAt: 6caf55861
+---
+
+Every archive in a package is a **MEAF** file (`.meaf`). MEAF compresses each entry, and can also encrypt the archive's table of contents and payloads and sign the whole archive. With the same signing key, the packager also signs every module the game loads. Encryption keeps casual extraction tools out of your content. Signing lets the game refuse an archive or a DLL someone has swapped or modified.
+
+A Shipping package does both by default, from keys your project commits. This page explains the keys, what the packager and the game do with them, and what the protection does not cover.
+
+## The project's keys
+
+A project's keys live in `Config/DefaultCrypto.ini`, as in Unreal's Project Settings > Crypto. You commit the file, because every build, patch and DLC of one game must be made with the same keys <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/CryptoSettings.cs" />:
+
+```ini title="Config/DefaultCrypto.ini"
+[/Script/MowoCrypto.CryptoSettings]
+bEncryptPaks=True
+bSignPaks=True
+EncryptionKeyId=0
+EncryptionKey=<64 hex digits>
+SigningPublicKey=<64 hex digits>
+```
+
+The file holds the XChaCha20 encryption key and the EdDSA signing **public** key. The signing **private** key is never in it. That key signs everything a Shipping game trusts (its archives, its modules, trusted mods and live-ops config), so anyone who could read the repository could sign a trojan with it. It lives in one of two places:
+
+| Where | For |
+|---|---|
+| The per-user key store: `%LOCALAPPDATA%\MowoEngine\SigningKeys` on Windows, `$XDG_CONFIG_HOME/MowoEngine/SigningKeys` on Linux, `~/Library/Application Support/MowoEngine/SigningKeys` on macOS | A developer machine. One file per key, named by its public key. |
+| The `MOWO_SIGNING_PRIVATE_KEY` environment variable | A build machine. Set it as a CI secret; it is used only when it belongs to the INI's public key. |
+
+`bEncryptPaks=False` or `bSignPaks=False` turns off one half of the protection.
+
+### Create and manage the keys
+
+<Steps>
+<Step title="Generate them">
+
+In the editor, open **Edit > Project Settings… > Crypto**, press **Generate** next to **Encryption Key** and **Signing Keys**, then **Apply** <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/CryptoSettingsPage.cpp" />. Or run:
+
+```powershell
+./mbt.cmd crypto generate --project D:/Projects/MyGame/MyGame.mproject
+```
+
+Existing keys are kept unless you pass `--force` (or press **Regenerate**). `--encryption` and `--signing` make only one of them.
+
+</Step>
+<Step title="Commit the INI and back up the private key">
+
+Commit `Config/DefaultCrypto.ini`. The command prints where it stored the private key: copy that file somewhere safe, because a lost key means you cannot sign a patch for a build you already shipped.
+
+</Step>
+<Step title="Give the private key to other machines">
+
+On a teammate's machine, import it into their key store; it is refused unless it belongs to the project's public key:
+
+```powershell
+./mbt.cmd crypto import-signing-key --project D:/Projects/MyGame/MyGame.mproject --file D:/Secrets/MyGame-signing.key
+```
+
+On a build machine, set `MOWO_SIGNING_PRIVATE_KEY` instead.
+
+</Step>
+</Steps>
+
+`mbt crypto show` says which keys a project has, and where the private key was found, without printing any key <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CryptoCommand.cs" />.
+
+<Callout type="danger" title="Regenerating breaks compatibility">
+A build made with new keys cannot open archives an older build shipped, and the reverse. Patches and DLC for a released build must be made with that build's keys. Regenerate only before your first release, or when a key was exposed.
+</Callout>
+
+A project whose `DefaultCrypto.ini` still carries a `SigningPrivateKey=` line (the layout before 2026-10-13) must move it out: `mbt crypto migrate` moves the key into your store and rewrites the file. Until then, other configurations warn and Shipping refuses to package. The key stays in the repository's history, so treat it as exposed and make a new pair with `mbt crypto generate --signing --force` if anyone outside the team ever had read access.
+
+## What `mbt package` does with the keys
+
+| Configuration | Keys present | Keys missing |
+|---|---|---|
+| Shipping | Encrypts and signs | Refuses to package, and names the button and the command that make the keys |
+| Any other | Encrypts and signs | Packages plaintext and unsigned |
+
+`--unprotected` packages plaintext, unsigned content and unsigned modules on purpose, even when keys exist. `--crypto-config <file>` packages with a crypto INI outside the project, which may hold the private key inline <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />.
+
+With keys, the package gets:
+
+- **Encrypted content.** The content paks, their chunks and DLC archives. The engine pak and the shader paks stay unencrypted, because the player reads them during startup, but they are signed <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs" />.
+- **Signed archives.** Every archive in `Content/Paks/`.
+- **Signed modules.** Every module in `Binaries/<Platform>/` gets a detached `<file>.mowosig` signature made with the same key <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ModuleSigner.cs" />.
+- **Keys inside the host.** The game host reserves a key block, and the packager writes the encryption key and the signing public key into the **staged** copy of the host. Each key is split into two random shares under a position mask <Source path="Engine/Source/Runtime/Filesystem/Public/Filesystem/EmbeddedCryptoKeys.h" />. `DefaultCrypto.ini` itself is never staged, and the build tree under `Engine/Binaries` never carries a project's keys <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ConfigIniStager.cs" />.
+
+The log's `Content protection:` line says what was applied: the key id it encrypted with and the start of the signing public key.
+
+## What the game does
+
+The game host registers its embedded keys with [`FMeafKeyRing`](/docs/api/filesystem/) before the first archive mounts <Source path="Engine/Source/Runtime/MowoGame/Private/MowoGame.cpp" />. You do not register keys yourself in a packaged game.
+
+With a signing key present, the host also arms the module gate: <Source symbol="FModuleSignature" /> checks each module against its `.mowosig` before the image is mapped, so an unsigned or altered DLL is refused before any of its code runs. The trust root is the key registered in `FMeafKeyRing`, never one read from the sidecar, and no module is exempt by name <Source path="Engine/Source/Runtime/Filesystem/Public/Filesystem/FModuleSignature.h" />. The gate also takes the working directory and `PATH` out of the DLL search.
+
+<Flow steps={["Read plaintext header", "Look up key by key id", "Decrypt and check the table", "Verify signature", "Mount", "Verify blocks on first read"]} caption="Opening an encrypted, signed archive. A failure at any step refuses the mount or the read." />
+
+1. The header says whether the archive is encrypted and signed, and which key id it uses. An encrypted archive whose key is not registered is not opened, and the log names the missing key id <Source path="Engine/Source/Runtime/Filesystem/Private/MEAFFileSystem.cpp" />.
+2. The table of contents is decrypted and its nonce recomputed, which rejects a wrong key or an edited table before anything else is read.
+3. The signature over the header, the table and the data section's block hashes is checked. When a signing public key is registered, the archive must be signed by exactly that key.
+4. Each block of the data section is hashed the first time a read touches it, so honoring the signature does not mean hashing every pak before the first frame <Source path="Engine/Source/Runtime/Filesystem/Public/Filesystem/MEAFFormat.h" />.
+
+The `meaf.Verify` console variable sets payload verification: `-1` (default) picks level 2 for signed archives and 1 otherwise, `0` turns it off, `1` checks each entry's CRC32 on load, `2` also verifies the data section.
+
+## The format at a glance
+
+| Feature | How it works |
+|---|---|
+| Lookup | Flat, hash-indexed table of contents. Directories are inferred from entry paths. |
+| Compression | Per entry: zstd (the default) or LZ4. Small records of one kind can share a trained zstd dictionary, stored as an ordinary entry. |
+| Streaming | Large streamable entries are compressed in 256 KiB blocks, so a partial read only decompresses the blocks it touches. |
+| Encryption | XChaCha20 over the table of contents and every payload. The header stays plaintext. |
+| Nonces | Deterministic, from a BLAKE2b digest of the stored bytes, so an unchanged file repacks to identical bytes and patches stay small. |
+| Signing | EdDSA with BLAKE2b (Monocypher's `crypto_eddsa_*`, not RFC 8032 Ed25519) over the header, the stored table and a table of per-block hashes. |
+
+The packer and the runtime share one implementation of the cryptography, so nonce derivation cannot drift between them <Source path="Engine/Source/Runtime/Filesystem/Public/Filesystem/MeafCrypto.h" />. Older archive versions still load.
+
+## What is and is not protected
+
+Keep the threat model realistic. The encryption key is inside the shipped executable by construction, as in every engine that ships encrypted paks; splitting it into masked shares only defeats a scan for a 32-byte run. Encryption stops someone from opening your archives with a generic tool, not a determined attacker who inspects the running game. Signing is the stronger guarantee: without the private key, nobody can produce an archive or a module your game accepts.
+
+The engine pak, the shader paks and the pak of baked derived data (the reflection probes the game reads) are signed but not encrypted: they carry engine content, shader bytecode and derived bytes, nothing you authored <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs" />.
+
+## MeafBuilder
+
+`MeafBuilder` is the archive tool the packager runs. You can run it yourself from `Engine/Binaries/<Platform>/` to inspect a package <Source path="Engine/Source/Programs/MeafBuilder/Private/main.cpp" />:
+
+| Command | Use |
+|---|---|
+| `create -o <file> -i <dir>` | Pack a directory. `-c none\|fast\|default\|best`, `--codec zstd\|lz4`, `--encrypt-key`, `--key-id`, `--sign-key` |
+| `list <file> [-l]` | List entries |
+| `extract <file> -o <dir>` | Extract entries |
+| `verify <file>` | Check integrity |
+| `info <file>` | Show header information |
+| `keygen -o <dir>` | Write a standalone key set (`meaf_encryption.key`, `meaf_signing.key`, `meaf_signing.pub`) |
+
+For an encrypted archive, `list`, `extract`, `verify` and `info` take `--encrypt-key <file>` and `--key-id <n>`. A file holding the encryption key as 64 hex digits works.
+
+## Related
+
+- [`FMeafKeyRing`](/docs/api/filesystem/), [`FModuleSignature`](/docs/api/filesystem/), [`FProjectCryptoSettings`](/docs/api/filesystem/)
+- [Patches, chunks and DLC](/docs/shipping/patches-and-dlc/)
+- [Mods and the Workshop](/docs/shipping/mods/), [Live ops](/docs/shipping/live-ops/): both rely on the same signing key

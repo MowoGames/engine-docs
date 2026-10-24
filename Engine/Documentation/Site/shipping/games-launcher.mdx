@@ -1,0 +1,125 @@
+---
+title: Mowo Games Launcher
+sidebarTitle: Games Launcher
+description: "The player-facing Mowo Games Launcher: sign-in, library, installs, cloud saves, friends, overlay and crash reports, and how to package it."
+order: 10
+sources:
+  - Engine/Source/Programs/MowoGamesLauncher/MowoGamesLauncher.Target.cs
+  - Engine/Source/Programs/MowoGamesLauncher/MowoGamesLauncher.Build.cs
+  - Engine/Source/Programs/MowoGamesLauncher/Private/MowoGamesLauncher.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Setup/LauncherSetup.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherSettings.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherInstaller.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherCloud.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherCrashes.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherSelfUpdate.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Core/MLauncherApp.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Link/LauncherGameLink.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/Overlay/LauncherOverlay.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/UI/LauncherAuthScreens.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/UI/LauncherSettingsPage.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/UI/LauncherPopups.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Private/UI/LauncherShell.cpp
+  - Engine/Source/Programs/MowoGamesLauncher/Content/Localization/de.txt
+  - Engine/Source/Runtime/Platform/Private/Posix/PosixWindowTracking.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageLauncherCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherPackager.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMsi.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMacApp.cs
+  - Engine/Config/Toolchains.ini
+verifiedAt: 08e26df3d
+---
+
+**Mowo Games Launcher** (`MowoGamesLauncher`) is the launcher players use for Mowo games. They sign in with a Mowo ID, see their library, install, update and play games, sync cloud saves, talk to friends and use an in-game overlay. Games built with Mowo talk to it through Mowo Online Services. It is not the **Mowo Project Launcher**, which opens engine projects for developers.
+
+The first part of this page describes the launcher as a player meets it. The last part shows how to build and package it.
+
+<Screenshot id="shipping-games-launcher-library" alt="Mowo Games Launcher signed in, on the Library page: the sidebar, a grid of game tiles with one installed and one available to install, the download indicator idle, and the account menu in the top right." />
+
+## Install and uninstall
+
+The launcher installs per user, under `%LOCALAPPDATA%\Programs\Mowo Games\Launcher` on Windows, so it needs no administrator rights <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Setup/LauncherSetup.cpp" />. There are two downloads for Windows:
+
+- **`MowoGamesLauncherSetup-<version>-Win64.exe`.** The launcher itself, which runs its own installer screens when its file name contains "Setup". It downloads the newest launcher build, installs the Visual C++ runtime when it is missing, and registers the Apps & features entry, the launcher's URL schemes and the Start menu and desktop shortcuts.
+- **`MowoGamesLauncher-<version>-Win64.msi`.** A per-user Windows Installer package that installs to the same folder with the same shortcuts and URL schemes, for managed deployment <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMsi.cs" />.
+
+Every install carries `MowoGamesLauncherUninstall.exe` beside the launcher, which Apps & features runs. Uninstalling signs the player out on that PC, removes the shortcuts, URL schemes and caches, optionally deletes installed games, and removes the install folder. The setup also takes switches for scripted installs:
+
+| Switch | Effect |
+|---|---|
+| `--setup [--dir=<path>] [--quiet] [--no-desktop-shortcut] [--no-launch]` | Install; `--quiet` runs without a window |
+| `--uninstall [--quiet] [--delete-games]` | Uninstall |
+
+On macOS the download is `MowoGamesLauncher-<version>-Mac.dmg` holding **Mowo Games Launcher.app** <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMacApp.cs" />.
+
+An installed launcher updates itself: it downloads a newer build in the background and applies it on the next start <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherSelfUpdate.cpp" />.
+
+## Sign in
+
+The sign-in screen takes the email and password of a Mowo ID, with **Keep me signed in on this PC** <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/UI/LauncherAuthScreens.cpp" />. Other ways in:
+
+- **Continue in browser**, and the provider buttons under "or sign in with", which open Mowo ID in the browser.
+- **Use a code from another device**, for a device such as a Steam Deck or TV where typing is awkward.
+- **Steam.** A game started from Steam can sign a player in with their linked Steam account, or offer to link one.
+
+Two-step verification asks for an authenticator code, an emailed code, a passkey in the browser or a backup code, and **Trust this PC for 30 days** skips it next time.
+
+Without a connection, a player who has signed in on the PC before can choose **Play offline**: installed games stay playable, and friends and cloud saves pause until **Reconnect**.
+
+## Library, installs and updates
+
+The library lists the games the player owns, including games owned on a linked Steam account. The launcher sells nothing itself: getting a game opens its store page in the browser, and a game bought there appears in the library without a restart.
+
+Games install into the library folder, `Mowo Games` in the player's home folder by default <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherSettings.cpp" />. A build is a manifest of files stored as compressed, hash-addressed chunks. The installer reuses chunks the installed version already has, resumes partial downloads, verifies everything and only then switches the install over <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherInstaller.cpp" />. On a game's **Manage** menu, **Verify files** and **Repair** check and fix an install, and **Cloud backups** restores an older save.
+
+The download queue runs one job at a time, survives restarts, updates installed games automatically when the game is not running, and takes a bandwidth limit in Settings.
+
+## Play
+
+**Play** checks the Visual C++ runtime (and runs the game's bundled `VC_redist.x64.exe` when it is missing), syncs cloud saves, then starts the game from its install folder with a session for Mowo Online Services in its environment. The game connects back to the launcher over the local machine for friends, invites, presence, achievements and the overlay <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Link/LauncherGameLink.cpp" />. **Stop** asks the game to quit, and ends it when it does not.
+
+The launcher registers the `mowo-games://` URL scheme, plus `mowo://` for the store site's **Open in launcher**. Links such as `mowo-games://launch/<product>` start a game and `mowo-games://game/<product>` opens its page.
+
+## Cloud saves
+
+A game names its save folder, and the launcher keeps it in sync with the player's Mowo ID before the game starts and after it exits <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherCloud.cpp" />. When only one side changed, it uploads or downloads. When both changed, it asks: **Keep cloud save**, **Keep this PC's save** or **Decide later**. The copy that loses is kept as a backup for 30 days.
+
+## Friends and the overlay
+
+The friends sheet lists friends in game, online and offline, friend requests and invites, with **Join** and invite actions. Privacy settings decide who sees the player online, which game they play, and who may send requests.
+
+The in-game overlay draws friends, invites, notifications and achievements over a running game that uses Mowo Online Services. **Shift+Tab** opens it by default; the shortcut is a setting <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Overlay/LauncherOverlay.cpp" />. The overlay works on Windows only, over windowed and borderless games; exclusive fullscreen games show none <Source path="Engine/Source/Runtime/Platform/Private/Posix/PosixWindowTracking.cpp" />.
+
+## Crash reports
+
+**Share anonymous usage data** (Settings, privacy; off by default) decides whether crash reports leave the PC <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/UI/LauncherSettingsPage.cpp" />. After a game exits with an error, or leaves a new engine crash report in its crash folder, the launcher treats it as a crash. With the setting on, it sends the report to Mowo ID right away; with it off, it asks, and sends only when the player presses **Send report**. The report carries the game's log tail with the user's home folder, user name and PC name masked; the minidump stays on the PC <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherCrashes.cpp" />. The launcher's own crashes are reported the same way.
+
+This is separate from a game's own crash reporter; see [Crash reporting](/docs/shipping/crash-reporting/).
+
+## Settings and languages
+
+Settings cover the language, starting with the system, closing to the tray, the library folder, bandwidth and auto-update, notifications, privacy, accessibility, controller and overlay, and an About page with the version and licenses. The launcher is in English, German, Spanish, French, Italian, Lithuanian, Polish, Brazilian Portuguese, Russian, Turkish and Ukrainian, and picks the system language when it has it.
+
+The launcher keeps its settings, caches and logs under the `MowoGamesLauncher` product folder (`%LOCALAPPDATA%\MowoGamesLauncher` on Windows). Its own command line takes `--hidden` (start in the tray) and `--url=<mowo-games://…>` (handle a link) <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/MowoGamesLauncher.cpp" />.
+
+## Package the launcher
+
+The launcher is a Program target that links monolithic in its own output tree, with third-party libraries linked statically and the Steam, Discord, upscaler and Mowo Online SDKs off. Its fonts, themes, string tables, UI shaders and engine content are linked into the executable, so the shipped launcher is one file <Source path="Engine/Source/Programs/MowoGamesLauncher/MowoGamesLauncher.Target.cs" />.
+
+```powershell
+./mbt.cmd package-launcher
+./mbt.cmd package-launcher -c Shipping --sign D:/Secrets/MyStudio.pfx
+```
+
+`mbt package-launcher` builds the target twice, because each link embeds the archives the previous build packed, then stages the executable, the app-local Visual C++ runtime and a `Manifest.txt`. It refuses a build whose closure still needs a DLL or a runtime folder <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherPackager.cs" />. Beside the folder it writes a zip and the download:
+
+| Host | Download |
+|---|---|
+| Windows | `MowoGamesLauncherSetup-<version>-Win64.exe` and the per-user MSI. `--no-msi` skips the MSI. |
+| macOS | `MowoGamesLauncher-<version>-Mac.dmg`. `--no-dmg` skips it. |
+
+The MSI is built with the WiX Toolset 5 that `Engine/Config/Toolchains.ini` pins, run as a local .NET tool; `dotnet tool restore` in `Engine/Source/Programs/MowoBuildTool/Installer/` installs it <Source path="Engine/Config/Toolchains.ini" />.
+
+On macOS, the `.app` and the `.dmg` are signed ad hoc unless you pass a Developer ID identity with `--sign` (or `MOWO_SIGN_IDENTITY`). `--notarize <profile>` (or `MOWO_NOTARY_PROFILE`) notarizes and staples the `.dmg` with that `notarytool` keychain profile, and needs a Developer ID signature <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMacApp.cs" />. An ad hoc signed launcher is not notarized, and Gatekeeper will not open it on another Mac.
+
+The [mbt command reference](/docs/reference/mbt-cli/) lists every option.

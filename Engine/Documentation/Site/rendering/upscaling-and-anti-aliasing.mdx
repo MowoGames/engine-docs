@@ -1,0 +1,187 @@
+---
+title: Upscaling and anti-aliasing
+description: Choose between TAA, TSR, FSR, DLSS, XeSS and MetalFX, set the render resolution, and use frame generation and low-latency modes.
+order: 12
+sources:
+  - Engine/Source/Runtime/RHI/Public/RHI/IUpscaler.h
+  - Engine/Source/Runtime/RHI/Public/RHI/FrameGeneration.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
+  - Engine/Source/Runtime/RHI/Private/Upscaler.cpp
+  - Engine/Source/Runtime/RHI/Private/TsrUpscaler.cpp
+  - Engine/Source/Runtime/RHI/Private/SpatialUpscaler.cpp
+  - Engine/Source/Runtime/RHI/Private/FrameGeneration.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRenderer.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/QualityAutoTier.cpp
+  - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
+  - Engine/Source/Runtime/MetalRHI/Private/MetalRHI/MetalUpscaler.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+  - Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp
+  - Engine/Documentation/ROADMAP.md
+verifiedAt: 1a346c1c5
+---
+
+Mowo can render at a lower internal resolution and reconstruct the output with a temporal upscaler, or render at native resolution and resolve aliasing with TAA or FXAA. One cvar, `r.Upscaler`, picks the method; `r.UpscalerQuality` picks the render resolution.
+
+## The methods
+
+| `r.Upscaler` | Method | Kind | Needs |
+|---|---|---|---|
+| `-1` | Auto | Picked at startup, see below | — |
+| `0` | None | No AA, no upscaling | — |
+| `1` | TAA | Built-in temporal AA at native resolution | Any GPU |
+| `2` | Spatial | AMD FSR1 (EASU and RCAS), no temporal history | Any GPU |
+| `3` | FSR | AMD FidelityFX Super Resolution | D3D12 or Vulkan |
+| `4` | DLSS | NVIDIA DLSS Super Resolution through Streamline | An NVIDIA GPU that supports it; D3D12, Vulkan or D3D11 |
+| `5` | TSR | The engine's own temporal super resolution | Any GPU |
+| `6` | XeSS | Intel XeSS | The XeSS runtime; D3D12, Vulkan or D3D11 |
+| `7` | MetalFX | Apple MetalFX temporal scaler | Metal |
+
+The values match <Source symbol="UpscalerType" />.
+
+<Callout type="note">
+Selecting a vendor upscaler is always safe. If its SDK, runtime or GPU is missing, the engine falls back to TAA. `IUpscaler::IsUpscalerSupported` answers whether a method can really run on this device, and the editor and the game's settings screen only offer the methods that can (<Source symbol="IUpscaler" />).
+</Callout>
+
+### TSR
+
+TSR is Mowo's own temporal super resolution: two compute passes on plain RHI pipelines, with no vendor SDK and no special hardware. It runs on every backend. Tune it with these variables (also on **Project Settings > Engine > Upscaling**):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `r.TSR.Sharpness` | 0.4 | Sharpening on the output, 0 to 1 |
+| `r.TSR.MaxSamples` | 32 | Where the per-pixel sample count saturates. Higher is steadier and slower to react. |
+| `r.TSR.ClampGamma` | 1.0 | Width of the history clamp. Lower removes ghosting and adds flicker. |
+| `r.TSR.AntiFlicker` | 2.0 | Damping for pixels whose brightness oscillates between frames |
+| `r.TSR.Velocity.WeightClampingSampleCount` | 4 | History cap for fast-moving pixels. Lower is crisper in motion. |
+| `r.TSR.Debug` | 0 | 1 history weight, 2 rejection, 3 velocity |
+
+### Spatial
+
+Spatial is FSR1: render smaller, upsample with edge-adaptive EASU, then sharpen with RCAS. It needs no jitter, motion vectors or history, so it has no ghosting but recovers less detail. `r.FSR1.Sharpness` (default 0.25) controls RCAS.
+
+### Vendor upscalers
+
+- **FSR** ships with the engine and runs on D3D12 and Vulkan.
+- **DLSS** runs through NVIDIA Streamline, loaded at runtime. A missing Streamline reports DLSS as unsupported. `r.DLSS.Preset` pins the network preset: `0` driver default, `1` J, `2` K, `3` L, `4` M.
+- **XeSS** loads the XeSS runtime when it is present. On D3D11 it uses XeSS's native D3D11 path.
+- **MetalFX** is the Metal backend's upscaler. When the device supports it, the resolve upgrades to MetalFX's denoising scaler (`r.MetalFX.Denoised`, default 1). `r.MetalFX.Subsume 1` then hands denoising to MetalFX and skips the engine's own per-effect temporal filters; the default, 0, keeps them.
+
+<Callout type="warning">
+**DLSS Ray Reconstruction** (`r.DLSS.RayReconstruction`) is in development. It replaces the engine's denoisers for ray-traced signals with NVIDIA's model while DLSS is the upscaler. Leave it off unless you are testing it.
+</Callout>
+
+## Render resolution
+
+`r.UpscalerQuality` maps to a render scale (<Source symbol="UpscalerQuality" />):
+
+| `r.UpscalerQuality` | Preset | Render scale |
+|---|---|---|
+| `0` | Native | 1.000 |
+| `1` | Quality | 0.667 |
+| `2` | Balanced | 0.580 |
+| `3` | Performance | 0.500 |
+| `4` | Ultra Performance | 0.333 |
+
+Only scaling methods act on it. TAA and None always render at full resolution. An explicit `r.RenderScale` (0.25 to 1.0) wins over the preset; the **Custom Percentage** setting writes it. With [dynamic resolution](/docs/rendering/quality-tiers/#dynamic-resolution) on, the render scale moves between its bounds below the preset's base scale.
+
+While a temporal upscaler reconstructs the output, material textures are sampled with a negative mip bias so they keep output-resolution detail. `r.MaterialMipBias.Auto` (default 1) turns this on, `r.MaterialMipBias.Offset` adds to it and `r.MaterialMipBias.Min` (default -2) limits it.
+
+## How the default is chosen
+
+When `r.Upscaler` is `-1`, the auto-tier fills it at startup (<Source path="Engine/Source/Runtime/SceneRenderer/Private/QualityAutoTier.cpp" />):
+
+1. The quality mode comes from the tier: Performance at Low, Balanced at Medium, Quality at High and Epic, Native at Cinematic.
+2. Vendor upscalers are picked only when `r.AutoQuality.VendorUpscalers` is 1. Then an NVIDIA GPU with DLSS gets DLSS, AMD with FSR gets FSR, Intel with XeSS gets XeSS, and Apple with MetalFX gets MetalFX.
+3. At Native the choice is TAA.
+4. Otherwise the choice is TSR.
+
+<Callout type="engine">
+Vendor upscalers are opt-in for the automatic case because their SDKs sit between the engine and the graphics API and install their own process-exit handlers. TSR hooks nothing, so it carries the automatic case, and DLSS, FSR and XeSS stay one setting away.
+</Callout>
+
+The editor viewport is an authoring view: it always resolves at native resolution with a temporal AA resolve, whatever the tier says, so you never judge reconstructed pixels. The shipped game keeps the tier's upscaling.
+
+## Choose an upscaler
+
+<Steps>
+<Step title="Per project">
+Open **Project Settings**, the **Rendering** page, section **ANTI-ALIASING & UPSCALING**. Set **Anti-Aliasing Method**, **Screen Percentage** and, if you want a fixed scale, **Custom Percentage**. Unsupported methods are greyed.
+</Step>
+<Step title="From code">
+Check support first, then set the cvars. The renderer applies the change at the next `BeginScene`.
+</Step>
+<Step title="For players">
+The game's settings screen has **Anti-Aliasing Method**, **Screen Percentage** and **Custom Percentage** rows in the **Graphics** category, and lists only the methods this GPU can run.
+</Step>
+</Steps>
+
+```cpp title="PickUpscaler.cpp" wrap
+#include "Core/IConsoleManager.h"
+#include "RHI/IUpscaler.h"
+#include <string>
+
+const bool dlss = Mowo::IUpscaler::IsUpscalerSupported(Mowo::UpscalerType::DLSS);
+const Mowo::UpscalerType type = dlss ? Mowo::UpscalerType::DLSS : Mowo::UpscalerType::TSR;
+
+Mowo::IConsoleManager::Get().SetByName("r.Upscaler", std::to_string(static_cast<int>(type)));
+Mowo::IConsoleManager::Get().SetByName("r.UpscalerQuality", std::to_string(static_cast<int>(Mowo::UpscalerQuality::Quality)));
+```
+
+<Screenshot id="rendering-upscaling-project-settings" alt="Mowo Editor Project Settings on the Rendering page scrolled to the ANTI-ALIASING & UPSCALING section, with the Anti-Aliasing Method dropdown open listing TAA, TSR, FSR, DLSS, XeSS and MetalFX, where unsupported entries appear greyed" caption="Pick the method and screen percentage per project." />
+
+## The scene's AA setting
+
+Each scene also has an anti-aliasing mode, `AntiAliasingMode`: None, FXAA (the default) or TAA. It is a fallback: an active upscaler owns anti-aliasing, including the TAA the auto-tier picks at Native, and the scene setting is then ignored. FXAA runs only when no temporal resolve runs that frame.
+
+Where each resolve sits in the frame:
+
+- Temporal upscalers (TSR, FSR, DLSS, XeSS, MetalFX) resolve **before** tonemapping, on linear HDR.
+- Built-in TAA runs **after** tonemapping, before lens flare.
+- Spatial runs after tonemapping.
+- FXAA, or contrast-adaptive sharpening (`r.Sharpness`, 0 to 100 percent; -1 uses the scene setting), runs in the final pass.
+
+See [Frame pipeline](/docs/rendering/frame-pipeline/#5-post-processing).
+
+## Frame generation <Status />
+
+<Callout type="warning">
+Frame generation is written for D3D12, Vulkan and Metal, but the paths have not been verified on the hardware they target. Treat it as in development and test it on each GPU family you ship for.
+</Callout>
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `r.FrameGeneration` | 0 | 1 inserts generated frames between rendered ones. The swapchain is rebuilt when it changes. |
+| `r.FrameGeneration.Backend` | 0 | 0 auto (prefer DLSS-G, then FSR3), 1 FSR3, 2 DLSS-G, 3 XeSS-FG |
+| `r.FrameGeneration.Multiplier` | 2 | Presented frames per rendered frame, 2 to 6, clamped to what the backend reports |
+| `r.FrameGeneration.Dynamic` | 0 | Let DLSS-G vary the multiplier to hold `r.FrameGeneration.TargetFps` |
+| `r.FrameGeneration.AutoHold` | 1 | Under VSync, hold generation off while the game already renders at the display refresh |
+
+Which backend each API can host:
+
+- **D3D12**: FSR3, DLSS-G and XeSS-FG.
+- **Vulkan**: FSR3 and DLSS-G. XeSS-FG only exists as a DXGI proxy swapchain and can never run on Vulkan.
+- **Metal**: the MetalFX frame interpolator.
+- **D3D11**: none.
+
+Frame generation engages only while the game owns the presented swapchain. The editor never enables it, because its viewport is a texture inside the editor UI. Set it per project on **Project Settings > Engine > Frame Generation**; players get **Frame Generation**, **Backend**, **Multiplier** and **Dynamic Frame Generation** rows that list only what their GPU reports.
+
+## Low latency
+
+`r.LowLatency` reduces input latency with whichever vendor runtime the GPU runs: `0` off, `1` on, `2` on plus boost. `r.LowLatency.Backend` picks one: `0` auto, `1` NVIDIA Reflex, `2` AMD Anti-Lag 2, `3` Intel XeLL. An unsupported pick falls back to auto.
+
+| Runtime | Backends |
+|---|---|
+| NVIDIA Reflex | D3D12, Vulkan, D3D11 |
+| AMD Anti-Lag 2 | D3D12 |
+| Intel XeLL | D3D12 |
+
+A running DLSS-G or XeSS-FG keeps low latency on.
+
+## API reference
+
+- [RHI module](/docs/api/rhi/): `IUpscaler`, `UpscalerType`, `UpscalerQuality`, `EDlssPreset`, `FrameGeneration`, `FrameGenerationControls`, `EFrameGenBackend`, `FRHIApiCeiling`
+- [Renderer module](/docs/api/renderer/): `AntiAliasingMode`
+- [SceneRenderer module](/docs/api/scenerenderer/): `FQualityAutoTier`

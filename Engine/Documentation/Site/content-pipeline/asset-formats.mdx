@@ -1,0 +1,175 @@
+---
+title: Asset formats
+description: What is inside an asset package (summary, payload and bulk chunks, in text or binary), and the cooked .mmodel, .mtex and .maudio formats.
+order: 3
+sources:
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_package.h
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_package_text.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/AssetPackageTypes.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/AssetPackageCook.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/FormatContract.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MmodelFormat.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MmodelLoader.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MtexFormat.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MtexLoader.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MaudioFormat.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MaudioLoader.h
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/AssetCommand.cs
+verifiedAt: 1a346c1c5
+---
+
+Every asset in `Content/` is an **asset package**: one data model with two encodings. Text packages (materials, prefabs, levels, actor files, data assets) are [MDF](/docs/content-pipeline/mdf/) you can read and merge. Binary packages (meshes, textures, sounds, animation) add aligned bulk data that loads on demand. The encoding belongs to the asset type, not to you: a type with bulk data is binary. This page describes the package format and the cooked formats the runtime decodes.
+
+## Asset packages
+
+A package has three parts <Source symbol="MdfPackage" />:
+
+| Part | What it holds |
+|---|---|
+| **Summary** | What the asset registry and the Content Browser read without loading the asset: the class, the asset id, per-subsystem versions, registry tags, the import table (other assets this one references, by id and path, hard or soft), the export table, and in binary packages the bulk chunk table and a thumbnail. |
+| **Payload** | The asset's objects as MDF nodes, written by the engine's reflection serializer. |
+| **Bulk** | Binary packages only: 16-byte aligned chunks such as geometry, texels or animation keys. A chunk can be marked editor-only; the cook strips those. |
+
+<Flow steps={["Header (MPKG)", "Summary (binary MDF)", "Payload (binary MDF)", "Bulk chunks"]} caption="A binary package. A text package is the same summary node followed by the payload nodes, with no bulk." />
+
+A binary package starts with the magic `MPKG` and a 56-byte header with the offset and size of each part <Source symbol="MdfPackageHeader" />. Because the summary sits at the front, the registry and the Content Browser read a thumbnail or an asset's references without pulling its geometry off disk.
+
+References between packages are by **id**, with the path kept beside it. A rename leaves a [redirect](/docs/content-pipeline/redirectors/) for the path; the id keeps resolving either way.
+
+### What each binary type holds
+
+| Type | Extension | Contents <Source symbol="FAssetPackageTypes" /> |
+|---|---|---|
+| Static Mesh, Skeletal Mesh | `.mesh`, `.skmesh` | The built model in the `RenderData` chunk. The payload carries mesh settings (collision, sockets, material slot bindings) and the summary tags each material slot with its `.mat` package. |
+| Skeleton | `.skel` | Bones in the payload. |
+| Animation Sequence | `.anim` | The channel table in the payload, keys in the `Tracks` chunk. |
+| Texture | `.tex` | Import and build settings in the payload, the encoded source image in the `Source` chunk. |
+| Sound Wave | `.sound` | Import settings in the payload, the built `.maudio` in the `RenderData` chunk. Long clips stream from that range. |
+
+An import also records where the asset came from (the source path and a hash of its bytes) so [Reimport](/docs/content-pipeline/importing/#reimport) can find the file and tell whether it changed.
+
+### Inspect, diff and merge packages
+
+Binary packages are not readable in a text editor, so the build tool renders them:
+
+| Command | What it does |
+|---|---|
+| `mbt asset dump <file>` | Prints a package as text: summary, payload, and each bulk chunk by tag and size. The `.gitattributes` block uses it as the diff text converter. |
+| `mbt asset diff <before> <after>` | Property-level diff of two MDF documents or packages. |
+| `mbt asset merge <base> <ours> <theirs>` | Three-way property merge. `--loom` merges Loom graphs by node id. |
+
+See the [mbt CLI reference](/docs/reference/mbt-cli/).
+
+## What the cook does to a package
+
+`mbt cook` runs `FAssetPackageCook` <Source symbol="FAssetPackageCook" /> over every binary package it stages:
+
+- a Texture builds its mip chain for the target (BC7 for color, BC5 for normal maps, BC6H for HDR, ASTC on mobile);
+- a Sound is re-encoded when the target asks for another codec (Opus on mobile);
+- a mesh's render data is quantized into compact vertex streams with separate LOD, distance field, card and morph chunks;
+- an Animation Sequence's keys are compressed;
+- every package loses its editor-only bulk.
+
+The result keeps its id, class and imports, so every reference still resolves. A cooked package is tagged `cooked`, and cooking it again changes nothing. Text packages are written as binary MDF. See [Cooking](/docs/content-pipeline/cooking/).
+
+## Cooked binary formats
+
+Three formats carry what the renderer and audio engine decode at runtime without Assimp, image decoders or audio decoders. A cooked mesh package's render data decodes to a `.mmodel`; a loose texture or model source that was not imported as a package cooks to `.mtex` or `.mmodel`; a sound's built audio is a `.maudio`.
+
+| Format | Magic | Current version | Carries |
+|---|---|---|---|
+| `.mmodel` | `MMDL` | 17 | Meshes, materials, skeleton, animation, node tree, lights, cameras, LODs, meshlets, distance fields, GI cards, morph targets |
+| `.mtex` | `MTEX` | 4 | Block-compressed or raw pixels with a mip chain, cubemaps, arrays and volumes |
+| `.maudio` | `MAUD` | 3 | PCM or Opus samples, loop points, streaming flags, loudness, pitch |
+
+### Rules every format follows
+
+The AssetFormats module states three rules every binary format keeps <Source symbol="FFormatContract" />:
+
+- **Little-endian on disk.** Every shipping target is little-endian.
+- **Versioning is additive.** A reader accepts any version from 1 up to a ceiling and gates each newer block on `version >= N`. It never rejects a file for being older, and a writer never reuses a field.
+- **Magic first.** The magic is checked before any offset is read, so a truncated or foreign file fails cleanly.
+
+### .mmodel
+
+A `.mmodel` is a pre-processed model that loads straight to the GPU <Source symbol="MmodelHeader" />. The format grew one block at a time, and older files still load:
+
+| Version | Added |
+|---|---|
+| 2, 3 | Node tree; embedded lights and cameras |
+| 4, 5 | Meshlet clusters, then the cluster-group DAG |
+| 6 | A baked signed distance field per mesh |
+| 7 | Cooked discrete LODs |
+| 8 | Material slots with opacity texture, emissive color, alpha mask and two-sided |
+| 9 | Quantized animation keys, with float keys kept where the error would be too large |
+| 10 | 72-byte lit vertex: tangent with handedness and a second UV channel |
+| 11 | GI card sets for the surface cache |
+| 12 | Morph target deltas |
+| 13 | Clear coat, anisotropy and sheen from glTF material extensions |
+| 14 | Morph tracks in animation clips |
+| 15 | Per-LOD simplification error, so each mesh switches LOD at its own distance |
+| 16 | Optional 16-bit indices for meshes up to 65,536 vertices |
+| 17 | Morph tracks name the target they drive |
+
+### .mtex
+
+A `.mtex` holds a texture ready for upload. The 64-byte header records size, depth (6 for a cubemap, or the layer or slice count of an array or volume), mip count, compression, flags, channel count and bytes per channel <Source symbol="MtexCompression" />:
+
+| Compression | Use |
+|---|---|
+| `BC7` | Color, and the default for most textures |
+| `BC5` | Normal maps |
+| `BC6H` | HDR, unsigned half float |
+| `BC4` | Single channel: masks, AO, height |
+| `BC1`, `BC3` | Opaque color, and color with alpha |
+| `ASTC` | 6x6 blocks for mobile targets |
+| `None` | Raw RGBA8 |
+
+Flags mark sRGB, cubemap, normal map, HDR, premultiplied alpha, arrays and volumes. Version 2 added the average color of mip 0, version 3 its average alpha, and version 4 texture arrays and volume textures.
+
+### .maudio
+
+A `.maudio` holds audio with its playback metadata. The 80-byte header records sample rate, channel count, codec, flags, sample count, duration and loop points <Source symbol="MaudioCodec" />.
+
+- **Codecs.** PCM 16-bit, PCM 24-bit, 32-bit float, and Opus (20 ms packets with an offset table). Vorbis is reserved and never written.
+- **Flags.** Streaming, looping, spatial and preload.
+- **Loudness.** Version 2 added the measured loudness, the target and the gain the runtime applies to reach it. The samples are never scaled.
+- **Pitch and streaming chunk.** Version 3 added the default pitch and the read size for streaming clips.
+
+## Load a cooked file in C++
+
+Each cooked format has a loader that resolves a path through the VFS, falls back to the native file system, and returns a struct with a `valid` flag and an `error` string. Use them for tools and tests; games load assets through the asset system.
+
+```cpp wrap title="Inspect a cooked texture"
+#include "AssetFormats/MtexLoader.h"
+
+const Mowo::MtexLoadedData texture = Mowo::MtexLoader::Load("Saved/Inspect/Rock_A.mtex");
+
+if (!texture.valid) {
+	return;
+}
+
+const bool isBc7 = texture.header.compression == Mowo::MtexCompression::BC7;
+const size_t mipCount = texture.mipData.size();
+```
+
+```cpp wrap title="Inspect a cooked model and clip"
+#include "AssetFormats/MmodelLoader.h"
+#include "AssetFormats/MaudioLoader.h"
+
+const Mowo::MmodelLoadedData model = Mowo::MmodelLoader::Load("Saved/Inspect/SampleBiped.mmodel");
+const Mowo::MaudioLoadedData clip = Mowo::MaudioLoader::Load("Saved/Inspect/Music.maudio");
+
+if (!model.valid || !clip.valid) {
+	return;
+}
+
+const size_t meshCount = model.meshes.size();
+const float seconds = clip.header.duration;
+```
+
+## Related
+
+- [File types](/docs/content-pipeline/file-types/) for every extension.
+- [Cooking](/docs/content-pipeline/cooking/) for when these files are written.
+- API: [`MdfPackage`](/docs/api/mdf/mdfpackage/), [`FAssetPackageTypes`](/docs/api/assetformats/fassetpackagetypes/), [`MmodelLoader`](/docs/api/assetformats/mmodelloader/), [`MtexLoader`](/docs/api/assetformats/mtexloader/), [`MaudioLoader`](/docs/api/assetformats/maudioloader/), [`FFormatContract`](/docs/api/assetformats/fformatcontract/).

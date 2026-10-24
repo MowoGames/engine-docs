@@ -1,0 +1,143 @@
+---
+title: Character movement
+description: The kinematic character controller, walking, falling, swimming, ladder and mantling modes, root-motion sources and custom movement modes.
+order: 9
+sources:
+  - Engine/Source/Runtime/Physics/Public/Physics/CharacterController.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterControllerComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterMovementComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/LadderVolumeComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/CharacterMovementSystem.h
+  - Engine/Source/Runtime/Physics/Public/Physics/CharacterLadderSystem.h
+  - Engine/Source/Runtime/Physics/Public/Physics/CustomMovementMode.h
+  - Engine/Source/Runtime/Physics/Public/Physics/RootMotionSource.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/MCharacterMovementComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/ACharacter.h
+  - Engine/Source/Runtime/Game/Public/Water/CharacterWaterSystem.h
+verifiedAt: 08e26df3d
+---
+
+Characters do not use rigid bodies. A character controller moves a capsule with its own collision checks, and a movement component turns input into velocity through a set of movement modes. `ACharacter` wires both up for you; this page explains what they do and how to tune them.
+
+## The character controller
+
+`CharacterControllerComponent` wraps Jolt's kinematic `CharacterVirtual`. <Source symbol="CharacterControllerComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `radius`, `height`, `mass` | The capsule |
+| `maxSlopeAngle`, `stepHeight` | The steepest walkable slope and the tallest step the capsule climbs |
+| `crouchHeightScale` | Crouched height as a fraction of `height` |
+| `pushBodies`, `maxStrength` | Whether walking into dynamic bodies shoves them, and how hard |
+| `physicalPresence` | Builds an inner kinematic body (on by default) |
+
+The inner body is what makes a character visible to the rest of the world: traces, overlaps, contact events, AI sight lines and the scanner hit it, and characters block each other. Without it, bullets pass straight through. The default `Pawn` preset blocks `Visibility` and ignores `Camera`, so AI sight stops on a player but a spring arm does not collide with its own owner.
+
+<Callout type="warning">
+A ray that starts inside a capsule hits it at distance 0. Every trace fired from a character must ignore that character's own body. Get it with `PhysicsSystem::GetQueryBodyForEntity(entity)`, which returns the right body for characters and rigid bodies alike, and pass it to `FQueryFilter::Ignore`. <Source symbol="PhysicsSystem::GetQueryBodyForEntity" />
+</Callout>
+
+### Moving platforms
+
+A character standing on a moving or rotating body is carried with it. `linearVelocity` on the component is the character's own velocity relative to the ground, so standing still on a lift reads as zero. The ground's share is in `groundVelocity`. When the character jumps off, it keeps the platform's velocity. <Source symbol="CharacterController::GetLinearVelocity" />
+
+## Movement modes
+
+`CharacterMovementComponent` holds the active `EMovementMode`. The movement system runs before the physics step. <Source symbol="CharacterMovementComponent" />
+
+| Mode | Entered | Behavior |
+| --- | --- | --- |
+| `Walking` | On the ground | `walkSpeed`, scaled by `sprintMultiplier` or `crouchMultiplier`; `maxAcceleration`, `brakingDeceleration`, `groundFriction` |
+| `Falling` | Automatically when the ground is lost | Gravity plus `airControl` steering; back to `Walking` on landing |
+| `Flying` | Only when gameplay sets it | `flySpeed`, no gravity, full 3D input |
+| `Swimming` | Automatically when chest-deep in a water volume | `swimSpeed`, buoyant, 3D input |
+| `Ladder` | Automatically inside a `LadderVolume` | Climbs along the volume's `climbAxis` at `ladderSpeed`; jump detaches |
+| `Mantling` | Jump while airborne next to a reachable ledge | Rises until the feet clear the top, then moves over it |
+| `Custom` | When gameplay sets a registered custom mode | Your own step function |
+
+Jump tuning:
+
+| Field | Effect |
+| --- | --- |
+| `jumpSpeed` | Initial vertical speed |
+| `maxJumpCount` | Jumps before landing; 2 gives a double jump |
+| `jumpHoldTime` | Seconds a held jump button keeps adding lift; 0 gives a fixed-height jump |
+| `coyoteTime` | Seconds after leaving a ledge during which a jump still counts as grounded |
+
+Ledge grabbing uses `ledgeGrabEnabled`, `mantleMaxHeight`, `mantleReach` and `mantleDuration`.
+
+<Screenshot id="gameplay-character-movement-details" alt="Mowo Editor Details panel for a character entity showing the CharacterController component (Radius, Height, Max Slope Angle, Step Height) and the CharacterMovement component (Walk Speed, Sprint Multiplier, Jump Speed, Max Jump Count, Coyote Time, Ledge Grab Enabled)" caption="Both components are edited in the Details panel like any other." />
+
+## Drive a character from code
+
+On an actor, `MCharacterMovementComponent` is the interface to all of this. `ACharacter` creates one and forwards `Jump`, `Crouch`, `UnCrouch` and `SetSprinting` to it. <Source symbol="MCharacterMovementComponent" />
+
+| Function | Effect |
+| --- | --- |
+| `Jump()`, `StopJumping()` | Press and release jump |
+| `Crouch()`, `UnCrouch()`, `IsCrouched()` | Crouch, which shrinks the capsule |
+| `SetSprinting(bool)`, `IsSprinting()` | Sprint |
+| `SetMovementInput(dir)`, `ClearMovementInput()` | Set the input direction directly |
+| `IsGrounded()`, `GetVelocity()`, `GetMovementModeName()` | Read state |
+
+The same functions are Visual Scripting nodes.
+
+## Root motion
+
+When `useRootMotion` is set and the character's animator produces a root delta, the movement step drives the capsule from the animation instead of from input. Vertical motion stays under gravity and jumping. `rootMotionRotation` also applies the animation's yaw to the facing. See [Animation](/docs/gameplay/animation/).
+
+## Root-motion sources
+
+A root-motion source is movement that gameplay applies over time: a dash, a knockback, a launch pad, a pull to a ledge. Because a source is a function of its own elapsed time only, client prediction and the server produce the same movement, which a velocity poked into the controller cannot. <Source symbol="FRootMotionSource" />
+
+| Function on `MCharacterMovementComponent` | Movement |
+| --- | --- |
+| `ApplyDash(velocity, duration)` | Constant world velocity for the duration |
+| `ApplyJumpForce(direction, distance, height, duration)` | An arc to `distance` that peaks at `height` |
+| `ApplyMoveTo(target, duration)` | Straight to a point, arriving exactly |
+| `StopRootMotionSource(id)` | Ends a source early; each `Apply` returns its id |
+
+```cpp title="Dash.cpp" wrap
+#include "Game/ACharacter.h"
+#include "Game/MCharacterMovementComponent.h"
+#include "Math/Vec3.h"
+
+Mowo::ACharacter* hero = nullptr;
+Mowo::MCharacterMovementComponent* movement = hero->FindComponent<Mowo::MCharacterMovementComponent>();
+int32_t dash = movement->ApplyDash(Mowo::Vec3(0.0f, 0.0f, -12.0f), 0.2f);
+(void)dash;
+```
+
+## Custom movement modes
+
+For a mode the engine does not ship, such as wall running or a grapple, register a step function under a small id and switch the character into it. The step runs in place of the built-in modes, so it is predicted and reconciled like `Walking`, as long as it reads only the character's own components and the time step. <Source symbol="FCustomMovementModes" />
+
+```cpp title="WallRun.cpp"
+#include "ECS/World.h"
+#include "Physics/Components/CharacterControllerComponent.h"
+#include "Physics/Components/CharacterMovementComponent.h"
+#include "Physics/CustomMovementMode.h"
+
+static constexpr uint8_t kWallRun = 1;
+
+static void StepWallRun(Mowo::World& world, uint64_t entityId, Mowo::CharacterMovementComponent& movement, Mowo::CharacterControllerComponent& controller, float deltaTime) {
+}
+
+void RegisterWallRun() {
+	Mowo::FCustomMovementModes::Register(kWallRun, &StepWallRun, "WallRun");
+}
+
+void UnregisterWallRun() {
+	Mowo::FCustomMovementModes::Unregister(kWallRun, &StepWallRun);
+}
+```
+
+Switch a character into it with `MCharacterMovementComponent::SetCustomMovementMode(1)` and back with `ClearCustomMovementMode()`. Unregister the mode when your module shuts down, because the registry holds a plain function pointer into your module.
+
+## Related
+
+- [Gameplay framework](/docs/gameplay/gameplay-framework/) for `ACharacter` and the template characters
+- [Physics](/docs/gameplay/physics/)
+- [Multiplayer](/docs/multiplayer/) for client prediction of character movement
+- API: [Physics module](/docs/api/physics/), [Game module](/docs/api/game/)

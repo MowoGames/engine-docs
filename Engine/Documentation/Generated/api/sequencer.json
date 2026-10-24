@@ -1,0 +1,1787 @@
+{
+	"name": "MowoEngine.Sequencer",
+	"displayName": "Sequencer",
+	"slug": "sequencer",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Sequencer/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Sequencer/Public/Sequencer/MSequenceStatics.h",
+			"include": "Sequencer/MSequenceStatics.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MSequenceStatics",
+					"namespace": "Mowo",
+					"bases": "public MObject",
+					"reflected": true,
+					"line": 19,
+					"members": [
+						{
+							"kind": "method",
+							"name": "PlaySequence",
+							"signature": "bool PlaySequence(AActor* target)",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "PlaySequenceByPath",
+							"signature": "bool PlaySequenceByPath(const std::string& path, bool loop)",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "StopSequence",
+							"signature": "void StopSequence(AActor* target)",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "SkipSequence",
+							"signature": "void SkipSequence(AActor* target)",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "IsSequencePlaying",
+							"signature": "bool IsSequencePlaying(AActor* target) const",
+							"line": 32
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Sequencer/Public/Sequencer/MovieRenderOutput.h",
+			"include": "Sequencer/MovieRenderOutput.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EMovieRenderFormat",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 13,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "PngSequence",
+							"signature": "PngSequence = 0",
+							"line": 14
+						},
+						{
+							"kind": "enumerator",
+							"name": "MjpegAvi",
+							"signature": "MjpegAvi = 1",
+							"line": 15
+						},
+						{
+							"kind": "enumerator",
+							"name": "PngAndAvi",
+							"signature": "PngAndAvi = 2",
+							"line": 16
+						},
+						{
+							"kind": "enumerator",
+							"name": "H264Mp4",
+							"signature": "H264Mp4 = 3",
+							"doc": "H.264 + AAC through the OS encoder (FPlatformVideo): the one output that\ncarries the audio mix and has no size cap.",
+							"line": 19
+						},
+						{
+							"kind": "enumerator",
+							"name": "PngAndMp4",
+							"signature": "PngAndMp4 = 4",
+							"line": 20
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMovieAudioClip",
+					"namespace": "Mowo",
+					"doc": "One audio clip as the movie mix sees it: already decoded to stereo float at\nthe mix rate, placed on the sequence's frame timeline.",
+					"line": 25,
+					"members": [
+						{
+							"kind": "field",
+							"name": "StartFrame",
+							"signature": "int32_t StartFrame = 0",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "DurationFrames",
+							"signature": "int32_t DurationFrames = 0",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "Volume",
+							"signature": "float Volume = 1.0f",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "Samples",
+							"signature": "std::vector<float> Samples",
+							"line": 29
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMovieFrameRate",
+					"namespace": "Mowo",
+					"doc": "A frame rate as the containers store it. 23.976 is not 23976/1000 but\n24000/1001, and a movie stamped with the former drifts a frame out of sync\nwith an NTSC-rate edit every 42 seconds.",
+					"line": 35,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Numerator",
+							"signature": "uint32_t Numerator = 24",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "Denominator",
+							"signature": "uint32_t Denominator = 1",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "Value",
+							"signature": "double Value() const",
+							"line": 39
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMovieRenderPlan",
+					"namespace": "Mowo",
+					"doc": "The frames an offline render walks and what it calls them. Pure, so the\nfixed-timestep contract — every frame of [start, end) exactly once, in\norder, at the sequence's own rate — is pinned without a device.",
+					"line": 47,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FrameList",
+							"signature": "static std::vector<int32_t> FrameList(int32_t startFrame, int32_t endFrame)",
+							"static": true,
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "FrameFileName",
+							"signature": "static std::string FrameFileName(const std::string& baseName, int32_t frame, const char* extension)",
+							"static": true,
+							"doc": "\"Intro\" + 12 -> \"Intro.0012.png\". The padding is fixed so an editor or a\ncompositor that sorts the folder by name sees the frames in order.",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "SanitizeName",
+							"signature": "static std::string SanitizeName(const std::string& name)",
+							"static": true,
+							"doc": "A sequence name is not a file name: path separators and the characters\nWindows refuses would scatter or drop the output.",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "ApplyFade",
+							"signature": "static void ApplyFade(std::vector<uint8_t>& rgba, float fadeAlpha)",
+							"static": true,
+							"doc": "The editor draws a fade track as a widget over the viewport, which a\nreadback never sees, so a rendered movie composites it itself.",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "WritesPng",
+							"signature": "static bool WritesPng(EMovieRenderFormat format)",
+							"static": true,
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "WritesAvi",
+							"signature": "static bool WritesAvi(EMovieRenderFormat format)",
+							"static": true,
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "WritesMp4",
+							"signature": "static bool WritesMp4(EMovieRenderFormat format)",
+							"static": true,
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "RationalFrameRate",
+							"signature": "static FMovieFrameRate RationalFrameRate(float framesPerSecond)",
+							"static": true,
+							"doc": "The sequence's float rate as a container rational: whole rates over 1,\nthe NTSC family (23.976, 29.97, 47.952, 59.94, 119.88) as N*1000/1001,\nanything else to three decimals over 1000. Zero or negative is 24/1.",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "AudioSampleAt",
+							"signature": "static uint64_t AudioSampleAt(int64_t frameFromStart, double frameRate, uint32_t sampleRate)",
+							"static": true,
+							"doc": "The first audio sample of movie frame `frameFromStart`. Frame i's audio\nis [AudioSampleAt(i), AudioSampleAt(i + 1)), so chunks written a frame at\na time tile the mix exactly, with no sample dropped or doubled by\nrounding a non-integer samples-per-frame. Double, so an NTSC rate's\nFMovieFrameRate::Value() keeps the audio on the video's exact clock.",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "MixAudio",
+							"signature": "static std::vector<float> MixAudio(const std::vector<FMovieAudioClip>& clips, int32_t startFrame, int32_t endFrame, double frameRate, uint32_t sampleRate)",
+							"static": true,
+							"doc": "The audio tracks summed over [startFrame, endFrame): stereo, interleaved,\nAudioSampleAt(endFrame - startFrame) frames long. A clip plays its source\nfrom the beginning at its StartFrame for DurationFrames, as the Sequencer\npreviews it; a clip that starts before the range enters part-way through.\nThe sum is clamped to [-1, 1].",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "WriteWav",
+							"signature": "static bool WriteWav(const std::string& path, const std::vector<float>& interleaved, uint32_t channels, uint32_t sampleRate)",
+							"static": true,
+							"doc": "16-bit PCM WAV, the stem that travels next to an AVI or a PNG sequence.",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "WritePngFrame",
+							"signature": "static bool WritePngFrame(const std::string& path, const std::vector<uint8_t>& rgba, uint32_t width, uint32_t height)",
+							"static": true,
+							"doc": "Deflate-compressed PNG through stb rather than ScreenCapture's stored\nblocks: a stored 1080p frame is 8 MB, and a movie is hundreds of them.",
+							"line": 97
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMovieAviInfo",
+					"namespace": "Mowo",
+					"doc": "What an AVI on disk says about itself — read back from the bytes, so a test\nchecks the file a player would open rather than the writer's own counters.",
+					"line": 102,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Valid",
+							"signature": "bool Valid = false",
+							"line": 103
+						},
+						{
+							"kind": "field",
+							"name": "Width",
+							"signature": "uint32_t Width = 0",
+							"line": 104
+						},
+						{
+							"kind": "field",
+							"name": "Height",
+							"signature": "uint32_t Height = 0",
+							"line": 105
+						},
+						{
+							"kind": "field",
+							"name": "TotalFrames",
+							"signature": "uint32_t TotalFrames = 0",
+							"line": 106
+						},
+						{
+							"kind": "field",
+							"name": "StreamLength",
+							"signature": "uint32_t StreamLength = 0",
+							"line": 107
+						},
+						{
+							"kind": "field",
+							"name": "IndexEntries",
+							"signature": "uint32_t IndexEntries = 0",
+							"line": 108
+						},
+						{
+							"kind": "field",
+							"name": "MovieChunks",
+							"signature": "uint32_t MovieChunks = 0",
+							"line": 109
+						},
+						{
+							"kind": "field",
+							"name": "FrameRateNumerator",
+							"signature": "uint32_t FrameRateNumerator = 0",
+							"line": 110
+						},
+						{
+							"kind": "field",
+							"name": "FrameRateDenominator",
+							"signature": "uint32_t FrameRateDenominator = 0",
+							"line": 111
+						},
+						{
+							"kind": "field",
+							"name": "Codec",
+							"signature": "std::string Codec",
+							"line": 112
+						},
+						{
+							"kind": "field",
+							"name": "EveryFrameIsJpeg",
+							"signature": "bool EveryFrameIsJpeg = false",
+							"line": 113
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMjpegAviWriter",
+					"namespace": "Mowo",
+					"doc": "Motion-JPEG in an AVI 1.0 container: every frame an independent JPEG, an\nidx1 index, nothing else. It is the one video format that needs no codec\nlibrary to write and that every player and editing tool opens, so it is the\nfallback on a host without an OS encoder for the MP4 output. AVI 1.0 caps a\nRIFF at 1 GiB, so a frame that would cross it is refused rather than written\ninto a file no reader will accept; a long render goes to MP4.",
+					"line": 122,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FMjpegAviWriter",
+							"signature": "FMjpegAviWriter() = default",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "~FMjpegAviWriter",
+							"signature": "~FMjpegAviWriter()",
+							"line": 125
+						},
+						{
+							"kind": "method",
+							"name": "FMjpegAviWriter",
+							"signature": "FMjpegAviWriter(const FMjpegAviWriter&) = delete",
+							"line": 127
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FMjpegAviWriter& operator=(const FMjpegAviWriter&) = delete",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "Open",
+							"signature": "bool Open(const std::string& path, uint32_t width, uint32_t height, float framesPerSecond, int32_t jpegQuality)",
+							"line": 130
+						},
+						{
+							"kind": "method",
+							"name": "AddFrame",
+							"signature": "bool AddFrame(const std::vector<uint8_t>& rgba, uint32_t width, uint32_t height)",
+							"line": 131
+						},
+						{
+							"kind": "method",
+							"name": "Close",
+							"signature": "bool Close()",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "IsOpen",
+							"signature": "bool IsOpen() const",
+							"line": 134
+						},
+						{
+							"kind": "method",
+							"name": "FrameCount",
+							"signature": "uint32_t FrameCount() const",
+							"line": 137
+						},
+						{
+							"kind": "method",
+							"name": "LastError",
+							"signature": "const std::string& LastError() const",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "Inspect",
+							"signature": "static FMovieAviInfo Inspect(const std::string& path)",
+							"static": true,
+							"line": 144
+						},
+						{
+							"kind": "field",
+							"name": "kMaxRiffBytes",
+							"signature": "static constexpr uint64_t kMaxRiffBytes = 1024ull * 1024ull * 1024ull",
+							"static": true,
+							"line": 146
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Sequencer/Public/Sequencer/SequenceAsset.h",
+			"include": "Sequencer/SequenceAsset.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "ESequenceInterp",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 14,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Linear",
+							"signature": "Linear",
+							"line": 15
+						},
+						{
+							"kind": "enumerator",
+							"name": "Cubic",
+							"signature": "Cubic",
+							"line": 16
+						},
+						{
+							"kind": "enumerator",
+							"name": "Constant",
+							"signature": "Constant",
+							"line": 17
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "ESequenceParamKind",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 20,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Scalar",
+							"signature": "Scalar",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "Color",
+							"signature": "Color",
+							"line": 22
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceTransformKey",
+					"namespace": "Mowo",
+					"line": 25,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Frame",
+							"signature": "int32_t Frame = 0",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "Interp",
+							"signature": "ESequenceInterp Interp = ESequenceInterp::Cubic",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "Position",
+							"signature": "Vec3 Position = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "Rotation",
+							"signature": "Vec3 Rotation = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "Scale",
+							"signature": "Vec3 Scale = Vec3(1.0f, 1.0f, 1.0f)",
+							"line": 30
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceVisibilityKey",
+					"namespace": "Mowo",
+					"line": 33,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Frame",
+							"signature": "int32_t Frame = 0",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "Visible",
+							"signature": "bool Visible = true",
+							"line": 35
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceCameraCut",
+					"namespace": "Mowo",
+					"line": 38,
+					"members": [
+						{
+							"kind": "field",
+							"name": "StartFrame",
+							"signature": "int32_t StartFrame = 0",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "EndFrame",
+							"signature": "int32_t EndFrame = 0",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "Binding",
+							"signature": "std::string Binding",
+							"line": 41
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceParamKey",
+					"namespace": "Mowo",
+					"line": 44,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Frame",
+							"signature": "int32_t Frame = 0",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "Interp",
+							"signature": "ESequenceInterp Interp = ESequenceInterp::Cubic",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "Scalar",
+							"signature": "float Scalar = 0.0f",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "Color",
+							"signature": "Vec3 Color = Vec3(1.0f, 1.0f, 1.0f)",
+							"line": 48
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceMaterialTrack",
+					"namespace": "Mowo",
+					"line": 51,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Parameter",
+							"signature": "std::string Parameter = \"Roughness\"",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "Keys",
+							"signature": "std::vector<FSequenceParamKey> Keys",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "ClassifyParameter",
+							"signature": "static ESequenceParamKind ClassifyParameter(const std::string& parameter)",
+							"static": true,
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Kind",
+							"signature": "ESequenceParamKind Kind() const",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "FindKey",
+							"signature": "int32_t FindKey(int32_t frame) const",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "UpsertKey",
+							"signature": "int32_t UpsertKey(const FSequenceParamKey& key)",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "RemoveKey",
+							"signature": "void RemoveKey(int32_t index)",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "MoveKey",
+							"signature": "int32_t MoveKey(int32_t index, int32_t newFrame)",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "SortKeys",
+							"signature": "void SortKeys()",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateScalar",
+							"signature": "bool EvaluateScalar(float frame, float& outValue) const",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateColor",
+							"signature": "bool EvaluateColor(float frame, Vec3& outColor) const",
+							"line": 67
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "ESequencePropertyValueType",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 70,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Scalar",
+							"signature": "Scalar",
+							"line": 71
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bool",
+							"signature": "Bool",
+							"line": 72
+						},
+						{
+							"kind": "enumerator",
+							"name": "Integer",
+							"signature": "Integer",
+							"line": 73
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vector2",
+							"signature": "Vector2",
+							"line": 74
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vector3",
+							"signature": "Vector3",
+							"line": 75
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vector4",
+							"signature": "Vector4",
+							"line": 76
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequencePropertyKey",
+					"namespace": "Mowo",
+					"line": 79,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Frame",
+							"signature": "int32_t Frame = 0",
+							"line": 80
+						},
+						{
+							"kind": "field",
+							"name": "Interp",
+							"signature": "ESequenceInterp Interp = ESequenceInterp::Linear",
+							"line": 81
+						},
+						{
+							"kind": "field",
+							"name": "Value",
+							"signature": "Vec4 Value = Vec4(0.0f, 0.0f, 0.0f, 0.0f)",
+							"line": 82
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequencePropertyTrack",
+					"namespace": "Mowo",
+					"doc": "Keys an arbitrary reflected property on a bound entity's component. The\ncomponent is the reflected display name (\"Light\"), Property the serialized\nfield name (\"intensity\"). Values are packed into a Vec4 (scalar/bool/int in\nx, vectors spread across xyzw) and interpolated per component.",
+					"line": 89,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Component",
+							"signature": "std::string Component",
+							"line": 90
+						},
+						{
+							"kind": "field",
+							"name": "Property",
+							"signature": "std::string Property",
+							"line": 91
+						},
+						{
+							"kind": "field",
+							"name": "Label",
+							"signature": "std::string Label",
+							"line": 92
+						},
+						{
+							"kind": "field",
+							"name": "ValueType",
+							"signature": "ESequencePropertyValueType ValueType = ESequencePropertyValueType::Scalar",
+							"line": 93
+						},
+						{
+							"kind": "field",
+							"name": "Keys",
+							"signature": "std::vector<FSequencePropertyKey> Keys",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "ComponentCount",
+							"signature": "int32_t ComponentCount() const",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "FindKey",
+							"signature": "int32_t FindKey(int32_t frame) const",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "UpsertKey",
+							"signature": "int32_t UpsertKey(const FSequencePropertyKey& key)",
+							"line": 99
+						},
+						{
+							"kind": "method",
+							"name": "RemoveKey",
+							"signature": "void RemoveKey(int32_t index)",
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "MoveKey",
+							"signature": "int32_t MoveKey(int32_t index, int32_t newFrame)",
+							"line": 101
+						},
+						{
+							"kind": "method",
+							"name": "SortKeys",
+							"signature": "void SortKeys()",
+							"line": 102
+						},
+						{
+							"kind": "method",
+							"name": "Evaluate",
+							"signature": "bool Evaluate(float frame, Vec4& outValue) const",
+							"line": 104
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceSkeletalTrack",
+					"namespace": "Mowo",
+					"doc": "Plays a skeletal animation clip along the timeline against the bound\nentity's Animator. The clip is identified by name among the animator's\navailable clips; blend in/out ramp the applied weight at the bar edges.",
+					"line": 110,
+					"members": [
+						{
+							"kind": "field",
+							"name": "ClipName",
+							"signature": "std::string ClipName",
+							"line": 111
+						},
+						{
+							"kind": "field",
+							"name": "ClipPath",
+							"signature": "std::string ClipPath",
+							"line": 112
+						},
+						{
+							"kind": "field",
+							"name": "StartFrame",
+							"signature": "int32_t StartFrame = 0",
+							"line": 113
+						},
+						{
+							"kind": "field",
+							"name": "LengthFrames",
+							"signature": "int32_t LengthFrames = 48",
+							"line": 114
+						},
+						{
+							"kind": "field",
+							"name": "PlayRate",
+							"signature": "float PlayRate = 1.0f",
+							"line": 115
+						},
+						{
+							"kind": "field",
+							"name": "BlendInFrames",
+							"signature": "int32_t BlendInFrames = 0",
+							"line": 116
+						},
+						{
+							"kind": "field",
+							"name": "BlendOutFrames",
+							"signature": "int32_t BlendOutFrames = 0",
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "Contains",
+							"signature": "bool Contains(float frame) const",
+							"line": 119
+						},
+						{
+							"kind": "method",
+							"name": "BlendWeight",
+							"signature": "float BlendWeight(float frame) const",
+							"line": 120
+						},
+						{
+							"kind": "method",
+							"name": "LocalTimeSeconds",
+							"signature": "float LocalTimeSeconds(float frame, float frameRate) const",
+							"line": 121
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceEventKey",
+					"namespace": "Mowo",
+					"line": 124,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Frame",
+							"signature": "int32_t Frame = 0",
+							"line": 125
+						},
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name = \"Event\"",
+							"line": 126
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceAudioClip",
+					"namespace": "Mowo",
+					"line": 129,
+					"members": [
+						{
+							"kind": "field",
+							"name": "StartFrame",
+							"signature": "int32_t StartFrame = 0",
+							"line": 130
+						},
+						{
+							"kind": "field",
+							"name": "DurationFrames",
+							"signature": "int32_t DurationFrames = 48",
+							"line": 131
+						},
+						{
+							"kind": "field",
+							"name": "Volume",
+							"signature": "float Volume = 1.0f",
+							"line": 132
+						},
+						{
+							"kind": "field",
+							"name": "Path",
+							"signature": "std::string Path",
+							"line": 133
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceAudioTrack",
+					"namespace": "Mowo",
+					"line": 136,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 137
+						},
+						{
+							"kind": "field",
+							"name": "Clips",
+							"signature": "std::vector<FSequenceAudioClip> Clips",
+							"line": 138
+						},
+						{
+							"kind": "method",
+							"name": "SortClips",
+							"signature": "void SortClips()",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "ClipAt",
+							"signature": "int32_t ClipAt(float frame) const",
+							"line": 141
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceFadeKey",
+					"namespace": "Mowo",
+					"line": 144,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Frame",
+							"signature": "int32_t Frame = 0",
+							"line": 145
+						},
+						{
+							"kind": "field",
+							"name": "Interp",
+							"signature": "ESequenceInterp Interp = ESequenceInterp::Linear",
+							"line": 146
+						},
+						{
+							"kind": "field",
+							"name": "Value",
+							"signature": "float Value = 0.0f",
+							"line": 147
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceKeyEdit",
+					"namespace": "Mowo",
+					"doc": "Frame arithmetic shared by every group edit. The editor drags a whole key\nselection through these, and the tests pin them, so a snap that rounds one\nkey differently from its neighbours cannot creep back in.",
+					"line": 153,
+					"members": [
+						{
+							"kind": "method",
+							"name": "SnapFrame",
+							"signature": "static int32_t SnapFrame(int32_t frame, int32_t interval)",
+							"static": true,
+							"line": 154
+						},
+						{
+							"kind": "method",
+							"name": "OffsetFrame",
+							"signature": "static int32_t OffsetFrame(int32_t frame, int32_t delta, int32_t interval)",
+							"static": true,
+							"line": 155
+						},
+						{
+							"kind": "method",
+							"name": "ScaleFrame",
+							"signature": "static int32_t ScaleFrame(int32_t frame, int32_t pivot, float scale, int32_t interval)",
+							"static": true,
+							"line": 156
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSequenceBinding",
+					"namespace": "Mowo",
+					"doc": "A binding is either possessable — it resolves to an entity the scene already\nholds — or spawnable, in which case the player creates the entity when\nplayback starts and destroys it when playback stops. SpawnTemplate names a\nprefab; an empty one spawns a bare transform-only entity the tracks drive.",
+					"line": 163,
+					"members": [
+						{
+							"kind": "field",
+							"name": "EntityName",
+							"signature": "std::string EntityName",
+							"line": 164
+						},
+						{
+							"kind": "field",
+							"name": "EntityUuid",
+							"signature": "std::string EntityUuid",
+							"line": 165
+						},
+						{
+							"kind": "field",
+							"name": "Spawnable",
+							"signature": "bool Spawnable = false",
+							"line": 166
+						},
+						{
+							"kind": "field",
+							"name": "SpawnTemplate",
+							"signature": "std::string SpawnTemplate",
+							"line": 167
+						},
+						{
+							"kind": "field",
+							"name": "HasTransformTrack",
+							"signature": "bool HasTransformTrack = false",
+							"line": 168
+						},
+						{
+							"kind": "field",
+							"name": "HasVisibilityTrack",
+							"signature": "bool HasVisibilityTrack = false",
+							"line": 169
+						},
+						{
+							"kind": "field",
+							"name": "HasSkeletalTrack",
+							"signature": "bool HasSkeletalTrack = false",
+							"line": 170
+						},
+						{
+							"kind": "field",
+							"name": "TransformKeys",
+							"signature": "std::vector<FSequenceTransformKey> TransformKeys",
+							"line": 171
+						},
+						{
+							"kind": "field",
+							"name": "VisibilityKeys",
+							"signature": "std::vector<FSequenceVisibilityKey> VisibilityKeys",
+							"line": 172
+						},
+						{
+							"kind": "field",
+							"name": "MaterialTracks",
+							"signature": "std::vector<FSequenceMaterialTrack> MaterialTracks",
+							"line": 173
+						},
+						{
+							"kind": "field",
+							"name": "PropertyTracks",
+							"signature": "std::vector<FSequencePropertyTrack> PropertyTracks",
+							"line": 174
+						},
+						{
+							"kind": "field",
+							"name": "SkeletalTrack",
+							"signature": "FSequenceSkeletalTrack SkeletalTrack",
+							"line": 175
+						},
+						{
+							"kind": "method",
+							"name": "FindPropertyTrack",
+							"signature": "int32_t FindPropertyTrack(const std::string& component, const std::string& property) const",
+							"line": 177
+						},
+						{
+							"kind": "method",
+							"name": "AddPropertyTrack",
+							"signature": "int32_t AddPropertyTrack(const std::string& component, const std::string& property, const std::string& label, ESequencePropertyValueType type)",
+							"line": 178
+						},
+						{
+							"kind": "method",
+							"name": "RemovePropertyTrack",
+							"signature": "void RemovePropertyTrack(int32_t index)",
+							"line": 179
+						},
+						{
+							"kind": "method",
+							"name": "FindTransformKey",
+							"signature": "int32_t FindTransformKey(int32_t frame) const",
+							"line": 181
+						},
+						{
+							"kind": "method",
+							"name": "UpsertTransformKey",
+							"signature": "int32_t UpsertTransformKey(const FSequenceTransformKey& key)",
+							"line": 182
+						},
+						{
+							"kind": "method",
+							"name": "RemoveTransformKey",
+							"signature": "void RemoveTransformKey(int32_t index)",
+							"line": 183
+						},
+						{
+							"kind": "method",
+							"name": "MoveTransformKey",
+							"signature": "int32_t MoveTransformKey(int32_t index, int32_t newFrame)",
+							"line": 184
+						},
+						{
+							"kind": "method",
+							"name": "FindVisibilityKey",
+							"signature": "int32_t FindVisibilityKey(int32_t frame) const",
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "UpsertVisibilityKey",
+							"signature": "int32_t UpsertVisibilityKey(const FSequenceVisibilityKey& key)",
+							"line": 187
+						},
+						{
+							"kind": "method",
+							"name": "RemoveVisibilityKey",
+							"signature": "void RemoveVisibilityKey(int32_t index)",
+							"line": 188
+						},
+						{
+							"kind": "method",
+							"name": "MoveVisibilityKey",
+							"signature": "int32_t MoveVisibilityKey(int32_t index, int32_t newFrame)",
+							"line": 189
+						},
+						{
+							"kind": "method",
+							"name": "FindMaterialTrack",
+							"signature": "int32_t FindMaterialTrack(const std::string& parameter) const",
+							"line": 191
+						},
+						{
+							"kind": "method",
+							"name": "AddMaterialTrack",
+							"signature": "int32_t AddMaterialTrack(const std::string& parameter)",
+							"line": 192
+						},
+						{
+							"kind": "method",
+							"name": "RemoveMaterialTrack",
+							"signature": "void RemoveMaterialTrack(int32_t index)",
+							"line": 193
+						},
+						{
+							"kind": "method",
+							"name": "SortKeys",
+							"signature": "void SortKeys()",
+							"line": 195
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateTransform",
+							"signature": "bool EvaluateTransform(float frame, Vec3& outPosition, Vec3& outRotation, Vec3& outScale) const",
+							"line": 197
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateVisibility",
+							"signature": "bool EvaluateVisibility(float frame, bool& outVisible) const",
+							"line": 198
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "SequenceAsset",
+					"namespace": "Mowo",
+					"line": 201,
+					"members": [
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "const std::string& GetName() const",
+							"line": 203
+						},
+						{
+							"kind": "method",
+							"name": "SetName",
+							"signature": "void SetName(const std::string& name)",
+							"line": 206
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameRate",
+							"signature": "float GetFrameRate() const",
+							"line": 210
+						},
+						{
+							"kind": "method",
+							"name": "SetFrameRate",
+							"signature": "void SetFrameRate(float rate)",
+							"line": 213
+						},
+						{
+							"kind": "method",
+							"name": "GetPlaybackStart",
+							"signature": "int32_t GetPlaybackStart() const",
+							"line": 215
+						},
+						{
+							"kind": "method",
+							"name": "GetPlaybackEnd",
+							"signature": "int32_t GetPlaybackEnd() const",
+							"line": 218
+						},
+						{
+							"kind": "method",
+							"name": "SetPlaybackRange",
+							"signature": "void SetPlaybackRange(int32_t start, int32_t end)",
+							"line": 221
+						},
+						{
+							"kind": "method",
+							"name": "GetWorkStart",
+							"signature": "int32_t GetWorkStart() const",
+							"line": 223
+						},
+						{
+							"kind": "method",
+							"name": "GetWorkEnd",
+							"signature": "int32_t GetWorkEnd() const",
+							"line": 226
+						},
+						{
+							"kind": "method",
+							"name": "SetWorkRange",
+							"signature": "void SetWorkRange(int32_t start, int32_t end)",
+							"line": 229
+						},
+						{
+							"kind": "method",
+							"name": "ClampToPlayback",
+							"signature": "float ClampToPlayback(float frame) const",
+							"line": 231
+						},
+						{
+							"kind": "method",
+							"name": "HasCameraCutTrack",
+							"signature": "bool HasCameraCutTrack() const",
+							"line": 233
+						},
+						{
+							"kind": "method",
+							"name": "SetCameraCutTrack",
+							"signature": "void SetCameraCutTrack(bool enabled)",
+							"line": 236
+						},
+						{
+							"kind": "method",
+							"name": "HasEventTrack",
+							"signature": "bool HasEventTrack() const",
+							"line": 238
+						},
+						{
+							"kind": "method",
+							"name": "SetEventTrack",
+							"signature": "void SetEventTrack(bool enabled)",
+							"line": 241
+						},
+						{
+							"kind": "method",
+							"name": "HasFadeTrack",
+							"signature": "bool HasFadeTrack() const",
+							"line": 243
+						},
+						{
+							"kind": "method",
+							"name": "SetFadeTrack",
+							"signature": "void SetFadeTrack(bool enabled)",
+							"line": 246
+						},
+						{
+							"kind": "method",
+							"name": "Bindings",
+							"signature": "std::vector<FSequenceBinding>& Bindings()",
+							"line": 248
+						},
+						{
+							"kind": "method",
+							"name": "Bindings",
+							"signature": "const std::vector<FSequenceBinding>& Bindings() const",
+							"line": 251
+						},
+						{
+							"kind": "method",
+							"name": "CameraCuts",
+							"signature": "std::vector<FSequenceCameraCut>& CameraCuts()",
+							"line": 254
+						},
+						{
+							"kind": "method",
+							"name": "CameraCuts",
+							"signature": "const std::vector<FSequenceCameraCut>& CameraCuts() const",
+							"line": 257
+						},
+						{
+							"kind": "method",
+							"name": "EventKeys",
+							"signature": "std::vector<FSequenceEventKey>& EventKeys()",
+							"line": 260
+						},
+						{
+							"kind": "method",
+							"name": "EventKeys",
+							"signature": "const std::vector<FSequenceEventKey>& EventKeys() const",
+							"line": 263
+						},
+						{
+							"kind": "method",
+							"name": "AudioTracks",
+							"signature": "std::vector<FSequenceAudioTrack>& AudioTracks()",
+							"line": 266
+						},
+						{
+							"kind": "method",
+							"name": "AudioTracks",
+							"signature": "const std::vector<FSequenceAudioTrack>& AudioTracks() const",
+							"line": 269
+						},
+						{
+							"kind": "method",
+							"name": "FadeKeys",
+							"signature": "std::vector<FSequenceFadeKey>& FadeKeys()",
+							"line": 272
+						},
+						{
+							"kind": "method",
+							"name": "FadeKeys",
+							"signature": "const std::vector<FSequenceFadeKey>& FadeKeys() const",
+							"line": 275
+						},
+						{
+							"kind": "method",
+							"name": "FindBinding",
+							"signature": "int32_t FindBinding(const std::string& entityName) const",
+							"line": 279
+						},
+						{
+							"kind": "method",
+							"name": "AddBinding",
+							"signature": "int32_t AddBinding(const std::string& entityName, const std::string& entityUuid)",
+							"line": 280
+						},
+						{
+							"kind": "method",
+							"name": "AddSpawnableBinding",
+							"signature": "int32_t AddSpawnableBinding(const std::string& entityName, const std::string& spawnTemplate)",
+							"line": 281
+						},
+						{
+							"kind": "method",
+							"name": "RemoveBinding",
+							"signature": "void RemoveBinding(int32_t index)",
+							"line": 282
+						},
+						{
+							"kind": "method",
+							"name": "AddAudioTrack",
+							"signature": "int32_t AddAudioTrack(const std::string& name)",
+							"line": 284
+						},
+						{
+							"kind": "method",
+							"name": "RemoveAudioTrack",
+							"signature": "void RemoveAudioTrack(int32_t index)",
+							"line": 285
+						},
+						{
+							"kind": "method",
+							"name": "SortCameraCuts",
+							"signature": "void SortCameraCuts()",
+							"line": 287
+						},
+						{
+							"kind": "method",
+							"name": "ActiveCameraCut",
+							"signature": "const FSequenceCameraCut* ActiveCameraCut(float frame) const",
+							"line": 288
+						},
+						{
+							"kind": "method",
+							"name": "SortEventKeys",
+							"signature": "void SortEventKeys()",
+							"line": 290
+						},
+						{
+							"kind": "method",
+							"name": "FindEventKey",
+							"signature": "int32_t FindEventKey(int32_t frame) const",
+							"line": 291
+						},
+						{
+							"kind": "method",
+							"name": "UpsertEventKey",
+							"signature": "int32_t UpsertEventKey(const FSequenceEventKey& key)",
+							"line": 292
+						},
+						{
+							"kind": "method",
+							"name": "RemoveEventKey",
+							"signature": "void RemoveEventKey(int32_t index)",
+							"line": 293
+						},
+						{
+							"kind": "method",
+							"name": "MoveEventKey",
+							"signature": "int32_t MoveEventKey(int32_t index, int32_t newFrame)",
+							"line": 294
+						},
+						{
+							"kind": "method",
+							"name": "CollectEventsInRange",
+							"signature": "void CollectEventsInRange(float fromExclusive, float toInclusive, std::vector<const FSequenceEventKey*>& outEvents) const",
+							"line": 295
+						},
+						{
+							"kind": "method",
+							"name": "SortFadeKeys",
+							"signature": "void SortFadeKeys()",
+							"line": 297
+						},
+						{
+							"kind": "method",
+							"name": "FindFadeKey",
+							"signature": "int32_t FindFadeKey(int32_t frame) const",
+							"line": 298
+						},
+						{
+							"kind": "method",
+							"name": "UpsertFadeKey",
+							"signature": "int32_t UpsertFadeKey(const FSequenceFadeKey& key)",
+							"line": 299
+						},
+						{
+							"kind": "method",
+							"name": "RemoveFadeKey",
+							"signature": "void RemoveFadeKey(int32_t index)",
+							"line": 300
+						},
+						{
+							"kind": "method",
+							"name": "MoveFadeKey",
+							"signature": "int32_t MoveFadeKey(int32_t index, int32_t newFrame)",
+							"line": 301
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateFade",
+							"signature": "bool EvaluateFade(float frame, float& outValue) const",
+							"line": 302
+						},
+						{
+							"kind": "method",
+							"name": "SerializeToString",
+							"signature": "std::string SerializeToString() const",
+							"line": 304
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromString",
+							"signature": "bool LoadFromString(const std::string& text)",
+							"line": 305
+						},
+						{
+							"kind": "method",
+							"name": "SaveToFile",
+							"signature": "bool SaveToFile(const std::string& path) const",
+							"line": 306
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromFile",
+							"signature": "bool LoadFromFile(const std::string& path)",
+							"line": 307
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Sequencer/Public/Sequencer/SequenceEvents.h",
+			"include": "Sequencer/SequenceEvents.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "SequenceNamedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 13,
+					"members": [
+						{
+							"kind": "method",
+							"name": "SequenceNamedEvent",
+							"signature": "SequenceNamedEvent(const std::string& eventName, const std::string& sequenceName, int32_t frame) : m_eventName(eventName), m_sequenceName(sequenceName), m_frame(frame)",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "GetEventName",
+							"signature": "const std::string& GetEventName() const",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "GetSequenceName",
+							"signature": "const std::string& GetSequenceName() const",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "GetFrame",
+							"signature": "int32_t GetFrame() const",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 30
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Sequencer/Public/Sequencer/SequencePlayerComponent.h",
+			"include": "Sequencer/SequencePlayerComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "SequencePlayerComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"line": 15,
+					"members": [
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 16
+						},
+						{
+							"kind": "field",
+							"name": "sequencePath",
+							"signature": "std::string sequencePath",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "autoPlay",
+							"signature": "bool autoPlay = false",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "loop",
+							"signature": "bool loop = false",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "playRate",
+							"signature": "float playRate = 1.0f",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "suppressPlayerInput",
+							"signature": "bool suppressPlayerInput = true",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "skippable",
+							"signature": "bool skippable = false",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "playing",
+							"signature": "bool playing = false",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "paused",
+							"signature": "bool paused = false",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "time",
+							"signature": "float time = 0.0f",
+							"line": 49
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Sequencer/Public/Sequencer/SequencePlayerSystem.h",
+			"include": "Sequencer/SequencePlayerSystem.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "SequencePlayerSystem",
+					"namespace": "Mowo",
+					"bases": "public System",
+					"line": 28,
+					"members": [
+						{
+							"kind": "method",
+							"name": "SequencePlayerSystem",
+							"signature": "SequencePlayerSystem() = default",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "~SequencePlayerSystem",
+							"signature": "~SequencePlayerSystem() override",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "SequencePlayerSystem",
+							"signature": "SequencePlayerSystem(const SequencePlayerSystem&) = delete",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "SequencePlayerSystem& operator=(const SequencePlayerSystem&) = delete",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "Update",
+							"signature": "void Update(float deltaTime) override",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown() override",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "SetScene",
+							"signature": "void SetScene(Scene* scene)",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "SetInputManager",
+							"signature": "void SetInputManager(InputManager* input)",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Play",
+							"signature": "bool Play(EntityID entity)",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "PlayPath",
+							"signature": "EntityID PlayPath(const std::string& path, bool loop)",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Pause",
+							"signature": "void Pause(EntityID entity)",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "Resume",
+							"signature": "void Resume(EntityID entity)",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "Stop",
+							"signature": "void Stop(EntityID entity)",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Skip",
+							"signature": "void Skip(EntityID entity)",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "SetTime",
+							"signature": "void SetTime(EntityID entity, float seconds)",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "IsPlaying",
+							"signature": "bool IsPlaying(EntityID entity) const",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "AnyPlaying",
+							"signature": "bool AnyPlaying() const",
+							"line": 54
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Sequencer/Public/Sequencer/SequencerModule.h",
+			"include": "Sequencer/SequencerModule.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [],
+			"free": [
+				{
+					"kind": "function",
+					"name": "RegisterSequencerModule",
+					"signature": "void RegisterSequencerModule()",
+					"doc": "Registers the sequence-player scene system with the engine modular\nregistry. Idempotent. Called by the plugin loader's InitializeModule /\nthe monolithic static registrar; hosts that link the plugin without\nplugin discovery (headless tests) call it directly.",
+					"line": 12
+				}
+			]
+		}
+	]
+}

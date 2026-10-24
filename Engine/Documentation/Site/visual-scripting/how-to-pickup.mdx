@@ -1,0 +1,107 @@
+---
+title: "How-to: a pickup that adds to an inventory"
+sidebarTitle: "How-to: pickup"
+description: Build a pickup that, when the player walks into it, adds its item name to the player's inventory array and removes itself.
+order: 11
+sources:
+  - Engine/Source/Runtime/Loom/Private/LoomVM.cpp
+  - Engine/Source/Runtime/Game/Private/LoomRuntime.cpp
+  - Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp
+  - Engine/Source/Runtime/Game/Public/Game/MGameplayStatics.h
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
+verifiedAt: 08e26df3d
+---
+
+This guide builds two classes that talk to each other: a **pickup** that, when the player walks into it, hands its item name to the player and removes itself, and a **player** that keeps the names in an array. You will use an array variable, the overlap payload, **Cast To**, and **Call On Target** into another class's function.
+
+Build the [door](/docs/visual-scripting/how-to-door/) first if you have not used a Trigger slot yet.
+
+<Flow steps={["Player enters pickup trigger", "BP_Pickup: OnTriggerEnter", "Cast To BP_Player", "Call On Target: AddItem", "Inventory grows, pickup removed"]} highlight={3} caption="What happens on pickup" />
+
+## Part 1: the player's inventory
+
+<Steps>
+<Step title="Create the player class">
+
+In the Content Browser, choose **Loom Class > Character** and name it `BP_Player`. Use it as your game mode's player pawn.
+
+</Step>
+<Step title="Add the inventory variable">
+
+In **Variables**, add `Inventory` of type String.
+
+</Step>
+<Step title="Add AddItem">
+
+Click **+** in **Functions**, name the function `AddItem` and give it one String input, `item`.
+
+</Step>
+<Step title="Write the body">
+
+Wire the entry node into an **Array Add** node, set its variable to `Inventory`, and feed the entry node's `item` pin into its value. The first Array Add turns the String variable into an empty array and appends to it <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />.
+
+</Step>
+<Step title="Compile and save">
+
+Click **Compile**, then **Save**.
+
+</Step>
+</Steps>
+
+<Callout type="tip">
+
+The pickup calls one function instead of writing the player's variables. If the player later caps the inventory or plays a sound, that change lives in `AddItem` and no pickup changes.
+
+</Callout>
+
+## Part 2: the pickup
+
+<Steps>
+<Step title="Create the class">
+
+Choose **Loom Class > Actor** and name it `BP_Pickup`.
+
+</Step>
+<Step title="Add variables">
+
+Add `ItemName` (String, default `Coin`, **Instance Editable** on) and `Collected` (Bool, default `false`). Placed pickups can then grant a coin, a key or a potion from the same class.
+
+</Step>
+<Step title="Add components">
+
+Add a **MeshRenderer** component so the pickup is visible, and a **Trigger** component with shape Sphere and a radius that covers it.
+
+</Step>
+<Step title="Handle OnTriggerEnter">
+
+Add an `OnTriggerEnter` event graph and wire:
+
+1. **Event** into a **Branch** on **Get Variable** `Collected`. Continue from **False** only.
+2. **Cast To** `BP_Player`, with **Get Variable** `PinPayload` as the object. `PinPayload` holds the actor that entered <Source path="Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp" />.
+3. From the cast's success output, **Call On Target** with the function `AddItem`. Wire the cast's object output into Target and **Get Variable** `ItemName` into the argument.
+4. **Set Variable** `Collected` to `true`.
+5. `DestroyActor` from the **Gameplay Library**, with **Self** as the actor <Source symbol="MGameplayStatics" />.
+
+</Step>
+<Step title="Compile and save">
+
+Compile, then save.
+
+</Step>
+</Steps>
+
+**Call On Target** finds no reflected `AddItem` on the player's class, so it runs the player's visual function in the player's context, and the string lands in the player's `Inventory`. If something other than the player brushes the trigger, the cast fails and nothing happens.
+
+<Screenshot id="loom-howto-pickup-graph" alt="Visual Scripting editor with BP_Pickup open on the OnTriggerEnter graph: Event OnTriggerEnter into a Branch on Collected, the False output into Cast To BP_Player fed by Get PinPayload, the cast's success output into Call On Target AddItem with Get ItemName as the argument, then Set Collected true and DestroyActor with Self" caption="The pickup's OnTriggerEnter graph." />
+
+## Part 3: place and play
+
+Drop several `BP_Pickup` instances in the level and set each one's `ItemName` in its Details panel. Start Play-In-Editor and walk over them.
+
+To watch it, open `BP_Player` while playing and put a breakpoint on the Array Add node in `AddItem`. Each pickup pauses there, and the watch strip shows `Inventory` growing. A logpoint with the message `got {item}` prints each pickup without stopping. See [Debugging](/docs/visual-scripting/debugging/).
+
+## Take it further
+
+- **No duplicates.** In `AddItem`, check **Array Contains** on `Inventory` and **Branch** before adding.
+- **Counts instead of names.** Use a map of item name to count: read the current count with **Map Find** and write it back with **Map Add**.
+- **Tell the HUD.** Give `BP_Player` an `OnInventoryChanged` event dispatcher and **Broadcast** it from `AddItem`, so a listener updates without polling. See [Functions, macros and dispatchers](/docs/visual-scripting/functions-macros-dispatchers/#event-dispatchers).

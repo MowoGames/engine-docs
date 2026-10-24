@@ -1,0 +1,81 @@
+---
+title: Acoustics
+description: How walls muffle sound, how rooms and portals carry it round corners, reverb zones, reverb and reflections traced from geometry, and echolocation.
+order: 17
+sources:
+  - Engine/Source/Runtime/Audio/Public/Audio/SoundOcclusion.h
+  - Engine/Source/Runtime/Audio/Public/Audio/SoundPropagation.h
+  - Engine/Source/Runtime/Audio/Public/Audio/ReverbZones.h
+  - Engine/Source/Runtime/Audio/Public/Audio/GeometricAcoustics.h
+  - Engine/Source/Runtime/Audio/Public/Audio/EchoTail.h
+  - Engine/Source/Runtime/Audio/Public/Audio/ConvolutionEngine.h
+  - Engine/Source/Runtime/Audio/Public/Audio/Components/AudioReverbZoneComponent.h
+  - Engine/Source/Runtime/Audio/Public/Audio/Components/RoomVolumeComponent.h
+  - Engine/Source/Runtime/Audio/Public/Audio/Components/PortalComponent.h
+  - Engine/Source/Runtime/Audio/Public/Audio/Components/AudioSourceComponent.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/GeometricAcousticsSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/MAcousticsStatics.h
+  - Engine/Plugins/ScanHierarchy/Public/ScanHierarchy/ScanAcousticGeometry.h
+verifiedAt: 08e26df3d
+---
+
+Mowo works out how sound travels from the level's geometry. One occlusion rule applies to every sound, including world sources, proximity voice chat, radio speakers and AI hearing, so the creature on the far side of a door hears exactly what the player does.
+
+## Occlusion
+
+A ray from the source to the listener collects every wall it crosses, and each hit knows its [surface type](/docs/gameplay/physics/). The loss is keyed by material: <Source symbol="FSoundOcclusion" />
+
+| Class | Loss | Low-pass | Surfaces |
+| --- | --- | --- | --- |
+| Thin wall | -9 dB | 2.5 kHz | Default, Wood, Glass, Carpet, Grass, Flesh |
+| Thick wall | -18 dB | 900 Hz | Concrete, Stone, Metal, Dirt, Gravel, Sand, Snow, Ice, Water, Mud |
+
+Several walls on one ray add up in decibels and take the darkest cutoff, down to a -60 dB floor. Override any row in **Project Settings › Engine › Audio › Occlusion Materials**.
+
+Turn occlusion on per source with `useOcclusion`; `occlusionSmoothing` sets how fast the voice glides to its new level. Only the nearest `audio.OcclusionRaycastBudget` (default 32) sources are traced each frame; the rest keep their last state.
+
+## Rooms and portals
+
+Walls alone get doorways wrong: the wall beside an open door is concrete, but a voice in the next room comes round through the opening almost untouched. Add the architecture with two components: <Source symbol="FSoundPropagation" />
+
+- **RoomVolume**: an oriented box named by `roomId`. When rooms nest, higher `priority` wins, then the smaller volume. <Source symbol="RoomVolumeComponent" />
+- **Portal**: an opening of `width` by `height` between two rooms. It finds them by probing `probeDepth` either side, or by naming them in `roomA` and `roomB`. `openFraction` is how far a door stands open; the open and closed loss and cutoff are the portal's own, so a heavy fire door can say so. <Source symbol="PortalComponent" />
+
+Propagation takes the louder of the straight path through the walls and the path through the portals.
+
+## Reverb zones
+
+An `AudioReverbZone` component makes a box or sphere reverberant. The highest-`priority` zone containing the listener wins, so a small closet zone can nest inside a warehouse zone. `fadeDistance` blends at the edge and `crossfadeRate` sets how fast the send follows. The reverb is parametric (`roomSize`, `damping`, `wet`, `dry`), or a convolution reverb when `irPath` names an impulse response. Only the SFX and Ambient buses get reverb; Music and Voice stay dry. <Source symbol="AudioReverbZoneComponent" />
+
+## Reverb and reflections from geometry
+
+With `audio.Acoustics` on (the default), the engine also traces the listener's surroundings a few times a second (`audio.Acoustics.UpdateHz`): <Source symbol="FGeometricAcoustics" />
+
+- **Reverb**: rays from the listener bounce around the room to estimate its decay time, absorption and enclosure.
+- **Early reflections**: an exact image-source search finds the first reflections from nearby walls, up to `audio.Acoustics.ReflectionOrder` surfaces per path.
+
+Both feed a convolution reverb on the submix named by `audio.EchoTailSubmix`. Surfaces absorb and scatter by material; set the coefficients in **Project Settings › Engine › Audio › Acoustic Materials**. <Source symbol="FEchoTail" />
+
+`audio.Acoustics.Geometry` picks what sound is traced against: the scan hierarchy (fast, with the ScanHierarchy plugin) or the physics scene. With the plugin, walls muffle sound against the same triangles the LiDAR scanner sees. <Source path="Engine/Plugins/ScanHierarchy/Public/ScanHierarchy/ScanAcousticGeometry.h" />
+
+## Echolocation
+
+`MAcousticsStatics::Echolocate(origin, direction)` sends a click out in a cone and reports the echoes, nearest first: `GetEchoPosition`, `GetEchoDelay` and `GetEchoStrength`. It works both ways: the player hears echoes played from where they bounced (`audio.Acoustics.EchoClip`), and the AI hears the click at `audio.Acoustics.EchoNoise`. <Source symbol="MAcousticsStatics" />
+
+The same class answers `GetPathLossDb(from, to)`, `GetRoomDecaySeconds()` and `GetRoomEnclosure()` for gameplay.
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `audio.Acoustics` | 1 | Geometric acoustics on or off |
+| `audio.Acoustics.ReverbRays`, `audio.Acoustics.ReverbBounces` | 256, 4 | Reverb tracing budget |
+| `audio.Acoustics.MaxReflections` | 16 | Early reflections kept |
+| `audio.Acoustics.MaxDistance` | 80 | Longest ray leg, in meters |
+| `audio.Acoustics.EchoRays`, `audio.Acoustics.EchoRange`, `audio.Acoustics.EchoConeDegrees` | 128, 40, 70 | Echolocation click |
+
+Tracing is seeded, so two machines replaying a click agree on its echoes. Bounce lines and echo points draw under the **Audio** debug layer.
+
+## Related
+
+- [Audio](/docs/gameplay/audio/)
+- [LiDAR and point clouds](/docs/gameplay/lidar-and-point-clouds/) for the scan hierarchy
+- API: [Audio module](/docs/api/audio/), [Game module](/docs/api/game/)

@@ -1,0 +1,132 @@
+---
+title: Interaction and inventory
+description: The Combat plugin's interaction, physical carry, items, inventories, crafting, resource gathering and RPG progression.
+order: 34
+sources:
+  - Engine/Plugins/Combat/Combat.mplugin
+  - Engine/Source/Runtime/Game/Public/Game/Components/InteractableComponent.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/InteractionSystem.h
+  - Engine/Plugins/Combat/Private/InteractionSystem.cpp
+  - Engine/Plugins/Combat/Public/CombatPlugin/MInteractionStatics.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/CarryableComponent.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/CarrySystem.h
+  - Engine/Plugins/Combat/Private/CarrySystem.cpp
+  - Engine/Plugins/Combat/Public/CombatPlugin/MCarryStatics.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/ItemDefinitionAsset.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/ItemDurability.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/ItemStats.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/InventoryComponent.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/MInventoryComponent.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/MInventoryStatics.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/CraftingSystem.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/CraftingStationComponent.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/ResourceNodeComponent.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/MCraftingStatics.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/RecipeAsset.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/ProgressionAsset.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/RpgProgression.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/MProgressionStatics.h
+verifiedAt: 08e26df3d
+---
+
+These systems come with the **Combat, Interaction & RPG** plugin (off by default; enable it in the Plugins window). The same components drive a horror game's scanner pickup, a shop simulator's shelf and a survival game's crafting bench. The First Person and Simulator templates use them. <Source path="Engine/Plugins/Combat/Combat.mplugin" />
+
+## Interaction
+
+Add an `Interactable` component to anything the player can use. <Source symbol="InteractableComponent" />
+
+| Field | Meaning |
+| --- | --- |
+| `interactionType` | `Use`, `PickUp`, `Hold` or `Toggle` |
+| `promptTextKey` | Localization key the HUD prompt shows while it is focused |
+| `range` | Reach in meters |
+| `holdDuration` | Seconds a `Hold` interaction must be held |
+| `cooldown` | Seconds before it can be used again |
+| `priority` | Bias when several are in view |
+
+Each tick, the interaction system picks the best target from the player's view: enabled, in range, inside the view cone (`interact.ConeDeg`), scored by distance and closeness to screen center (`interact.ScreenCenterWeight`), and in line of sight. The focused object gets the selection outline. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/InteractionSystem.h" />
+
+Interacting runs the component's callback, reports to the quest system, fires the actor's `OnInteract` event in Visual Scripting, and for `PickUp` picks the object up. The template characters bind **Interact** to <Kbd>E</Kbd> and **Throw** to <Kbd>Q</Kbd>. `MInteractionStatics` offers `GetFocusedActor`, `SetInteractableEnabled` and `TriggerInteract`. The HUD can bind `interaction.prompt`, `interaction.progress` and `interaction.focused`.
+
+## Carry
+
+A `Carryable` component makes a dynamic body physically carryable: `holdDistance`, `holdOffset`, `maxCarryMass`, `throwImpulse`, `dropOnDamage` and `placeSnap`. The object is held by a motorized physics constraint, not teleported, so heavy objects lag and swing. It drops when the constraint stretches past `carry.BreakDistance`, when the carrier dies, or on damage with `dropOnDamage`. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/CarryableComponent.h" />
+
+| Mass class | Automatic range | Meaning |
+| --- | --- | --- |
+| Light | Under 5 kg | One hand |
+| Medium | 5 to 25 kg | Both hands |
+| Heavy | 25 to 80 kg | Two people carry it together |
+| Immovable | 80 kg and up | Nobody lifts it |
+
+In multiplayer, the server owns the physics of a carry; clients predict pickups, drops and throws and reconcile with the server's answer. `MCarryStatics` offers `IsCarrying`, `GetCarriedActor`, `ForceDrop`, `GetMassClassName` and `GetCarrierCount`. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/MCarryStatics.h" />
+
+## Items
+
+An item is an `.item` asset: name, icon, `max_stack`, `mass`, a category tag, an equip slot, a `world_mesh` for its dropped form, free-form properties, and optionally `durability`, `wear_per_use` and `rarity`. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/ItemDefinitionAsset.h" />
+
+```mdf title="Content/Items/Crate.item"
+Item "crate" {
+    schema_version: 1
+    name_key: "item.crate.name"
+    name_text: "Crate"
+    max_stack: 10
+    mass: 4.0
+    category: "Item.Container"
+
+    StatModifier "MaxHealth" { percent: 20 }
+}
+```
+
+- **Durability**: weapons, melee swings and tool gathers wear the item that backs them; a broken item stops working until repaired. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/ItemDurability.h" />
+- **Stat modifiers**: `StatModifier` entries add a flat or percent bonus to an attribute while the item is equipped, as one gameplay effect that is removed on unequip. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/ItemStats.h" />
+
+## Inventory
+
+`MInventoryComponent` gives an actor a slot-based inventory with a capacity, stack caps and an optional mass budget. Picking up a carryable whose `itemId` is set stores it and removes the world object; dropping spawns its world form back. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/MInventoryComponent.h" />
+
+`MInventoryStatics` offers `AddItemByPath`, `RemoveItem`, `GetItemCount`, `HasItem` and `DropItem`. The HUD can bind `inventory.slotN.icon`, `inventory.slotN.count`, `inventory.slotN.name`, `inventory.slots`, `inventory.used` and `inventory.mass`.
+
+## Crafting and gathering
+
+A recipe is a `.recipe` asset of inputs and outputs, with a craft time, an optional station tag and an unlock flag. <Source symbol="RecipeAsset" />
+
+```mdf title="Content/Recipes/Sword.recipe"
+Recipe "sword" {
+	schema_version: 1
+	name_key: "recipe.sword.name"
+	craft_time: 1.0
+	station_tag: "forge"
+	unlocked: true
+	Input "plank" { count: 1 }
+	Input "iron" { count: 2 }
+	Output "sword" { count: 1 }
+}
+```
+
+An empty `station_tag` means it can be crafted by hand; otherwise the crafter must stand at an `ACraftingStationActor` with that tag, and a station can require power from a [utility grid](/docs/gameplay/zones-and-utility-grids/). Inputs are consumed when a craft starts and refunded on cancel; if the output does not fit, everything rolls back. A recipe output marked `repairs` restores an item's durability instead. Crafts queue and survive save games. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/CraftingSystem.h" />
+
+**Resource nodes** (`AResourceNodeActor`, or a `ResourceNode` component) give items when gathered by holding interact or by hitting them with a weapon or tool, optionally gated on a tool, and respawn after a time. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/ResourceNodeComponent.h" />
+
+`MCraftingStatics` offers `CanCraft`, `StartCraft`, `CancelCraft`, `GetCraftQueueSize`, `GetCraftProgress`, `GetActiveRecipe`, `UnlockRecipe` and `GatherResource`.
+
+## RPG progression
+
+A `.progression` asset lists levels with cumulative XP thresholds, attribute points and ability unlock tags. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/ProgressionAsset.h" />
+
+```mdf title="Content/RPG/Hero.progression"
+Progression "hero_curve" {
+	schema_version: 1
+	Level "1" { xp_required: 0 }
+	Level "2" { xp_required: 100, attribute_points: 2 }
+	Level "3" { xp_required: 300, attribute_points: 3, unlocks: ["Ability.Unlock.Whirlwind"] }
+}
+```
+
+Progression runs on the [ability system](/docs/gameplay/abilities-and-damage/): `XP`, `Level` and `AttributePoints` are attributes, and the core stats feed derived ones (`Vitality` raises `MaxHealth`, `Strength` raises `DamageMultiplier`, `Endurance` raises `MaxStamina`). The attacker's `DamageMultiplier` and critical-hit chance scale both guns and melee. `MProgressionStatics` offers `SetProgressionAsset`, `GrantXP`, `GrantKillXP`, `GrantQuestXP`, `GrantGatherXP`, `GetXP`, `GetLevel`, `GetUnspentPoints` and `SpendAttributePoint`. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/MProgressionStatics.h" />
+
+## Related
+
+- [Weapons and melee](/docs/gameplay/weapons-and-melee/)
+- [Survival and economy](/docs/gameplay/survival-and-economy/) for building and shops
+- [Quests, dialogue and subtitles](/docs/gameplay/narrative/)

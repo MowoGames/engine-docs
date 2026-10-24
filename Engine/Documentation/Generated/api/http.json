@@ -1,0 +1,602 @@
+{
+	"name": "MowoEngine.Http",
+	"displayName": "Http",
+	"slug": "http",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Http/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Http/Public/Http/HttpClient.h",
+			"include": "Http/HttpClient.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "HttpResponse",
+					"namespace": "Mowo",
+					"line": 18,
+					"members": [
+						{
+							"kind": "field",
+							"name": "statusCode",
+							"signature": "long statusCode = 0",
+							"doc": "HTTP status; 0 = transport-level failure",
+							"line": 19
+						},
+						{
+							"kind": "field",
+							"name": "body",
+							"signature": "std::string body",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "error",
+							"signature": "std::string error",
+							"doc": "non-empty on transport error (curl message)",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "nameNotResolved",
+							"signature": "bool nameNotResolved = false",
+							"doc": "The host (or proxy) name did not resolve. Separated from the other\ntransport failures because it is the one that usually means the URL is\nwrong rather than the network being down, and a caller that retries on\na schedule wants to treat the two differently.",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "Ok",
+							"signature": "bool Ok() const",
+							"line": 29
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "HttpMultipartFile",
+					"namespace": "Mowo",
+					"line": 34,
+					"members": [
+						{
+							"kind": "field",
+							"name": "fieldName",
+							"signature": "std::string fieldName",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "filePath",
+							"signature": "std::string filePath",
+							"doc": "absolute path on disk",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "contentType",
+							"signature": "std::string contentType = \"application/octet-stream\"",
+							"line": 37
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "HttpTransferOptions",
+					"namespace": "Mowo",
+					"line": 40,
+					"members": [
+						{
+							"kind": "field",
+							"name": "headers",
+							"signature": "std::vector<std::string> headers",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "connectTimeoutSeconds",
+							"signature": "int32_t connectTimeoutSeconds = 10",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "stallTimeoutSeconds",
+							"signature": "int32_t stallTimeoutSeconds = 30",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "maxBytesPerSecond",
+							"signature": "int64_t maxBytesPerSecond = 0",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "cancel",
+							"signature": "const std::atomic<bool>* cancel = nullptr",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "onProgress",
+							"signature": "std::function<void(uint64_t received, uint64_t total)> onProgress",
+							"line": 46
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "HttpDownloadResult",
+					"namespace": "Mowo",
+					"line": 49,
+					"members": [
+						{
+							"kind": "field",
+							"name": "statusCode",
+							"signature": "int32_t statusCode = 0",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "bytesWritten",
+							"signature": "uint64_t bytesWritten = 0",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "fileSize",
+							"signature": "uint64_t fileSize = 0",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "resumed",
+							"signature": "bool resumed = false",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "cancelled",
+							"signature": "bool cancelled = false",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "nameNotResolved",
+							"signature": "bool nameNotResolved = false",
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "error",
+							"signature": "std::string error",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "errorBody",
+							"signature": "std::string errorBody",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Ok",
+							"signature": "bool Ok() const",
+							"line": 59
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "HttpClient",
+					"namespace": "Mowo",
+					"doc": "Minimal libcurl-backed client. Each call owns its own easy handle, so the\nstatic methods are safe to call from multiple threads concurrently.",
+					"line": 66,
+					"members": [
+						{
+							"kind": "method",
+							"name": "GlobalInit",
+							"signature": "static void GlobalInit()",
+							"static": true,
+							"doc": "Process-wide curl init/teardown. Idempotent; the request methods call\nGlobalInit() lazily, so explicit use is optional.",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "GlobalShutdown",
+							"signature": "static void GlobalShutdown()",
+							"static": true,
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "Post",
+							"signature": "static HttpResponse Post(const std::string& url, const std::string& body, const std::vector<std::string>& headers = {}, long timeoutSeconds = 15)",
+							"static": true,
+							"doc": "POST a raw string body.",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "Request",
+							"signature": "static HttpResponse Request(const std::string& method, const std::string& url, const std::string& body = \"\", const std::vector<std::string>& headers = {}, long timeoutSeconds = 15)",
+							"static": true,
+							"doc": "Any HTTP verb (\"GET\", \"POST\", \"PUT\", \"PATCH\", \"DELETE\", ...). An empty\nbody sends no payload; GET with a body is refused by construction (a\nbody on GET is undefined per RFC 9110 and proxies drop it silently).",
+							"line": 82
+						},
+						{
+							"kind": "method",
+							"name": "PostMultipart",
+							"signature": "static HttpResponse PostMultipart(const std::string& url, const std::map<std::string, std::string>& fields, const std::vector<HttpMultipartFile>& files, const std::vector<std::string>& headers = {}, long timeoutSeconds = 30)",
+							"static": true,
+							"doc": "multipart/form-data POST: form fields + file attachments. Used by the\nSentry minidump upload.",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "Fetch",
+							"signature": "static HttpResponse Fetch(const std::string& url, const HttpTransferOptions& options)",
+							"static": true,
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "Download",
+							"signature": "static HttpDownloadResult Download(const std::string& url, const std::string& filePath, const HttpTransferOptions& options, bool resume = true)",
+							"static": true,
+							"line": 98
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Http/Public/Http/HttpWebSocketConnection.h",
+			"include": "Http/HttpWebSocketConnection.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EHttpWsResult",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 21,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Ok",
+							"signature": "Ok",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "Again",
+							"signature": "Again",
+							"doc": "The non-blocking socket has nothing to read, or no room to write.",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "Error",
+							"signature": "Error",
+							"line": 25
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "EHttpWsFlag",
+					"namespace": "Mowo",
+					"doc": "Frame flags as curl reports them, without curl's header.",
+					"line": 29,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Text",
+							"signature": "static constexpr uint32_t Text = 1u << 0",
+							"static": true,
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "Binary",
+							"signature": "static constexpr uint32_t Binary = 1u << 1",
+							"static": true,
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "Cont",
+							"signature": "static constexpr uint32_t Cont = 1u << 2",
+							"static": true,
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "Close",
+							"signature": "static constexpr uint32_t Close = 1u << 3",
+							"static": true,
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "Ping",
+							"signature": "static constexpr uint32_t Ping = 1u << 4",
+							"static": true,
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "Pong",
+							"signature": "static constexpr uint32_t Pong = 1u << 5",
+							"static": true,
+							"line": 35
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FHttpWsFrameInfo",
+					"namespace": "Mowo",
+					"line": 38,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Flags",
+							"signature": "uint32_t Flags = 0",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "BytesLeft",
+							"signature": "int64_t BytesLeft = 0",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "Offset",
+							"signature": "int64_t Offset = 0",
+							"line": 41
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FHttpWebSocketConnection",
+					"namespace": "Mowo",
+					"line": 44,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FHttpWebSocketConnection",
+							"signature": "FHttpWebSocketConnection()",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "~FHttpWebSocketConnection",
+							"signature": "~FHttpWebSocketConnection()",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "FHttpWebSocketConnection",
+							"signature": "FHttpWebSocketConnection(const FHttpWebSocketConnection&) = delete",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FHttpWebSocketConnection& operator=(const FHttpWebSocketConnection&) = delete",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Connect",
+							"signature": "bool Connect(const std::string& url, const std::vector<std::string>& headers, int64_t timeoutSeconds, std::string& outError)",
+							"doc": "Runs the HTTP upgrade. PINGs are left to the caller (no auto-pong):\nin CONNECT_ONLY mode curl's pong only queues until the next send.",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "Send",
+							"signature": "EHttpWsResult Send(const void* data, size_t size, size_t& outSent, uint32_t flags, std::string& outError)",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Receive",
+							"signature": "EHttpWsResult Receive(void* buffer, size_t capacity, size_t& outRead, FHttpWsFrameInfo& outInfo, std::string& outError)",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "IsOpen",
+							"signature": "bool IsOpen() const",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset()",
+							"line": 60
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h",
+			"include": "Http/SentryCrashUploader.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "ECrashFlushMode",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Who is asking for the upload, which decides what a game's crash settings\n(FCrashReportClientSettings, read from each report's .txt) let through.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "NextLaunch",
+							"signature": "NextLaunch",
+							"doc": "A launch: reports the player agreed to upfront, plus every report no\ngame configured (the editor, engine tools).",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "UserConsented",
+							"signature": "UserConsented",
+							"doc": "The reporter's Send button — the player has just agreed.",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "Unattended",
+							"signature": "Unattended",
+							"doc": "The watchdog with no window: only a game that sends unattended.",
+							"line": 27
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FCrashUploadQueueStatus",
+					"namespace": "Mowo",
+					"doc": "What is waiting in the crash dir and what the last tries of the default\nendpoint ran into, read from disk, so any process can show it.",
+					"line": 32,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Pending",
+							"signature": "int32_t Pending = 0",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "Host",
+							"signature": "std::string Host",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "ResolveFailures",
+							"signature": "int32_t ResolveFailures = 0",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "LastAttempt",
+							"signature": "int64_t LastAttempt = 0",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "RetriesSuppressed",
+							"signature": "bool RetriesSuppressed = false",
+							"line": 37
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "SentryCrashUploader",
+					"namespace": "Mowo",
+					"line": 40,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FlushPending",
+							"signature": "static int FlushPending()",
+							"static": true,
+							"doc": "Scan the crash dir for *.dmp, POST each (with its .txt sidecar) to the\nSentry minidump endpoint, and delete on success. No-op (returns 0) if\nno DSN is configured or no dumps exist. Failed uploads are LEFT on\ndisk for the next run, so it's safe to call when offline.\n\nDSN resolution, per report: the report_dsn line its .txt carries (the\ngame's [CrashReportClient] Dsn), else explicit SetDsn(), else the DSN\ncompiled into SentryCrashUploader.cpp. A report its game disabled, or\none `mode` may not send without asking, is left on disk.\nReturns the number of reports successfully uploaded.\n\nSynchronous, but the common case (no pending dumps) is just a cheap\ndirectory scan. Only does network I/O when a crash actually happened.",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "FlushPending",
+							"signature": "static int FlushPending(ECrashFlushMode mode, const std::string& onlyBasePath = std::string())",
+							"static": true,
+							"doc": "`onlyBasePath` (a report path without extension) limits the flush to\nthat one report — what the reporter's Send button consents to.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "SetDsn",
+							"signature": "static void SetDsn(const std::string& dsn)",
+							"static": true,
+							"doc": "Provide the fallback DSN explicitly (overrides the compiled one) for\nreports that carry none. Empty restores the compiled one.",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "GetLastEndpoint",
+							"signature": "static std::string GetLastEndpoint()",
+							"static": true,
+							"doc": "The minidump endpoint the last FlushPending() on THIS thread posted to\n(or would have, had it not been backing off). Empty when it tried none.",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "GetLastWithheldCount",
+							"signature": "static int32_t GetLastWithheldCount()",
+							"static": true,
+							"doc": "Reports the last FlushPending() on THIS thread left on disk because\ntheir game's settings did not allow sending them in that mode.",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "HasDsn",
+							"signature": "static bool HasDsn()",
+							"static": true,
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "SetCrashDir",
+							"signature": "static void SetCrashDir(const std::string& absDir)",
+							"static": true,
+							"doc": "Override the scan dir (default <state root>/<Product>/Saved/Crashes).",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "GetLastError",
+							"signature": "static std::string GetLastError()",
+							"static": true,
+							"doc": "Human-readable reason the last FlushPending() on THIS thread failed to\nupload a report (HTTP status + server body, or the transport error).\nEmpty when every report went through.",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "AreRetriesSuppressed",
+							"signature": "static bool AreRetriesSuppressed()",
+							"static": true,
+							"doc": "True when the last FlushPending() on THIS thread stopped retrying the\nconfigured endpoint because its host has not resolved for several runs.\nA UI that promises \"retried on the next launch\" must not say so then —\nnothing will be retried until the DSN is corrected or a day passes.",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "GetQueueStatus",
+							"signature": "static FCrashUploadQueueStatus GetQueueStatus()",
+							"static": true,
+							"doc": "The queue in the crash dir against the endpoint reports without a DSN\nof their own go to. Reports stay queued until an upload succeeds.",
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "DescribeQueueStatus",
+							"signature": "static std::string DescribeQueueStatus(const FCrashUploadQueueStatus& status)",
+							"static": true,
+							"doc": "One sentence for a person: how many reports wait and why, or empty when\nnothing is queued.",
+							"line": 95
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

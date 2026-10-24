@@ -1,0 +1,227 @@
+---
+title: Reflection
+description: The MCLASS, MSTRUCT, MPROPERTY, MFUNCTION, MENUM, MINTERFACE and MDELEGATE macros, their specifiers, and how the header tool turns them into generated code.
+order: 4
+sources:
+  - Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/Reflect.h
+  - Engine/Source/Runtime/ECS/Public/ECS/Component.h
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/GameplayDelegates.h
+  - Engine/Source/Programs/MowoHeaderTool/Specifiers/TypeSpecifiers.cs
+  - Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs
+  - Engine/Source/Programs/MowoHeaderTool/Parser/HeaderParser.cs
+  - Engine/Source/Programs/MowoHeaderTool/Validation/Validators.cs
+  - Engine/Source/Programs/MowoHeaderTool/Emit/GeneratedHeaderEmitter.cs
+  - Engine/Source/Programs/MowoHeaderTool/Emit/ReflSourceEmitter.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleResolver.cs
+verifiedAt: 1a346c1c5
+---
+
+Reflection is what lets a C++ field save into a level, show in the Details panel, keep its target alive in the garbage collector and replicate, and what lets a function be called by name from Visual Scripting. You opt in with macros in your headers. At build time **MowoHeaderTool** (MHT) reads them and generates the descriptor tables and glue code.
+
+The macros themselves expand to nothing (`Reflection/ReflectMacros.h`). MHT reads the header text with its own parser and never runs a compiler, so a typo is reported as `File.h(12): error: …` before anything compiles. <Source path="Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h" />
+
+## Two rules for every reflected header
+
+1. **Its last `#include` is its generated header**, named after the file: `DoorActor.h` ends its includes with `#include "DoorActor.generated.h"`. An include after it, or a missing one, is a build error.
+2. **Every `MCLASS` and `MINTERFACE` body contains `MGENERATED_BODY()`.** It may not sit inside an `#if`.
+
+A header may declare any number of reflected types, enums and delegates.
+
+## Objects and actors
+
+```cpp nocompile title="DoorActor.h"
+#pragma once
+
+#include "Game/AActor.h"
+
+#include "DoorActor.generated.h"
+
+namespace Mowo {
+
+MCLASS(meta = (Icon = "door"))
+class ADoorActor : public AActor {
+public:
+	MGENERATED_BODY()
+
+	MPROPERTY(EditAnywhere, Category = "Door")
+	float m_OpenAngle = 90.0f;
+
+	MPROPERTY()
+	TObjectPtr<ADoorActor> m_LinkedDoor;
+
+	MOWO_TOOLTIP("Swings the door open.")
+	MFUNCTION()
+	void Open();
+
+	MFUNCTION()
+	bool IsOpen() const;
+};
+
+} // namespace Mowo
+```
+
+From this MHT generates:
+
+- an `MClass` descriptor: name, super class, size, constructor, flags and metadata,
+- the garbage-collection trace function, from the `MPROPERTY` object references,
+- a property table and a function table, with a type-erased call thunk per `MFUNCTION`,
+- the expansion of `MGENERATED_BODY()`: `StaticClass()`, `ThisClass`, `Super` (the first base that is not an interface), and the friend declaration the trace function uses to read private fields.
+
+On an `MCLASS`, only `MPROPERTY` fields are reflected, and they may be private. Object references must be `TObjectPtr<T>`; see [Objects and garbage collection](/docs/programming/objects-and-gc/#the-tobjectptr-rule).
+
+### Class specifiers
+
+| Specifier | Effect |
+| --- | --- |
+| `Abstract`, `Transient`, `NotPlaceable`, `Deprecated` | Class flags |
+| `Config=Game` | Marks the class as configurable from INI; see [Project files](/docs/reference/project-files/#class-sections) |
+| `DisplayName=`, `Category=`, `Tooltip=` | Describe the class in the editor |
+| `meta=(...)` | Open key-value metadata, read at run time with `MClass::FindMeta` |
+
+An unknown specifier is a build error that lists the known ones. <Source path="Engine/Source/Programs/MowoHeaderTool/Specifiers/TypeSpecifiers.cs" />
+
+### Property specifiers
+
+| Specifier | Effect |
+| --- | --- |
+| `EditAnywhere`, `VisibleAnywhere` | Editable or read-only in the Details panel |
+| `Category=` | Groups the field |
+| `Config` | Settable from the class's INI section |
+| `SaveGame` | Saved in the world-state save |
+| `Transient` | Same as `RuntimeOnly`: neither saved nor shown |
+| `Replicated`, `ReplicatedUsing=Fn`, `RepCondition=`, `NetQuantize=` | Property replication; see [Multiplayer](/docs/multiplayer/) |
+| `AssetRef`, `AssetType=` | A `std::string` that holds an asset path, saved as a typed asset reference |
+| `Key=`, `DisplayName=`, `Tooltip=`, `Range=`, `ClampMin=`, `ClampMax=`, `Step=`, `Units=`, `Color`, `LayerMask`, `EditCondition=`, `Hidden`, `ReadOnly`, `RuntimeOnly`, `Custom=`, `Nested=` | The same meanings as the field markers below |
+| `meta=(...)` | Anything else, carried into the module's JSON export |
+
+<Source path="Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs" />
+
+### Function specifiers
+
+`MFUNCTION` reflects a public method's name, return type and parameters. `MFUNCTION(Server)`, `(Client)` and `(Multicast)` make it an RPC; `Reliable` or `Unreliable` picks the channel. Naming two directions is a build error, and so is an `MFUNCTION` that is not public. `Category=`, `DisplayName=`, `Tooltip=` and `Description=` describe the node Visual Scripting shows. <Source path="Engine/Source/Programs/MowoHeaderTool/Validation/Validators.cs" />
+
+Write `MOWO_TOOLTIP("...")` before `MFUNCTION` (or `MFUNCTION(Tooltip="...")`) to describe what a call does; the Visual Scripting node shows it on hover. Every `MFUNCTION` is exposed to [Visual Scripting](/docs/visual-scripting/) automatically.
+
+A reflected call can carry `bool`, the fixed-width integers, `float`, `double`, `Vec2`, `Vec3`, `Vec4`, `Quat`, `std::string`, any `MObject`-derived pointer, enums, `FName`, `FGameplayTag`, `FRotator`, `TSoftObjectPtr` and `MClass*`. Anything else is marked as a custom type and refused by the Visual Scripting VM.
+
+## Components and value structs
+
+ECS components and plain value structs use `MOWO_REFLECTED_NAMED("Name")` (or `MSTRUCT()`), and fields carry markers instead of `MPROPERTY`. A struct whose body contains `MOWO_COMPONENT(Self)` registers as a component; without it, it is a value struct, described wherever a component field uses it.
+
+```cpp nocompile title="HealthComponent.h"
+#pragma once
+
+#include "ECS/Component.h"
+#include "Reflection/Reflect.h"
+
+#include "HealthComponent.generated.h"
+
+struct MOWO_REFLECTED_NAMED("Health") MCATEGORY("Gameplay") MOWO_TOOLTIP("Hit points and regeneration.") HealthComponent {
+	MOWO_COMPONENT(HealthComponent)
+
+	MOWO_KEY("max_health") MOWO_RANGE(1, 1000)
+	float maxHealth = 100.0f;
+
+	MOWO_UNITS("s")
+	float regenDelay = 3.0f;
+
+	MOWO_RUNTIME_ONLY
+	float current = 0.0f;
+};
+```
+
+MHT turns this into a type descriptor with a property table and registers the component with the ECS, so level loading and saving, the editor's **Add Component** menu, duplication and prefabs all pick it up. Adding a component or a field needs no serializer or editor change.
+
+### Field markers
+
+| Marker | Effect |
+| --- | --- |
+| `MOWO_KEY("name")` | The key the field saves under |
+| `MOWO_DISPLAY("Label")` | The Details label |
+| `MOWO_TOOLTIP("...")` | Hover text; on the struct itself, the description the Add Component menu shows |
+| `MOWO_RANGE(lo, hi)` | A slider |
+| `MOWO_STEP(s)` | Drag and step granularity |
+| `MOWO_UNITS("m")` | The unit the stored number means; `rad` is stored in radians and edited in degrees |
+| `MOWO_COLOR` | A colour picker for a `Vec3` or `Vec4` |
+| `MOWO_ASSET_REF`, `MOWO_ASSET_TYPE("Mesh")` | An asset picker for a string path, optionally filtered to one type |
+| `MOWO_LAYER_MASK` | A named-layer multi-select for a `uint32_t` |
+| `MOWO_EDIT_CONDITION("flag")` | Disables the row unless the named field is true (`"!flag"` inverts) |
+| `MOWO_READ_ONLY`, `MOWO_HIDDEN` | Disabled row, or no row |
+| `MOWO_RUNTIME_ONLY` | Neither saved nor shown |
+| `MOWO_CUSTOM("key")` | Hands the field to a registered property-type handler |
+| `MOWO_NESTED(...)` | Shows one member of a value-type field as its own row |
+| `MCATEGORY("...")` | On the struct, the Add Component menu group; on a field, its category |
+
+`std::vector<T>` fields become arrays, `std::map`, `std::unordered_map` and `TMap` become maps, `std::set`, `std::unordered_set` and `TSet` become sets, and a field typed as another reflected struct becomes a nested struct. Map keys and set elements are `int32_t`, `uint32_t`, `UUID` or `std::string`. Shapes MHT does not support (a vector of vectors, a vector of enums) are skipped with a build warning; mark them `MOWO_RUNTIME_ONLY` or give them a custom handler.
+
+`MOWO_CUSTOM_SERIALIZE(fn)` and `MOWO_CUSTOM_DESERIALIZE(fn)` on the struct add hooks that run beside the reflected fields. Define them in the component's own module: the generated code that references them compiles into that module.
+
+## Enums
+
+An enum used by a reflected field gets a descriptor automatically, so it saves by name and shows as a drop-down. `MENUM()` registers one that nothing reflected uses yet:
+
+```cpp title="DoorState.h"
+#include "Reflection/ReflectMacros.h"
+
+#include <cstdint>
+
+enum class MENUM() EDoorState : uint8_t {
+	Closed,
+	Opening MMETA(DisplayName = "Opening..."),
+	Open,
+	Retired MMETA(Hidden),
+	Count
+};
+```
+
+- `MMETA(DisplayName="...")` relabels an enumerator; the saved string is always the identifier, so relabelling never breaks a saved level.
+- `MMETA(Hidden)` keeps an enumerator out of the drop-down. A trailing `Count`, `MAX` or `Num` sentinel is hidden automatically. <Source path="Engine/Source/Programs/MowoHeaderTool/Parser/HeaderParser.cs" />
+- A header that only marks enums can include `Reflection/ReflectMacros.h` instead of `Reflect.h`.
+
+## Interfaces
+
+```cpp nocompile
+MINTERFACE()
+class IDamageable {
+public:
+	MGENERATED_BODY()
+
+	virtual ~IDamageable() = default;
+	virtual float TakeDamage(float amount, AActor* instigator) = 0;
+};
+```
+
+MHT registers a class named `MDamageable` for the interface, and every `MCLASS` deriving from `IDamageable` lists it, so `GetClass()->ImplementsInterface(FName("IDamageable"))` answers without the C++ type. `IDamageable::StaticInterfaceClass()` returns the descriptor. `MIMPLEMENTS("IFoo")` declares an interface a class implements without inheriting it in C++. <Source path="Engine/Source/Programs/MowoHeaderTool/Emit/ReflSourceEmitter.cs" />
+
+## Delegates
+
+```cpp nocompile
+MDELEGATE(Tooltip = "Health changed: new value, old value.")
+using FOnHealthChanged = TMulticastDelegate<float, float>;
+```
+
+`MDELEGATE` in front of a `Delegate<R(Args...)>` or `TMulticastDelegate<Args...>` alias exports its signature for the editor and Visual Scripting. It generates no run-time code.
+
+## Conditional members
+
+A member inside `#if WITH_EDITOR` (or any condition MHT cannot decide) is reflected under the same condition: its generated row is wrapped in the same `#if`, so one generated file is right for every configuration. Conditions MHT can decide (`#if 0`, include guards, macros the header defines) are applied as the preprocessor would.
+
+MHT never expands macros, so a reflected type or member that a macro produces is not seen.
+
+## Turning it on
+
+MHT runs inside the build tool, between reading the rules and compiling, for every module whose `.Build.cs` sets `bUseHeaderTool = true`. It scans the folders in `HeaderToolDirectories` (or `Public/`) and writes, per header:
+
+| File | Contents |
+| --- | --- |
+| `<Header>.generated.h` | What each `MGENERATED_BODY()` expands to |
+| `<Header>.refl.cpp` | Descriptors, registrations, trace functions and call thunks, compiled into the module |
+| `<Module>.reflection.json` | The module's markup: types, properties, functions, enums, delegates, metadata |
+
+The output folder, `Reflection/` under the module's generated directory, is a public include path of the module. <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleResolver.cs" /> Generated sources include `stdafx.h`, so every scanned module needs one in its `Private/` folder or on its forced includes (the game-module scaffold handles this). A pass with an error writes nothing, and an unchanged output keeps its timestamp.
+
+<Callout type="warning">
+A reflected component in a module without `bUseHeaderTool = true` gets no descriptor: it does not appear in the editor and does not save. New modules that declare reflected types must opt in.
+</Callout>

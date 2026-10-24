@@ -1,0 +1,94 @@
+---
+title: Architecture
+description: How the engine source is organised into module groups, the dependency order between modules, and the per-module DLL and export-macro model.
+order: 1
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/Platform.h
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleResolver.cs
+  - Engine/Source/Runtime/EngineLoop/EngineLoop.Build.cs
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/Game/Public/Game/EngineModularRegistry.h
+  - Engine/Source/Runtime/Core/Public/Core/FModuleManager.h
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformAbstraction.h
+verifiedAt: 08e26df3d
+---
+
+The engine is a set of shared libraries, one per module, layered in a strict dependency order. A lower module never includes a higher module's headers. On top sit the hosts: the editor, the game player and the dedicated server, each a subclass of the same `Engine` class.
+
+## Source layout
+
+Every module is a directory under its group:
+
+| Folder | What it holds | Ships in a game |
+| --- | --- | --- |
+| `Engine/Source/Runtime/` | Everything a game may contain: Core and the foundation libraries, the RHI and its backends, the renderer, physics, audio, UI, the game framework, the hosts | Yes |
+| `Engine/Source/Editor/` | The editor, the project launcher, `EditorFramework` and the multi-user server | No |
+| `Engine/Source/Developer/` | Test targets, the test kit, the sandbox game module | No |
+| `Engine/Source/Programs/` | Standalone tools: the build tool, the header tool, the crash reporter, MowoInsights and others | No |
+| `Engine/Source/ThirdParty/` | Vendored libraries with their own rules files | Per library |
+| `Engine/Plugins/` | Opt-in plugins enabled per project | When enabled |
+
+The engine has <Fact id="modules.length" /> modules. [Engine modules](/docs/reference/engine-modules/) lists them with their group and API page.
+
+## Dependency order
+
+From the bottom up:
+
+1. **MDF**, **Math** and **Platform.** MDF is the header-only data-format library and Math the header-only vector library. Platform is the platform abstraction layer, the only module with OS-specific code. See [Platform abstraction](/docs/programming/platform-abstraction/).
+2. **Foundation:** Core, Logging, Memory, Threading, Events, Serialization, Reflection, ECS, Components, Filesystem, Input, Project, Http, ML, Scan.
+3. **Graphics and simulation:** RHI and its backends (D3D12, Vulkan, D3D11, Metal), Renderer, DebugDraw, Camera, Animation, Physics, Audio, Particles, Networking, Volumes.
+4. **UI and content:** Arc (the UI framework the editor and games share), ArcUI (the game-UI layer over Arc), Loom (Visual Scripting), AssetFormats.
+5. **The game framework,** bottom to top: AssetSystem (assets, the registry, importers), SceneTypes (render components and the CPU side of terrain and water), Game (scenes, actors, `MWorld`, gameplay), SceneRenderer (the scene renderer). The dedicated server does not link SceneRenderer.
+6. **EngineLoop** (binary `MowoEngine`): the `Engine` class, the window and the frame loop. **GameHost**: the game player as a library.
+7. **Hosts:** MowoGame (the player), MowoServer (the dedicated server), MowoEditor, and the programs.
+
+<Flow steps={["Platform · Math · MDF", "Core and foundation", "RHI · Renderer · Physics · Audio", "Arc · Loom", "AssetSystem → SceneTypes → Game → SceneRenderer", "EngineLoop", "Hosts"]} highlight={4} caption="Each tier may include the tiers below it, never the ones above." />
+
+### Calls up go through hooks
+
+When a lower module has to act on a higher one, the higher module installs a function pointer at load. Game, for example, renders a scene through a hook that SceneRenderer installs, which is how the dedicated server runs the same Game module without the renderer. Keep to this pattern: add a hook in the lower module rather than an upward include.
+
+### Feature modules
+
+AINavigation, VoiceChat, Narrative, Destruction, GeometryTools, PointCloud, Sequencer, LevelGen, Accessibility, PCG and GpuEcs sit above the engine umbrella, so the engine cannot link them. `Engine::LoadFeatureModules` loads each by name before plugins load, and each registers its scene systems, serializers and reflected types itself. A feature module whose binary is missing is skipped with a log line. <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" />
+
+A feature module never depends on a plugin. What a game opts into (platform SDKs, genre kits) is a plugin instead; see [Writing a plugin](/docs/programming/plugins/).
+
+## One DLL per module
+
+Every runtime module builds as a shared library in a modular build (the editor and development builds). A Shipping or monolithic build links the same modules into one executable.
+
+### Export macros
+
+Each module has its own export macro, declared in `Core/Platform.h`: `CORE_API`, `ECS_API`, `GAME_API`, `HTTP_API` and so on. It expands to `dllexport` while that module compiles and to `dllimport` everywhere else. <Source path="Engine/Source/Runtime/Core/Public/Core/Platform.h" />
+
+You do not define anything in your rules file for this. The build tool gives every C++ module a private `MOWO_BUILD_<MODULE>` define (the module name upper-cased) and a public `MW_DYNAMIC_LINK`; a monolithic build drops the latter, and the macros expand to nothing. <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleResolver.cs" />
+
+EngineLoop is the exception: its symbols use `MOWO_API`, which is `dllexport` in any module compiled with `MW_BUILD_DLL`. New code uses its own module's macro, never `MOWO_API`.
+
+### Rules for exported code
+
+- **Header-only classes get no macro.** There is nothing to export.
+- **A class with static state uses its owner's macro.** Function-local statics in inline members (singletons, counters) resolve through the import table when the class is `dllimport`, so all modules share one copy. A class marked `MOWO_API` or with no macro at all gets one copy per DLL, silently.
+- **The owning module must compile the header.** Exported inline members are emitted only by translation units that see the `dllexport` declaration. If no `.cpp` in the owning module includes the header, consumers fail to link.
+- **Delete copy operations on exported classes with `unique_ptr` members.**
+- **Export explicit template instantiations** instead of relying on implicit instantiation across the boundary.
+- **Pass function pointers, not `std::function`, across a plugin boundary** for anything a registry keeps. Each image owns its allocator.
+
+<Callout type="warning">
+Changing the layout of a public struct or enum in a shared library is an ABI break. Rebuild every target after such a change; a stale executable crashes on the mismatch. Plugins and game modules are protected by the module ABI check described in [Writing a plugin](/docs/programming/plugins/#the-module-abi-check).
+</Callout>
+
+### Include paths
+
+A public header is included through its module's folder: `Engine/Source/Runtime/Physics/Public/Physics/…` is included as `"Physics/…"`. Headers that only engine modules may use go in `Internal/` instead of `Public/`; the build puts `Internal/` on the include path of engine modules only, never of plugins or projects. The RHI backends are the main example: game code reaches a backend only through `RHI/`.
+
+EngineLoop has no `Public/` folder yet; its `Private/` folder is its public include path, so `#include "Core/Engine.h"` resolves for every module that depends on EngineLoop. <Source path="Engine/Source/Runtime/EngineLoop/EngineLoop.Build.cs" />
+
+## Data formats
+
+- **MDF** (`.mat`, `.prefab`, `.mmap` and the other asset files) is the format for game data, with a text and a binary encoding. See [Content pipeline](/docs/content-pipeline/).
+- **INI** in Unreal's dialect is the format for configuration. See [Project files](/docs/reference/project-files/).
+- **JSON** is used only for `.mproject` and `.mplugin` manifests and tool output.
+
+Every file type has exactly one extension, listed in one table; see [File types](/docs/reference/file-types/).

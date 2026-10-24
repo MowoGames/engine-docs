@@ -1,0 +1,612 @@
+{
+	"name": "MowoEngine.Volumes",
+	"displayName": "Volumes",
+	"slug": "volumes",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Volumes/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Volumes/Public/Volumes/Components/VolumeComponent.h",
+			"include": "Volumes/Components/VolumeComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "VolumeComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"doc": "Zone-based post-process override (HDRP Volume analogue).\n\nA `VolumeComponent` contributes its profile to the per-camera blend each\nframe. Two shapes:\n- Global (isGlobal = true): always contributes, just sorted by priority.\n- Local  (isGlobal = false): uses the entity's TransformComponent\nworld position + `halfExtents` as a box\nAABB; contributes when the camera is\ninside, with a `blendDistance` falloff at\nthe box edges for a soft transition.\n\nThe profile itself can live either inline on the component (`profile`,\nthe field directly below) or as a `.volume` asset referenced by\n`profileAssetPath` (resolved by VolumeManager — when both are present,\nasset wins). The inline profile is the default so new components light\nup without an asset round-trip.",
+					"line": 38,
+					"members": [
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "isGlobal",
+							"signature": "bool isGlobal = true",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "halfExtents",
+							"signature": "Vec3 halfExtents = Vec3(5.0f, 5.0f, 5.0f)",
+							"doc": "Box half-extents in local space. Only consulted when isGlobal=false.\nWorld transform comes from the entity's TransformComponent — the box\nride along with the entity's position + rotation.",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "priority",
+							"signature": "float priority = 0.0f",
+							"doc": "Volumes are processed from low to high priority. Higher-priority\nvolumes override lower-priority slots that aren't already covered by\na stronger contribution. For two volumes at equal priority, the\nlater-walked one wins (registration order).",
+							"line": 67
+						},
+						{
+							"kind": "field",
+							"name": "blendDistance",
+							"signature": "float blendDistance = 1.0f",
+							"doc": "Distance (in world units) outside the box AABB where the volume's\ninfluence fades from 1 to 0. Inside the box minus blendDistance\nweight is 1; from there to the box edge it falls off linearly.\nIgnored when isGlobal=true (global volumes always contribute at\nweight*1.0).",
+							"line": 77
+						},
+						{
+							"kind": "field",
+							"name": "weight",
+							"signature": "float weight = 1.0f",
+							"doc": "Per-volume strength multiplier on the camera-space weight (0..1).\nUseful for scripts cross-fading two cinematic volumes — set weight\nat runtime to scrub between them without changing priority order.",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "profileAssetPath",
+							"signature": "std::string profileAssetPath",
+							"doc": "Optional asset reference — when non-empty, VolumeManager loads the\nreferenced VolumeProfileAsset and uses its profile instead of the\ninline one below.",
+							"line": 95
+						},
+						{
+							"kind": "field",
+							"name": "profile",
+							"signature": "VolumeProfile profile",
+							"doc": "Inline profile — edited via the custom HDRP-style override-toggle\nUI, not via the codegen-generated property panel. We tag it as\na custom property type and keep it hidden so the codegen emits a\n`PropertyType::Custom` entry with key \"VolumeProfile\" and skips\ntrying to introspect the struct's fields. Serialization is handled\nby a custom struct hook; the inspector hook reads/writes this\nfield directly.",
+							"line": 106
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "VolumeComponentCustomSerialize",
+					"signature": "void VolumeComponentCustomSerialize(const void* comp, MdfNode& node)",
+					"doc": "Custom hooks defined in VolumeComponentReflection.cpp (this module —\nhandles the inline profile). Codegen emits extern declarations against\nthem, so they must link inside Volumes.dll.",
+					"line": 19
+				},
+				{
+					"kind": "function",
+					"name": "VolumeComponentCustomDeserialize",
+					"signature": "void VolumeComponentCustomDeserialize(void* comp, const MdfNode& node)",
+					"line": 20
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/Volumes/Public/Volumes/VolumeManager.h",
+			"include": "Volumes/VolumeManager.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "VolumeManager",
+					"namespace": "Mowo",
+					"doc": "Per-frame volume evaluator.\n\nVolumeManager owns no state of its own — it walks the world's\nVolumeComponent entities each call and computes a blended VolumeProfile\nusing the camera's world position. The result is materialized into a\nScenePostProcess (the renderer's existing input contract) so the existing\nrendering path picks up the blended values with no further changes.\n\nAlgorithm (per Evaluate call):\n1. Seed the result profile from the scene's baseline ScenePostProcess\n(all slots marked overriding → backwards compat when no volumes exist).\n2. Collect every enabled VolumeComponent + its TransformComponent.\n3. Compute per-volume weight in [0,1]:\n- global → weight = component.weight\n- local  → distanceToBox / blendDistance fade, multiplied by weight\n4. Sort by ascending priority (lower first), so higher-priority volumes\noverwrite earlier slot values.\n5. For each (volume, weight) pair, walk the profile's slots and merge:\n- bool/int/enum: snap to source when overrides && weight ≥ 0.5\n- float / Vec3 : lerp current → source by weight\n6. Materialize the blended profile into `out`.\n\nDesigned to run unconditionally each frame — when no volumes exist the\ncost is one ScenePostProcess copy and the world's component iterator\nreturning empty, both negligible.",
+					"line": 38,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Evaluate",
+							"signature": "static void Evaluate(World& world, const Vec3& cameraPos, const ScenePostProcess& seedDefaults, ScenePostProcess& outPostProcess)",
+							"static": true,
+							"doc": "Walk the world, compute the blended profile at `cameraPos`, and write\nthe result into `outPostProcess`. `seedDefaults` is the scene's\nbaseline (Scene::Environment().postProcess) used as the seed so the\npath is backwards-compatible.",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "EvaluateProfile",
+							"signature": "static VolumeProfile EvaluateProfile(World& world, const Vec3& cameraPos, const VolumeProfile& seed)",
+							"static": true,
+							"doc": "Lower-level — produces the blended VolumeProfile without writing back\nto a ScenePostProcess. Useful for tooling and tests.",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "Blend",
+							"signature": "static void Blend(VolumeProfile& dst, const VolumeProfile& src, float weight)",
+							"static": true,
+							"doc": "Merge one profile's overriding slots into another at `weight`, with the\nper-type rules above. Public because the Volume Profile editor shows\nwhat a given blend weight resolves to, and a preview computed by a\nsecond copy of these rules is a preview of something the renderer never\nproduces.",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "SetPreviewProfile",
+							"signature": "static void SetPreviewProfile(const VolumeProfile& profile)",
+							"static": true,
+							"doc": "Editor preview. While a profile is set it blends LAST at full weight,\nabove every authored volume, so an open .volume document is what the\nviewport shows without the author first having to place a volume around\nthe camera. Only the editor sets this.",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "ClearPreviewProfile",
+							"signature": "static void ClearPreviewProfile()",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "HasPreviewProfile",
+							"signature": "static bool HasPreviewProfile()",
+							"static": true,
+							"line": 68
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Volumes/Public/Volumes/VolumeProfile.h",
+			"include": "Volumes/VolumeProfile.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "VolumeOverride",
+					"namespace": "Mowo",
+					"template": "template<typename T>",
+					"doc": "HDRP-style per-parameter override slot. `value` is read by the renderer\nonly when `overrides` is true; otherwise the underlying scene default or\nthe last volume to override wins.\n\nWe deliberately do NOT default-initialize `value` — VolumeProfile sets\neach slot's value explicitly so the defaults match ScenePostProcess.",
+					"line": 18,
+					"members": [
+						{
+							"kind": "field",
+							"name": "overrides",
+							"signature": "bool overrides = false",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "value",
+							"signature": "T value",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "VolumeOverride",
+							"signature": "VolumeOverride() = default",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "VolumeOverride",
+							"signature": "explicit VolumeOverride(const T& v) : overrides(false), value(v)",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "VolumeOverride",
+							"signature": "VolumeOverride(bool ov, const T& v) : overrides(ov), value(v)",
+							"line": 26
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "VolumeProfile",
+					"namespace": "Mowo",
+					"doc": "Mirror of ScenePostProcess where every parameter is wrapped in\nVolumeOverride<T>. A profile authored by the user only flips `overrides`\non the fields they care about — everything else falls through to the\nscene's baseline ScenePostProcess. VolumeManager produces a blended\nVolumeProfile per frame; SceneRenderer then materializes the result into\nScenePostProcess for the existing render path to read.\n\nField order mirrors ScenePostProcess (Scene.h) — keep them in sync if you\nadd a field there. Add the corresponding VolumeOverride here AND the lerp\nin VolumeManager::BlendInto.",
+					"line": 40,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MakeProfileFromScenePostProcess",
+							"signature": "static VolumeProfile MakeProfileFromScenePostProcess(const ScenePostProcess& pp)",
+							"static": true,
+							"doc": "Copies the scene's baseline ScenePostProcess into a profile where every\nslot is marked as overriding (so a downstream blend starting from this\nprofile sees full coverage). Used by VolumeManager to seed the result\nbefore walking volumes, so without any volumes the renderer sees today's\nScenePostProcess unchanged.",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "ApplyProfileToScenePostProcess",
+							"signature": "static void ApplyProfileToScenePostProcess(const VolumeProfile& profile, ScenePostProcess& out)",
+							"static": true,
+							"doc": "Inverse — materializes a (blended) VolumeProfile back into a\nScenePostProcess for the existing render path. Fields that aren't\noverridden in the profile are left as-is in `out`.",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "tonemapEnabled",
+							"signature": "VolumeOverride<bool> tonemapEnabled = VolumeOverride<bool>(true)",
+							"doc": "Tonemapping",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "exposure",
+							"signature": "VolumeOverride<float> exposure = VolumeOverride<float>(1.8f)",
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "autoExposureMetering",
+							"signature": "VolumeOverride<int> autoExposureMetering = VolumeOverride<int>(0)",
+							"doc": "Auto exposure. The floor/ceiling pair belongs on a volume above all the\nothers here: a horror level wants the ceiling brought right down inside\nthe dark rooms and released again outdoors, and that is a per-room\ndecision, not a per-scene one. Metering mode is discrete (it selects a\nstatistic, and there is nothing between two statistics to blend).",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "autoExposureEV",
+							"signature": "VolumeOverride<float> autoExposureEV = VolumeOverride<float>(0.0f)",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "autoExposureMinEV",
+							"signature": "VolumeOverride<float> autoExposureMinEV = VolumeOverride<float>(-4.321928f)",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "autoExposureMaxEV",
+							"signature": "VolumeOverride<float> autoExposureMaxEV = VolumeOverride<float>(4.0f)",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "autoExposureSpeedUp",
+							"signature": "VolumeOverride<float> autoExposureSpeedUp = VolumeOverride<float>(3.0f)",
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "autoExposureSpeedDown",
+							"signature": "VolumeOverride<float> autoExposureSpeedDown = VolumeOverride<float>(1.0f)",
+							"line": 67
+						},
+						{
+							"kind": "field",
+							"name": "autoExposureLowPercent",
+							"signature": "VolumeOverride<float> autoExposureLowPercent = VolumeOverride<float>(50.0f)",
+							"line": 68
+						},
+						{
+							"kind": "field",
+							"name": "autoExposureHighPercent",
+							"signature": "VolumeOverride<float> autoExposureHighPercent = VolumeOverride<float>(95.0f)",
+							"line": 69
+						},
+						{
+							"kind": "field",
+							"name": "bloomEnabled",
+							"signature": "VolumeOverride<bool> bloomEnabled = VolumeOverride<bool>(true)",
+							"doc": "Bloom",
+							"line": 72
+						},
+						{
+							"kind": "field",
+							"name": "bloomIntensity",
+							"signature": "VolumeOverride<float> bloomIntensity = VolumeOverride<float>(0.15f)",
+							"line": 73
+						},
+						{
+							"kind": "field",
+							"name": "bloomThreshold",
+							"signature": "VolumeOverride<float> bloomThreshold = VolumeOverride<float>(1.0f)",
+							"line": 74
+						},
+						{
+							"kind": "field",
+							"name": "bloomClamp",
+							"signature": "VolumeOverride<float> bloomClamp = VolumeOverride<float>(16.0f)",
+							"line": 75
+						},
+						{
+							"kind": "field",
+							"name": "ssaoEnabled",
+							"signature": "VolumeOverride<bool> ssaoEnabled = VolumeOverride<bool>(true)",
+							"doc": "SSAO",
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "ssaoRadius",
+							"signature": "VolumeOverride<float> ssaoRadius = VolumeOverride<float>(0.5f)",
+							"line": 79
+						},
+						{
+							"kind": "field",
+							"name": "ssaoIntensity",
+							"signature": "VolumeOverride<float> ssaoIntensity = VolumeOverride<float>(1.5f)",
+							"line": 80
+						},
+						{
+							"kind": "field",
+							"name": "ssaoBias",
+							"signature": "VolumeOverride<float> ssaoBias = VolumeOverride<float>(0.03f)",
+							"line": 81
+						},
+						{
+							"kind": "field",
+							"name": "ssrEnabled",
+							"signature": "VolumeOverride<bool> ssrEnabled = VolumeOverride<bool>(false)",
+							"doc": "SSR",
+							"line": 84
+						},
+						{
+							"kind": "field",
+							"name": "ssrIntensity",
+							"signature": "VolumeOverride<float> ssrIntensity = VolumeOverride<float>(1.0f)",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "ssrMaxDistance",
+							"signature": "VolumeOverride<float> ssrMaxDistance = VolumeOverride<float>(50.0f)",
+							"line": 86
+						},
+						{
+							"kind": "field",
+							"name": "ssrMaxSteps",
+							"signature": "VolumeOverride<int> ssrMaxSteps = VolumeOverride<int>(64)",
+							"line": 87
+						},
+						{
+							"kind": "field",
+							"name": "ssrThickness",
+							"signature": "VolumeOverride<float> ssrThickness = VolumeOverride<float>(0.5f)",
+							"line": 88
+						},
+						{
+							"kind": "field",
+							"name": "ssrRoughnessCutoff",
+							"signature": "VolumeOverride<float> ssrRoughnessCutoff = VolumeOverride<float>(0.7f)",
+							"line": 89
+						},
+						{
+							"kind": "field",
+							"name": "antiAliasingMode",
+							"signature": "VolumeOverride<int> antiAliasingMode = VolumeOverride<int>((int)AntiAliasingMode::FXAA)",
+							"doc": "Anti-aliasing\nEnum — can't sensibly blend, treated like a bool (highest-priority\noverride wins).",
+							"line": 94
+						},
+						{
+							"kind": "field",
+							"name": "contrast",
+							"signature": "VolumeOverride<float> contrast = VolumeOverride<float>(1.0f)",
+							"doc": "Color grading",
+							"line": 97
+						},
+						{
+							"kind": "field",
+							"name": "saturation",
+							"signature": "VolumeOverride<float> saturation = VolumeOverride<float>(1.0f)",
+							"line": 98
+						},
+						{
+							"kind": "field",
+							"name": "temperature",
+							"signature": "VolumeOverride<float> temperature = VolumeOverride<float>(0.0f)",
+							"line": 99
+						},
+						{
+							"kind": "field",
+							"name": "colorGradingLift",
+							"signature": "VolumeOverride<Vec3> colorGradingLift = VolumeOverride<Vec3>(Vec3(1, 1, 1))",
+							"line": 100
+						},
+						{
+							"kind": "field",
+							"name": "colorGradingGamma",
+							"signature": "VolumeOverride<Vec3> colorGradingGamma = VolumeOverride<Vec3>(Vec3(1, 1, 1))",
+							"line": 101
+						},
+						{
+							"kind": "field",
+							"name": "colorGradingGain",
+							"signature": "VolumeOverride<Vec3> colorGradingGain = VolumeOverride<Vec3>(Vec3(1, 1, 1))",
+							"line": 102
+						},
+						{
+							"kind": "field",
+							"name": "colorGradingLutPath",
+							"signature": "VolumeOverride<std::string> colorGradingLutPath = VolumeOverride<std::string>(std::string())",
+							"doc": "3D LUT: the path is discrete (dominant volume wins), the\nstrength lerps — crossing between two LUT volumes crossfades the\ngrade through the strength blend.",
+							"line": 106
+						},
+						{
+							"kind": "field",
+							"name": "postProcessMaterialPath",
+							"signature": "VolumeOverride<std::string> postProcessMaterialPath = VolumeOverride<std::string>(std::string())",
+							"line": 107
+						},
+						{
+							"kind": "field",
+							"name": "colorGradingLutStrength",
+							"signature": "VolumeOverride<float> colorGradingLutStrength = VolumeOverride<float>(1.0f)",
+							"line": 108
+						},
+						{
+							"kind": "field",
+							"name": "vignetteEnabled",
+							"signature": "VolumeOverride<bool> vignetteEnabled = VolumeOverride<bool>(false)",
+							"doc": "Vignette",
+							"line": 111
+						},
+						{
+							"kind": "field",
+							"name": "vignetteIntensity",
+							"signature": "VolumeOverride<float> vignetteIntensity = VolumeOverride<float>(0.3f)",
+							"line": 112
+						},
+						{
+							"kind": "field",
+							"name": "vignetteSmoothness",
+							"signature": "VolumeOverride<float> vignetteSmoothness = VolumeOverride<float>(0.5f)",
+							"line": 113
+						},
+						{
+							"kind": "field",
+							"name": "vignetteRoundness",
+							"signature": "VolumeOverride<float> vignetteRoundness = VolumeOverride<float>(1.0f)",
+							"line": 114
+						},
+						{
+							"kind": "field",
+							"name": "chromaticAberrationEnabled",
+							"signature": "VolumeOverride<bool> chromaticAberrationEnabled = VolumeOverride<bool>(false)",
+							"doc": "Chromatic aberration",
+							"line": 117
+						},
+						{
+							"kind": "field",
+							"name": "chromaticAberrationIntensity",
+							"signature": "VolumeOverride<float> chromaticAberrationIntensity = VolumeOverride<float>(0.1f)",
+							"line": 118
+						},
+						{
+							"kind": "field",
+							"name": "filmGrainEnabled",
+							"signature": "VolumeOverride<bool> filmGrainEnabled = VolumeOverride<bool>(false)",
+							"doc": "Film grain",
+							"line": 121
+						},
+						{
+							"kind": "field",
+							"name": "filmGrainIntensity",
+							"signature": "VolumeOverride<float> filmGrainIntensity = VolumeOverride<float>(0.2f)",
+							"line": 122
+						},
+						{
+							"kind": "field",
+							"name": "filmGrainSize",
+							"signature": "VolumeOverride<float> filmGrainSize = VolumeOverride<float>(1.5f)",
+							"line": 123
+						},
+						{
+							"kind": "field",
+							"name": "dofEnabled",
+							"signature": "VolumeOverride<bool> dofEnabled = VolumeOverride<bool>(false)",
+							"doc": "Depth of field",
+							"line": 126
+						},
+						{
+							"kind": "field",
+							"name": "dofFocusDistance",
+							"signature": "VolumeOverride<float> dofFocusDistance = VolumeOverride<float>(10.0f)",
+							"line": 127
+						},
+						{
+							"kind": "field",
+							"name": "dofFocusRange",
+							"signature": "VolumeOverride<float> dofFocusRange = VolumeOverride<float>(5.0f)",
+							"line": 128
+						},
+						{
+							"kind": "field",
+							"name": "dofMaxBlur",
+							"signature": "VolumeOverride<float> dofMaxBlur = VolumeOverride<float>(1.0f)",
+							"line": 129
+						},
+						{
+							"kind": "field",
+							"name": "motionBlurEnabled",
+							"signature": "VolumeOverride<bool> motionBlurEnabled = VolumeOverride<bool>(false)",
+							"doc": "Motion blur",
+							"line": 132
+						},
+						{
+							"kind": "field",
+							"name": "motionBlurIntensity",
+							"signature": "VolumeOverride<float> motionBlurIntensity = VolumeOverride<float>(0.5f)",
+							"line": 133
+						},
+						{
+							"kind": "field",
+							"name": "motionBlurMaxVelocity",
+							"signature": "VolumeOverride<float> motionBlurMaxVelocity = VolumeOverride<float>(32.0f)",
+							"line": 134
+						},
+						{
+							"kind": "field",
+							"name": "lensFlareEnabled",
+							"signature": "VolumeOverride<bool> lensFlareEnabled = VolumeOverride<bool>(false)",
+							"doc": "Lens flare (screen-space)",
+							"line": 137
+						},
+						{
+							"kind": "field",
+							"name": "lensFlareIntensity",
+							"signature": "VolumeOverride<float> lensFlareIntensity = VolumeOverride<float>(0.3f)",
+							"line": 138
+						},
+						{
+							"kind": "field",
+							"name": "lensFlareThreshold",
+							"signature": "VolumeOverride<float> lensFlareThreshold = VolumeOverride<float>(0.5f)",
+							"line": 139
+						},
+						{
+							"kind": "field",
+							"name": "lensFlareGhostCount",
+							"signature": "VolumeOverride<int> lensFlareGhostCount = VolumeOverride<int>(4)",
+							"line": 140
+						},
+						{
+							"kind": "field",
+							"name": "lensFlareGhostSpacing",
+							"signature": "VolumeOverride<float> lensFlareGhostSpacing = VolumeOverride<float>(0.25f)",
+							"line": 141
+						},
+						{
+							"kind": "field",
+							"name": "lensFlareHaloRadius",
+							"signature": "VolumeOverride<float> lensFlareHaloRadius = VolumeOverride<float>(0.5f)",
+							"line": 142
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Volumes/Public/Volumes/VolumeProfileSerialize.h",
+			"include": "Volumes/VolumeProfileSerialize.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVolumeProfileSerialize",
+					"namespace": "Mowo",
+					"doc": "Single source of truth for VolumeProfile MDF I/O. Used both by\nVolumeProfileAsset (loading a .volume from disk) and the VolumeComponent\ncustom-serialize hook (storing inline profiles inside scene MDFs).\n\nOn the wire each overridden slot is a sub-node of the form\n<slotName overrides=\"true\" value=\"X\"/>\nSlots that aren't overriding are simply omitted, keeping authored files\nsmall — a \"do nothing\" profile is empty MDF.",
+					"line": 18,
+					"members": [
+						{
+							"kind": "method",
+							"name": "SerializeVolumeProfile",
+							"signature": "static void SerializeVolumeProfile(const VolumeProfile& profile, MdfNode& outNode)",
+							"static": true,
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "DeserializeVolumeProfile",
+							"signature": "static void DeserializeVolumeProfile(VolumeProfile& outProfile, const MdfNode& inNode)",
+							"static": true,
+							"line": 21
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

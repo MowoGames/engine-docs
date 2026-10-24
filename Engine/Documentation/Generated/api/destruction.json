@@ -1,0 +1,1524 @@
+{
+	"name": "MowoEngine.Destruction",
+	"displayName": "Destruction",
+	"slug": "destruction",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Destruction/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/DebrisPool.h",
+			"include": "Destruction/DebrisPool.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FDebrisPool",
+					"namespace": "Mowo",
+					"doc": "The per-scene debris budget. Every shard a break spawns is entered here;\nwhen the count would pass the budget the OLDEST shard is recycled first,\nand no shard outlives the lifetime cap whatever its component asked for.\nWithout this a cascade in a room full of crates spawned bodies until the\nphysics step could not keep its budget, and \"keep forever\" pieces (a\nlifetime of 0) never left at all.",
+					"line": 19,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "DestroyFn",
+							"signature": "using DestroyFn = std::function<void(EntityID)>",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "MaxCount",
+							"signature": "static int32_t MaxCount()",
+							"static": true,
+							"doc": "phys.Debris.MaxCount / phys.Debris.MaxLifetime.",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "MaxLifetime",
+							"signature": "static float MaxLifetime()",
+							"static": true,
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "MaxSpawnPerFrame",
+							"signature": "static int32_t MaxSpawnPerFrame()",
+							"static": true,
+							"doc": "phys.Debris.MaxSpawnPerFrame: shards one update may create across every\nbreak. A break past it spawns fewer pieces rather than a hitch; the\ncount restarts at each Tick.",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "SetSpawnCapOverride",
+							"signature": "void SetSpawnCapOverride(int32_t maxSpawn)",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "EffectiveMaxSpawnPerFrame",
+							"signature": "int32_t EffectiveMaxSpawnPerFrame() const",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "TryReserveSpawn",
+							"signature": "bool TryReserveSpawn()",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "SetBudgetOverride",
+							"signature": "void SetBudgetOverride(int32_t maxCount, float maxLifetime)",
+							"doc": "A test (or a scene that knows better) can pin the budget without\ntouching the cvars; negative restores the cvar.",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "EffectiveMaxCount",
+							"signature": "int32_t EffectiveMaxCount() const",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "EffectiveMaxLifetime",
+							"signature": "float EffectiveMaxLifetime() const",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "ClampLifetime",
+							"signature": "float ClampLifetime(float requested) const",
+							"doc": "0 means \"keep\" on the component; under a budget that becomes the cap.",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "Add",
+							"signature": "size_t Add(EntityID entity, float lifetime, const DestroyFn& destroy)",
+							"doc": "Enters a shard, evicting the oldest through `destroy` when the budget\nis already full. Returns how many were evicted.",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaTime, const DestroyFn& destroy)",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Forget",
+							"signature": "void Forget(EntityID entity)",
+							"doc": "The entity went away some other way (its own cascade break, a scene\nunload) — drop it without destroying anything.",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "Contains",
+							"signature": "bool Contains(EntityID entity) const",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Count",
+							"signature": "size_t Count() const",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 60
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/DestructibleComponent.h",
+			"include": "Destruction/DestructibleComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "DestructibleComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"line": 15,
+					"members": [
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 16
+						},
+						{
+							"kind": "field",
+							"name": "pieceCount",
+							"signature": "int32_t pieceCount = 12",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "int32_t seed = 7",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "breakOnImpact",
+							"signature": "bool breakOnImpact = true",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "impactThreshold",
+							"signature": "float impactThreshold = 6.0f",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "scatterImpulse",
+							"signature": "float scatterImpulse = 2.0f",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "pieceLifetime",
+							"signature": "float pieceLifetime = 12.0f",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "requestBreak",
+							"signature": "bool requestBreak = false",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "cascadeLevels",
+							"signature": "int32_t cascadeLevels = 0",
+							"doc": "Multi-level fracture: debris pieces inherit a Destructible with\none level less, half the piece count, and a raised impact threshold —\nhard hits shatter the shards again. 0 = single-level (default).",
+							"line": 58
+						},
+						{
+							"kind": "field",
+							"name": "fractureAssetPath",
+							"signature": "std::string fractureAssetPath",
+							"doc": "An offline carve (.fracture, the details block's Bake Fracture button).\nEmpty means the Voronoi clipper runs on the game thread at break time,\nwhich is what a prop with sixty pieces cannot afford mid-firefight, and\nwhat leaves two peers carving from whatever collider each of them has.",
+							"line": 67
+						},
+						{
+							"kind": "field",
+							"name": "replicateBreaks",
+							"signature": "bool replicateBreaks = true",
+							"doc": "The server owns breaks. With this on, a break on the host sends one\n(chunk set, seed, impulse) event and every client replays the same\nshards from its own bake; off, the entity simply vanishes on clients\nwhen its ghost despawns.",
+							"line": 74
+						},
+						{
+							"kind": "field",
+							"name": "partialDamage",
+							"signature": "bool partialDamage = false",
+							"doc": "Partial damage: a hit releases only the pieces within Damage Radius\nof it, the rest stays standing as a remnant, and any part of the\nremnant that no longer reaches an anchored piece through shared faces\nfalls with it. Off, a hit breaks the whole prop as before.",
+							"line": 82
+						},
+						{
+							"kind": "field",
+							"name": "damageRadius",
+							"signature": "float damageRadius = 0.5f",
+							"line": 87
+						},
+						{
+							"kind": "field",
+							"name": "anchor",
+							"signature": "EDestructionAnchor anchor = EDestructionAnchor::Bottom",
+							"doc": "Which side of the prop holds it up: pieces touching that side of the\nfractured bounds are anchored. None anchors nothing, so any partial\nhit drops everything the hit did not already release.",
+							"line": 98
+						},
+						{
+							"kind": "field",
+							"name": "anchorMargin",
+							"signature": "float anchorMargin = 0.05f",
+							"line": 103
+						},
+						{
+							"kind": "field",
+							"name": "netDamagePending",
+							"signature": "bool netDamagePending = false",
+							"line": 111
+						},
+						{
+							"kind": "field",
+							"name": "netDamagePoint",
+							"signature": "Vec3 netDamagePoint = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 112
+						},
+						{
+							"kind": "field",
+							"name": "netDamageRadius",
+							"signature": "float netDamageRadius = 0.0f",
+							"line": 113
+						},
+						{
+							"kind": "field",
+							"name": "netDamageImpulse",
+							"signature": "float netDamageImpulse = 0.0f",
+							"line": 114
+						},
+						{
+							"kind": "method",
+							"name": "MulticastPointDamage",
+							"signature": "void MulticastPointDamage(Vec3 point, float radius, float impulse)",
+							"doc": "Server → every ghost: \"this prop took a hit here\". The point, radius\nand impulse are enough because the pieces and their connectivity come\nfrom the same bake on every peer.",
+							"line": 119
+						},
+						{
+							"kind": "field",
+							"name": "lastVelocity",
+							"signature": "Vec3 lastVelocity = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 127
+						},
+						{
+							"kind": "field",
+							"name": "hasLastVelocity",
+							"signature": "bool hasLastVelocity = false",
+							"line": 128
+						},
+						{
+							"kind": "field",
+							"name": "netBreakPending",
+							"signature": "bool netBreakPending = false",
+							"line": 130
+						},
+						{
+							"kind": "field",
+							"name": "netBreakChunkSetId",
+							"signature": "uint32_t netBreakChunkSetId = 0",
+							"line": 131
+						},
+						{
+							"kind": "field",
+							"name": "netBreakSeed",
+							"signature": "uint32_t netBreakSeed = 0",
+							"line": 132
+						},
+						{
+							"kind": "field",
+							"name": "netBreakImpulse",
+							"signature": "Vec3 netBreakImpulse = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 133
+						},
+						{
+							"kind": "method",
+							"name": "MulticastBreak",
+							"signature": "void MulticastBreak(uint32_t chunkSetId, uint32_t breakSeed, Vec3 impulse)",
+							"doc": "Server → every ghost: \"this prop broke\". Only the event is carried —\nnever the shards — so the wire cost is three words however many pieces\nthe bake holds. The system consumes the pending flag on its next tick,\nbecause the RPC lands mid-frame and a break destroys the entity.",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "DestructibleComponent",
+							"signature": "DestructibleComponent() = default",
+							"line": 147
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/DestructionSystem.h",
+			"include": "Destruction/DestructionSystem.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FDestructionBreakEvent",
+					"namespace": "Mowo",
+					"doc": "What the server sends once per break and what every peer replays.\n`chunkSetId` names the bake the shards come from (0 = live carve from\nthe collider); `seed` only drives the per-piece launch jitter, because\nthe carve itself is fixed by the bake (or by the component's authored\nseed) and must not vary between peers.",
+					"line": 27,
+					"members": [
+						{
+							"kind": "field",
+							"name": "chunkSetId",
+							"signature": "uint32_t chunkSetId = 0",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "uint32_t seed = 0",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "impulse",
+							"signature": "Vec3 impulse = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 30
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "DestructionSystem",
+					"namespace": "Mowo",
+					"bases": "public System",
+					"line": 33,
+					"members": [
+						{
+							"kind": "method",
+							"name": "DestructionSystem",
+							"signature": "DestructionSystem() = default",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "~DestructionSystem",
+							"signature": "~DestructionSystem() override = default",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "DestructionSystem",
+							"signature": "DestructionSystem(const DestructionSystem&) = delete",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "DestructionSystem& operator=(const DestructionSystem&) = delete",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "void Initialize(World* world) override",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown() override",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "Update",
+							"signature": "void Update(float deltaTime) override",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "SetSceneHooks",
+							"signature": "void SetSceneHooks(std::function<EntityID(const std::string&)> createEntity, std::function<void(EntityID)> destroyEntity)",
+							"doc": "Scene injects these so runtime-spawned pieces are registered with the\nScene's entity metadata (name, layers, render filter). Without hooks\nthe system falls back to raw World entities (headless tests).",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "ApplyDamageField",
+							"signature": "void ApplyDamageField(const Vec3& center, float radius, float impulse)",
+							"doc": "Field-based damage: every Destructible whose position lies\nwithin `radius` of `center` breaks, and its debris inherits an extra\nvelocity pointing away from the center, scaled by `impulse` and a\nlinear distance falloff — the explosion primitive (grenades, barrels,\nspells). Enabled/broken state and cascades behave as in impact breaks.",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "BreakWithEvent",
+							"signature": "bool BreakWithEvent(EntityID entity, const FDestructionBreakEvent& event)",
+							"doc": "Breaks `entity` from an explicit event — the client replay path, and\nthe way a test pins that two peers land the same shards.",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "ApplyPointDamage",
+							"signature": "uint32_t ApplyPointDamage(EntityID entity, const Vec3& point, float radius, float impulse, bool fromNetwork = false)",
+							"doc": "Partial damage at a world point. `entity` is a Destructible with\nPartial Damage on, or a remnant piece of one already hit. The pieces\nwithin `radius` of the point are released as debris (pushed away from\nthe point by `impulse`), then everything left that cannot reach an\nanchored piece through shared faces is released too. Returns the\nnumber of pieces released; 0 when nothing was in range or the entity\nis not damageable this way. The whole-prop break is what a\nDestructible without Partial Damage does instead.",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "IsRemnantPiece",
+							"signature": "bool IsRemnantPiece(EntityID entity) const",
+							"doc": "Remnant bookkeeping, for tests and tools: how many pieces of the\nprop that `entity` belonged to are still standing, and whether an\nentity is a standing remnant piece at all.",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "StandingPieceCount",
+							"signature": "uint32_t StandingPieceCount(EntityID entity) const",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "MakeBreakEvent",
+							"signature": "FDestructionBreakEvent MakeBreakEvent(EntityID entity, const DestructibleComponent& dc)",
+							"doc": "The event the host would send for a break of `entity` now.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "PieceLaunchVelocity",
+							"signature": "static Vec3 PieceLaunchVelocity(const FFracturePiece& piece, uint32_t pieceIndex, const Vec3& inheritedVelocity, float scatter, uint32_t seed)",
+							"static": true,
+							"doc": "Pure over its inputs: the same event lands the same shard the same\nway on every peer, and a different seed lands it differently.",
+							"line": 84
+						},
+						{
+							"kind": "method",
+							"name": "ResolveBake",
+							"signature": "const FFractureBakeData* ResolveBake(const std::string& path)",
+							"doc": "Cached per path; a miss stays cached as null so a broken reference is\nreported once rather than re-read on every break.",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "RegisterBake",
+							"signature": "void RegisterBake(const std::string& path, const FFractureBakeData& data)",
+							"doc": "Seeds the cache directly — a headless test has no VFS to load from,\nand a game that ships bakes inside its own archive can hand them over.",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "GetDebrisPool",
+							"signature": "FDebrisPool& GetDebrisPool()",
+							"line": 94
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/FractureBake.h",
+			"include": "Destruction/FractureBake.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FFractureBakeData",
+					"namespace": "Mowo",
+					"doc": "An offline fracture: the Voronoi carve of one collider, stored so the\nruntime never runs the clipper on the game thread and so every peer\nbreaks the prop into the SAME shards. `chunkSetId` is a content hash of\nthe piece payload — a break event names it, and a client whose bake\ndiffers (stale cook, edited asset) knows to fall back rather than\nspawn shards the server never had.",
+					"line": 24,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kSchemaVersion",
+							"signature": "static constexpr uint32_t kSchemaVersion = 2",
+							"static": true,
+							"doc": "v2 records the fracture method and its parameters; a v1 bake was a\nuniform Voronoi carve and reads back as one.",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "sourceShape",
+							"signature": "std::string sourceShape",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "halfExtents",
+							"signature": "Vec3 halfExtents = Vec3(0.5f, 0.5f, 0.5f)",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "pieceCount",
+							"signature": "uint32_t pieceCount = 0",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "uint32_t seed = 0",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "chunkSetId",
+							"signature": "uint32_t chunkSetId = 0",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "method",
+							"signature": "FFractureMethodSettings method",
+							"doc": "The method the next bake carves with and its parameters; its piece\ncount and seed are `pieceCount` and `seed` above.",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "pieces",
+							"signature": "std::vector<FFracturePiece> pieces",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "MethodSettings",
+							"signature": "FFractureMethodSettings MethodSettings() const",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "IsValid",
+							"signature": "bool IsValid() const",
+							"line": 47
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FFractureBake",
+					"namespace": "Mowo",
+					"line": 52,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Extension",
+							"signature": "static const char* Extension()",
+							"static": true,
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "RootType",
+							"signature": "static const char* RootType()",
+							"static": true,
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "FracturePiecesForCollider",
+							"signature": "static std::vector<FFracturePiece> FracturePiecesForCollider(const ColliderComponent* collider, uint32_t pieceCount, uint32_t seed, std::string* outSourceShape = nullptr, Vec3* outHalfExtents = nullptr)",
+							"static": true,
+							"doc": "The one carve the live path and the bake share: hull/mesh colliders\nfracture their point cloud, spheres a fibonacci shell, everything else\n(and any degenerate input) the box. Kept in one place so a baked prop\nand an unbaked one shatter identically for the same seed.",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "Bake",
+							"signature": "static bool Bake(const ColliderComponent* collider, uint32_t pieceCount, uint32_t seed, FFractureBakeData& out)",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "EncodePieces",
+							"signature": "static std::vector<uint8_t> EncodePieces(const std::vector<FFracturePiece>& pieces)",
+							"static": true,
+							"doc": "Binary piece payload: face polygons verbatim, so the runtime rebuilds\nboth the convex hull and the render mesh from the shipped data with the\nsame helpers the live path uses.",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "DecodePieces",
+							"signature": "static bool DecodePieces(const std::vector<uint8_t>& blob, std::vector<FFracturePiece>& out)",
+							"static": true,
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "ChunkSetIdOf",
+							"signature": "static uint32_t ChunkSetIdOf(const std::vector<uint8_t>& payload)",
+							"static": true,
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "SerializeToMdf",
+							"signature": "static std::string SerializeToMdf(const FFractureBakeData& data, const std::string& name)",
+							"static": true,
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "ParseFromMdf",
+							"signature": "static bool ParseFromMdf(const std::string& text, FFractureBakeData& out, std::string* outError = nullptr)",
+							"static": true,
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromVfs",
+							"signature": "static bool LoadFromVfs(const std::string& path, FFractureBakeData& out, std::string* outError = nullptr)",
+							"static": true,
+							"line": 79
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/FractureConnectivity.h",
+			"include": "Destruction/FractureConnectivity.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EDestructionAnchor",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"reflected": true,
+					"doc": "Which pieces of a fracture hold the rest up. A piece is anchored when it\ntouches the named side of the fractured volume's bounds (within\n`anchorMargin`); everything that cannot reach an anchored piece through\nshared faces is unsupported and falls.",
+					"line": 19,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "None",
+							"signature": "None = 0",
+							"line": 20
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bottom",
+							"signature": "Bottom",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "Top",
+							"signature": "Top",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "MinX",
+							"signature": "MinX MMETA(DisplayName = \"-X Side\")",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "MaxX",
+							"signature": "MaxX MMETA(DisplayName = \"+X Side\")",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "MinZ",
+							"signature": "MinZ MMETA(DisplayName = \"-Z Side\")",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "MaxZ",
+							"signature": "MaxZ MMETA(DisplayName = \"+Z Side\")",
+							"line": 26
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FFractureConnectivity",
+					"namespace": "Mowo",
+					"doc": "The connectivity of a fracture, computed from the pieces' geometry so a\nbake and a live carve answer alike on every peer: two pieces are\nneighbours when they share a face (coplanar, facing each other, and one\nface's centre lies inside the other's polygon).",
+					"line": 33,
+					"members": [
+						{
+							"kind": "method",
+							"name": "BuildAdjacency",
+							"signature": "static std::vector<std::vector<uint32_t>> BuildAdjacency(const std::vector<FFracturePiece>& pieces, float epsilon = 1e-3f)",
+							"static": true,
+							"doc": "adjacency[i] lists the neighbours of piece i.",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "FindAnchored",
+							"signature": "static std::vector<bool> FindAnchored(const std::vector<FFracturePiece>& pieces, EDestructionAnchor anchor, float anchorMargin)",
+							"static": true,
+							"doc": "anchored[i] is true when piece i touches the anchor side of the\npieces' shared bounds. None anchors nothing, so any damage releases\nthe whole set.",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "FindSupported",
+							"signature": "static std::vector<bool> FindSupported(const std::vector<std::vector<uint32_t>>& adjacency, const std::vector<bool>& anchored, const std::vector<bool>& alive)",
+							"static": true,
+							"doc": "supported[i] is true for every alive piece that reaches an alive\nanchored piece through alive neighbours. Dead pieces are never\nsupported.",
+							"line": 46
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/FractureMethods.h",
+			"include": "Destruction/FractureMethods.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EFractureMethod",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "The fracture methods of UE's Fracture Mode the Destruction module carves.\nEvery one cuts a convex volume with planes, so every piece stays a convex\npolyhedron the runtime can hull and the bake can store verbatim, and the\npieces always partition the volume.",
+					"line": 18,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Uniform",
+							"signature": "Uniform",
+							"line": 19
+						},
+						{
+							"kind": "enumerator",
+							"name": "Clustered",
+							"signature": "Clustered",
+							"line": 20
+						},
+						{
+							"kind": "enumerator",
+							"name": "Radial",
+							"signature": "Radial",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "Planar",
+							"signature": "Planar",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "Slice",
+							"signature": "Slice",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "Brick",
+							"signature": "Brick",
+							"line": 24
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "EFractureBrickBond",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "How a brick wall's courses are laid (the bonds UE's Brick fracture offers).",
+					"line": 28,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Stretcher",
+							"signature": "Stretcher",
+							"line": 29
+						},
+						{
+							"kind": "enumerator",
+							"name": "Stack",
+							"signature": "Stack",
+							"line": 30
+						},
+						{
+							"kind": "enumerator",
+							"name": "English",
+							"signature": "English",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "Header",
+							"signature": "Header",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "Flemish",
+							"signature": "Flemish",
+							"line": 33
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FFractureMethodSettings",
+					"namespace": "Mowo",
+					"line": 36,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Method",
+							"signature": "EFractureMethod Method = EFractureMethod::Uniform",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "PieceCount",
+							"signature": "uint32_t PieceCount = 8",
+							"doc": "Uniform / Clustered / Radial / Planar: how many cells (Clustered: in\nall clusters together) or cutting planes; Seed drives every jitter.",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "Seed",
+							"signature": "uint32_t Seed = 0",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "ClusterCount",
+							"signature": "uint32_t ClusterCount = 4",
+							"doc": "Clustered: cells gather around this many centres, each spread over a\nsphere of ClusterRadius × the volume's diagonal.",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "ClusterRadius",
+							"signature": "float ClusterRadius = 0.15f",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "RadialCenter",
+							"signature": "Vec3 RadialCenter = Vec3(0.0f, 0.0f, 0.0f)",
+							"doc": "Radial: rings of cells around a centre offset from the volume's middle,\nin the plane normal to Y; Variability jitters angle and radius (0..1).",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "RadialRadius",
+							"signature": "float RadialRadius = 0.5f",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "AngularSteps",
+							"signature": "uint32_t AngularSteps = 6",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "RadialSteps",
+							"signature": "uint32_t RadialSteps = 3",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "Variability",
+							"signature": "float Variability = 0.2f",
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "SlicesX",
+							"signature": "uint32_t SlicesX = 2",
+							"doc": "Planar: PieceCount random planes through the volume, each cutting every\npiece it crosses.\nSlice: evenly spaced cuts along each axis, tilted up to SliceAngle deg.",
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "SlicesY",
+							"signature": "uint32_t SlicesY = 1",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "SlicesZ",
+							"signature": "uint32_t SlicesZ = 2",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "SliceAngle",
+							"signature": "float SliceAngle = 0.0f",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "Bond",
+							"signature": "EFractureBrickBond Bond = EFractureBrickBond::Stretcher",
+							"doc": "Brick: courses along Y of BrickHeight, bricks along X of BrickLength\n(a header shows its BrickDepth end), wythes along Z of BrickDepth.",
+							"line": 67
+						},
+						{
+							"kind": "field",
+							"name": "BrickLength",
+							"signature": "float BrickLength = 0.4f",
+							"line": 68
+						},
+						{
+							"kind": "field",
+							"name": "BrickHeight",
+							"signature": "float BrickHeight = 0.2f",
+							"line": 69
+						},
+						{
+							"kind": "field",
+							"name": "BrickDepth",
+							"signature": "float BrickDepth = 0.2f",
+							"line": 70
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FFractureMethods",
+					"namespace": "Mowo",
+					"line": 73,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kMaxPieces",
+							"signature": "static constexpr uint32_t kMaxPieces = 4096",
+							"static": true,
+							"doc": "The most pieces a bake may hold (the piece payload's decode cap).",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "MethodName",
+							"signature": "static const char* MethodName(EFractureMethod method)",
+							"static": true,
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "MethodFromName",
+							"signature": "static bool MethodFromName(const std::string& name, EFractureMethod& out)",
+							"static": true,
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "BondName",
+							"signature": "static const char* BondName(EFractureBrickBond bond)",
+							"static": true,
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "BondFromName",
+							"signature": "static bool BondFromName(const std::string& name, EFractureBrickBond& out)",
+							"static": true,
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "FractureBox",
+							"signature": "static std::vector<FFracturePiece> FractureBox(const Vec3& halfExtents, const FFractureMethodSettings& settings)",
+							"static": true,
+							"doc": "Carves the box of `halfExtents` (centred on the origin) by the method.\nUniform carves exactly what FVoronoiFracture::FractureBox does for the\nsame count and seed. Empty when the settings would exceed kMaxPieces.",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "FractureVolume",
+							"signature": "static std::vector<FFracturePiece> FractureVolume(const std::vector<std::vector<Vec3>>& faces, const FFractureMethodSettings& settings)",
+							"static": true,
+							"doc": "The same over any convex volume given as outward-wound face polygons.",
+							"line": 89
+						},
+						{
+							"kind": "method",
+							"name": "EstimatePieces",
+							"signature": "static uint32_t EstimatePieces(const Vec3& halfExtents, const FFractureMethodSettings& settings)",
+							"static": true,
+							"doc": "How many pieces the settings carve from that box, before carving: exact\nfor Slice and Brick (the cells the pattern lays over the box), the\nrequested count for Uniform and Clustered, an upper bound for Radial\n(a ring outside the volume carves nothing) and Planar (the most cells\nn planes can make).",
+							"line": 96
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/MVoxelDestructionStatics.h",
+			"include": "Destruction/MVoxelDestructionStatics.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MVoxelDestructionStatics",
+					"namespace": "Mowo",
+					"bases": "public MObject",
+					"reflected": true,
+					"doc": "Loom's voxel destruction: carve a sphere out of every VoxelDestructible it\nreaches (applied by the next simulation tick; loose pieces fall as debris).",
+					"line": 16,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ApplyVoxelDamage",
+							"signature": "void ApplyVoxelDamage(const Vec3& position, float radius)",
+							"line": 19
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/VoronoiFracture.h",
+			"include": "Destruction/VoronoiFracture.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FFracturePiece",
+					"namespace": "Mowo",
+					"line": 13,
+					"members": [
+						{
+							"kind": "field",
+							"name": "faces",
+							"signature": "std::vector<std::vector<Vec3>> faces",
+							"line": 14
+						},
+						{
+							"kind": "field",
+							"name": "centroid",
+							"signature": "Vec3 centroid",
+							"line": 15
+						},
+						{
+							"kind": "field",
+							"name": "volume",
+							"signature": "float volume = 0.0f",
+							"line": 16
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FVoronoiFracture",
+					"namespace": "Mowo",
+					"line": 19,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FractureBox",
+							"signature": "static std::vector<FFracturePiece> FractureBox(const Vec3& halfExtents, uint32_t pieceCount, uint32_t seed)",
+							"static": true,
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "FractureMeshPoints",
+							"signature": "static std::vector<FFracturePiece> FractureMeshPoints(const std::vector<Vec3>& points, uint32_t pieceCount, uint32_t seed)",
+							"static": true,
+							"doc": "Fracture an arbitrary point cloud (mesh vertices, hull\ncollider points): the convex hull of the points becomes the fractured\nvolume, Voronoi seeds are rejection-sampled inside it, and the same\nbisector clipping carves the cells. Non-convex meshes fracture as their\nconvex hull (the industry-standard debris approximation). Needs >= 4\nnon-coplanar points; returns empty on degenerate input.",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "BuildFracturePieceMesh",
+							"signature": "static TerrainChunkMesh BuildFracturePieceMesh(const FFracturePiece& piece, const Vec4& color)",
+							"static": true,
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "CollectPieceHullVertices",
+							"signature": "static void CollectPieceHullVertices(const FFracturePiece& piece, std::vector<Vec3>& outVertices)",
+							"static": true,
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "NextRandom",
+							"signature": "static uint32_t NextRandom(uint32_t& state)",
+							"static": true,
+							"doc": "The PCG stream the carve seeds with, exposed so a replayed break draws\nits per-piece launch jitter from the same integer generator on every\npeer — a platform's rand() would land the same seed on different shards.",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "NextFloat01",
+							"signature": "static float NextFloat01(uint32_t& state)",
+							"static": true,
+							"line": 39
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/VoxelDestructibleComponent.h",
+			"include": "Destruction/VoxelDestructibleComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "VoxelDestructibleComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"doc": "Voxel destruction: at play the entity's collider shape (box, sphere or\nmesh) becomes a grid of voxels. Damage carves spheres out of it; the carved\nvoxels fly off as rubble chunks, and whatever no longer connects to the\nfloor (or to the largest piece) breaks away as one physics body per piece.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "voxelSize",
+							"signature": "float voxelSize = 0.1f",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "anchorFloor",
+							"signature": "bool anchorFloor = true",
+							"doc": "Pieces stay up while they touch the bottom layer; off, the largest\npiece stays and the rest fall.",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "rubbleChunk",
+							"signature": "int32_t rubbleChunk = 3",
+							"doc": "Carved voxels leave as chunks this many voxels across; 0 drops them.",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "density",
+							"signature": "float density = 2400.0f",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "debrisLifetime",
+							"signature": "float debrisLifetime = 10.0f",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "maxDebris",
+							"signature": "int32_t maxDebris = 64",
+							"line": 59
+						},
+						{
+							"kind": "field",
+							"name": "color",
+							"signature": "Vec3 color = Vec3(0.6f, 0.58f, 0.55f)",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "voxels",
+							"signature": "uint32_t voxels = 0",
+							"line": 70
+						},
+						{
+							"kind": "field",
+							"name": "debrisSpawned",
+							"signature": "uint32_t debrisSpawned = 0",
+							"line": 71
+						},
+						{
+							"kind": "field",
+							"name": "built",
+							"signature": "bool built = false",
+							"line": 72
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/VoxelDestruction.h",
+			"include": "Destruction/VoxelDestruction.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FVoxelDamageResult",
+					"namespace": "Mowo",
+					"line": 17,
+					"members": [
+						{
+							"kind": "field",
+							"name": "carved",
+							"signature": "uint32_t carved = 0",
+							"line": 18
+						},
+						{
+							"kind": "field",
+							"name": "rubbleBodies",
+							"signature": "uint32_t rubbleBodies = 0",
+							"line": 19
+						},
+						{
+							"kind": "field",
+							"name": "islandBodies",
+							"signature": "uint32_t islandBodies = 0",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "islandVoxels",
+							"signature": "uint32_t islandVoxels = 0",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "debris",
+							"signature": "std::vector<EntityID> debris",
+							"line": 22
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FVoxelDestruction",
+					"namespace": "Mowo",
+					"doc": "The runtime of voxel destruction over a scene: builds each\nVoxelDestructible's grid from its collider, applies damage, spawns the\ndebris as rigid bodies and retires it on the debris budget.",
+					"line": 28,
+					"members": [
+						{
+							"kind": "method",
+							"name": "BuildAll",
+							"signature": "static uint32_t BuildAll(Scene& scene)",
+							"static": true,
+							"doc": "Builds the grids not built yet; the entity's mesh and collider become\nthe voxel surface.",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "Build",
+							"signature": "static bool Build(Scene& scene, EntityID entity)",
+							"static": true,
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "Damage",
+							"signature": "static FVoxelDamageResult Damage(Scene& scene, const Vec3& worldCenter, float radius)",
+							"static": true,
+							"doc": "A sphere of damage (world space) against every voxel solid it reaches.",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "QueueDamage",
+							"signature": "static void QueueDamage(const Vec3& worldCenter, float radius)",
+							"static": true,
+							"doc": "Queued from gameplay (Loom, weapons) and applied by the system's tick.",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "static void Tick(Scene& scene, float deltaTime)",
+							"static": true,
+							"doc": "Builds, applies queued damage, ages debris out.",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "FindGrid",
+							"signature": "static const FVoxelGrid* FindGrid(Scene& scene, EntityID entity)",
+							"static": true,
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "Forget",
+							"signature": "static void Forget(Scene& scene)",
+							"static": true,
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "RegisterSceneSystem",
+							"signature": "static void RegisterSceneSystem()",
+							"static": true,
+							"line": 47
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Destruction/Public/Destruction/VoxelGrid.h",
+			"include": "Destruction/VoxelGrid.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FVoxelIsland",
+					"namespace": "Mowo",
+					"doc": "A piece that came off: its voxels (indices into the grid it left) and its\nbox, in the grid's local space.",
+					"line": 16,
+					"members": [
+						{
+							"kind": "field",
+							"name": "voxels",
+							"signature": "std::vector<uint32_t> voxels",
+							"line": 17
+						},
+						{
+							"kind": "field",
+							"name": "boundsMin",
+							"signature": "Vec3 boundsMin = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 18
+						},
+						{
+							"kind": "field",
+							"name": "boundsMax",
+							"signature": "Vec3 boundsMax = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 19
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FVoxelGrid",
+					"namespace": "Mowo",
+					"doc": "A solid as a grid of voxels for destruction: voxelized from a mesh or a\nprimitive, carved by spheres, split into what still stands and what fell\noff, and meshed as its exposed faces.",
+					"line": 25,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Init",
+							"signature": "bool Init(const Vec3& origin, float cellSize, uint32_t nx, uint32_t ny, uint32_t nz)",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "FromTriangles",
+							"signature": "static FVoxelGrid FromTriangles(const std::vector<Vec3>& vertices, const std::vector<uint32_t>& indices, float cellSize, uint32_t maxDim = 256)",
+							"static": true,
+							"doc": "A closed triangle mesh (local space): every voxel whose centre is inside\n(parity along +X) or whose box a triangle passes through.",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "FromBox",
+							"signature": "static FVoxelGrid FromBox(const Vec3& halfExtents, float cellSize)",
+							"static": true,
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "FromSphere",
+							"signature": "static FVoxelGrid FromSphere(float radius, float cellSize)",
+							"static": true,
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "IsValid",
+							"signature": "bool IsValid() const",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "SizeX",
+							"signature": "uint32_t SizeX() const",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "SizeY",
+							"signature": "uint32_t SizeY() const",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "SizeZ",
+							"signature": "uint32_t SizeZ() const",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "CellSize",
+							"signature": "float CellSize() const",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Origin",
+							"signature": "const Vec3& Origin() const",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Index",
+							"signature": "uint32_t Index(uint32_t x, uint32_t y, uint32_t z) const",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "bool Get(uint32_t x, uint32_t y, uint32_t z) const",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "GetIndex",
+							"signature": "bool GetIndex(uint32_t index) const",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "Set",
+							"signature": "void Set(uint32_t x, uint32_t y, uint32_t z, bool solid)",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "Coordinates",
+							"signature": "void Coordinates(uint32_t index, uint32_t& x, uint32_t& y, uint32_t& z) const",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "VoxelCenter",
+							"signature": "Vec3 VoxelCenter(uint32_t index) const",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "SolidCount",
+							"signature": "uint32_t SolidCount() const",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "Carve",
+							"signature": "uint32_t Carve(const Vec3& center, float radius, std::vector<uint32_t>* removed = nullptr)",
+							"doc": "Removes the solid voxels whose centres lie within the sphere (local\nspace); their indices go to `removed`. Returns how many.",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "DetachIslands",
+							"signature": "std::vector<FVoxelIsland> DetachIslands(bool anchorFloor)",
+							"doc": "Whatever no longer connects (face to face) to the anchor — the floor\nlayer, or with no floor anchor the largest piece — leaves the grid as\nislands, largest first.",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "Chunk",
+							"signature": "std::vector<FVoxelIsland> Chunk(const std::vector<uint32_t>& voxels, uint32_t chunk) const",
+							"doc": "Splits loose voxels into chunks of `chunk` voxels a side: the rubble a\ncarve throws out.",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "BuildMesh",
+							"signature": "TerrainChunkMesh BuildMesh(const Vec4& color) const",
+							"doc": "The exposed faces of every solid voxel (or of an island's voxels alone).",
+							"line": 84
+						},
+						{
+							"kind": "method",
+							"name": "BuildIslandMesh",
+							"signature": "TerrainChunkMesh BuildIslandMesh(const FVoxelIsland& island, const Vec3& pivot, const Vec4& color) const",
+							"line": 85
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

@@ -1,0 +1,156 @@
+---
+title: Ray tracing
+description: Hardware ray-traced reflections, ambient occlusion, sun shadows and Global Illumination gather, the ray-tracing scene, and the path-traced reference renderer.
+order: 11
+sources:
+  - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RendererTypes.h
+  - Engine/Source/Runtime/RHI/Public/RHI/AccelerationStructure.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RayTracingPipeline.h
+  - Engine/Source/Runtime/RHI/Public/RHI/BlasCompaction.h
+  - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererGi.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPathTrace.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ViewportPanel.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Shaders/Private/PostProcess/PathTrace.comp.hlsl
+verifiedAt: 1a346c1c5
+---
+
+Mowo uses hardware ray tracing to improve four real-time effects: reflections, ambient occlusion, sun shadows and the Global Illumination gather. MegaLights also traces its shadow rays against the same scene. Every one is optional: when the device has no ray query, or the ray-tracing scene is not ready, each falls back to its raster or screen-space version for that frame. A progressive path tracer uses the same scene as a reference.
+
+## Hardware requirements
+
+Most ray tracing in Mowo is **inline ray query**: a pixel or compute shader traces rays itself, with no ray-tracing pipeline. Ray-traced sun shadows, and reflections when you ask for it, use a real ray-tracing pipeline with per-material hit shaders where the backend has one.
+
+| Backend | Ray query | Ray-tracing pipelines |
+|---|---|---|
+| Direct3D 12 | Yes (DXR) | Yes |
+| Vulkan | Yes (`VK_KHR_ray_query`) | Yes (`VK_KHR_ray_tracing_pipeline`) |
+| Metal | Yes (`intersection_query`) | No |
+| Direct3D 11 | No | No |
+
+`FRHIApiCeiling::SupportsRayTracing` and `SupportsRayTracingPipeline` give the API ceiling; `RendererCapabilities::SupportsRayQuery` and `SupportsRayTracingPipeline` give the device answer. Check both: a Vulkan driver can expose ray query without the pipeline extension.
+
+## Which features, which tier
+
+| Feature | cvar | Replaces | On by default at |
+|---|---|---|---|
+| Ray-traced reflections | `r.RTReflections` | The world leg of screen-space reflections | Epic, Cinematic |
+| Ray-traced AO | `r.RTAO` | GTAO | Epic, Cinematic |
+| Hardware ray-traced GI gather | `r.GI.HWRTGather` | The distance-field trace of the screen-probe gather | Epic, Cinematic |
+| Ray-traced sun shadows | `r.RTShadows` | The cascade and virtual-map lookup in lighting | Cinematic |
+| MegaLights shadow rays | `r.MegaLights` | A screen-space depth march | Epic, Cinematic, when a ray scene exists |
+
+Each cvar takes `-1` for the tier value and `0` or `1` to force the feature.
+
+<Callout type="tip">
+You do not need Epic to try ray tracing. On a High-tier machine with a capable GPU, set `r.RTReflections 1` or `r.RTAO 1`. Each one builds the ray-tracing scene it needs.
+</Callout>
+
+## The ray-tracing scene
+
+`SceneRenderer` builds acceleration structures at the start of each frame whenever a consumer wants them: `r.RTScene`, or any of the features above.
+
+- **Bottom-level cache.** One structure per mesh, built once and shared across instances and frames. New builds are limited per frame (`r.RTScene.BlasBudget`, default 8), so a large scene streams in over a few frames instead of hitching. Built structures are compacted (`r.RT.BLASCompaction`).
+- **Top-level structure.** One per frame in flight. When only transforms change, it is refitted instead of rebuilt.
+- **Terrain** joins as tiles of real triangles generated from the height texture (`r.RT.Terrain`, default 1).
+- **Foliage** clumps near the camera join, up to `r.RT.Foliage.Distance` (default 40) and `r.RT.Foliage.MaxInstances` (`r.RT.Foliage`, default 1).
+- **Translucent** geometry joins, visible only to reflection rays and, with `r.RT.TranslucentShadows`, to shadow rays, where it occludes by its opacity (`r.RT.Translucent`, default 1).
+
+Alpha-masked geometry is resolved per hit: where a pass can reach the material, it runs the material's own alpha test at the hit; otherwise it accepts the hit with probability equal to the mesh's average coverage.
+
+## Ray-traced reflections
+
+Ray-traced reflections share the screen-space reflections' inputs, output and denoiser. With `r.Reflections.Continuation` (default 1) each pixel shoots one ray: it marches the depth buffer first, and only rays that leave the screen or fail continue into the ray-tracing scene from where they stopped. Objects behind the camera and outside the screen reflect correctly.
+
+| cvar | Default | Meaning |
+|---|---|---|
+| `r.RTReflections.RoughnessCutoff` | tier | Rougher surfaces fall back to distance-field or environment reflections |
+| `r.RTReflections.HitLighting` | 1 | How a hit is shaded: 0 flat per-instance data, 1 the Global Illumination radiance cache with a near-hit blend |
+| `r.RTReflections.Pipeline` | 0 | Trace through a ray-tracing pipeline with per-material hit shaders instead of inline ray query. D3D12 and Vulkan only. |
+| `r.RTReflections.SecondBounce` | 1 | With the pipeline, a smooth metal hit traces one more reflection ray |
+
+## Ray-traced ambient occlusion
+
+Ray-traced AO runs in the AO slot in place of GTAO and writes the same target. It casts `r.RTAO.Rays` rays per pixel (2 at Epic, 3 at Cinematic) and accumulates them over about 25 frames on a still pixel (`r.RTAO.TemporalAlpha`, default 0.96). It falls back to GTAO when the ray-tracing scene is unavailable.
+
+GTAO and ray-traced AO read the shared AO radius differently, so ray-traced AO multiplies it (`r.RTAO.RadiusScale`, default 12, or set `r.RTAO.Radius` directly) and applies a gain (`r.RTAO.Calibration`, default 1.32) to match GTAO's average darkening.
+
+## Sun shadows and the GI gather
+
+These two are covered on their own pages:
+
+- [Shadows: ray-traced sun shadows](/docs/rendering/shadows/#ray-traced-sun-shadows)
+- [Global Illumination: hardware ray-traced gather](/docs/rendering/global-illumination/#hardware-ray-traced-gather)
+
+## Turn on ray tracing for your project
+
+<Steps>
+<Step title="Use a backend with ray query">
+D3D12 or Vulkan on a capable GPU, or Metal. D3D11 has no ray tracing. See [Backends](/docs/rendering/backends/).
+</Step>
+<Step title="Choose Epic or Cinematic, or enable features one by one">
+Epic turns on ray-traced reflections, AO and the GI gather. Cinematic adds ray-traced sun shadows. On other tiers, set the individual cvars.
+</Step>
+<Step title="Use the settings pages">
+**Project Settings > Rendering** has **Reflection Method** (screen space or ray traced). Players have **Reflection Method**, **Ray-Traced Scene** and **Ray-Traced Sun Shadows** rows in the **Graphics** settings.
+</Step>
+<Step title="Check that it is working">
+Switch the viewport to the **Reflections** buffer view (`r.ViewMode 15`). Objects outside the screen should now appear in mirrors. If nothing changed, the device has no ray query and the fallback is running.
+</Step>
+</Steps>
+
+<Screenshot id="rendering-rt-reflections-compare" alt="Two captures of the same polished floor in front of a column at the Epic tier, left with r.RTReflections 0 showing the column's reflection cut off at the screen edge, right with r.RTReflections 1 showing the full column reflected including the part outside the view" caption="Screen-space reflections lose what is off screen; ray-traced reflections do not." />
+
+## Path tracer
+
+The path tracer is a progressive, physically based reference renderer. It accumulates samples across frames until the image converges, and it is what the real-time Global Illumination, reflections and shadows are checked against. It traces the same scene as the real-time features with a diffuse plus GGX specular BRDF, samples the material's albedo, normal and metallic-roughness maps at each hit (`r.PathTracer.Textures`), samples the sun and local lights directly, and reads the sky cubemap on a miss.
+
+### Use it
+
+<Steps>
+<Step title="Open the view mode">
+In the viewport's view-mode menu, choose **Path Tracing** under **Reference**. The viewport shows the sample count as it accumulates. Leaving the view mode returns to real time; the mode costs nothing when it is not selected.
+</Step>
+<Step title="Hold the camera still">
+Accumulation restarts when the camera, the lights, the ray-tracing scene or a setting changes. Leave the view still until the noise clears; the denoiser keeps a fresh accumulation readable.
+</Step>
+<Step title="Tune it">
+Use **Project Settings > Engine > Path Tracer** or the cvars below.
+</Step>
+</Steps>
+
+<Screenshot id="rendering-path-tracer-view" alt="Mowo Editor viewport in the Path Tracing view mode on an interior scene, with the sample-count label in the viewport corner reading several hundred samples per pixel and a nearly noise-free image" caption="The Path Tracing view mode with its sample count." />
+
+| cvar | Default | Meaning |
+|---|---|---|
+| `r.PathTracer.Enable` | 0 | Force the tracer on in every view, the running game included, for offline capture. Session only: no config file applies it. |
+| `r.PathTracer.SamplesPerFrame` | 1 | Samples per pixel per frame, 1 to 16 |
+| `r.PathTracer.MaxSamples` | 4096 | Samples per pixel after which the converged image is held; 0 never stops |
+| `r.PathTracer.MaxBounces` | 8 | Bounces per path, 1 to 32 |
+| `r.PathTracer.Denoise` | 1 | Edge-aware denoiser over the accumulation; 0 shows the raw reference |
+| `r.PathTracer.FireflyClamp` | 256 | Per-sample brightness limit; 0 is unbounded. Raise it for very bright skies. |
+| `r.PathTracer.FurnaceSky` | 0 | Energy check: replaces the sky with a uniform one of this radiance and drops the other lights |
+
+For a reference frame without the editor, render with a static camera and write a screenshot after N frames:
+
+```powershell
+MowoGame.exe --project=MyGame.mproject --scene=Content/Maps/MyMap.mmap --screenshot=out.png --screenshot-frame=96 --cvar=r.PathTracer.Enable=1
+```
+
+This needs a development build, because Shipping drops `--cvar=` and `--scene`.
+
+### Path tracer limits
+
+- It needs ray query **and** 64-bit shader integers. Metal reports no 64-bit shader integers today, so the path tracer does not run there.
+- Diffuse and GGX only: clear coat, anisotropy, subsurface and area-light shapes are not sampled.
+- Glass and water are not traced. Translucent surfaces, particles and world widgets are composited on top with raster shading.
+- The environment is the sky cubemap. A scene lit only by a procedural sky with no cubemap reads black on a miss.
+- It is a reference mode and is not meant to run at interactive frame rates.
+
+## API reference
+
+- [RHI module](/docs/api/rhi/): `AccelerationStructure`, `RayTracingPipeline`, `RendererCapabilities`, `FRHIApiCeiling`
+- [SceneRenderer module](/docs/api/scenerenderer/): `SceneRenderer::Options`

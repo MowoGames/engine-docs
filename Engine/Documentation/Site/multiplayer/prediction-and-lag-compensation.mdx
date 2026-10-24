@@ -1,0 +1,136 @@
+---
+title: Prediction and lag compensation
+sidebarTitle: Prediction and lag comp
+description: How the client predicts its own pawn and reconciles with the host, and how the host rewinds the world to judge hits fairly.
+order: 4
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/CharacterNetDriver.h
+  - Engine/Source/Runtime/Networking/Private/CharacterNetDriver.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/CharacterPrediction.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/NetMovementStateComponent.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
+  - Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationPackets.h
+  - Engine/Source/Runtime/Physics/Public/Physics/CustomMovementMode.h
+  - Engine/Source/Runtime/Physics/Public/Physics/RootMotionSource.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterMovementComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MCharacterMovementComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/AbilitySystemStateComponent.h
+  - Engine/Plugins/Combat/Private/WeaponSystem.cpp
+  - Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp
+verifiedAt: 31e2736dd
+---
+
+Two problems appear as soon as there is latency between a client and the host. Your own movement feels late if the client waits for the host to answer, and your shots miss if the host checks them against where targets are now rather than where you saw them. Mowo solves the first with **client prediction and reconciliation**, and the second with **server rewind**.
+
+## Client prediction
+
+The client does not wait for a round trip before moving its own pawn. It applies input immediately, sends the same input to the host, and later compares its guess with the host's answer. Remote pawns are different: they are drawn from the [interpolation buffer](/docs/multiplayer/replication/#client-interpolation), not predicted.
+
+For character pawns you do not wire any of this yourself. `FCharacterNetDriver` is a scene system that owns the whole loop <Source symbol="FCharacterNetDriver" />:
+
+<Flow steps={["Capture move", "Step pawn locally", "Send moves", "Host queues and steps", "Host acks tick", "Compare", "Restore and replay"]} highlight={5} caption="The client predicts every move, keeps a copy, and replays the unacknowledged ones only when the host's state differs from its prediction." />
+
+<Steps>
+<Step title="The client records and sends a move">Each send interval (`net.PredictionSendHz`, 60 by default) the driver turns the local pawn's movement intent (move axes, sprint, crouch, jump pressed and held) into a move, plus the time it covers. Every input packet repeats the newest unacknowledged moves, up to three, so one lost packet costs the host no move <Source symbol="ReplicationInputBody" />.</Step>
+<Step title="The host queues and steps it">On the host, the driver queues each player's moves (`net.MaxQueuedMoves`) and steps the pawn once per move with that move's own time, through the same character movement and physics code a frame runs. Client time is bounded by the host's clock: a move larger than `net.MaxMoveDeltaTime` is clamped, and moves that run more than `net.MoveTimeBudget` ahead wait. A player that sends nothing for `net.ServerForceMoveSeconds` is stepped with no input, so its pawn still falls.</Step>
+<Step title="The host acknowledges">Only after a move ran does the host record it as processed. Every snapshot header carries that tick, so the tick a client reconciles against names a state the host actually computed. After each move the host also writes the pawn's `NetMovementStateComponent`: velocity, movement mode, jump count, crouch, and (owner only) the mantle, jump-hold and airborne timers <Source symbol="NetMovementStateComponent" />.</Step>
+<Step title="The client reconciles">When an acknowledgement arrives, the client compares the host's position and movement mode with what it predicted for that tick. If the position differs by more than `net.PredictionTolerance` (0.25 m) or the mode differs, it restores the host's position and movement state and replays every still-unacknowledged move through the same step.</Step>
+</Steps>
+
+Because the replay runs the same Jolt character step as normal movement, a correction replayed into a wall stops at the wall. The simulation snaps but the picture does not: the pawn is drawn where it was and the difference decays over `net.CorrectionSmoothTime`. A correction larger than `net.CorrectionSnapDistance` is treated as a teleport and snaps.
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `net.CharacterPrediction` | `1` | Client prediction with host reconciliation. `0` makes every pawn an interpolated ghost and installs no input receiver. |
+| `net.PredictionTolerance` | `0.25` | Divergence in meters that triggers a restore and replay. |
+| `net.PredictionSendHz` | `60` | Client move send rate. |
+| `net.CorrectionSmoothTime` | `0.1` | Time constant in seconds of the visual offset that hides a correction. `0` snaps. |
+| `net.CorrectionSnapDistance` | `2` | Corrections larger than this (meters) snap. |
+| `net.MaxQueuedMoves` | `64` | Moves the host holds per player before dropping the oldest. |
+| `net.MaxMoveDeltaTime` | `0.125` | Longest time in seconds the host steps for one move. |
+| `net.MoveTimeBudget` | `0.25` | How far in seconds a client's moves may run ahead of the host's clock. |
+| `net.ServerForceMoveSeconds` | `0.5` | Silence after which the host steps a pawn with no input. |
+
+The driver exposes `GetReconcileCount`, `GetCorrectionCount`, `GetLastCorrectionError` and `GetCorrectionOffset` for a debug overlay.
+
+### What predicts
+
+Everything the character movement step simulates predicts and reconciles, because the replay calls the same code:
+
+- **Every movement mode**: walking, falling, flying, swimming, mantling, ladders, and custom modes. Register a custom mode with `FCustomMovementModes::Register(id, fn, name)` <Source symbol="FCustomMovementModes" /> and enter it with `MCharacterMovementComponent::SetCustomMovementMode(id)`. The step function must read only the character's own components and the move's time.
+- **Root-motion sources**: `ApplyDash`, `ApplyJumpForce` and `ApplyMoveTo` on `MCharacterMovementComponent` <Source symbol="MCharacterMovementComponent" /> add a source that every movement step advances. Apply it on the client when the ability is predicted and on the host when it activates.
+- **Jumps**: `maxJumpCount` (air jumps), `jumpHoldTime` (variable height while the button is held; `StopJumping` releases) and `coyoteTime` (a ground jump just after walking off a ledge) on the character movement component.
+
+### Predicting something other than a character
+
+The prediction bookkeeping in `ReplicationManager` is generic. If your pawn is not a character, you can drive it directly <Source symbol="ReplicationManager" />:
+
+| Call | Side | What it does |
+|---|---|---|
+| `RecordClientInput(tick, body)` | Client | Stores the move in the pending ring and sends it. |
+| `SetInputReceiver(fn)` | Host | Receives each client's `ReplicationInputBody` so you can apply it to that client's object. |
+| `SetReconcileCallback(fn)` | Client | Called with the new acknowledged tick when the host has moved past inputs you predicted. |
+| `GetPendingInputs()` | Client | The unacknowledged moves to replay. |
+| `TryGetAuthoritativeTransform(id, out)` | Client | The host's latest decoded pose for an object. |
+
+`ReplicationInputBody` carries a client tick, a button mask, the move's duration in tenths of a millisecond, two move axes and two look axes. The pending ring holds up to 128 moves.
+
+<Callout type="note">
+The same predict, confirm or roll back model is used for ability activation in the gameplay ability system, through `MFUNCTION(Server)` and `MFUNCTION(Client)` confirm and reject RPCs on the ability state component <Source symbol="AbilitySystemStateComponent" />.
+</Callout>
+
+## Lag compensation
+
+When a client fires, it aims at ghosts that are drawn about 100 ms in the past, plus half a round trip. If the host tested the shot against the present world, a clean hit on screen would miss. So the host keeps a short history of every networked object's pose and tests the shot against the moment the shooter saw.
+
+<Flow steps={["Client fires", "Send view tick", "RewindTo(tick)", "Raycast", "RestorePresent"]} highlight={2} caption="The client sends the server tick it was looking at. The host rewinds, tests, and puts everything back." />
+
+### How the history works
+
+- The host captures one pose set per **server tick**, which runs at 30 Hz by default and is separate from the snapshot rate.
+- It keeps **15 entries**, so the window is 500 ms at 30 Hz <Source symbol="ReplicationManager::RewindTo" />. `SetLagCompHistoryTicks` changes the count.
+- A frame hitch advances at most four ticks, so a stall cannot fill the history with copies of one pose.
+- A rewind older than the window clamps to the oldest entry rather than refusing the shot <Source path="Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp" />.
+
+On a dedicated server the tick follows `--tickrate` <Source path="Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp" />. The history length in ticks stays 15, so the window in milliseconds scales with the tick rate.
+
+### Which tick to rewind to
+
+On the client, `GetClientViewServerTick()` returns the server tick of the snapshot the interpolated ghosts are drawn from this frame: what the player actually aimed at <Source symbol="ReplicationManager::GetClientViewServerTick" />. Send that tick with the fire request.
+
+### Rewind on the host
+
+`RewindTo(serverTick)` moves every networked object back to its pose at that tick. Hit tests query physics, not transforms, so the rewind also teleports rigid bodies and character bodies by the same offset, without waking them or changing their velocity. `RestorePresent()` puts everything back.
+
+```cpp title="LagCompensation.cpp"
+#include "Core/Platform.h"
+#include "Networking/Replication/ReplicationManager.h"
+
+#include <cstdint>
+
+template<typename FHitTest>
+static bool HitTestAtViewTick(Mowo::ReplicationManager& replication, uint32_t viewTick, FHitTest&& hitTest) {
+	if (viewTick == 0 || !replication.RewindTo(viewTick)) {
+		return hitTest();
+	}
+
+	const bool hit = hitTest();
+	replication.RestorePresent();
+
+	return hit;
+}
+```
+
+<Callout type="warning">
+Rewinding is not thread-safe and only makes sense on the host, between physics steps. Always pair `RewindTo` with `RestorePresent`; a second `RewindTo` before the restore is refused.
+</Callout>
+
+The Combat plugin's weapons use exactly this path: the client sends its view tick with the fire request, and the host wraps each hitscan in a rewind <Source path="Engine/Plugins/Combat/Private/WeaponSystem.cpp" />.
+
+## Related
+
+- [Replication](/docs/multiplayer/replication/) for the snapshot and acknowledgement packets this builds on.
+- [Rollback and net rewind](/docs/multiplayer/rollback/) for deterministic rollback sessions.
+- [RPCs and events](/docs/multiplayer/rpcs/) for the input rate limit that shares the RPC gate.
+- API: [`FCharacterNetDriver`](/docs/api/networking/fcharacternetdriver/), [`FCharacterPrediction`](/docs/api/networking/fcharacterprediction/), [`ReplicationManager`](/docs/api/networking/replicationmanager/), [`FPendingInput`](/docs/api/networking/fpendinginput/).

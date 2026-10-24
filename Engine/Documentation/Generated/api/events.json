@@ -1,0 +1,812 @@
+{
+	"name": "MowoEngine.Events",
+	"displayName": "Events",
+	"slug": "events",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Events/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Events/Public/Events/Event.h",
+			"include": "Events/Event.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EventCategory",
+					"namespace": "Mowo",
+					"bases": "uint32_t",
+					"line": 10,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "None",
+							"signature": "None = 0",
+							"line": 11
+						},
+						{
+							"kind": "enumerator",
+							"name": "Application",
+							"signature": "Application = 1 << 0,",
+							"line": 12
+						},
+						{
+							"kind": "enumerator",
+							"name": "Input",
+							"signature": "Input = 1 << 1,",
+							"line": 13
+						},
+						{
+							"kind": "enumerator",
+							"name": "Keyboard",
+							"signature": "Keyboard = 1 << 2,",
+							"line": 14
+						},
+						{
+							"kind": "enumerator",
+							"name": "Mouse",
+							"signature": "Mouse = 1 << 3,",
+							"line": 15
+						},
+						{
+							"kind": "enumerator",
+							"name": "Window",
+							"signature": "Window = 1 << 4,",
+							"line": 16
+						},
+						{
+							"kind": "enumerator",
+							"name": "Game",
+							"signature": "Game = 1 << 5",
+							"line": 17
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "Event",
+					"namespace": "Mowo",
+					"line": 28,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~Event",
+							"signature": "virtual ~Event() = default",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "RegisterEventType",
+							"signature": "static uint32_t RegisterEventType(const char* name)",
+							"static": true,
+							"doc": "Registration lives in the Events DLL and is keyed by name, so one event\ntype resolves to one id no matter which module first touches it. A\nmodule-local counter can't: MOWO_EVENT's id is a function-local static,\nand a module that dllexports the event class gets its own copy seeded in\nits own call order.",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "virtual const char* GetName() const = 0",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "GetTypeID",
+							"signature": "virtual uint32_t GetTypeID() const = 0",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "GetCategory",
+							"signature": "virtual EventCategory GetCategory() const = 0",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "virtual std::string ToString() const",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "IsInCategory",
+							"signature": "bool IsInCategory(EventCategory category) const",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "handled",
+							"signature": "bool handled = false",
+							"line": 51
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "operator|",
+					"signature": "inline EventCategory operator|(EventCategory a, EventCategory b)",
+					"line": 20
+				},
+				{
+					"kind": "function",
+					"name": "operator&",
+					"signature": "inline bool operator&(EventCategory a, EventCategory b)",
+					"line": 24
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/Events/Public/Events/EventBus.h",
+			"include": "Events/EventBus.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FEventSubscription",
+					"namespace": "Mowo",
+					"doc": "Handle returned by EventBus::Subscribe. A subscriber whose callback\ncaptures anything with a shorter lifetime than the process MUST\nUnsubscribe before that lifetime ends — the bus is a process singleton,\nso an abandoned subscription dangles forever.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "TypeID",
+							"signature": "uint32_t TypeID = 0",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "Id",
+							"signature": "uint64_t Id = 0",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "IsValid",
+							"signature": "bool IsValid() const",
+							"line": 24
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "EventBus",
+					"namespace": "Mowo",
+					"line": 29,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static EventBus& Get()",
+							"static": true,
+							"doc": "Out-of-line — a header-inline function-local static duplicates the\nbus per DLL, so cross-module posts land in a queue nobody drains.",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "EventBus",
+							"signature": "EventBus(const EventBus&) = delete",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "EventBus& operator=(const EventBus&) = delete",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "Subscribe",
+							"signature": "template<typename T> FEventSubscription Subscribe(std::function<void(T&)> callback, const void* owner = FModuleAnchor::Here())",
+							"doc": "The subscription remembers the module it was made from (`owner`, by\ndefault FModuleAnchor evaluated in the caller's image): a plugin that\nnever unsubscribed left a callback into its freed code on the bus.",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "SubscriptionCount",
+							"signature": "size_t SubscriptionCount() const",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "Unsubscribe",
+							"signature": "void Unsubscribe(FEventSubscription& sub)",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "RemoveAllInModule",
+							"signature": "size_t RemoveAllInModule(void* moduleHandle)",
+							"doc": "Unsubscribes everything a module subscribed and drops the queued\nevents whose type that module defines — the unload sweep.",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "Post",
+							"signature": "template<typename T, typename... Args> void Post(Args&&... args)",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "DispatchImmediate",
+							"signature": "void DispatchImmediate(Event& event)",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "DispatchImmediate",
+							"signature": "template<typename T, typename... Args> void DispatchImmediate(Args&&... args)",
+							"line": 88
+						},
+						{
+							"kind": "alias",
+							"name": "FPreDispatchHook",
+							"signature": "using FPreDispatchHook = std::function<void(Event&)>",
+							"doc": "Pre-dispatch hook fires before per-type handlers run on a queued\nevent, giving the application first crack at `handled` consumption.",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "SetPreDispatchHook",
+							"signature": "void SetPreDispatchHook(FPreDispatchHook hook)",
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "ProcessEvents",
+							"signature": "void ProcessEvents()",
+							"line": 101
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "GetPendingEventCount",
+							"signature": "size_t GetPendingEventCount() const",
+							"line": 112
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Events/Public/Events/EventDispatcher.h",
+			"include": "Events/EventDispatcher.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "EventDispatcher",
+					"namespace": "Mowo",
+					"line": 13,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "EventCallback",
+							"signature": "using EventCallback = std::function<void(Event&)>",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "Subscribe",
+							"signature": "template<typename T> uint64_t Subscribe(std::function<void(T&)> callback)",
+							"line": 17
+						},
+						{
+							"kind": "method",
+							"name": "Unsubscribe",
+							"signature": "bool Unsubscribe(uint32_t typeID, uint64_t id)",
+							"doc": "A listener removed from inside its own dispatch is nulled in place and\ncompacted after the walk — erasing mid-iteration invalidated the loop.",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "Dispatch",
+							"signature": "void Dispatch(Event& event)",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "Dispatch",
+							"signature": "template<typename T, typename F> bool Dispatch(Event& event, F&& func)",
+							"doc": "Type-filtered dispatch: runs func only when the event is a T.",
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"doc": "Clearing from inside a handler must not free the vector the dispatch\nwalk is iterating — null the callbacks instead; the walk skips them and\ncompacts its own type's vector afterwards.",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "template<typename T> void Clear()",
+							"doc": "Clear listeners for a specific event type",
+							"line": 118
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Events/Public/Events/GameEvents.h",
+			"include": "Events/GameEvents.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "GamePausedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 9,
+					"members": [
+						{
+							"kind": "method",
+							"name": "GamePausedEvent",
+							"signature": "explicit GamePausedEvent(bool paused) : m_paused(paused)",
+							"line": 11
+						},
+						{
+							"kind": "method",
+							"name": "IsPaused",
+							"signature": "bool IsPaused() const",
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 20
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "GameStateChangedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 28,
+					"members": [
+						{
+							"kind": "method",
+							"name": "GameStateChangedEvent",
+							"signature": "GameStateChangedEvent(int previousState, int newState) : m_previousState(previousState), m_newState(newState)",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "GetPreviousState",
+							"signature": "int GetPreviousState() const",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "GetNewState",
+							"signature": "int GetNewState() const",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 43
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "LevelLoadedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 53,
+					"members": [
+						{
+							"kind": "method",
+							"name": "LevelLoadedEvent",
+							"signature": "explicit LevelLoadedEvent(const std::string& levelName) : m_levelName(levelName)",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "GetLevelName",
+							"signature": "const std::string& GetLevelName() const",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 64
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "LevelUnloadedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 72,
+					"members": [
+						{
+							"kind": "method",
+							"name": "LevelUnloadedEvent",
+							"signature": "explicit LevelUnloadedEvent(const std::string& levelName) : m_levelName(levelName)",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "GetLevelName",
+							"signature": "const std::string& GetLevelName() const",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 83
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Events/Public/Events/KeyEvents.h",
+			"include": "Events/KeyEvents.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "KeyEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 9,
+					"members": [
+						{
+							"kind": "method",
+							"name": "GetKeyCode",
+							"signature": "int GetKeyCode() const",
+							"line": 11
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "KeyPressedEvent",
+					"namespace": "Mowo",
+					"bases": "public KeyEvent",
+					"line": 22,
+					"members": [
+						{
+							"kind": "method",
+							"name": "KeyPressedEvent",
+							"signature": "KeyPressedEvent(int keyCode, bool repeat = false) : KeyEvent(keyCode), m_repeat(repeat)",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "IsRepeat",
+							"signature": "bool IsRepeat() const",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 34
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "KeyReleasedEvent",
+					"namespace": "Mowo",
+					"bases": "public KeyEvent",
+					"line": 43,
+					"members": [
+						{
+							"kind": "method",
+							"name": "KeyReleasedEvent",
+							"signature": "explicit KeyReleasedEvent(int keyCode) : KeyEvent(keyCode)",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 50
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "KeyTypedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"doc": "Character input, not a raw key code.",
+					"line": 56,
+					"members": [
+						{
+							"kind": "method",
+							"name": "KeyTypedEvent",
+							"signature": "explicit KeyTypedEvent(uint32_t character) : m_character(character)",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "GetCharacter",
+							"signature": "uint32_t GetCharacter() const",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 67
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Events/Public/Events/MouseEvents.h",
+			"include": "Events/MouseEvents.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MouseButtonPressedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 9,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MouseButtonPressedEvent",
+							"signature": "explicit MouseButtonPressedEvent(int button) : m_button(button)",
+							"line": 11
+						},
+						{
+							"kind": "method",
+							"name": "GetButton",
+							"signature": "int GetButton() const",
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 20
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MouseButtonReleasedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 28,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MouseButtonReleasedEvent",
+							"signature": "explicit MouseButtonReleasedEvent(int button) : m_button(button)",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "GetButton",
+							"signature": "int GetButton() const",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 39
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MouseMovedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 47,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MouseMovedEvent",
+							"signature": "MouseMovedEvent(float x, float y) : m_x(x), m_y(y)",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "GetX",
+							"signature": "float GetX() const",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "GetY",
+							"signature": "float GetY() const",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 61
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MouseScrolledEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 70,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MouseScrolledEvent",
+							"signature": "MouseScrolledEvent(float xOffset, float yOffset) : m_xOffset(xOffset), m_yOffset(yOffset)",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "GetXOffset",
+							"signature": "float GetXOffset() const",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "GetYOffset",
+							"signature": "float GetYOffset() const",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 84
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Events/Public/Events/WindowEvents.h",
+			"include": "Events/WindowEvents.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "WindowResizeEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 9,
+					"members": [
+						{
+							"kind": "method",
+							"name": "WindowResizeEvent",
+							"signature": "WindowResizeEvent(uint32_t width, uint32_t height) : width(width), height(height)",
+							"line": 11
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 17
+						},
+						{
+							"kind": "field",
+							"name": "width",
+							"signature": "uint32_t width",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "height",
+							"signature": "uint32_t height",
+							"line": 22
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "WindowCloseEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 25,
+					"members": []
+				},
+				{
+					"kind": "class",
+					"name": "WindowCloseEvent::WindowFocusEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 30,
+					"members": [
+						{
+							"kind": "method",
+							"name": "WindowFocusEvent",
+							"signature": "explicit WindowFocusEvent(bool focused) : focused(focused)",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "focused",
+							"signature": "bool focused",
+							"line": 41
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "WindowCloseEvent::WindowMovedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 44,
+					"members": [
+						{
+							"kind": "method",
+							"name": "WindowMovedEvent",
+							"signature": "WindowMovedEvent(int x, int y) : x(x), y(y)",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "std::string ToString() const override",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "y",
+							"signature": "int x, y",
+							"line": 55
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "WindowCloseEvent::WindowMinimizedEvent",
+					"namespace": "Mowo",
+					"bases": "public Event",
+					"line": 58,
+					"members": [
+						{
+							"kind": "method",
+							"name": "WindowMinimizedEvent",
+							"signature": "explicit WindowMinimizedEvent(bool minimized) : minimized(minimized)",
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "minimized",
+							"signature": "bool minimized",
+							"line": 65
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

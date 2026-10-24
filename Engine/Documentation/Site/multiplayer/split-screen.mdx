@@ -1,0 +1,92 @@
+---
+title: Split-screen
+description: Run two to four local players on one machine, each with a gamepad, a camera and a screen pane tiled by FSplitScreenLayout.
+order: 11
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/LocalPlayer.h
+  - Engine/Source/Runtime/Game/Public/Game/SplitScreenLayout.h
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Runtime/GameHost/Public/GameHost/MGameEngine.h
+verifiedAt: 08e26df3d
+---
+
+Split-screen puts two to four players on one machine. Each local player has a gamepad slot, a player controller, a camera and a pane of the screen. It needs no special render path: every camera already has a normalized viewport rectangle, and the runtime renders each camera into its region of the window. Split-screen only tiles those rectangles and routes each gamepad to its player.
+
+## Try it
+
+Start the standalone game (`MowoGame`, or your packaged game executable) with `--players=N`, where N is 2 to 4. Values outside 1 to 4 are clamped <Source symbol="MGameEngine" />.
+
+```powershell
+MowoGame.exe --project=MyGame.mproject --players=2
+```
+
+At startup the runtime creates one local player per count, with gamepad slot `i` driving player `i`. Each frame it assigns players to the scene's cameras in render order, recomputes the panes for the window size, and writes each pane onto its camera's viewport <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />.
+
+<Callout type="warning">
+Author one camera per player. A scene with fewer cameras than players draws only the panes that have a camera; the rest stay empty.
+</Callout>
+
+<Screenshot id="multiplayer-split-screen-two-players" alt="The standalone player launched with --players=2 on a scene that has two cameras, showing the window split into a top and a bottom pane, each rendering a different player's view" caption="Two players with the automatic horizontal layout." />
+
+## Layouts
+
+`ESplitScreenLayout` <Source symbol="ESplitScreenLayout" />:
+
+| Layout | Panes |
+|---|---|
+| `Single` | One full-screen view |
+| `Horizontal` | Top and bottom. The two-player default. |
+| `Vertical` | Left and right |
+| `Quad` | A 2 by 2 grid. Order is top-left, top-right, bottom-left, bottom-right. |
+| `Auto` | Resolves from the player count: 1 is `Single`, 2 is `Horizontal`, 3 or 4 is `Quad` |
+
+With three players in `Quad`, the first three cells are used. Adjacent panes share pixel edges exactly, with no gaps, even at odd resolutions.
+
+<Flow steps={["Player count", "Resolve layout", "Compute panes", "Copy to cameras", "Render each camera"]} highlight={2} caption="FSplitScreenLayout does the math; the runtime copies the result onto CameraComponent viewports." />
+
+## The pieces
+
+| Type | Role |
+|---|---|
+| [`FViewportRect`](/docs/api/game/fviewportrect/) | One pane, both normalized (0 to 1, what a camera stores) and in pixels |
+| [`FSplitScreenLayout`](/docs/api/game/fsplitscreenlayout/) | Pure layout math. `Compute(layout, playerCount, width, height, out)` fills up to four rectangles. |
+| [`FLocalPlayer`](/docs/api/game/flocalplayer/) | A player index, the gamepad slot that drives it (`-1` for keyboard and mouse), its controller, camera entity and pane |
+| [`FLocalPlayerManager`](/docs/api/game/flocalplayermanager/) | Owns the list, tiles the panes and maps gamepad slots to players |
+
+`FLocalPlayerManager` holds no renderer or camera reference. It computes rectangles, and the caller copies them onto cameras <Source symbol="FLocalPlayerManager" />.
+
+## Manage local players in code
+
+```cpp title="LocalPlayers.cpp"
+#include "Core/Platform.h"
+#include "Game/LocalPlayer.h"
+#include "Game/SplitScreenLayout.h"
+
+#include <cstdint>
+
+static int32_t SetUpCouchCoop(Mowo::FLocalPlayerManager& players, uint32_t width, uint32_t height) {
+	players.Clear();
+	players.AddLocalPlayer(0);
+	players.AddLocalPlayer(1);
+	players.SetLayout(Mowo::ESplitScreenLayout::Vertical);
+
+	return players.RecomputeLayout(width, height);
+}
+
+static int32_t PlayerForGamepad(const Mowo::FLocalPlayerManager& players, int32_t gamepadSlot) {
+	return players.PlayerIndexForGamepad(gamepadSlot);
+}
+```
+
+- `AddLocalPlayer(gamepadIndex)` assigns the next player index. It refuses more than four players, and adding a gamepad slot that already has an owner returns that owner instead of creating a duplicate <Source symbol="FLocalPlayerManager::AddLocalPlayer" />.
+- `PlayerIndexForGamepad(slot)` returns the owning player, or `-1` when the slot owns none. Use it to feed each player's controller from its own gamepad.
+- `RecomputeLayout(width, height)` returns the number of panes written.
+
+## Local and online players
+
+Split-screen is local only: several people share one machine and one world. Networked players on other machines are handled by [sessions](/docs/multiplayer/sessions-and-hosting/). `FLocalPlayerManager` does not register its players with a network session, so treat split-screen and online sessions as separate features.
+
+## Related
+
+- [Multiplayer overview](/docs/multiplayer/) for networked play.
+- API: [`FLocalPlayerManager`](/docs/api/game/flocalplayermanager/), [`FSplitScreenLayout`](/docs/api/game/fsplitscreenlayout/), [`ESplitScreenLayout`](/docs/api/game/esplitscreenlayout/).

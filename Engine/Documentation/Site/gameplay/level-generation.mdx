@@ -1,0 +1,70 @@
+---
+title: Level generation
+description: Build a different level each run from a room grammar on a module grid, validate it, spawn rooms, and share the seed in multiplayer.
+order: 31
+sources:
+  - Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelGrammar.h
+  - Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelGenerator.h
+  - Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelValidator.h
+  - Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelSpawner.h
+  - Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelGenerationComponent.h
+  - Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelSeedReplication.h
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+verifiedAt: 08e26df3d
+---
+
+Level generation builds a level from rooms, roguelike style. It works graph first: a room graph is rewritten from a grammar, then placed room by room on a 4 m module grid, checked, and spawned. A seed always produces the same level on every machine.
+
+## The grammar
+
+A `.levelgrammar` asset describes the rooms and how they may connect. Create one from the Content Browser's **New › Level Grammar**, which starts from a built-in facility grammar. <Source symbol="FLevelGrammar" />
+
+| Part | Holds |
+| --- | --- |
+| Start chain | The graph the rewriting starts from, such as `Start,Goal` |
+| Rules | `Replace` retypes a room, `Attach` hangs new rooms off one, `Insert` splits a connection with a chain of rooms. Each has a weight and a cap. |
+| Modules | Rooms on the grid: room type, footprint in cells, doorway sockets (cell, side, width), and the prefab or level to spawn |
+| Limits | Minimum and maximum rooms of each type |
+| Budget | Critical-path length, minimum door width, and the cap and shared-wall prefabs |
+
+A rule only applies where the room's modules have enough doorways for the result, so every rewritten graph can be placed.
+
+## Generation and validation
+
+`FLevelGenerator::Generate(grammar, seed)` applies rules picked by weight from a seeded stream until none applies, then places rooms breadth-first from the start, each rotated so its doorway faces its parent's and never overlapping. A room with no fit fails the attempt and the next attempt re-seeds. `HashLayout` fingerprints the result. <Source symbol="FLevelGenerator" />
+
+`FLevelValidator::Validate` then checks the layout: every room placed, no overlaps, sockets that meet, one shared wall between touching rooms, every open doorway capped, every room reachable, the critical path wide enough, and the path length in range. <Source symbol="FLevelValidator" />
+
+## Spawn a level
+
+Add a `LevelGeneration` component (category **Gameplay**) to an entity; its position is the grid origin. <Source symbol="LevelGenerationComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `grammar` | The `.levelgrammar`; empty uses the built-in one |
+| `seed`, `randomSeed` | A fixed seed, or a random one that is logged so you can reproduce it |
+| `generateOnPlay` | Generate when play begins |
+| `requireValid` | Spawn only a layout that passes validation |
+| `replicateSeed` | Share the host's seed with clients |
+
+The spawner places each room's module, a cap on every open doorway and a shared wall on every touching edge. A module can name a **level** (`.mmap`) instead of a prefab, edited like any level; it is placed as a level instance, and its actors get ids derived from the seed, so every machine that generates the same seed holds the same actors under the same ids. <Source symbol="FLevelSpawner" />
+
+```mdf title="A module authored as a level"
+Module "Lab" {
+	room_type: "Lab"
+	width: 2
+	height: 2
+	level: asset("Content/Level/Modules/Lab.mmap")
+	Socket "North" { x: 0 y: 1 width: 1.6 }
+}
+```
+
+## Multiplayer
+
+With `replicateSeed` on, the host picks the seed, generates, and sends the seed and a hash of its grammar to every client, including late joiners. A client builds nothing until the seed arrives, then builds the same level. A grammar whose hash differs from the host's is logged as an error. <Source symbol="FLevelSeedReplication" />
+
+## Related
+
+- [Procedural content (PCG)](/docs/gameplay/pcg/) for scattering inside rooms
+- [Multiplayer](/docs/multiplayer/)
+- API: [LevelGen module](/docs/api/levelgen/)

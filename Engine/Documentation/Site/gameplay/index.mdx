@@ -1,0 +1,170 @@
+---
+title: Gameplay programming
+sidebarTitle: Gameplay
+description: How gameplay code is organized in Mowo, from actors and components down to the ECS, and a map of every gameplay system and plugin.
+order: 4
+icon: Gamepad2
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+  - Engine/Source/Runtime/Game/Public/Game/MActorComponent.h
+  - Engine/Source/Runtime/ECS/Public/ECS/System.h
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/Reflect.h
+  - Engine/Source/Developer/MowoSandbox/Public/Sandbox/ASandboxActor.h
+  - Engine/Plugins/Combat/Combat.mplugin
+verifiedAt: 08e26df3d
+---
+
+Gameplay in Mowo is C++ written against an Unreal-style object layer: you subclass `AActor`, compose it from components, mark fields with reflection macros, and let a world tick it. Under that layer sits a flat entity-component system (ECS) that the renderer, physics and animation iterate for speed. [Visual Scripting](/docs/visual-scripting/) builds its node catalog from the same reflection data, so every system on these pages is usable from graphs too.
+
+This section explains how the two layers fit together, then covers each gameplay system: physics, animation, audio, effects, AI, cameras, narrative, save games and the first-party gameplay plugins. The object model, reflection macros and modules are covered in depth in [Programming](/docs/programming/).
+
+## Two layers, one scene
+
+Every actor has a backing ECS entity. Gameplay code talks to the actor. Performance-critical systems read the entity. <Source symbol="AActor" />
+
+<Flow steps={["Your AActor subclass", "Actor components (MActorComponent)", "Mirrored ECS components", "ECS systems (render, physics, animation)"]} highlight={0} caption="Gameplay code writes to actors and actor components. Components publish their state onto the actor's backing entity, which the flat systems iterate." />
+
+The layers split the work like this:
+
+| Layer | What it is | You use it for |
+| --- | --- | --- |
+| `MObject` | The garbage-collected base class with a reflected `MClass` | Anything with identity and lifetime |
+| `AActor` / `MWorld` | Placeable objects and the world that ticks them | Gameplay objects, lifecycle, spawning |
+| `MActorComponent` / `MSceneComponent` | Object-oriented behaviors attached to an actor | Meshes, lights, cameras, your own logic |
+| ECS `World`, components, `System` | Plain-data components in archetype storage, processed by systems | High-volume data, engine subsystems |
+
+An actor component such as `MStaticMeshComponent` also writes a plain `MeshRenderer` component onto the actor's entity, so the renderer's flat iteration sees it while your code keeps using the object interface. <Source symbol="MActorComponent" />
+
+<Callout type="engine">
+`AActor`, `MWorld` and the scene live in the **Game** module. Below it sit **SceneTypes** (render components), **AssetSystem**, the **ECS** module and **Components** (the base `TransformComponent` and `RelationshipComponent`). Larger systems such as AI, narrative, sequencer and PCG are feature modules the engine loads by name. See [Programming](/docs/programming/) for the module layout.
+</Callout>
+
+## Naming conventions
+
+Mowo keeps Unreal's prefixes with one change: managed objects use `M` where Unreal uses `U`.
+
+| Prefix | Meaning | Examples |
+| --- | --- | --- |
+| `M` | Garbage-collected object | `MObject`, `MWorld`, `MActorComponent` |
+| `A` | Actor | `AActor`, `APawn`, `AGameMode` |
+| `F` | Plain struct or value type | `FName`, `FTimerHandle` |
+| `E` | Enum | `ETickGroup`, `ECollisionChannel` |
+| `T` | Template | `TObjectPtr`, `TWeakObjectPtr` |
+| `I` | Interface | `IDamageable` |
+
+ECS components are plain structs named with a `Component` suffix, for example `TransformComponent` and `RigidBodyComponent`.
+
+## Where your code lives
+
+Your gameplay code lives in the project's game module, a shared library that depends on the engine and can be hot-reloaded while the editor runs; see [Programming](/docs/programming/) for game modules and plugins. `MowoSandbox` in the engine source is the reference template for a hot-reloadable module. The editor's class wizard, `mbt newclass` and the hot-reload loop are covered in [Working with C++](/docs/editor/working-with-cpp/).
+
+A typical game-module class looks like this, taken from the sandbox template:
+
+<Steps>
+<Step title="Derive from an engine class">
+Pick `AActor` for a placeable object, `MActorComponent` or `MSceneComponent` for a reusable behavior, or `APawn`/`ACharacter` for something a player or AI drives.
+</Step>
+<Step title="Annotate it for reflection">
+Put `MCLASS()` before the class and `MGENERATED_BODY()` inside it. Mark fields with `MPROPERTY()` so they are saved with the scene and traced by the garbage collector. <Source symbol="ASandboxActor" />
+</Step>
+<Step title="Build components in the constructor">
+Create components with `CreateDefaultSubobject<T>()` and pick a root with `SetRootComponent()`.
+</Step>
+<Step title="Override the lifecycle">
+Override `BeginPlay`, `Tick` and `EndPlay`, and call the base implementation so components keep receiving their callbacks.
+</Step>
+</Steps>
+
+<Callout type="note">
+Every `MFUNCTION` you declare shows up in Visual Scripting automatically, because the node catalog is built by walking the class registry. You never register nodes by hand.
+</Callout>
+
+## What happens each frame
+
+When the game is playing, the scene runs actor ticks in groups around the ECS update, and the physics step happens inside the ECS update. <Source symbol="AActor" />
+
+<Flow steps={["PrePhysics actors", "DuringPhysics actors", "ECS systems (physics step, transforms)", "PostPhysics actors", "PostUpdateWork actors"]} highlight={2} caption="Actor tick groups run around the ECS system update. Put logic that must see settled physics poses in PostPhysics or later." />
+
+With `p.OverlapDuringPhysics` on (the default), the physics steps run on a worker while the `DuringPhysics` group ticks. ECS systems have their own phase order (`PrePhysics`, `Physics`, `PostPhysics`, `PostUpdate`) inside that update. <Source symbol="System" />
+
+## Pages in this section
+
+### Foundations
+
+<CardGrid>
+<Card title="Actors and the world" href="/docs/gameplay/actors-and-world/" icon="Gamepad2">AActor, MWorld, spawning, pooling, ticking, timers and level changes.</Card>
+<Card title="Components" href="/docs/gameplay/components/" icon="Gamepad2">Actor and ECS components, triggers, movement components and splines.</Card>
+<Card title="Gameplay framework" href="/docs/gameplay/gameplay-framework/" icon="Gamepad2">Game modes, controllers, pawns, characters and subsystems.</Card>
+<Card title="Input" href="/docs/gameplay/input/" icon="Gamepad2">Input actions, mapping contexts, triggers, devices and rebinding.</Card>
+<Card title="Entity-component system" href="/docs/gameplay/ecs/" icon="Gamepad2">Entities, archetypes, queries, systems and command buffers.</Card>
+<Card title="Objects and garbage collection" href="/docs/gameplay/objects-and-gc/" icon="Gamepad2">What keeps an object alive and which pointer to hold it with.</Card>
+<Card title="Save games" href="/docs/gameplay/save-games/" icon="Gamepad2">Save-game objects, world-state slots, autosave and migrations.</Card>
+</CardGrid>
+
+### Physics and animation
+
+<CardGrid>
+<Card title="Physics" href="/docs/gameplay/physics/" icon="Gamepad2">Bodies, colliders, channels, queries, constraints and materials.</Card>
+<Card title="Character movement" href="/docs/gameplay/character-movement/" icon="Gamepad2">The character controller, movement modes and root-motion sources.</Card>
+<Card title="Vehicles, cloth and ragdolls" href="/docs/gameplay/vehicles-cloth-and-ragdolls/" icon="Gamepad2">Wheeled and tracked vehicles, cloth, ragdolls and hit reactions.</Card>
+<Card title="Destruction" href="/docs/gameplay/destruction/" icon="Gamepad2">Fractured props and carvable voxel solids.</Card>
+<Card title="Animation" href="/docs/gameplay/animation/" icon="Gamepad2">The Animator, animation graphs, blend spaces and root motion.</Card>
+<Card title="Montages and notifies" href="/docs/gameplay/montages-and-notifies/" icon="Gamepad2">One-shot animations, frame events and motion warping.</Card>
+<Card title="IK, retargeting and motion matching" href="/docs/gameplay/ik-and-retargeting/" icon="Gamepad2">IK, control rigs, retargeting, motion matching and lip-sync.</Card>
+</CardGrid>
+
+### Presentation
+
+<CardGrid>
+<Card title="Cameras" href="/docs/gameplay/camera/" icon="Gamepad2">View targets, camera controllers and camera shake.</Card>
+<Card title="Audio" href="/docs/gameplay/audio/" icon="Gamepad2">Sound sources, submixes, sound cues and the voice budget.</Card>
+<Card title="Acoustics" href="/docs/gameplay/acoustics/" icon="Gamepad2">Occlusion, rooms and portals, reverb and echolocation.</Card>
+<Card title="Music and mixing" href="/docs/gameplay/music-and-mixing/" icon="Gamepad2">Adaptive music and mix snapshots.</Card>
+<Card title="Particles and VFX" href="/docs/gameplay/particles/" icon="Gamepad2">Emitters, modules, VFX graphs and effects scalability.</Card>
+<Card title="GPU simulation" href="/docs/gameplay/gpu-simulation/" icon="Gamepad2">GPU swarms and FLIP fluids.</Card>
+<Card title="Sequencer" href="/docs/gameplay/sequencer/" icon="Gamepad2">Cinematics, events and movie rendering.</Card>
+<Card title="Accessibility" href="/docs/gameplay/accessibility/" icon="Gamepad2">Subtitles, auto-subtitles, color vision and comfort options.</Card>
+</CardGrid>
+
+### AI and game systems
+
+<CardGrid>
+<Card title="AI" href="/docs/gameplay/ai/" icon="Gamepad2">Controllers, blackboards, behavior and state trees, perception and queries.</Card>
+<Card title="Navigation" href="/docs/gameplay/navigation/" icon="Gamepad2">Nav mesh baking, agents, links, obstacles and runtime rebuilds.</Card>
+<Card title="AI crowds and director" href="/docs/gameplay/ai-crowds-and-director/" icon="Gamepad2">Significance, crowds, pacing, cover, smart objects and schedules.</Card>
+<Card title="Abilities, health and damage" href="/docs/gameplay/abilities-and-damage/" icon="Gamepad2">Health, damage, gameplay tags, attributes, effects and abilities.</Card>
+<Card title="Quests, dialogue and subtitles" href="/docs/gameplay/narrative/" icon="Gamepad2">Data-driven quests and branching dialogue.</Card>
+<Card title="Time rewind" href="/docs/gameplay/time-rewind/" icon="Gamepad2">Rewind the last seconds of play.</Card>
+</CardGrid>
+
+### Worlds
+
+<CardGrid>
+<Card title="World environment" href="/docs/gameplay/world-environment/" icon="Gamepad2">Day and night, water, buoyancy and streaming regions.</Card>
+<Card title="Procedural content" href="/docs/gameplay/pcg/" icon="Gamepad2">Deterministic scattering with PCG graphs.</Card>
+<Card title="Level generation" href="/docs/gameplay/level-generation/" icon="Gamepad2">Levels built from a room grammar.</Card>
+<Card title="LiDAR and point clouds" href="/docs/gameplay/lidar-and-point-clouds/" icon="Gamepad2">Scanning, persistent point clouds and attention.</Card>
+</CardGrid>
+
+### Gameplay plugins
+
+The engine ships <Fact id="plugins.length" /> plugins. These four add gameplay; each is off until a project enables it in the Plugins window.
+
+<CardGrid>
+<Card title="Weapons and melee" href="/docs/gameplay/weapons-and-melee/" icon="Gamepad2">Combat plugin: guns, melee, impacts and pickups.</Card>
+<Card title="Interaction and inventory" href="/docs/gameplay/interaction-and-inventory/" icon="Gamepad2">Combat plugin: interaction, carry, items, crafting and progression.</Card>
+<Card title="Zones and utility grids" href="/docs/gameplay/zones-and-utility-grids/" icon="Gamepad2">Combat plugin: gameplay zones and power networks.</Card>
+<Card title="Survival and economy" href="/docs/gameplay/survival-and-economy/" icon="Gamepad2">Survival plugin: base building, currencies and shops.</Card>
+<Card title="Smart Props" href="/docs/gameplay/smart-props/" icon="Gamepad2">Smart Props plugin: parametric prop assemblies.</Card>
+<Card title="LiDAR Scan Hierarchy" href="/docs/gameplay/lidar-and-point-clouds/" icon="Gamepad2">ScanHierarchy plugin: fast Embree scan tracing.</Card>
+</CardGrid>
+
+Networking and replication are covered in [Multiplayer](/docs/multiplayer/), and game UI in [UI](/docs/ui/).
+
+## API reference
+
+- [Game module](/docs/api/game/), [ECS module](/docs/api/ecs/), [Components module](/docs/api/components/), [Core module](/docs/api/core/)
+- [Physics](/docs/api/physics/), [Animation](/docs/api/animation/), [Audio](/docs/api/audio/), [Particles](/docs/api/particles/), [Camera](/docs/api/camera/), [Input](/docs/api/input/)
+- [AINavigation](/docs/api/ainavigation/), [Narrative](/docs/api/narrative/), [Sequencer](/docs/api/sequencer/), [Destruction](/docs/api/destruction/), [PCG](/docs/api/pcg/), [LevelGen](/docs/api/levelgen/), [GpuEcs](/docs/api/gpuecs/), [Accessibility](/docs/api/accessibility/)

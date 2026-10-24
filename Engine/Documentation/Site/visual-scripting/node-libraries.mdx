@@ -1,0 +1,116 @@
+---
+title: Node libraries
+description: The reflected Statics libraries that appear as palette categories, the functions every actor calls on itself, the async actions and the standard macros.
+order: 8
+sources:
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomNodeCatalog.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomAsync.h
+  - Engine/Source/Runtime/Loom/Private/LoomAsync.cpp
+  - Engine/Source/Runtime/Loom/Private/LoomMacroExpander.cpp
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp
+  - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Game/Public/Game/MGameplayStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/MDebugStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/MStringStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/MMathStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/MTimerStatics.h
+  - Engine/Source/Runtime/Game/Private/Game/LoomGameplayWaitProvider.cpp
+verifiedAt: 08e26df3d
+---
+
+You never register a node. The node catalogue walks every reflected class and flattens its `MFUNCTION`s, so anything a module reflects is placeable <Source symbol="LoomNodeCatalog" />. This page lists what ships: the `Statics` libraries, the functions every actor exposes on itself, the async actions and the standard macros. For each function's parameters, open the class in the API reference.
+
+## How libraries appear
+
+A reflected class whose name ends in `Statics` gets its own palette category: the leading `M` and the trailing `Statics` are dropped and `Library` is added, so `MGameplayStatics` is **Gameplay Library** <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp" />. A placed node stores the qualified name, such as `MGameplayStatics::SpawnActorByClass`, and the VM calls it on the class's default object, so no target pin is needed. A `const` function is a pure node.
+
+A library from a feature module or a plugin appears once that module is loaded and the plugin is enabled. Your game module's own `Statics` classes appear the same way.
+
+## Engine libraries
+
+| Class | Module | Covers |
+| --- | --- | --- |
+| <Source symbol="MGameplayStatics" /> | Game | Spawn and destroy actors, actor location and rotation, the player pawn, the game instance, traces, damage, world time, pause and time dilation |
+| <Source symbol="MActorStatics" /> | Game | Attachment, velocity and impulses, orientation vectors, scale, tags, counting and indexing actors by class or tag |
+| <Source symbol="MDebugStatics" /> | Game | Print String and the Draw Debug shapes. Every call does nothing in Shipping. |
+| <Source symbol="MStringStatics" /> | Game | String operations, all pure |
+| <Source symbol="MMathStatics" /> | Game | Interpolation, angles, vectors, rotators, `FTransform` Make and Break |
+| <Source symbol="MTimerStatics" /> | Game | Timers that fire an input pin; pause, resume and clear |
+| <Source symbol="MInputStatics" /> | Game | Input action state, input contexts, gamepad family and glyphs, the on-screen keyboard |
+| <Source symbol="MLevelStatics" /> | Game | Actors near a point, actor by name, keyed scene values, spawn at a transform, streaming regions and data layers |
+| <Source symbol="MCameraStatics" /> | Game | Camera shakes and view targets |
+| <Source symbol="MMovementStatics" /> | Game | Projectile movement, rotating movement and spring arms |
+| <Source symbol="MPhysicsStatics" /> | Game | Physics materials on an actor's collider |
+| <Source symbol="MPhysicsInteractableStatics" /> | Game | Physics interactables |
+| <Source symbol="MImpactStatics" /> | Game | Impacts |
+| <Source symbol="MWaterStatics" /> | Game | Water queries |
+| <Source symbol="MAcousticsStatics" /> | Game | Geometric acoustics: echoes, paths and the listener's room |
+| <Source symbol="MSaveStatics" /> | Game | Checkpoints, save slots and `MSaveGame` objects |
+| <Source symbol="MPlayerStateStatics" /> | Game | Replicated player records: name, score, team, ready. Setters run on the host only. |
+| <Source symbol="MAttentionStatics" /> | Game | The Attention meter |
+| <Source symbol="MStatusEffectStatics" /> | Game | Status effects |
+| <Source symbol="MRewindStatics" /> | Game | Time rewind |
+| <Source symbol="MRollbackStatics" /> | Game | Rollback netcode input and session health |
+| <Source symbol="MLiveOpsStatics" /> | Game | Remote config, experiments and telemetry events |
+| <Source symbol="MModStatics" /> | Game | Loaded mods and the switches a mod menu needs |
+| <Source symbol="MRenderingStatics" /> | Game | The active graphics API, and requesting a different one at next start |
+| <Source symbol="MAudioStatics" /> | Audio | Bus mixer and fire-and-forget playback |
+| <Source symbol="MUIStatics" /> | ArcUI | Game UI screens. See [UI](/docs/ui/). |
+| <Source symbol="MRebindStatics" /> | ArcUI | Input remapping for a custom controls screen |
+| <Source symbol="MSmartObjectStatics" /> | AINavigation | Claim and release smart object slots |
+| <Source symbol="MStateTreeStatics" /> | AINavigation | Send events to a state tree, read its state, write its blackboard |
+| <Source symbol="MCrowdStatics" /> | AINavigation | Crowds |
+| <Source symbol="MDirectorStatics" /> | AINavigation | The AI director |
+| <Source symbol="MSituationStatics" /> | AINavigation | Situations |
+| <Source symbol="MDialogueStatics" /> | Narrative | Dialogue |
+| <Source symbol="MQuestStatics" /> | Narrative | Quests |
+| <Source symbol="MSubtitleStatics" /> | Narrative | Subtitles |
+| <Source symbol="MMusicStatics" /> | Narrative | Music |
+| <Source symbol="MMixSnapshotStatics" /> | Narrative | Mix snapshots |
+| <Source symbol="MVoxelDestructionStatics" /> | Destruction | Carve voxel destructibles |
+| <Source symbol="MPcgStatics" /> | PCG | Regenerate PCG volumes and read back what they placed |
+| <Source symbol="MSequenceStatics" /> | Sequencer | Sequences |
+| <Source symbol="MVoiceChatStatics" /> | VoiceChat | Mute and per-player volume |
+
+## Functions on self
+
+Without a library prefix, a call resolves on the running instance's own class chain. `AActor` exposes `GetActorLocation`, `SetActorLocation`, `GetActorName`, `SetActorHiddenInGame`, `GetComponentByClass`, `GetComponentByName` and `GetComponentCount` <Source symbol="AActor" />. A component returned by a getter is an object pin: call its functions with **Call On Target**. Pawn, Character, controller, game mode and game state classes reach their native base's reflected functions the same way. See [Calling C++](/docs/visual-scripting/calling-cpp/).
+
+## Async actions
+
+An **Async Action** node starts an action and resumes the graph on the pin the action fires. These ship with the engine <Source path="Engine/Source/Runtime/Loom/Private/LoomAsync.cpp" />:
+
+| Action | Inputs | Fires |
+| --- | --- | --- |
+| Timed Wait | Duration | On Completed, with the elapsed time |
+| Delay Until Next Tick | | On Next Tick |
+| Wait For Gameplay Event | Event Name | On Event, with the payload |
+| Async Load Asset | Asset Path | On Loaded with the asset, or On Failed |
+| AI Move To | Pawn, Destination, Acceptance Radius | On Arrived, or On Failed |
+| Wait Input Action | Action, Test Already Pressed | On Pressed with the seconds waited, then On Released with the seconds held; On Failed |
+| Wait Overlap | Trigger, Tag Filter, Timeout | On Overlap with the entering actor, On Timeout, or On Failed |
+| Wait Attribute Change | Target, Attribute, Trigger Once | On Changed with the new value, or On Failed |
+
+Wait Input Action ignores a press already held when it starts unless **Test Already Pressed** is set. Wait Overlap counts only actors that enter after it starts; an empty Trigger means the graph's own actor. Wait Attribute Change keeps listening for the life of the graph unless **Trigger Once** is set.
+
+<Callout type="warning">
+
+Async Load Asset, AI Move To and the three Wait actions rely on a provider installed by a higher module: the asset system, the AI navigation module and the gameplay layer. In a host without one, the node takes On Failed on its first tick and logs what is missing.
+
+</Callout>
+
+A game module can add its own action, or replace a shipped one by registering under the same name, with `LoomAsyncRegistry::Register` <Source symbol="LoomAsyncRegistry" />.
+
+## Standard macros
+
+Two macros ship with the engine and appear under **Macros (Standard)** in every class <Source path="Engine/Source/Runtime/Loom/Private/LoomMacroExpander.cpp" />:
+
+| Macro | Inputs | Outputs | Does |
+| --- | --- | --- | --- |
+| `IsValidBranch` | `In` (exec), `Object` | `IsValid`, `NotValid` (exec) | Checks an object and branches in one node. |
+| `ForEachWithBreak` | `In` (exec), `Array`, `Break` (exec) | `LoopBody` (exec), `Element`, `Index`, `Completed` (exec) | A For Each whose body can fire `Break` to stop early. |
+
+## Next
+
+- [Flow control](/docs/visual-scripting/flow-control/): the built-in node kinds.
+- [Game API](/docs/api/game/): every Game library with its parameters.

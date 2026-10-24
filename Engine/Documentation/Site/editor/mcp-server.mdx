@@ -1,0 +1,103 @@
+---
+title: MCP server for AI agents
+sidebarTitle: MCP server
+description: Let an AI agent such as Claude Code drive the editor over the Model Context Protocol - setup, access levels, security, tools and custom tools.
+order: 24
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/Mcp/EditorMcpService.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Mcp/EditorMcpTools.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferencesPage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/McpIndicator.cpp
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/McpServer.h
+  - Engine/Source/Editor/EditorFramework/Private/McpServer.cpp
+verifiedAt: f5ba7fec2
+---
+
+The editor serves its own tools over the **Model Context Protocol** (MCP), so an AI agent such as Claude Code, or any MCP client, can work in the editor the way a person does: open and save levels, place and edit actors, read and write Visual Scripting graphs, start and stop Play, take screenshots and run tests. Every tool goes through an operation the editor already has, so an agent's edit is undoable and validated like a click <Source path="Engine/Source/Editor/MowoEditor/Private/Mcp/EditorMcpTools.cpp" />.
+
+## Turning it on
+
+| Transport | How | For |
+| --- | --- | --- |
+| HTTP | **Editor Preferences ▸ AI agents ▸ Enable MCP server** (port 52801 by default; 0 picks a free port), or `--mcp-port=<n>` on the command line | Attaching to an editor that is already open |
+| stdio | `MowoEditor.exe --mcp-stdio --project <Project>.mproject` | A client that launches the editor itself |
+
+With stdio, the editor reads one JSON-RPC message per line on standard input, answers on standard output, logs to standard error, and closes when the client closes its input.
+
+Each HTTP session gets a new bearer token. The editor writes the port, token and access level to `Saved/Config/Editor/McpServer.json` (per user, never committed; `--mcp-endpoint-file=<path>` picks another file) <Source path="Engine/Source/Editor/MowoEditor/Private/Mcp/EditorMcpService.cpp" />. The status bar's **AI agents** popover shows the endpoint and token and copies the command that attaches Claude Code:
+
+```bash
+claude mcp add --transport http mowo-editor http://127.0.0.1:52801/mcp --header "Authorization: Bearer <token>"
+```
+
+<Screenshot id="editor-mcp-popover" alt="The AI agents popover opened from the status bar: state Connected, the endpoint http://127.0.0.1:52801/mcp and the masked token with copy buttons, one client row naming the client with its transport, tool call count and last-heard time, and the Stop button." />
+
+## Editor Preferences ▸ AI agents
+
+| Row | Effect |
+| --- | --- |
+| Enable MCP server | Starts or stops the listener on the next frame (`editor.mcp.enabled`) |
+| Port | `editor.mcp.port` |
+| Allow remote connections | Off listens on 127.0.0.1 only; on listens on every interface. Use it only on a network you trust |
+| Access token | The running token, masked. **Copy** copies it; **Rotate** issues a new one on the same port |
+| Commands agents may run | **Read only** (the default), **Read + edit (no delete)** or **Everything** |
+
+Both transports start at the access chosen here. `--mcp-access=read|edit|full` on the command line changes it for that session. Nothing an agent can reach changes it.
+
+## Tools and access
+
+Each tool has an access level. A tool above the allowed level is left out of the tool list, and calling it returns an error that names the preference.
+
+| Access | Tools |
+| --- | --- |
+| Read | `editor_status`, `list_actors`, `get_property`, `select_actor`, `camera_set`, `screenshot`, `open_asset`, `loom_read`, `loom_nodes`, `multiuser_status` |
+| Edit | `open_level`, `new_level`, `save_level`, `spawn_actor`, `set_property`, `set_cvar`, `import_asset`, `pie_start`, `pie_stop` |
+| Full | `delete_actor`, `console`, `run_script`, `run_tests`, `loom_write`, `editor_quit` |
+
+`run_script` runs an [editor script](/docs/editor/automation/). `loom_write` needs Full access because a Visual Scripting graph calls reflected functions and runs at the next Play: writing one is writing code.
+
+Tools run on the editor's main thread between frames. A tool that needs frames, such as starting Play or taking a screenshot after a change, answers later on the same connection without blocking the editor.
+
+## Security
+
+A tool that saves files and runs builds can execute code, so the server is locked down <Source path="Engine/Source/Editor/EditorFramework/Private/McpServer.cpp" />:
+
+- Every HTTP request must carry the session's bearer token. A request from a browser page (a foreign `Origin`) is refused even with the token.
+- Every path a tool takes must resolve inside the project, after following links. Network share paths are refused.
+- Each tool writes only its own file type: `screenshot` a `.png`, `save_level` a `.mmap`, `loom_write` a `.loom`.
+- `import_asset` from outside the project needs Full access.
+- `set_cvar` refuses security settings (such as `editor.mcp.*`, `net.encrypt`, `net.psk`) and anything the console itself may not set.
+- `run_tests` and the script `run` command start `mbt` without a shell, and the test filter accepts a test name only.
+
+## Protocol
+
+MCP 2025-06-18 over JSON-RPC 2.0: `initialize`, `ping`, `tools/list` and `tools/call`. The HTTP transport answers `POST /mcp` with `application/json`; batches are refused.
+
+## Adding your own tools
+
+An editor plugin can register tools in <Source symbol="FMcpToolRegistry" />. A tool has a name, a description, an input schema, an access level (Full when not set) and a handler that returns an <Source symbol="FMcpToolResult" />. Return `FMcpToolResult::Wait()` to be called again next frame. Unregister the tool when your module shuts down. See [Plugins and extensions](/docs/editor/plugins/).
+
+```cpp title="MyPluginMcpTools.cpp"
+#include <EditorFramework/McpServer.h>
+
+#include <string>
+#include <utility>
+
+void RegisterCountTool() {
+	Mowo::FMcpTool tool;
+	tool.Name = "myplugin_echo";
+	tool.Description = "Echo a message back to the agent.";
+	tool.InputSchema = Mowo::FMcpToolRegistry::Schema({ { "message", "string" } });
+	tool.Access = Mowo::EMcpToolAccess::Read;
+	tool.Handler = [](const nlohmann::json& args, uint32_t) {
+		return Mowo::FMcpToolResult::Text(args.value("message", std::string()));
+	};
+
+	Mowo::FMcpToolRegistry::Get().Register(std::move(tool));
+}
+
+void UnregisterCountTool() {
+	Mowo::FMcpToolRegistry::Get().Unregister("myplugin_echo");
+}
+```

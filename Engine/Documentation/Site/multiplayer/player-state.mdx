@@ -1,0 +1,89 @@
+---
+title: Player state
+description: The replicated per-player record (name, score, team, ping, ready) the host keeps for every player, and how to read and change it from C++ and Loom.
+order: 2
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/PlayerStateComponent.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/PlayerStateSystem.h
+  - Engine/Source/Runtime/Networking/Private/PlayerStateSystem.cpp
+  - Engine/Source/Runtime/Networking/Private/FNetworkModule.cpp
+  - Engine/Source/Runtime/Game/Public/Game/MPlayerStateStatics.h
+  - Engine/Source/Runtime/Game/Private/Game/MPlayerStateStatics.cpp
+verifiedAt: 08e26df3d
+---
+
+Every player in a session has a **player state**: a small replicated record that every machine sees. A scoreboard, a name tag, a lobby "who is ready" list and a team color all read it. The host keeps the authoritative records; clients receive them as ordinary replicated ghosts.
+
+## What a record holds
+
+A record is an entity carrying a `PlayerStateComponent` <Source symbol="PlayerStateComponent" />. Every field is replicated and read-only in the editor:
+
+| Field | Meaning |
+|---|---|
+| `playerId` | The session player id (the host is 1). |
+| `playerName` | Display name from the session roster. |
+| `score` | Game-defined score. |
+| `team` | Game-defined team. `0` means no team. |
+| `pawnNetworkId` | Network id of the player's pawn. |
+| `isHost` | True for the hosting player. |
+| `isReady` | The lobby ready flag. |
+| `isSpectator` | Game-defined spectator flag. |
+| `isInactive` | The player dropped and its slot is held for the rejoin grace window. |
+| `pingMs` | Round trip to the host in whole milliseconds, refreshed once a second. |
+
+## How records are kept
+
+`FPlayerStateSystem` <Source symbol="FPlayerStateSystem" /> runs on the host. Each frame it makes sure there is exactly one record per player in the session roster, copies name, host, ready, inactive and pawn id from the roster, and destroys the records of players who left. Each record entity is a networked object that is always relevant, owned by its player's peer, in the `High` priority tier, and does not replicate its transform.
+
+On a client the system does nothing: the records arrive through [replication](/docs/multiplayer/replication/). When a machine stops hosting, its authoritative records are destroyed.
+
+<Callout type="note">
+Score, team and spectator are yours to set. The engine only fills the fields it can read from the session (name, host, ready, inactive, pawn, ping).
+</Callout>
+
+## Teams and relevancy
+
+A player's team also becomes its peer's [relevancy group](/docs/multiplayer/replication/#relevancy-and-budgets): team `t` gets the group mask `1 << t`, and team 0 gets every group. Mark a networked object with `netRelevancyGroups` and only the matching team receives it.
+
+## Read and change records in C++
+
+The static helpers on `FPlayerStateSystem` work on any machine for reads and only on the host for writes. A write on a client, or for an unknown player, returns `false`.
+
+```cpp title="Scoreboard.cpp"
+#include "ECS/World.h"
+#include "Networking/Components/PlayerStateComponent.h"
+#include "Networking/Session/PlayerStateSystem.h"
+
+#include <cstdint>
+
+static int32_t TeamScore(Mowo::World& world, uint32_t team) {
+	int32_t total = 0;
+	Mowo::FPlayerStateSystem::ForEach(world, [&](Mowo::EntityID, const Mowo::PlayerStateComponent& ps) {
+		if (ps.team == team) {
+			total += ps.score;
+		}
+	});
+
+	return total;
+}
+
+static void OnKill(Mowo::World& world, uint32_t killerPlayerId) {
+	Mowo::FPlayerStateSystem::AddScore(world, killerPlayerId, 1);
+}
+```
+
+| Function | Use |
+|---|---|
+| `ForEach`, `Count` | Walk or count every record in the world. |
+| `Find(world, playerId)`, `FindLocal(world)` | One record, or the local player's. |
+| `AddScore`, `SetScore`, `SetTeam`, `SetSpectator` | Host-only writes. |
+
+## Read and change records from Loom
+
+`MPlayerStateStatics` <Source symbol="MPlayerStateStatics" /> exposes the same data to [Visual Scripting](/docs/visual-scripting/) graphs: `GetPlayerCount`, `GetPlayerIdAt`, `GetLocalPlayerId`, `GetPlayerName`, `GetScore`, `GetTeam`, `GetPing`, `IsReady`, `IsHostPlayer`, `IsInactive`, and the host-only `AddScore`, `SetScore`, `SetTeam` and `SetSpectator`.
+
+## Related
+
+- [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/) for the roster, ready flags and rejoin.
+- [Replication](/docs/multiplayer/replication/) for relevancy groups.
+- API: [`PlayerStateComponent`](/docs/api/networking/playerstatecomponent/), [`FPlayerStateSystem`](/docs/api/networking/fplayerstatesystem/), [`MPlayerStateStatics`](/docs/api/game/mplayerstatestatics/).

@@ -1,0 +1,1798 @@
+{
+	"name": "MowoEngine.ECS",
+	"displayName": "ECS",
+	"slug": "ecs",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/ECS/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/Archetype.h",
+			"include": "ECS/Archetype.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "BitsetHash",
+					"namespace": "Mowo",
+					"doc": "bitset<MAX_COMPONENTS> has no built-in std::hash, so the archetype map keys on this:\n64-bit chunks mixed boost-style. Runs on archetype lookup only, never in\nthe GetComponent hot path.",
+					"line": 19,
+					"members": [
+						{
+							"kind": "method",
+							"name": "operator",
+							"signature": "size_t operator()(const std::bitset<MAX_COMPONENTS>& bs) const noexcept",
+							"line": 20
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "IComponentColumn",
+					"namespace": "Mowo",
+					"doc": "Type-erased column: one per ComponentID an Archetype tracks. Components are\nstored contiguously and matched 1:1 with the archetype's entity list by row\nindex, so World can hold heterogeneous columns in one map without losing SoA.",
+					"line": 42,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IComponentColumn",
+							"signature": "virtual ~IComponentColumn() = default",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "virtual size_t Size() const = 0",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "EmplaceDefault",
+							"signature": "virtual size_t EmplaceDefault() = 0",
+							"doc": "Appends a default-constructed slot for migration to fill; returns its row.",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "PopBack",
+							"signature": "virtual void PopBack() = 0",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "MoveAssignFromOther",
+							"signature": "virtual void MoveAssignFromOther(size_t dstRow, IComponentColumn& src, size_t srcRow) = 0",
+							"doc": "Both columns must hold the same component type — the caller checks\nComponentID equality. Used for cross-archetype migration.",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "MoveAssignInternal",
+							"signature": "virtual void MoveAssignInternal(size_t dstRow, size_t srcRow) = 0",
+							"doc": "Swap-remove: move the last row into the removed row's slot, then PopBack.",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "Raw",
+							"signature": "virtual void* Raw(size_t row) = 0",
+							"doc": "Callers that know the type cast to T*; World hides the cast behind\nGetComponent<T>().",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "Raw",
+							"signature": "virtual const void* Raw(size_t row) const = 0",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "Data",
+							"signature": "virtual void* Data() = 0",
+							"doc": "Start of the contiguous buffer, for iteration without a per-row indirection.",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "Data",
+							"signature": "virtual const void* Data() const = 0",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "ElementSize",
+							"signature": "virtual size_t ElementSize() const = 0",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "ComponentId",
+							"signature": "virtual ComponentID ComponentId() const = 0",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "MakeEmptyOfSameType",
+							"signature": "virtual std::unique_ptr<IComponentColumn> MakeEmptyOfSameType() const = 0",
+							"doc": "A migration target needs columns for every component in the source's\nsignature but can't know the C++ types; only the source column does.",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "CloneDeep",
+							"signature": "virtual std::unique_ptr<IComponentColumn> CloneDeep() const = 0",
+							"line": 76
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "ComponentColumn",
+					"namespace": "Mowo",
+					"template": "template<typename T>",
+					"bases": "public IComponentColumn",
+					"doc": "One per (Archetype, ComponentID) pair.",
+					"line": 80,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "size_t Size() const override",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "EmplaceDefault",
+							"signature": "size_t EmplaceDefault() override",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "PopBack",
+							"signature": "void PopBack() override",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "MoveAssignFromOther",
+							"signature": "void MoveAssignFromOther(size_t dstRow, IComponentColumn& src, size_t srcRow) override",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "MoveAssignInternal",
+							"signature": "void MoveAssignInternal(size_t dstRow, size_t srcRow) override",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "Raw",
+							"signature": "void* Raw(size_t row) override",
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "Raw",
+							"signature": "const void* Raw(size_t row) const override",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "Data",
+							"signature": "void* Data() override",
+							"line": 114
+						},
+						{
+							"kind": "method",
+							"name": "Data",
+							"signature": "const void* Data() const override",
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "ElementSize",
+							"signature": "size_t ElementSize() const override",
+							"line": 121
+						},
+						{
+							"kind": "method",
+							"name": "ComponentId",
+							"signature": "ComponentID ComponentId() const override",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "MakeEmptyOfSameType",
+							"signature": "std::unique_ptr<IComponentColumn> MakeEmptyOfSameType() const override",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "CloneDeep",
+							"signature": "std::unique_ptr<IComponentColumn> CloneDeep() const override",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "At",
+							"signature": "T* At(size_t row)",
+							"line": 142
+						},
+						{
+							"kind": "method",
+							"name": "At",
+							"signature": "const T* At(size_t row) const",
+							"line": 145
+						},
+						{
+							"kind": "method",
+							"name": "TypedData",
+							"signature": "T* TypedData()",
+							"line": 148
+						},
+						{
+							"kind": "method",
+							"name": "TypedData",
+							"signature": "const T* TypedData() const",
+							"line": 151
+						},
+						{
+							"kind": "method",
+							"name": "EmplaceBack",
+							"signature": "template<typename... Args> size_t EmplaceBack(Args&&... args)",
+							"doc": "Returns the new row. Avoids the default-construct + move-assign pair\nwhen the caller already has the final value (the AddComponent hot path).",
+							"line": 157
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "Archetype",
+					"namespace": "Mowo",
+					"doc": "Entities sharing a component signature. Every entity with signature S lives\nin exactly one Archetype keyed by S, and its columns are the only storage for\nthose components. AddComponent / RemoveComponent migrate the entity's data to\nanother archetype, which invalidates any component pointer held across it.",
+					"line": 171,
+					"members": [
+						{
+							"kind": "field",
+							"name": "signature",
+							"signature": "std::bitset<MAX_COMPONENTS> signature",
+							"line": 172
+						},
+						{
+							"kind": "field",
+							"name": "columns",
+							"signature": "std::unordered_map<ComponentID, std::unique_ptr<IComponentColumn>> columns",
+							"line": 173
+						},
+						{
+							"kind": "field",
+							"name": "columnIndex",
+							"signature": "std::array<IComponentColumn*, MAX_COMPONENTS> columnIndex",
+							"doc": "Dense ComponentID-indexed view of `columns` so the read hot path resolves\na column with one array index instead of a hashed lookup. Kept in sync by\nPutColumn — columns are only ever added to an archetype, never removed.",
+							"line": 177
+						},
+						{
+							"kind": "field",
+							"name": "entities",
+							"signature": "std::vector<EntityID> entities",
+							"doc": "Positions here correspond 1:1 with row indices into every column.",
+							"line": 179
+						},
+						{
+							"kind": "field",
+							"name": "slots",
+							"signature": "std::vector<uint32_t> slots",
+							"doc": "The World slot of each row's entity, parallel to `entities`. A\nswap-remove fixes the moved entity's row through it with an index, and\na ForEach hands it to Entity as a lookup hint — where a reverse\nid → row hash map used to be.",
+							"line": 184
+						},
+						{
+							"kind": "method",
+							"name": "Column",
+							"signature": "IComponentColumn* Column(ComponentID cid) const",
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "ColumnData",
+							"signature": "template<typename T> T* ColumnData() const",
+							"doc": "Start of T's column, or null when this archetype does not carry T —\nhow a chunk pass reads an optional component without a per-entity lookup.",
+							"line": 192
+						},
+						{
+							"kind": "method",
+							"name": "PutColumn",
+							"signature": "void PutColumn(ComponentID cid, std::unique_ptr<IComponentColumn> col)",
+							"line": 198
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/Component.h",
+			"include": "ECS/Component.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "ComponentBase",
+					"namespace": "Mowo",
+					"doc": "Optional — components are plain structs and need not derive from this.",
+					"line": 9,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~ComponentBase",
+							"signature": "virtual ~ComponentBase() = default",
+							"line": 10
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/ComponentOps.h",
+			"include": "ECS/ComponentOps.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FComponentOps",
+					"namespace": "Mowo",
+					"line": 11,
+					"members": [
+						{
+							"kind": "method",
+							"name": "RegisterComponentColumnFactory",
+							"signature": "static bool RegisterComponentColumnFactory(ComponentID id, std::unique_ptr<IComponentColumn> (*factory)())",
+							"static": true,
+							"line": 13
+						},
+						{
+							"kind": "method",
+							"name": "MakeComponentColumn",
+							"signature": "static std::unique_ptr<IComponentColumn> MakeComponentColumn(ComponentID id)",
+							"static": true,
+							"line": 14
+						},
+						{
+							"kind": "method",
+							"name": "HasComponentColumnFactory",
+							"signature": "static bool HasComponentColumnFactory(ComponentID id)",
+							"static": true,
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "RegisterComponentOps",
+							"signature": "template<typename T> static bool RegisterComponentOps()",
+							"static": true,
+							"line": 17
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/Entity.h",
+			"include": "ECS/Entity.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "Entity",
+					"namespace": "Mowo",
+					"doc": "Lightweight entity handle.",
+					"line": 11,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Entity",
+							"signature": "Entity() : m_id(INVALID_ENTITY), m_world(nullptr)",
+							"line": 13
+						},
+						{
+							"kind": "method",
+							"name": "Entity",
+							"signature": "Entity(EntityID id, World* world) : m_id(id), m_world(world)",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "Entity",
+							"signature": "Entity(EntityID id, World* world, uint32_t slotHint) : m_id(id), m_world(world), m_slotHint(slotHint)",
+							"doc": "ForEach passes the row's World slot along, so a GetComponent on the\nentity it hands out skips the id → slot hash. The hint is checked\nagainst the id on every use and falls back to the hash when stale.",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "IsValid",
+							"signature": "bool IsValid() const",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "operatorbool",
+							"signature": "explicit operator bool() const",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "GetID",
+							"signature": "EntityID GetID() const",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "operator==",
+							"signature": "bool operator==(const Entity& other) const",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "operator!=",
+							"signature": "bool operator!=(const Entity& other) const",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "const",
+							"signature": "bool operator<(const Entity& other) const",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "AddComponent",
+							"signature": "template<typename T, typename... Args> T& AddComponent(Args&&... args)",
+							"doc": "Defined in World.h — Entity must not depend on World here.",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "RemoveComponent",
+							"signature": "template<typename T> void RemoveComponent()",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "GetComponent",
+							"signature": "template<typename T> T* GetComponent()",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "GetComponent",
+							"signature": "template<typename T> const T* GetComponent() const",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "HasComponent",
+							"signature": "template<typename T> bool HasComponent() const",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "Destroy",
+							"signature": "void Destroy()",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "GetWorld",
+							"signature": "World* GetWorld() const",
+							"line": 63
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/EntityCommandBuffer.h",
+			"include": "ECS/EntityCommandBuffer.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FEntityCommandBuffer",
+					"namespace": "Mowo",
+					"doc": "Structural changes recorded now and applied later, on the main thread, in\none go — the Mass command buffer. A worker or a ForEach that needs to add,\nremove or destroy records here instead of submitting one std::function per\nchange (a heap allocation and an indirect call each): consecutive records of\nthe same kind and component type share one typed batch.\n\nPlayback runs the batches in recording order, with World::AddComponent /\nRemoveComponent semantics per record — adding a component the entity\nalready carries leaves the existing value alone. A run of destroys goes\nthrough World::DestroyEntities, which takes the lock once and orders the run\nwith SortForStructuralBatch, so the surviving layout depends on which\nentities died, not on the order a worker happened to record them in.\n\nA buffer is not thread-safe: one per recording thread.",
+					"line": 27,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FEntityCommandBuffer",
+							"signature": "FEntityCommandBuffer() = default",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "FEntityCommandBuffer",
+							"signature": "FEntityCommandBuffer(FEntityCommandBuffer&&) = default",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FEntityCommandBuffer& operator=(FEntityCommandBuffer&&) = default",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "FEntityCommandBuffer",
+							"signature": "FEntityCommandBuffer(const FEntityCommandBuffer&) = delete",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FEntityCommandBuffer& operator=(const FEntityCommandBuffer&) = delete",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "AddComponent",
+							"signature": "template<typename T> void AddComponent(EntityID entity, T value = T())",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "RemoveComponent",
+							"signature": "template<typename T> void RemoveComponent(EntityID entity)",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "DestroyEntity",
+							"signature": "void DestroyEntity(EntityID entity)",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "Num",
+							"signature": "size_t Num() const",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "IsEmpty",
+							"signature": "bool IsEmpty() const",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "NumBatches",
+							"signature": "size_t NumBatches() const",
+							"doc": "Number of typed batches the records collapsed into.",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "Playback",
+							"signature": "void Playback(World& world)",
+							"doc": "Main thread, outside any ForEach — the same rule as the World calls it\nmakes. The buffer is empty afterwards and can be recorded into again.",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "SubmitTo",
+							"signature": "void SubmitTo(World& world)",
+							"doc": "Queues the whole buffer on the World's deferred queue, which plays it\nback at the end of World::Update. Safe from any thread, like\nWorld::SubmitDeferred; this buffer is left empty.",
+							"line": 82
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/EntitySlotMap.h",
+			"include": "ECS/EntitySlotMap.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FEntitySlotMap",
+					"namespace": "Mowo",
+					"doc": "EntityID → World slot: open addressing with linear probing over a\npower-of-two table kept at most half full. std::unordered_map paid a node\nallocation per entity and a pointer chase per lookup; an entity id is a\nrandom 64-bit UUID, so here a lookup is almost always one probe into a flat\narray. Erase shifts the rest of the probe run back instead of leaving a\ntombstone, so a world that churns entities for hours never ends up probing\nover dead buckets.\n\nConcurrent Find calls are fine; every write is a World structural operation\nand runs under the World's mutex.",
+					"line": 22,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "uint32_t Find(EntityID id) const",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Contains",
+							"signature": "bool Contains(EntityID id) const",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "FindOrAdd",
+							"signature": "uint32_t& FindOrAdd(EntityID id, uint32_t value, bool& inserted)",
+							"doc": "The value stored for `id`, inserting `value` first when it is absent.\nThe reference stays valid until the next FindOrAdd, Erase or Clear.",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Erase",
+							"signature": "bool Erase(EntityID id)",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "size_t Size() const",
+							"line": 144
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"doc": "Keeps the table's capacity: a world that is cleared is usually refilled\nwith as many entities.",
+							"line": 150
+						},
+						{
+							"kind": "method",
+							"name": "BucketCount",
+							"signature": "size_t BucketCount() const",
+							"line": 157
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/Query.h",
+			"include": "ECS/Query.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "Query",
+					"namespace": "Mowo",
+					"template": "template<typename... Ts>",
+					"line": 25,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Query",
+							"signature": "explicit Query(World* world) : m_world(world)",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "Each",
+							"signature": "template<typename Fn> void Each(Fn&& fn)",
+							"doc": "The lambda receives EntityID followed by one T& per template parameter,\nin declaration order.",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "Count",
+							"signature": "size_t Count()",
+							"doc": "Match count without dispatching the callback.",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "Invalidate",
+							"signature": "void Invalidate()",
+							"doc": "Forces a rebuild on the next Each(); normally the version-mismatch check\ndoes this. For tests and code that knows something skipped a version bump.",
+							"line": 73
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "MakeQuery",
+					"signature": "template<typename... Ts> inline auto World::MakeQuery()",
+					"doc": "The World.h declaration returns `auto` because it can't name Query yet, so\nthis definition must deduce too — spelling Query<Ts...> as the return type\nis a declaration mismatch under MSVC.",
+					"line": 141
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/SceneSystemRegistry.h",
+			"include": "ECS/SceneSystemRegistry.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FModularSceneSystem",
+					"namespace": "Mowo",
+					"doc": "One world system contributed by a plugin (or a below-Game module).\nMirrors Scene's internal SceneSystemEntry: which registration set the\nsystem belongs to (base = edit mode, simulation, runtime), where it\nticks outside World::Update (editorTick/simulationTick are explicit\nsequence indices, -1 = skip), and what gets torn down on\nRuntime/Simulation stop. The factory hooks are plain function pointers\nso the descriptor stays trivially copyable across the DLL boundary.\n\nABI WARNING: plugins construct this struct with THEIR compiled layout and\nthe registry copies it with the engine's. Growing the struct therefore\nrequires rebuilding every plugin binary — a stale plugin registers a\nshort struct and the engine reads garbage past its end (a call through a\njunk function pointer, first seen when OnSceneAttach was added). New\nfields go at the END, every field must be null-tolerated, and\nMOWO_MODULE_API_VERSION (Core/FModuleManager.h) must be bumped so the\nloader refuses a plugin compiled against the old layout instead of\ncopying past its end.",
+					"line": 39,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "Base",
+							"signature": "bool Base = false",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "Simulation",
+							"signature": "bool Simulation = false",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "Runtime",
+							"signature": "bool Runtime = false",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "EditorTick",
+							"signature": "int32_t EditorTick = -1",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "SimulationTick",
+							"signature": "int32_t SimulationTick = -1",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "RemoveOnRuntimeStop",
+							"signature": "bool RemoveOnRuntimeStop = false",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "RemoveOnSimulationStop",
+							"signature": "bool RemoveOnSimulationStop = false",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*Ensure)(World&) = nullptr",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*Update)(World&, float) = nullptr",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*Remove)(World&) = nullptr",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*OnSceneAttach)(World&, Scene&) = nullptr",
+							"doc": "Called after every ensure pass with the owning Scene — the modular\nanalogue of the SetSceneHooks/SetScene wiring blocks, so a plugin\nsystem can spawn/destroy through the Scene's entity metadata instead\nof raw World entities. Must be idempotent: Initialize, runtime start\nand simulation start each re-run it. Scene is opaque down here — the\ncallback is only ever invoked from Scene itself.",
+							"line": 58
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FSceneSystemRegistry",
+					"namespace": "Mowo",
+					"line": 61,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FSceneSystemRegistry& Get()",
+							"static": true,
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "FSceneSystemRegistry",
+							"signature": "FSceneSystemRegistry(const FSceneSystemRegistry&) = delete",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FSceneSystemRegistry& operator=(const FSceneSystemRegistry&) = delete",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "RegisterSceneSystem",
+							"signature": "void RegisterSceneSystem(const FModularSceneSystem& system)",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "GetSceneSystems",
+							"signature": "const std::vector<FModularSceneSystem>& GetSceneSystems() const",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "RemoveAllInModule",
+							"signature": "size_t RemoveAllInModule(void* moduleHandle, World* world = nullptr)",
+							"doc": "Drops every system whose hooks live inside the given module image —\nthe entries hold plain function pointers, so after the DLL frees they\nare calls into unmapped pages. This also unblocks reload: the by-name\ndedupe in RegisterSceneSystem would otherwise keep the STALE entry and\nrefuse the fresh module's registration. When `world` is non-null the\ncondemned systems' Remove hooks run against it first, so instances the\nplugin allocated don't outlive the code their destructors live in.\nDriven by the FModuleManager unload broadcast (with no world); the\nhot-reload orchestrator calls it directly with the live world.\nReturns the number of systems dropped.",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "SceneSystemRevision",
+							"signature": "uint32_t SceneSystemRevision() const",
+							"doc": "Bumped whenever the system set changes so Scene can rebuild its cached\ntick order instead of missing a module that loaded after the first tick.",
+							"line": 87
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/System.h",
+			"include": "ECS/System.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "SystemPhase",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "World::Update runs systems phase by phase in this order, preserving\nregistration order within a phase. Mirrors AActor::ETickGroup. The default\nis PrePhysics, so systems that don't opt into a later phase keep their\nrelative order.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "PrePhysics",
+							"signature": "PrePhysics = 0",
+							"doc": "input, transforms, gameplay that feeds physics",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "Physics",
+							"signature": "Physics",
+							"doc": "the physics step itself",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "PostPhysics",
+							"signature": "PostPhysics",
+							"doc": "logic that reads the settled pose",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "PostUpdate",
+							"signature": "PostUpdate",
+							"doc": "cameras, audio listeners, anything last",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "Count",
+							"signature": "Count",
+							"line": 25
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSystemResources",
+					"namespace": "Mowo",
+					"doc": "World state that lives outside the component arrays. A system that\ndeclares its component access declares these too, so two systems that both\nreach the physics world (or a shared navmesh query) never share a batch;\nbefore this, that rule lived only in a comment above BuoyancySystem.",
+					"line": 35,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Physics",
+							"signature": "static constexpr uint32_t Physics = 1u << 0",
+							"static": true,
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "Navigation",
+							"signature": "static constexpr uint32_t Navigation = 1u << 1",
+							"static": true,
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "Audio",
+							"signature": "static constexpr uint32_t Audio = 1u << 2",
+							"static": true,
+							"line": 38
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "System",
+					"namespace": "Mowo",
+					"line": 41,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MakeComponentMask",
+							"signature": "template<typename... Ts> static ComponentMask MakeComponentMask()",
+							"static": true,
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "~System",
+							"signature": "virtual ~System() = default",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "GetPhase",
+							"signature": "virtual SystemPhase GetPhase() const",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "DeclaresComponentAccess",
+							"signature": "virtual bool DeclaresComponentAccess() const",
+							"doc": "Declaring reads and writes lets ComputeParallelBatches run this system\nconcurrently with non-conflicting systems in the same phase. Declaring\nnothing means conflicting with everything, i.e. serial in registration\norder — so this is purely opt-in.",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "GetReadMask",
+							"signature": "virtual ComponentMask GetReadMask() const",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "GetWriteMask",
+							"signature": "virtual ComponentMask GetWriteMask() const",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "GetResourceReadMask",
+							"signature": "virtual uint32_t GetResourceReadMask() const",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "GetResourceWriteMask",
+							"signature": "virtual uint32_t GetResourceWriteMask() const",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "GetDebugName",
+							"signature": "virtual const char* GetDebugName() const",
+							"doc": "Names the profiler scope World::Update wraps around this system's\nUpdate, so all registered systems show up in a capture without each\none carrying its own scope. The default resolves to the concrete type\n(MSVC renders it \"class Mowo::FCoverSystem\"); the returned pointer\nmust outlive the frame, so overrides return string literals.",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "virtual void Initialize(World* world)",
+							"line": 85
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "virtual void Shutdown()",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "Update",
+							"signature": "virtual void Update(float deltaTime) = 0",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "SystemsConflict",
+							"signature": "static bool SystemsConflict(const System& a, const System& b)",
+							"static": true,
+							"doc": "Two systems conflict — must stay ordered and may not run together —\nwhen either fails to declare its access, or their declared accesses\nrace: write/write on a shared component, or one's write touching the\nother's read. Read/read alone never conflicts.",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "ComputeParallelBatches",
+							"signature": "static std::vector<std::vector<size_t>> ComputeParallelBatches( const std::vector<System*>& systems)",
+							"static": true,
+							"doc": "Group systems (already filtered to one phase, in registration order)\ninto ordered batches. Every system within a batch is pairwise\nconflict-free, so a batch can run concurrently; batches run in order.\nA system never lands in an earlier batch than an earlier-registered\nsystem it conflicts with, so dependent ordering is preserved. Levels:\nlevel(i) = 1 + max level among earlier systems that conflict with i;\ntwo systems at the same level are provably non-conflicting.",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "GetWorld",
+							"signature": "World* GetWorld() const",
+							"line": 155
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "alias",
+					"name": "ComponentMask",
+					"signature": "using ComponentMask = std::bitset<MAX_COMPONENTS>",
+					"doc": "Same bitset the world uses for entity signatures, indexed by FComponentRegistry::GetComponentID<T>().",
+					"line": 29
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/Types.h",
+			"include": "ECS/Types.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FEntityHandle",
+					"namespace": "Mowo",
+					"doc": "Runtime handle into a World's dense slot table: no hash on the way to the\ncomponents. The UUID stays the identity that is saved, sent and compared;\na handle is valid only in the World that issued it and only until that\nentity dies (the generation moves on), and is never serialized.",
+					"line": 21,
+					"members": [
+						{
+							"kind": "field",
+							"name": "index",
+							"signature": "uint32_t index = UINT32_MAX",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "generation",
+							"signature": "uint32_t generation = 0",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "IsSet",
+							"signature": "bool IsSet() const",
+							"line": 25
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FComponentRegistry",
+					"namespace": "Mowo",
+					"doc": "Registration lives in the ECS DLL so ids stay consistent across DLL boundaries.",
+					"line": 33,
+					"members": [
+						{
+							"kind": "method",
+							"name": "RegisterComponentType",
+							"signature": "static ComponentID RegisterComponentType(const std::type_info& type)",
+							"static": true,
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "GetRegisteredTypeCount",
+							"signature": "static uint32_t GetRegisteredTypeCount()",
+							"static": true,
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "GetComponentID",
+							"signature": "template<typename T> static ComponentID GetComponentID()",
+							"static": true,
+							"line": 38
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "alias",
+					"name": "EntityID",
+					"signature": "using EntityID = uint64_t",
+					"doc": "Random 64-bit UUID that survives save/load. Zero means invalid.",
+					"line": 13
+				},
+				{
+					"kind": "field",
+					"name": "INVALID_ENTITY",
+					"signature": "constexpr EntityID INVALID_ENTITY = 0",
+					"line": 15
+				},
+				{
+					"kind": "alias",
+					"name": "ComponentID",
+					"signature": "using ComponentID = uint32_t",
+					"line": 30
+				},
+				{
+					"kind": "field",
+					"name": "MAX_COMPONENTS",
+					"signature": "constexpr std::size_t MAX_COMPONENTS = 512",
+					"doc": "Distinct component *types*, not instances — sizes World's per-entity\nsignature bitset (64 bytes) and every archetype's dense column index. The\nengine registers ~120 reflected types plus unreflected ones before a game or\nplugin adds any, so 256 left too little room; registration past the cap is a\nfatal error at the type that crosses it, not a later out_of_range.",
+					"line": 50
+				},
+				{
+					"kind": "function",
+					"name": "static_assert",
+					"signature": "static_assert(MAX_COMPONENTS % 64 == 0, \"MAX_COMPONENTS must stay a whole number of 64-bit words for BitsetHash\")",
+					"line": 51
+				},
+				{
+					"kind": "function",
+					"name": "static_assert",
+					"signature": "static_assert(MAX_COMPONENTS < 0x1000, \"component ids must stay below the RPC wire-id range (FReplicatedComponentRegistry::kRpcWireFirst)\")",
+					"line": 52
+				},
+				{
+					"kind": "field",
+					"name": "MAX_ENTITIES",
+					"signature": "constexpr std::size_t MAX_ENTITIES = 100000",
+					"doc": "Advisory only: archetype columns grow on demand and never preallocate\na slot pool of this size.",
+					"line": 56
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/World.h",
+			"include": "ECS/World.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "WorldArchetypeSnapshot",
+					"namespace": "Mowo",
+					"line": 28,
+					"members": [
+						{
+							"kind": "field",
+							"name": "signature",
+							"signature": "std::bitset<MAX_COMPONENTS> signature",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "entities",
+							"signature": "std::vector<EntityID> entities",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "columns",
+							"signature": "std::vector<std::unique_ptr<IComponentColumn>> columns",
+							"line": 31
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "WorldSnapshot",
+					"namespace": "Mowo",
+					"line": 34,
+					"members": [
+						{
+							"kind": "field",
+							"name": "archetypes",
+							"signature": "std::vector<WorldArchetypeSnapshot> archetypes",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "componentlessEntities",
+							"signature": "std::vector<EntityID> componentlessEntities",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "IsEmpty",
+							"signature": "bool IsEmpty() const",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "ByteSize",
+							"signature": "size_t ByteSize() const",
+							"line": 47
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "World",
+					"namespace": "Mowo",
+					"line": 59,
+					"members": [
+						{
+							"kind": "method",
+							"name": "World",
+							"signature": "World()",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "~World",
+							"signature": "~World()",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "void Initialize()",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown()",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "Update",
+							"signature": "void Update(float deltaTime)",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "UpdateBefore",
+							"signature": "void UpdateBefore(float deltaTime, const System* split)",
+							"doc": "One Update split at a system: UpdateBefore runs every system ahead of\n`split` in update order and stops; UpdateFrom runs `split` and the rest\n(and flushes the deferred queue, as Update does). The scene splits a\nframe at PhysicsSystem when the step overlaps the DuringPhysics tick:\nthe systems ahead of it — input, movement intent, transforms — must\nrun before the step is kicked or they act a step late. A system the\nworld does not hold makes UpdateBefore run nothing and UpdateFrom run\neverything.",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "UpdateFrom",
+							"signature": "void UpdateFrom(float deltaTime, const System* split)",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "CreateEntity",
+							"signature": "Entity CreateEntity()",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "CreateEntityWithID",
+							"signature": "Entity CreateEntityWithID(EntityID id)",
+							"doc": "Deserialization path — reuses a stored UUID",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "DestroyEntity",
+							"signature": "void DestroyEntity(Entity entity)",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "DestroyEntity",
+							"signature": "void DestroyEntity(EntityID id)",
+							"line": 82
+						},
+						{
+							"kind": "method",
+							"name": "DestroyEntities",
+							"signature": "void DestroyEntities(std::vector<EntityID> ids)",
+							"doc": "Destroys a set in SortForStructuralBatch order under one lock, with one\nsignature-version bump: the resulting layout is a function of the set,\nwhatever order it was gathered in. Unknown and dead ids are skipped.",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "SortForStructuralBatch",
+							"signature": "void SortForStructuralBatch(std::vector<EntityID>& ids) const",
+							"doc": "Reorders `ids` into the order a batch of structural changes to them\n(destroy, add or remove a component) should run in: archetype creation\norder, highest row first, then component-less ones in creation order.\nLeaving an archetype swap-removes the row, so which survivor lands where\ndepends on the order the batch runs — and a set gathered from a hash\ncontainer arrives in hash order. Running it in this order makes the\nresulting layout, and so every later ForEach, a function of the set\nalone. Unknown or dead ids go last in their given order.",
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "IsEntityValid",
+							"signature": "bool IsEntityValid(EntityID id) const",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "AddComponent",
+							"signature": "template<typename T, typename... Args> T& AddComponent(EntityID entity, Args&&... args)",
+							"doc": "Header-only templates — no dllexport.",
+							"line": 101
+						},
+						{
+							"kind": "method",
+							"name": "RemoveComponent",
+							"signature": "template<typename T> void RemoveComponent(EntityID entity)",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "GetComponent",
+							"signature": "template<typename T> T* GetComponent(EntityID entity)",
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "GetComponent",
+							"signature": "template<typename T> const T* GetComponent(EntityID entity) const",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "GetComponents",
+							"signature": "template<typename... Ts> void GetComponents(EntityID entity, Ts*&... out)",
+							"doc": "Resolves any number of components with ONE entity→archetype lookup —\neach out pointer is set to the live instance or nullptr. The batched\nform of GetComponent for hot paths that need several components of the\nsame entity per frame.",
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "HasComponent",
+							"signature": "template<typename T> bool HasComponent(EntityID entity) const",
+							"line": 120
+						},
+						{
+							"kind": "method",
+							"name": "GetHandle",
+							"signature": "FEntityHandle GetHandle(EntityID entity) const",
+							"doc": "Hash-free access for hot paths. Every entity owns a slot in a dense\ntable; the id → slot hash is the only hashed step left, and these skip\nit.\n\nA handle ({slot, generation}) is for code that keeps an entity across\nframes inside one World: it stops resolving the moment the entity dies.\nIt is runtime-only — the UUID remains what is saved and replicated.",
+							"line": 130
+						},
+						{
+							"kind": "method",
+							"name": "IsHandleValid",
+							"signature": "bool IsHandleValid(FEntityHandle handle) const",
+							"line": 131
+						},
+						{
+							"kind": "method",
+							"name": "GetEntityID",
+							"signature": "EntityID GetEntityID(FEntityHandle handle) const",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "GetComponent",
+							"signature": "template<typename T> T* GetComponent(FEntityHandle handle)",
+							"line": 134
+						},
+						{
+							"kind": "method",
+							"name": "GetComponent",
+							"signature": "template<typename T> const T* GetComponent(FEntityHandle handle) const",
+							"line": 137
+						},
+						{
+							"kind": "method",
+							"name": "GetComponents",
+							"signature": "template<typename... Ts> void GetComponents(FEntityHandle handle, Ts*&... out)",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "HasComponent",
+							"signature": "template<typename T> bool HasComponent(FEntityHandle handle) const",
+							"line": 143
+						},
+						{
+							"kind": "method",
+							"name": "GetSlotHint",
+							"signature": "uint32_t GetSlotHint(EntityID entity) const",
+							"doc": "A slot hint is a cache for code that only has the UUID — a link field,\na map value: the hinted lookup checks the slot against the id and pays\nthe hash only when the hint is stale, refreshing it in place. Any\nuint32_t initialised to UINT32_MAX is a valid (cold) hint.",
+							"line": 150
+						},
+						{
+							"kind": "method",
+							"name": "GetComponentHinted",
+							"signature": "template<typename T> T* GetComponentHinted(EntityID entity, uint32_t& slotHint)",
+							"line": 154
+						},
+						{
+							"kind": "method",
+							"name": "GetComponentsHinted",
+							"signature": "template<typename... Ts> void GetComponentsHinted(EntityID entity, uint32_t& slotHint, Ts*&... out)",
+							"line": 157
+						},
+						{
+							"kind": "method",
+							"name": "HasComponentHinted",
+							"signature": "template<typename T> bool HasComponentHinted(EntityID entity, uint32_t slotHint) const",
+							"line": 160
+						},
+						{
+							"kind": "method",
+							"name": "GetComponentRaw",
+							"signature": "void* GetComponentRaw(EntityID entity, ComponentID compId)",
+							"doc": "For tools that walk the reflection registry without compile-time\nknowledge of the component type. Null if the entity has no archetype or\nthe archetype doesn't carry that component.",
+							"line": 166
+						},
+						{
+							"kind": "method",
+							"name": "GetComponentRaw",
+							"signature": "const void* GetComponentRaw(EntityID entity, ComponentID compId) const",
+							"line": 167
+						},
+						{
+							"kind": "method",
+							"name": "HasComponentByID",
+							"signature": "bool HasComponentByID(EntityID entity, ComponentID compId) const",
+							"line": 168
+						},
+						{
+							"kind": "method",
+							"name": "AddComponentByID",
+							"signature": "void* AddComponentByID(EntityID entity, ComponentID compId)",
+							"line": 170
+						},
+						{
+							"kind": "method",
+							"name": "RemoveComponentByID",
+							"signature": "bool RemoveComponentByID(EntityID entity, ComponentID compId)",
+							"line": 171
+						},
+						{
+							"kind": "method",
+							"name": "AddSystem",
+							"signature": "template<typename T, typename... Args> T* AddSystem(Args&&... args)",
+							"line": 173
+						},
+						{
+							"kind": "method",
+							"name": "GetSystem",
+							"signature": "template<typename T> T* GetSystem()",
+							"line": 176
+						},
+						{
+							"kind": "method",
+							"name": "RemoveSystem",
+							"signature": "template<typename T> void RemoveSystem()",
+							"line": 179
+						},
+						{
+							"kind": "method",
+							"name": "SetParallelSystems",
+							"signature": "void SetParallelSystems(bool enabled)",
+							"doc": "When enabled, Update runs each phase's conflict-free system batches on\nthe job system. Only systems that declare component access are eligible;\nan undeclared system conflicts with everything, so with none declared\nevery batch is one system and Update matches the serial phase loop.\nFan-out is also skipped when Update itself runs on a job worker.",
+							"line": 187
+						},
+						{
+							"kind": "method",
+							"name": "GetParallelSystems",
+							"signature": "bool GetParallelSystems() const",
+							"line": 190
+						},
+						{
+							"kind": "method",
+							"name": "GetEntityCount",
+							"signature": "size_t GetEntityCount() const",
+							"line": 194
+						},
+						{
+							"kind": "method",
+							"name": "ForEach",
+							"signature": "template<typename T, typename Func> void ForEach(Func&& func)",
+							"line": 198
+						},
+						{
+							"kind": "method",
+							"name": "ForEachWith",
+							"signature": "template<typename... Ts, typename Func> void ForEachWith(Func&& func)",
+							"doc": "Any number of required components; the lambda receives (Entity, Ts&...)\nin declaration order. Widening a two-component pass to also fetch the\nextra components it needs per entity beats per-entity GetComponent calls\ninside the lambda.",
+							"line": 205
+						},
+						{
+							"kind": "method",
+							"name": "ForEachChunk",
+							"signature": "template<typename... Ts, typename Func> void ForEachChunk(Func&& func)",
+							"doc": "Archetype-at-a-time form of ForEachWith: the lambda receives\n(Archetype&, Ts*...) — the start of each required column, rows\n[0, arch.entities.size()). A pass that also wants an OPTIONAL component\nreads it once per archetype through arch.ColumnData<T>() instead of a\nhashed GetComponent per entity. Same thread and mutation rules as ForEach.",
+							"line": 213
+						},
+						{
+							"kind": "method",
+							"name": "ParallelForEachWith",
+							"signature": "template<typename... Ts, typename Func> void ParallelForEachWith(uint32_t rowsPerJob, Func&& func)",
+							"doc": "ForEachWith across the JobSystem: the rows of every matching archetype\ncut into runs of `rowsPerJob` and spread over the pool, the calling\nthread running its share (JobSystem::WaitForCounter helps). The lambda\ngets (Entity, Ts&...) like ForEachWith and must write only the row it is\nhanded and read state nothing else writes meanwhile — the contract a\ndeclared system in a parallel batch already keeps. Runs serially when the\npool is down, on a worker (a system already inside a parallel batch), or\nwhen everything fits one job. Main-thread only, like ForEach.",
+							"line": 224
+						},
+						{
+							"kind": "method",
+							"name": "GetLastParallelRunCount",
+							"signature": "uint32_t GetLastParallelRunCount() const",
+							"doc": "Row runs the most recent ParallelForEachWith handed to the job pool; 0\nwhen it ran serially. Diagnostics and tests only.",
+							"line": 229
+						},
+						{
+							"kind": "method",
+							"name": "ForEachEntity",
+							"signature": "template<typename Func> void ForEachEntity(Func&& func) const",
+							"doc": "Every living entity, unfiltered. Main-thread only. Order is defined:\narchetype creation order then row order, then component-less entities\nin creation order. It walks a snapshot, so the callback may add or\nremove components; an entity it destroys is skipped, one it creates is\nnot visited.",
+							"line": 238
+						},
+						{
+							"kind": "method",
+							"name": "MakeQuery",
+							"signature": "template<typename... Ts> auto MakeQuery()",
+							"doc": "Declared here so callers need no extra include; the body lives in Query.h.",
+							"line": 242
+						},
+						{
+							"kind": "method",
+							"name": "IsIterating",
+							"signature": "bool IsIterating() const",
+							"doc": "True while a ForEach / ForEachWith pass is running on any thread. The\nstructural mutators MOWO_CHECK this is false: mutating from inside a\nForEach lambda swap-removes the very row the loop cached a raw column\npointer into, so the guard aborts loudly instead of corrupting it.",
+							"line": 249
+						},
+						{
+							"kind": "method",
+							"name": "GetSignature",
+							"signature": "std::bitset<MAX_COMPONENTS> GetSignature(EntityID id) const",
+							"doc": "Empty bitset if the entity has no components yet (the row only exists\nafter the first AddComponent), which matches a no-requirements query.",
+							"line": 255
+						},
+						{
+							"kind": "method",
+							"name": "GetSignatureVersion",
+							"signature": "uint64_t GetSignatureVersion() const",
+							"doc": "Bumped on every entity creation, destruction, AddComponent, RemoveComponent.",
+							"line": 265
+						},
+						{
+							"kind": "method",
+							"name": "GetArchetypeVersion",
+							"signature": "uint64_t GetArchetypeVersion() const",
+							"doc": "Bumped ONLY when a new archetype is created; archetypes are never pruned\nat runtime. A Query's cached (archetype, columns) buckets go stale only\nwhen a new archetype appears, not when entities move between existing\nones (Each() reads live entity counts), so queries key their cache on\nthis instead of the per-mutation signature version.",
+							"line": 274
+						},
+						{
+							"kind": "method",
+							"name": "ForEachMatchingArchetype",
+							"signature": "template<typename Func> void ForEachMatchingArchetype(const std::bitset<MAX_COMPONENTS>& required, Func&& func) const",
+							"doc": "Every archetype whose signature is a superset of `required`, so a query\nrebuild walks matching archetypes instead of every entity's signature.",
+							"line": 280
+						},
+						{
+							"kind": "method",
+							"name": "SubmitDeferred",
+							"signature": "void SubmitDeferred(std::function<void(World*)> cmd)",
+							"doc": "Threads that can't take the World mutex — because a ForEach is up the\nstack, or to batch many small mutations — submit a callable instead.\nSubmit is thread-safe; the lambda runs on the main thread and may call\nany World API. FlushDeferred runs at the end of World::Update, after\nevery system and outside any ForEach. Calling it manually elsewhere is\nfine, but never re-enter it from inside a ForEach lambda.",
+							"line": 289
+						},
+						{
+							"kind": "method",
+							"name": "FlushDeferred",
+							"signature": "void FlushDeferred()",
+							"line": 290
+						},
+						{
+							"kind": "method",
+							"name": "CaptureSnapshot",
+							"signature": "WorldSnapshot CaptureSnapshot() const",
+							"line": 292
+						},
+						{
+							"kind": "method",
+							"name": "RestoreSnapshot",
+							"signature": "void RestoreSnapshot(const WorldSnapshot& snapshot)",
+							"line": 293
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "AddComponent",
+					"signature": "template<typename T, typename... Args> T& World::AddComponent(EntityID entity, Args&&... args)",
+					"line": 468
+				},
+				{
+					"kind": "function",
+					"name": "RemoveComponent",
+					"signature": "template<typename T> void World::RemoveComponent(EntityID entity)",
+					"line": 559
+				},
+				{
+					"kind": "function",
+					"name": "GetComponent",
+					"signature": "template<typename T> T* World::GetComponent(EntityID entity)",
+					"line": 615
+				},
+				{
+					"kind": "function",
+					"name": "GetComponent",
+					"signature": "template<typename T> const T* World::GetComponent(EntityID entity) const",
+					"line": 620
+				},
+				{
+					"kind": "function",
+					"name": "GetComponent",
+					"signature": "template<typename T> T* World::GetComponent(FEntityHandle handle)",
+					"line": 625
+				},
+				{
+					"kind": "function",
+					"name": "GetComponent",
+					"signature": "template<typename T> const T* World::GetComponent(FEntityHandle handle) const",
+					"line": 630
+				},
+				{
+					"kind": "function",
+					"name": "GetComponentHinted",
+					"signature": "template<typename T> T* World::GetComponentHinted(EntityID entity, uint32_t& slotHint)",
+					"line": 635
+				},
+				{
+					"kind": "function",
+					"name": "GetHandle",
+					"signature": "inline FEntityHandle World::GetHandle(EntityID entity) const",
+					"line": 642
+				},
+				{
+					"kind": "function",
+					"name": "IsHandleValid",
+					"signature": "inline bool World::IsHandleValid(FEntityHandle handle) const",
+					"line": 655
+				},
+				{
+					"kind": "function",
+					"name": "GetEntityID",
+					"signature": "inline EntityID World::GetEntityID(FEntityHandle handle) const",
+					"line": 659
+				},
+				{
+					"kind": "function",
+					"name": "GetComponents",
+					"signature": "template<typename... Ts> void World::GetComponents(EntityID entity, Ts*&... out)",
+					"line": 665
+				},
+				{
+					"kind": "function",
+					"name": "GetComponents",
+					"signature": "template<typename... Ts> void World::GetComponents(FEntityHandle handle, Ts*&... out)",
+					"line": 671
+				},
+				{
+					"kind": "function",
+					"name": "GetComponentsHinted",
+					"signature": "template<typename... Ts> void World::GetComponentsHinted(EntityID entity, uint32_t& slotHint, Ts*&... out)",
+					"line": 677
+				},
+				{
+					"kind": "function",
+					"name": "HasComponent",
+					"signature": "template<typename T> bool World::HasComponent(EntityID entity) const",
+					"line": 683
+				},
+				{
+					"kind": "function",
+					"name": "HasComponent",
+					"signature": "template<typename T> bool World::HasComponent(FEntityHandle handle) const",
+					"line": 690
+				},
+				{
+					"kind": "function",
+					"name": "HasComponentHinted",
+					"signature": "template<typename T> bool World::HasComponentHinted(EntityID entity, uint32_t slotHint) const",
+					"line": 697
+				},
+				{
+					"kind": "function",
+					"name": "AddSystem",
+					"signature": "template<typename T, typename... Args> T* World::AddSystem(Args&&... args)",
+					"line": 704
+				},
+				{
+					"kind": "function",
+					"name": "GetSystem",
+					"signature": "template<typename T> T* World::GetSystem()",
+					"line": 716
+				},
+				{
+					"kind": "function",
+					"name": "RemoveSystem",
+					"signature": "template<typename T> void World::RemoveSystem()",
+					"line": 725
+				},
+				{
+					"kind": "function",
+					"name": "AddComponent",
+					"signature": "template<typename T, typename... Args> T& Entity::AddComponent(Args&&... args)",
+					"line": 748
+				},
+				{
+					"kind": "function",
+					"name": "RemoveComponent",
+					"signature": "template<typename T> void Entity::RemoveComponent()",
+					"line": 753
+				},
+				{
+					"kind": "function",
+					"name": "GetComponent",
+					"signature": "template<typename T> T* Entity::GetComponent()",
+					"line": 758
+				},
+				{
+					"kind": "function",
+					"name": "GetComponent",
+					"signature": "template<typename T> const T* Entity::GetComponent() const",
+					"line": 763
+				},
+				{
+					"kind": "function",
+					"name": "HasComponent",
+					"signature": "template<typename T> bool Entity::HasComponent() const",
+					"line": 770
+				},
+				{
+					"kind": "function",
+					"name": "Destroy",
+					"signature": "inline void Entity::Destroy()",
+					"line": 775
+				},
+				{
+					"kind": "function",
+					"name": "GetMatchList",
+					"signature": "inline const std::vector<Archetype*>& World::GetMatchList(const ComponentID* ids, size_t count)",
+					"doc": "The cache clear/build races only with itself (two iterations starting\nconcurrently after a structural change), never with a live consumer: the\nversion can only move via structural ops, which MOWO_CHECK !IsIterating(),\nso an in-flight pass pins the version and no concurrent GetMatchList can\nclear the entry it iterates. Mapped vectors are reference-stable across\ninserts, so the returned reference survives other lists being cached.",
+					"line": 789
+				},
+				{
+					"kind": "function",
+					"name": "ForEach",
+					"signature": "template<typename T, typename Func> void World::ForEach(Func&& func)",
+					"line": 827
+				},
+				{
+					"kind": "function",
+					"name": "ForEachWith",
+					"signature": "template<typename... Ts, typename Func> void World::ForEachWith(Func&& func)",
+					"line": 854
+				},
+				{
+					"kind": "function",
+					"name": "ForEachChunk",
+					"signature": "template<typename... Ts, typename Func> void World::ForEachChunk(Func&& func)",
+					"line": 895
+				},
+				{
+					"kind": "function",
+					"name": "ParallelForEachWith",
+					"signature": "template<typename... Ts, typename Func> void World::ParallelForEachWith(uint32_t rowsPerJob, Func&& func)",
+					"line": 915
+				},
+				{
+					"kind": "function",
+					"name": "ForEachEntity",
+					"signature": "template<typename Func> void World::ForEachEntity(Func&& func) const",
+					"line": 977
+				},
+				{
+					"kind": "function",
+					"name": "ForEachMatchingArchetype",
+					"signature": "template<typename Func> void World::ForEachMatchingArchetype(const std::bitset<MAX_COMPONENTS>& required, Func&& func) const",
+					"line": 996
+				}
+			]
+		}
+	]
+}

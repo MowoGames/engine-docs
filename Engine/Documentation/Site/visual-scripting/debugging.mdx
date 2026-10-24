@@ -1,0 +1,221 @@
+---
+title: Debugging graphs
+sidebarTitle: Debugging
+description: Set breakpoints, conditions and logpoints, step and edit live values in the editor, or attach VS Code through the built-in Debug Adapter Protocol server.
+order: 9
+sources:
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomDebugger.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomVM.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomExpression.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomDapServer.h
+  - Engine/Source/Runtime/Loom/Private/LoomDapServer.cpp
+  - Engine/Source/Runtime/Loom/Private/LoomDapSession.cpp
+  - Engine/Source/Runtime/Loom/Private/LoomTextView.cpp
+  - Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp
+  - Engine/Source/Runtime/Arc/Private/Widgets/AGraphEditor.cpp
+  - Engine/Source/Programs/IdeTooling/VSCode/package.json
+  - Engine/Source/Programs/IdeTooling/VSCode/README.md
+verifiedAt: 08e26df3d
+---
+
+You debug a graph the way you debug code: breakpoints, a call stack, stepping and live values. There are two front ends, the Visual Scripting editor and any IDE that speaks the Debug Adapter Protocol (DAP). Both drive the same debugger in the engine.
+
+## How the debugger works
+
+<Flow steps={["VM reaches an exec node", "Breakpoint or step?", "Capture frame and pause", "Editor or DAP client shows it", "Resume request queued", "Game thread resumes the run"]} highlight={2} caption="A cooperative pause" />
+
+The VM calls the debugger before it runs every exec node <Source symbol="LoomVM" />. If the node has a breakpoint whose condition holds, or a step is in progress, the debugger captures the exec stack, node outputs and locals as frames and pauses.
+
+The pause is cooperative. The VM returns normally with its state saved, so the game thread is never blocked and the renderer keeps drawing. Resume requests are queued, and the owner of the paused frame applies them at a safe point.
+
+The debugger is armed only when something needs it. The editor arms it while a `.loom` document is open; a DAP client arms it by attaching. With neither, breakpoint flags cost nothing.
+
+| Command | Effect |
+| --- | --- |
+| Continue (Resume) | Run to the next breakpoint. |
+| Step Over | Stop at the next node at the same frame depth or shallower. |
+| Step Into | Stop at the next node at any depth, entering function calls. |
+| Step Out | Run until control leaves the current frame. |
+| Pause | Stop at the next exec node any graph reaches. |
+| Stop | Abandon the paused run. |
+
+These map to `LoomDebugger::RequestContinue`, `RequestStepOver`, `RequestStepInto`, `RequestStepOut`, `RequestBreakNext` and `CancelPaused` <Source symbol="LoomDebugger" />.
+
+## Breakpoints, conditions and logpoints
+
+Select a node and press <Kbd>F9</Kbd>, or right-click it, to toggle a breakpoint. Only nodes with an exec input take one. The context menu also offers <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp" />:
+
+- **Add Conditional Breakpoint...** / **Edit Condition...**: the breakpoint stops only when an expression is true, for example `Health < 50 && bIsAlerted`. Names resolve to the paused function's parameters and locals first, then the instance's variables. A name that is not a variable is an error, not a silent zero, and a condition that cannot be evaluated stops anyway and logs why.
+- **Add Logpoint...** / **Make Logpoint...** / **Edit Log Message...**: the node prints a message instead of stopping. `{expr}` placeholders are evaluated in the frame, as in `hp={Health} ratio={Health / 100}`. The line goes to the log and to every attached IDE's console. A logpoint may also have a condition. **Make Breakpoint (Stop Here)** turns it back into a stop.
+
+The expression grammar is the one **Math Expression...** uses <Source symbol="LoomExpression" />. Breakpoints, conditions and log messages are saved in the `.loom` file with the node (`bp`, `bpCond`, `bpLog`), so they survive a reload. On the canvas the condition or message rides on the node as a badge.
+
+## Debug in the editor
+
+<Steps>
+<Step title="Set a breakpoint">
+
+Press <Kbd>F9</Kbd> on a node, or add a condition or logpoint from its context menu.
+
+</Step>
+<Step title="Push the class live">
+
+Click **Compile**. Only a compiled class reaches the running VM.
+
+</Step>
+<Step title="Run the game">
+
+Start Play-In-Editor, or click **Simulate** in the toolbar. Keep the class open.
+
+</Step>
+<Step title="Inspect the pause">
+
+When the node is reached, the editor marks it and paints live values on output pins. The **Debugger** tab shows the call stack and a watch strip of the instance's variables and the current frame's locals.
+
+</Step>
+<Step title="Change a value">
+
+Click a variable chip in the watch strip to set it. Numbers and bools go through the expression evaluator, so `Health - 10` works; vectors take `x, y, z`; strings take the text as typed; an object variable can only be cleared. Pin values are computed, so they are read-only <Source symbol="LoomDebugger::SetVariable" />. Resuming runs on with the edited value, so you can steer a run past a branch without recompiling.
+
+</Step>
+<Step title="Step or resume">
+
+Use **Resume**, **Step into**, **Step over** or **Stop** in the toolbar.
+
+</Step>
+</Steps>
+
+While the game runs, nodes that executed in the last 0.6 seconds pulse on the canvas, so you can watch execution move through the graph.
+
+<Screenshot id="loom-debugging-paused" alt="Visual Scripting editor during Play-In-Editor, paused on a breakpoint: the Branch node in the OnInteract graph has a red breakpoint dot and a highlighted outline, output pins show live values such as 'true' and '1.5', the Debugger tab lists the call stack and watch chips for IsOpen, OpenSpeed and TriggerRadius, and the toolbar shows Resume, Step into, Step over and Stop" caption="Paused at a breakpoint in the editor." />
+
+<Screenshot id="loom-debugging-logpoint" alt="Visual Scripting editor canvas with a Set Variable node carrying a logpoint badge reading 'log: hp={Health}', and the Output Log below showing the printed line 'hp=75' during Play-In-Editor" caption="A logpoint prints without stopping." />
+
+## The DAP server
+
+The same debugger is available to any IDE that speaks DAP. Start the editor or a game with `--loom-dap`:
+
+```powershell
+.\MowoEditor.exe --project D:\Games\MyGame\MyGame.mproject --loom-dap
+.\MyGame.exe --loom-dap=4711
+```
+
+- Bare `--loom-dap` uses port **4711** <Source symbol="LoomDapServer::kDefaultPort" />.
+- The server binds the loopback address only, `127.0.0.1`, because a debug adapter reachable from the network would be a remote-code-execution surface <Source path="Engine/Source/Runtime/Loom/Private/LoomDapServer.cpp" />.
+- It accepts one client at a time.
+- Without the switch nothing starts: no thread, no socket.
+
+When it starts, the log shows:
+
+```text
+[LoomDAP] Loom debug adapter listening on 127.0.0.1:4711 — attach an IDE with the "mowo-loom" debug type
+```
+
+<Callout type="danger">
+
+The DAP server is compiled out of Shipping builds. The `--loom-dap` check sits inside `#if !MOWO_SHIPPING`, so a retail game cannot be made to open a debug port, however it is launched <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" />.
+
+</Callout>
+
+Socket reads run on a worker thread that only parses frames and queues them. Every protocol decision runs on the game thread, because the debugger's pause state belongs to the thread that runs graphs.
+
+## Attach VS Code
+
+The extension lives in `Engine/Source/Programs/IdeTooling/VSCode`. VS Code connects straight to the engine's socket, with no adapter process in between.
+
+<Steps>
+<Step title="Build the extension">
+
+In `Engine/Source/Programs/IdeTooling/VSCode`, run `npm install`, then `npm run compile`.
+
+</Step>
+<Step title="Load it">
+
+Open that folder in VS Code and press <Kbd>F5</Kbd> to start an Extension Development Host. Or copy the folder to `%USERPROFILE%\.vscode\extensions\mowo-loom` (`~/.vscode/extensions/mowo-loom` on macOS and Linux) and restart VS Code.
+
+</Step>
+<Step title="Start the engine">
+
+Launch the editor or game with `--loom-dap`.
+
+</Step>
+<Step title="Attach">
+
+Add the configuration below to `.vscode/launch.json` and start it.
+
+</Step>
+</Steps>
+
+```json title=".vscode/launch.json"
+{
+  "type": "mowo-loom",
+  "request": "attach",
+  "name": "Attach to Mowo (Loom)",
+  "host": "127.0.0.1",
+  "port": 4711
+}
+```
+
+The attach configuration also accepts `stopOnEntry`, to break on the first node after attaching <Source path="Engine/Source/Programs/IdeTooling/VSCode/package.json" />. While attached, **Run and Debug > Loom Graphs** lists every registered class. Click one to open its listing and set breakpoints, conditions and logpoints in the gutter.
+
+<Screenshot id="loom-debugging-vscode" alt="VS Code attached to Mowo Editor through the mowo-loom debug type: the Loom Graphs view in the Run and Debug sidebar lists BP_Door and BP_SlidingDoor, the BP_Door listing is open read-only with a red breakpoint on the line '  1: Branch -> 4 else 6', the Call Stack shows 'BP_Door.event:OnInteract', and the Variables pane shows Locals, Instance variables and Pin values scopes" caption="VS Code paused on a breakpoint." />
+
+For Visual Studio or Rider, run the process under the native debugger with `--loom-dap` in its arguments, and attach VS Code alongside for graph-level debugging.
+
+## From graph to lines
+
+A `.loom` asset is a graph, but DAP thinks in lines. The adapter bridges the two with a generated text listing of each class, built from the same in-memory class the VM runs, so a line and the node it names cannot drift apart <Source symbol="LoomTextView" />. For the sample `BP_Door` class it starts like this:
+
+```text
+class BP_Door : AActor
+
+event OnInteract
+  0: Event OnInteract -> 1
+  1: Branch -> 4 else 6
+  2: CallGraphFunction IsPlayerInRange
+  3: GetVar TriggerRadius
+  4: CallGraphFunction OpenDoor
+  5: GetVar OpenSpeed
+  6: CallGraphFunction CloseDoor
+  7: Comment Door open / close logic
+end
+
+function OpenDoor(Speed: Float)
+  0: Event OpenDoor -> 2
+  1: Return
+  2: SetVar IsOpen -> 1
+end
+```
+
+- The first line names the class and its parent. The second is blank.
+- Each graph is a section: a header (`event`, `function` with its signature, or `macro`), one line per node in index order, `end`, and a blank line.
+- Events come first, then functions, then macros.
+- `-> N` is the next exec node, `else N` the second exec output, `[i]-> N` a list output.
+- A breakpoint on a header, blank or `end` line moves forward to the next node line, and the adapter reports the adjusted line.
+
+The listing is served through the DAP `source` request with MIME type `text/x-loom`. Source objects carry no `path` on purpose: the line numbers of the raw `.loom` file describe the MDF document, not the graph <Source path="Engine/Source/Runtime/Loom/Private/LoomDapSession.cpp" />.
+
+## Supported DAP requests
+
+| Request | Behavior |
+| --- | --- |
+| `initialize` | Reports support for `configurationDone`, evaluate-for-hovers, `terminate`, loaded sources, conditional breakpoints, logpoints and `setVariable`. |
+| `attach`, `launch` | Both attach to the running process and arm the debugger. |
+| `setBreakpoints` | Replaces the class's breakpoints, with each entry's `condition` and `logMessage`. A condition that does not parse is refused as unverified. |
+| `setVariable` | Sets a value in the `Locals` or `Instance variables` scope. `Pin values` are read-only. |
+| `threads` | One thread: the game thread that runs graphs. |
+| `stackTrace` | One frame per debug frame, on the paused node's line. |
+| `scopes`, `variables` | `Locals`, `Instance variables`, `Pin values`. |
+| `continue`, `next`, `stepIn`, `stepOut`, `pause` | The debugger commands above. |
+| `evaluate` | A name reads a local, then an instance variable. `#4` reads node 4's first output; `#4.1` reads its output pin 1. Anything else is evaluated as an expression, such as `Health * 2 + 1`. |
+| `source`, `loadedSources`, `loomSources` | Serve and list class listings. |
+| `disconnect`, `terminate` | Release the debugger and resume anything paused. |
+
+Stop reasons are `breakpoint`, `step` and `pause`. Logpoint lines arrive as `output` events. The adapter does not support restart, step-back, hit counts, or data, function and exception breakpoints. Unknown requests get a failed response.
+
+## Next
+
+- [Calling C++](/docs/visual-scripting/calling-cpp/): the calls you will watch fire.
+- [Flow control](/docs/visual-scripting/flow-control/): the execution model the debugger pauses.

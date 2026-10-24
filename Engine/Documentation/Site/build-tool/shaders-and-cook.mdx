@@ -1,0 +1,113 @@
+---
+title: Shaders and cook
+description: How mbt compiles HLSL for every graphics API, how modules declare shader roots and archives, and how workers and the shader cache speed it up.
+order: 6
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/ShadersCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CookCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DdcCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderCompiler.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderTarget.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderTargetRules.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderSourceMap.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderCompileWorkerPool.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderDerivedDataCache.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/ModuleRules.cs
+  - Engine/Source/Runtime/EngineLoop/EngineLoop.Build.cs
+  - Engine/Source/Developer/RendererTests/RendererTests.Build.cs
+verifiedAt: 08e26df3d
+---
+
+Mowo's shaders are HLSL. `mbt` compiles them into each graphics API's format and packs the results into `.meaf` archives beside the binaries. This page covers how shaders are declared, compiled and cached, and points to the content cook, which has its own section.
+
+## Formats per platform
+
+| Format | Compiler | Graphics API | Built on |
+|---|---|---|---|
+| SPIR-V | DXC | Vulkan | every platform |
+| DXIL | DXC | D3D12 | Windows |
+| DXBC | FXC | D3D11 | Windows |
+| MSL | spirv-cross from SPIR-V | Metal | macOS, iOS |
+
+Without `--targets`, a compile produces every format the target platform's graphics APIs load <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderTarget.cs" />. DXC and spirv-cross are vendored in `Engine/Binaries/ThirdParty/`, so no Vulkan SDK is needed; without DXC, shader commands exit with code 3 <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderCompiler.cs" />. A shader that uses a feature one format cannot express is left out of that format by rule, not by failure <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderTargetRules.cs" />.
+
+## File names decide the stages
+
+| File | Stages and entry points |
+|---|---|
+| `*.hlsl` | Vertex `VSMain` and pixel `PSMain` |
+| `*.comp.hlsl` | Compute `CSMain` |
+| `*.mesh.hlsl` | Mesh `MSMain` and pixel `PSMain` |
+| `*.rt.hlsl` | One ray-tracing library; its entry points are named by their `[shader("…")]` attributes |
+
+`#include` is followed recursively, and a shader recompiles when anything it includes changes.
+
+## Declaring shaders in a module
+
+A module declares what it compiles in its `.Build.cs` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/ModuleRules.cs" />:
+
+```csharp title="Engine/Source/Runtime/EngineLoop/EngineLoop.Build.cs (excerpt)"
+var engineShaders = Path.Combine(EngineDirectory, "Shaders");
+AddShaderSourceDirectoryMapping("/Engine", engineShaders);
+ShaderDirectories.Add(Path.Combine(engineShaders, "Private"));
+ShaderDirectories.Add(Path.Combine(engineShaders, "StandaloneRenderer"));
+ShaderArchive = "Shaders.meaf";
+```
+
+| Rules member | Meaning |
+|---|---|
+| `AddShaderSourceDirectoryMapping(root, folder)` | Names a folder by a virtual root, so HLSL anywhere includes its files as `#include "<root>/…"` |
+| `ShaderDirectories` | Folders whose `.hlsl` files compile into the module's archive |
+| `ShaderArchive` | The archive they pack into, beside the binaries |
+
+Virtual roots are `/Engine` for `Engine/Shaders`, `/Plugin/<Name>` for a plugin's `Shaders/` folder, `/Project` for a project, and `/Test` for the renderer tests <Source path="Engine/Source/Developer/RendererTests/RendererTests.Build.cs" />. A root starts with `/`, has no trailing `/`, may not overlap another, and each folder has one root; the build checks this when it collects every module's mappings <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderSourceMap.cs" />.
+
+Always include across folders by virtual path, never with `../`:
+
+```hlsl title="MyPass.hlsl"
+#include "/Engine/Public/MowoBindings.hlsli"
+```
+
+`mbt` stages the shader tree with includes rewritten to relative paths before it runs the compilers, so compiler errors still name your real files. Inside an archive, a shader under `/Engine/Private/` keeps its path below that folder as its key (`GBuffer/GBufferFill`); shaders of other roots are prefixed with the root's name (`Plugin/<Name>/…`, `Test/…`).
+
+## When shaders compile
+
+`mbt build` compiles every module's declared shaders beside the C++ build, from its start, and packs the archives once everything is linked <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs" />. `mbt shaders` runs the same pipeline on its own:
+
+```powershell
+./mbt.cmd shaders
+./mbt.cmd shaders --watch
+./mbt.cmd shaders --project D:/Projects/MyGame/MyGame.mproject
+./mbt.cmd shaders --targets spirv,dxil --force
+```
+
+| Option | Use |
+|---|---|
+| `-w, --watch` | Recompile on save, and mirror the new SPIR-V into the hot-reload folder beside the binaries, which a running engine polls |
+| `--project <p>.mproject` | Also compile the project's material-graph shaders (the `.material.hlsl` files the material editor writes under `Content/`) |
+| `--targets spirv,dxil,dxbc,msl` | Only these formats |
+| `-p, --platform` | Another platform's format set |
+| `--metallib` | On a Mac, compile the MSL into `.metallib` with `xcrun` before packing |
+| `--validate` | Compile without writing output |
+| `-f, --force` | Recompile everything |
+| `--report-matrix [--check]` | Compile every variant and stage against every format and write a coverage report; `--check` fails when a job stopped compiling |
+
+The [mbt command reference](/docs/reference/mbt-cli/) lists every option.
+
+## Workers and the shader cache
+
+`--workers <n|auto>` (or `MOWO_SHADER_WORKERS`) compiles SPIR-V and DXIL stages on that many worker processes instead of inside `mbt` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderCompileWorkerPool.cs" />.
+
+`--ddc <folder>` (or `MOWO_SHADER_DDC`; `1` uses `build/ShaderDDC`) reuses compiled blobs from a content-addressed shader cache. A blob's key is a hash of everything that decides its bytes: the source and its whole include closure by content, the defines, profile, entry point, format and the compilers' own fingerprint. Paths are not part of the key, so two checkouts, branches or machines can share one cache, and a compiler update is a miss rather than a stale hit <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderDerivedDataCache.cs" />.
+
+Point the folder at a network share to share it with your team, or put a cache server behind it: `MOWO_DDC_HTTP` names a server that `mbt ddc serve` runs (with `MOWO_DDC_HTTP_TOKEN` for its token and `MOWO_DDC_HTTP_READONLY=1` to only read). A remote hit is copied into the folder, and a fresh compile is sent up. The engine's own derived data cache uses the same server <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DdcCommand.cs" />.
+
+## Cooking content
+
+`mbt cook` turns a project's `Content/` into a `.meaf` archive: MDF game data becomes binary, textures and meshes are transcoded by running a development `MowoGame` over the staged tree, and a `Config/Chunks.ini` splits the output into chunks <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CookCommand.cs" />. `mbt package` runs the same cook. The [content pipeline section](/docs/content-pipeline/) covers cooking, chunks and the derived data cache in detail.
+
+## Related
+
+- [Toolchains and platforms](/docs/build-tool/toolchains-and-platforms/)
+- [Rendering](/docs/rendering/), for writing shaders against the renderer

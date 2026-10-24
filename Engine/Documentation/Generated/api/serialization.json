@@ -1,0 +1,601 @@
+{
+	"name": "MowoEngine.Serialization",
+	"displayName": "Serialization",
+	"slug": "serialization",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Serialization/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Serialization/Public/Serialization/FArchive.h",
+			"include": "Serialization/FArchive.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FArchive",
+					"namespace": "Mowo",
+					"doc": "Header-only, so no API/dllimport macro: otherwise consumers get import\nstubs for inline methods no DLL exports.",
+					"line": 33,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~FArchive",
+							"signature": "virtual ~FArchive() = default",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "IsSaving",
+							"signature": "bool IsSaving() const noexcept",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "IsLoading",
+							"signature": "bool IsLoading() const noexcept",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "GetVersion",
+							"signature": "uint32_t GetVersion() const noexcept",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "SetVersion",
+							"signature": "void SetVersion(uint32_t v)",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "IsByteSwapping",
+							"signature": "bool IsByteSwapping() const noexcept",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "SetByteSwapping",
+							"signature": "void SetByteSwapping(bool swap)",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "IsHostBigEndian",
+							"signature": "static bool IsHostBigEndian()",
+							"static": true,
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "Serialize",
+							"signature": "virtual void Serialize(void* data, size_t count) = 0",
+							"doc": "Raw byte transfer — subclasses implement. count = 0 is a no-op.",
+							"line": 69
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "FArchive::EMode",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 35,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Saving",
+							"signature": "Saving",
+							"line": 36
+						},
+						{
+							"kind": "enumerator",
+							"name": "Loading",
+							"signature": "Loading",
+							"line": 37
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMemoryArchive",
+					"namespace": "Mowo",
+					"bases": "public FArchive",
+					"doc": "In-memory byte buffer: writes append to m_buffer, reads consume it at\nm_cursor. Also the byte sink under higher-level format-specific archives.",
+					"line": 167,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FMemoryArchive",
+							"signature": "FMemoryArchive() : FArchive(EMode::Saving)",
+							"line": 169
+						},
+						{
+							"kind": "method",
+							"name": "FMemoryArchive",
+							"signature": "explicit FMemoryArchive(std::vector<uint8_t> source) : FArchive(EMode::Loading), m_buffer(std::move(source))",
+							"doc": "Reading mode. Serialize copies out of `source`; it never takes\nownership of the caller's bytes.",
+							"line": 174
+						},
+						{
+							"kind": "method",
+							"name": "Serialize",
+							"signature": "void Serialize(void* data, size_t count) override",
+							"line": 178
+						},
+						{
+							"kind": "method",
+							"name": "Bytes",
+							"signature": "const std::vector<uint8_t>& Bytes() const noexcept",
+							"line": 200
+						},
+						{
+							"kind": "method",
+							"name": "TakeBytes",
+							"signature": "std::vector<uint8_t> TakeBytes()",
+							"line": 203
+						},
+						{
+							"kind": "method",
+							"name": "Cursor",
+							"signature": "size_t Cursor() const noexcept",
+							"line": 206
+						},
+						{
+							"kind": "method",
+							"name": "AtEnd",
+							"signature": "bool AtEnd() const noexcept",
+							"line": 209
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Serialization/Public/Serialization/JsonDocument.h",
+			"include": "Serialization/JsonDocument.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "JsonDocument",
+					"namespace": "Mowo",
+					"line": 28,
+					"members": [
+						{
+							"kind": "method",
+							"name": "JsonDocument",
+							"signature": "JsonDocument() = default",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "JsonDocument",
+							"signature": "explicit JsonDocument(nlohmann::json root) : m_root(std::move(root))",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromFile",
+							"signature": "static bool LoadFromFile(const std::string& path, JsonDocument& out, std::string* outError = nullptr)",
+							"static": true,
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "ParseFromString",
+							"signature": "static bool ParseFromString(const std::string& source, JsonDocument& out, std::string* outError = nullptr)",
+							"static": true,
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "WriteToFile",
+							"signature": "bool WriteToFile(const std::string& path, int indent = 2) const",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "WriteToString",
+							"signature": "std::string WriteToString(int indent = 2) const",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "Json",
+							"signature": "nlohmann::json& Json()",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "Json",
+							"signature": "const nlohmann::json& Json() const",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "operator[]",
+							"signature": "nlohmann::json& operator[](const std::string& key)",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "operator[]",
+							"signature": "const nlohmann::json& operator[](const std::string& key) const",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "IsNull",
+							"signature": "bool IsNull() const",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "Contains",
+							"signature": "bool Contains(std::string_view path) const",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "GetString",
+							"signature": "std::string GetString(std::string_view path, std::string_view defaultValue = \"\") const",
+							"doc": "Dot-separated path, \"engine.version.channel\". Returns the default when\nthe path does not resolve or the leaf is the wrong type; never throws.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "GetInt",
+							"signature": "int GetInt(std::string_view path, int defaultValue = 0) const",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "GetInt64",
+							"signature": "int64_t GetInt64(std::string_view path, int64_t defaultValue = 0) const",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "GetBool",
+							"signature": "bool GetBool(std::string_view path, bool defaultValue = false) const",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "GetDouble",
+							"signature": "double GetDouble(std::string_view path, double defaultValue = 0.0) const",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "GetFloat",
+							"signature": "float GetFloat(std::string_view path, float defaultValue = 0.0f) const",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "GetVec2",
+							"signature": "Vec2 GetVec2(std::string_view path, const Vec2& defaultValue = {}) const",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "GetVec3",
+							"signature": "Vec3 GetVec3(std::string_view path, const Vec3& defaultValue = {}) const",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "GetVec4",
+							"signature": "Vec4 GetVec4(std::string_view path, const Vec4& defaultValue = {}) const",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "GetQuat",
+							"signature": "Quat GetQuat(std::string_view path, const Quat& defaultValue = {}) const",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "SetString",
+							"signature": "void SetString(std::string_view path, std::string_view value)",
+							"doc": "Same dot-path style; creates intermediate objects as needed.",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "SetInt",
+							"signature": "void SetInt(std::string_view path, int64_t value)",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "SetBool",
+							"signature": "void SetBool(std::string_view path, bool value)",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "SetDouble",
+							"signature": "void SetDouble(std::string_view path, double value)",
+							"line": 75
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "to_json",
+					"signature": "inline void to_json(nlohmann::json& j, const Vec2& v)",
+					"line": 89
+				},
+				{
+					"kind": "function",
+					"name": "to_json",
+					"signature": "inline void to_json(nlohmann::json& j, const Vec3& v)",
+					"line": 92
+				},
+				{
+					"kind": "function",
+					"name": "to_json",
+					"signature": "inline void to_json(nlohmann::json& j, const Vec4& v)",
+					"line": 95
+				},
+				{
+					"kind": "function",
+					"name": "to_json",
+					"signature": "inline void to_json(nlohmann::json& j, const Quat& q)",
+					"line": 98
+				},
+				{
+					"kind": "function",
+					"name": "from_json",
+					"signature": "inline void from_json(const nlohmann::json& j, Vec2& v)",
+					"line": 102
+				},
+				{
+					"kind": "function",
+					"name": "from_json",
+					"signature": "inline void from_json(const nlohmann::json& j, Vec3& v)",
+					"line": 108
+				},
+				{
+					"kind": "function",
+					"name": "from_json",
+					"signature": "inline void from_json(const nlohmann::json& j, Vec4& v)",
+					"line": 115
+				},
+				{
+					"kind": "function",
+					"name": "from_json",
+					"signature": "inline void from_json(const nlohmann::json& j, Quat& q)",
+					"line": 123
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/Serialization/Public/Serialization/MdfCompat.h",
+			"include": "Serialization/MdfCompat.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FMdfCompat",
+					"namespace": "Mowo",
+					"line": 23,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ToMdf",
+							"signature": "static MDF::MdfVec2 ToMdf(const Vec2& v)",
+							"static": true,
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "ToMdf",
+							"signature": "static MDF::MdfVec3 ToMdf(const Vec3& v)",
+							"static": true,
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "ToMdf",
+							"signature": "static MDF::MdfVec4 ToMdf(const Vec4& v)",
+							"static": true,
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "ToMdf",
+							"signature": "static MDF::MdfQuat ToMdf(const Quat& q)",
+							"static": true,
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "FromMdf",
+							"signature": "static Vec2 FromMdf(const MDF::MdfVec2& v)",
+							"static": true,
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "FromMdf",
+							"signature": "static Vec3 FromMdf(const MDF::MdfVec3& v)",
+							"static": true,
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "FromMdf",
+							"signature": "static Vec4 FromMdf(const MDF::MdfVec4& v)",
+							"static": true,
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "FromMdf",
+							"signature": "static Quat FromMdf(const MDF::MdfQuat& q)",
+							"static": true,
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "MakeMdfValue",
+							"signature": "static MdfValue MakeMdfValue(const Vec2& v)",
+							"static": true,
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "MakeMdfValue",
+							"signature": "static MdfValue MakeMdfValue(const Vec3& v)",
+							"static": true,
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "MakeMdfValue",
+							"signature": "static MdfValue MakeMdfValue(const Vec4& v)",
+							"static": true,
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "MakeMdfValue",
+							"signature": "static MdfValue MakeMdfValue(const Quat& q)",
+							"static": true,
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "MdfAsVec2",
+							"signature": "static Vec2 MdfAsVec2(const MdfValue& v)",
+							"static": true,
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "MdfAsVec3",
+							"signature": "static Vec3 MdfAsVec3(const MdfValue& v)",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "MdfAsVec4",
+							"signature": "static Vec4 MdfAsVec4(const MdfValue& v)",
+							"static": true,
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "MdfAsQuat",
+							"signature": "static Quat MdfAsQuat(const MdfValue& v)",
+							"static": true,
+							"line": 73
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Serialization/Public/Serialization/MdfSchemaVersion.h",
+			"include": "Serialization/MdfSchemaVersion.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EMdfSchemaCompat",
+					"namespace": "Mowo",
+					"doc": "How a file's stored `schema_version` relates to what this build knows.",
+					"line": 12,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Current",
+							"signature": "Current",
+							"doc": "stored == supported",
+							"line": 13
+						},
+						{
+							"kind": "enumerator",
+							"name": "Older",
+							"signature": "Older",
+							"doc": "stored < supported — run the type's forward migration",
+							"line": 14
+						},
+						{
+							"kind": "enumerator",
+							"name": "Newer",
+							"signature": "Newer",
+							"doc": "stored > supported — the file was written by a NEWER engine",
+							"line": 15
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMdfSchemaStamp",
+					"namespace": "Mowo",
+					"doc": "The writer's half: every asset type stamps its schema number AND the engine\nthat wrote it, UE's package summary in miniature. Scenes and prefabs add the\nplugin versions on top (FContentVersionStamp, in Game).",
+					"line": 62,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Stamp",
+							"signature": "static void Stamp(MdfNode& root, int64_t schemaVersion)",
+							"static": true,
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "EngineVersion",
+							"signature": "static std::string EngineVersion()",
+							"static": true,
+							"doc": "This build's major.minor, the notion the plugin gate uses.",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "IsEngineStampNewer",
+							"signature": "static bool IsEngineStampNewer(const std::string& stamped)",
+							"static": true,
+							"doc": "False for a stamp that does not parse: a typo is not a refusal.",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "EngineVersionKey",
+							"signature": "static const char* EngineVersionKey()",
+							"static": true,
+							"line": 69
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "CheckMdfSchemaVersionFromKey",
+					"signature": "EMdfSchemaCompat CheckMdfSchemaVersionFromKey(const MdfNode& root, const char* versionKey, uint32_t supported, const char* label, const char* assetName = \"\", uint32_t* outStored = nullptr)",
+					"doc": "Reads `schema_version` off an asset's root node and reports it against the\nversion this build supports. An absent marker means 1: the pre-versioning\nbaseline every early file has.\n\nWhy this exists: roughly twenty-five asset types STAMPED a schema version\nand no reader ever looked at it, two of them having already bumped to v2.\nA file from a newer engine therefore loaded through the lenient MDF reader,\nwhich drops what it does not recognise — so the asset came up quietly\nwrong, and re-saving it wrote the loss back to disk. `Newer` is the case\nthat matters, and a caller must act on it — the warning alone protects\nnothing. An asset loader refuses the file (UE's rule: an older engine does\nnot open a newer asset). A loader that must open the file anyway — a scene\nor prefab shown read-only — refuses to SAVE over it instead. Only a file\nwhose refusal would itself lose data, like player settings that would\notherwise reset to defaults and be written back, keeps what it recognises.\n\n`label` names the type in the log line (\"Quest\", \"SoundCue\", ...).\n`outStored` receives the version actually found, for a caller that wants to\ndrive its own migration chain.\n\nA root that also carries `engine_version` (FMdfSchemaStamp::Stamp) reads as\nNewer when that engine is newer than this one even at the same schema\nnumber — a newer build adds fields and enumerators without bumping every\nasset type's schema, and the number alone let such a file through. A file\nwhose schema is Older still reports Older, so its migration runs.",
+					"line": 43
+				},
+				{
+					"kind": "function",
+					"name": "CheckMdfSchemaVersion",
+					"signature": "inline EMdfSchemaCompat CheckMdfSchemaVersion(const MdfNode& root, uint32_t supported, const char* label, const char* assetName = \"\", uint32_t* outStored = nullptr)",
+					"doc": "The common case: the marker is called `schema_version`.",
+					"line": 51
+				}
+			]
+		}
+	]
+}

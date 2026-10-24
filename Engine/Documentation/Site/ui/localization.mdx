@@ -1,0 +1,176 @@
+---
+title: Localization
+description: Declare translatable text, format it per culture, extract it into string tables, exchange PO or XLIFF with translators, and switch language at run time.
+order: 7
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/Localization.h
+  - Engine/Source/Runtime/Core/Public/Core/LanguageSettings.h
+  - Engine/Source/Runtime/Core/Private/LanguageSettings.cpp
+  - Engine/Source/Runtime/Core/Public/Core/CultureFormat.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Core/CText.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/LocalizationVFS.h
+  - Engine/Source/Runtime/Filesystem/Private/LocalizationVFS.cpp
+  - Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomGraph.h
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+  - Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp
+verifiedAt: 08e26df3d
+---
+
+Every player-facing string in a Mowo game resolves through one process-wide string table. `FLocalizationManager` owns it <Source symbol="FLocalizationManager" />. Arc's `CText`, the text type every widget takes, reads it, and so do `.ui` screens, subtitles, data assets and Visual Scripting graphs. This page covers how to declare text, how it is formatted and resolved, how the tables are produced and translated, and how a player picks a language.
+
+The editor's **Window > Localization Dashboard** manages the same string tables; see [Asset tools](/docs/editor/asset-tools/#localization-dashboard).
+
+## The pieces
+
+| Piece | Lives in | Job |
+| --- | --- | --- |
+| `FLocalizationManager` | `Core/Localization.h` | String tables, resolution, plural and select forms |
+| `CText` | `Arc/Core/CText.h` | Text that re-resolves when the language changes |
+| `FCultureFormat` | `Core/CultureFormat.h` | Numbers, percentages, currency, dates, times and memory sizes per culture |
+| `FLanguageSettings` | `Core/LanguageSettings.h` | The player's language choice, saved, and the operating system default |
+| `mbt localize` | MowoBuildTool | Extraction, and PO and XLIFF exchange |
+
+## Declare text
+
+In C++, text is a namespace, a key and the English it was written in <Source symbol="CText" />:
+
+```cpp title="Hud.cpp" wrap
+#include <Arc/Core/CText.h>
+#include <Core/Localization.h>
+
+Arcf::CText label = ARC_NSLOCTEXT("Menu", "play", "Play");
+Mowo::FText title = MOWO_LOCTEXT("Menu", "title", "Main Menu");
+Arcf::CText left = Arcf::CText::FromStringTablePlural("Game", "cards", 3, "{n} cards");
+```
+
+`CText::FromString` is the unlocalized literal; it never re-resolves. `CText::FromKey(ns, key)` has no source string, so an unresolved key shows as the key itself. `FromStringTableSelect` picks a form such as a gender.
+
+In data, the same information is a property pair: `<base>_key` names the key and `<base>_text`, or plain `<base>`, carries the English. A `.ui` text node uses `text_key` and `text`:
+
+```mdf title="A Text node in a .ui"
+Props {
+    text: "Play"
+    text_key: "Menu.play"
+}
+```
+
+A key with a dot splits into namespace and key. A key without one takes its namespace from a `loc_namespace` property in an enclosing scope, then the root node name, then the file stem.
+
+In a graph, use the **Make Localized Text** node. It carries the namespace, key and source on the node, and its output is the resolved string. Edit all three with **Edit Localized Text...** on the node's context menu <Source symbol="LoomNodeKind" />. See [Visual Scripting](/docs/visual-scripting/).
+
+## Format
+
+`CText::Format` keeps the pattern and the arguments, not the result, so formatted text re-formats when the language changes: a localized pattern re-resolves, a `CText` argument re-resolves, and numbers re-format with the new culture's separators and digits. The text of one argument is never searched for another's placeholder.
+
+```cpp title="Ammo.cpp" wrap
+#include <Arc/Core/CText.h>
+
+int32_t clip = 12;
+int32_t reserve = 48;
+int32_t cards = 3;
+
+Arcf::CText ammo = Arcf::CText::Format(ARC_NSLOCTEXT("Hud", "ammo", "{0} / {1}"), clip, reserve);
+Arcf::CText hand = Arcf::CText::Format("{0} {0}|plural(one=card,other=cards)", cards);
+Arcf::CText place = Arcf::CText::Format("{0}{0}|ordinal(one=st,two=nd,few=rd,other=th)", cards);
+```
+
+- `{name}` placeholders take named arguments; `{0}` takes positional ones.
+- `|plural(...)` uses the culture's plural categories; an exact match such as `=0=no cards` is tried first. `|ordinal(...)` and `|select(...)` work the same way.
+- A backtick escapes a brace. A placeholder with no argument stays as written.
+
+Plural categories follow the Unicode CLDR rules per language, so Russian `21` is *one* and `11` is *many*. Numbers passed to `Format` go through `FCultureFormat` <Source symbol="FCultureFormat" />, which also offers `AsNumber`, `AsPercent`, `AsCurrency`, `AsDate`, `AsTime` and `AsMemory`. The C++ form without Arc is `FText::FormatArgs`.
+
+## How a key resolves
+
+Active locale, then the fallback locale (`en` unless changed), then the authored source string. Plural and select forms try the exact category (`key.few`) before `key.other` in each locale.
+
+A key that falls back to its source string while tables are loaded is a **missing key**. Outside Shipping, the first miss of each key prints one line; Shipping stays silent. `FLocalizationManager::GetMissingKeys()` returns the set at run time.
+
+## String tables
+
+```text
+<project>/Content/Localization/<locale>/<Namespace>.txt
+```
+
+One file per namespace per locale, with `key=value` lines and `#` comments <Source path="Engine/Source/Runtime/Filesystem/Private/LocalizationVFS.cpp" />. The extractor adds comment markers that the runtime skips:
+
+```text
+# @source Quit the game
+# @was Quit
+quit=Выход
+
+# @source Resume
+# @new
+resume=
+```
+
+| Marker | Means |
+| --- | --- |
+| `@source` | The English this row was generated against |
+| `@was` | The English the existing translation was made against; the translation needs checking |
+| `@new` | Never translated. The empty value is dropped at run time, so the English shows instead of a blank. |
+| `@orphan` | Extraction no longer finds this key. The row is kept until you prune it. |
+
+`\n` and `\t` are escaped, so a multi-line string survives the one-line format.
+
+## Extract
+
+```bash
+./mbt.cmd localize extract --project MyGame                        # merge into Content/Localization
+./mbt.cmd localize extract --project MyGame --locale ru --locale uk  # create locales
+./mbt.cmd localize extract --project MyGame --dry-run              # report only
+./mbt.cmd localize extract --project MyGame --list-unkeyed         # UI text with no text_key
+./mbt.cmd localize extract --project MyGame --strict               # fail on a key with two English sources
+./mbt.cmd localize extract --project MyGame --prune                # delete orphaned rows
+```
+
+Extraction sweeps `Source/` and `Plugins/` for the `LOCTEXT` family and `Content/` and `Plugins/` for the `<base>_key` convention and Make Localized Text nodes, then merges. **Merging never overwrites a translation.** The source locale (`en` by default, `--source-locale` to change it) is regenerated from the English; every other locale keeps its values and only gains keys and markers. A second run over an unchanged project writes nothing.
+
+It reports, rather than fixes, a key declared twice with different English and UI text with no `text_key`. All options are in the [mbt CLI reference](/docs/reference/mbt-cli/).
+
+## Exchange with translators
+
+Translation tools read PO and XLIFF, not `key=value` tables. Export a locale and merge the result back:
+
+```bash
+./mbt.cmd localize export --project MyGame --locale ru                  # ru.po
+./mbt.cmd localize export --project MyGame --locale ru --format xliff   # ru.xlf (XLIFF 1.2)
+./mbt.cmd localize import --project MyGame --locale ru --file ru.po
+./mbt.cmd localize import --project MyGame --locale ru --file ru.xlf --dry-run
+```
+
+Every string carries its namespace and key, so two keys with the same English stay separate. A translation whose English has changed (`@was`) exports as fuzzy or needs-review; importing it back without that flag clears the marker. An import never applies a translation to different English: a unit whose source no longer matches `@source` is skipped.
+
+## Pseudo-localization
+
+Turn on **Pseudo-Localization** in Project Settings, or set `i18n.PseudoLocalize 1` <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp" />. Every string that resolves through a table becomes accented, about a third longer and bracketed. Plain ASCII left on screen never went through a table; a label whose closing bracket is cut off will not fit longer languages. Placeholders, plural forms and markup stay intact. See [console variables](/docs/reference/console-variables/).
+
+## Choose a language
+
+`FLanguageSettings` is the surface a settings screen needs <Source symbol="FLanguageSettings" />:
+
+```cpp title="LanguageMenu.cpp" wrap
+#include <Core/LanguageSettings.h>
+
+const std::vector<Mowo::FLanguageOption>& options = Mowo::FLanguageSettings::GetAvailable();
+std::string current = Mowo::FLanguageSettings::GetPreference();
+Mowo::FLanguageSettings::SetPreference("ru");
+```
+
+- Each option carries the locale code and its name in its own language (`Русский`, not `Russian`).
+- `FollowSystem()` is the stored value meaning "whatever the operating system prefers". A player who never picked keeps following the machine. The system preference is matched by exact tag, then by primary language, so `ru-RU` finds a table shipped as `ru`.
+- The choice is saved to `Language.ini` in the user's config folder <Source path="Engine/Source/Runtime/Core/Private/LanguageSettings.cpp" />.
+
+Connect the language list to the project's tables once, after content is mounted, with `LocalizationVFS::Install("Content/Localization")`. It lists the locale folders as the available languages, teaches `FLanguageSettings` to load one, and applies the saved choice <Source symbol="LocalizationVFS" />. The shipped settings screen's **Language** row writes `i18n.Locale`. See [Settings and accessibility](/docs/ui/settings-and-accessibility/).
+
+## Switch at run time
+
+`SetPreference`, `FLocalizationManager::SetLocale` and `CTextLocalizationManager::SetLanguage` are the same switch. It bumps a revision and Arc re-lays out every widget, so a `CText` built before the switch shows the new language without being rebuilt. Make Localized Text nodes resolve on every read, so running graphs follow too. `CText` caches its resolution against the revision, so a steady-state localized label costs an integer comparison.
+
+A screen stack created under a right-to-left language (Arabic, Hebrew, Persian, Urdu and others) starts mirrored, and a switch that changes direction rebuilds every mounted screen.
+
+## Related
+
+- [ArcUI screens](/docs/ui/arcui-screens/) for `text_key` in `.ui` assets.
+- API: [Core](/docs/api/core/) and [Arc](/docs/api/arc/).

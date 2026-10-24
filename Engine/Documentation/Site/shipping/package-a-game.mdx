@@ -1,0 +1,195 @@
+---
+title: Package a game
+description: Step by step, turn a Mowo project into a tested Windows package, from project settings and content keys to a clean-machine launch.
+order: 1
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageAndroidCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CryptoCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ShippingInfo.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/CryptoSettings.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VcRedistStager.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VcRedistFallback.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DebugInfoSplitter.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/ProjectLayout.cs
+  - Engine/Source/Runtime/Project/Public/Project/PackagingSettings.h
+  - Engine/Source/Runtime/Project/Private/PackagingSettings.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/CryptoSettingsPage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp
+  - Samples/SampleProject/SampleProject.mproject
+  - Engine/Documentation/ROADMAP.md
+verifiedAt: 6caf55861
+---
+
+This guide takes a project from the editor to a folder you can hand to a player. It targets Windows, the platform packaging is finished for. macOS, Linux and Android are covered at the end, with what does not work yet.
+
+You need a built engine (see [Build tool](/docs/build-tool/)) and a game project with a start scene.
+
+## Before you start
+
+`mbt` finds the engine by walking up from the current directory. Run it from the engine root and point `--project` at your game's `.mproject`. Without `--project`, `mbt package` uses the manifest at the engine root only when there is exactly one <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />.
+
+## Package your game
+
+<Steps>
+<Step title="Set the product identity">
+
+The package reads its name, version and publisher from the project manifest. Open **Edit > Project Settings…** and fill in the **IDENTITY** rows (**Project Name**, **Version**) and the **PUBLISHER** rows (**Product Name**, **Company Name**, **Copyright**) <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp" />.
+
+<Screenshot id="shipping-project-settings-identity" alt="Mowo Editor, Edit > Project Settings… open on the first page, showing the IDENTITY section (Project Name, Version) and the PUBLISHER section (Product Name, Company Name, Copyright, Description) filled in for a sample game." />
+
+The keys packaging reads from the `.mproject`:
+
+```json title="MyGame.mproject (excerpt)"
+{
+  "build": { "outputName": "MyGame" },
+  "player": {
+    "productName": "My Game",
+    "companyName": "My Studio",
+    "copyright": "© 2026 My Studio",
+    "iconPath": ""
+  },
+  "project": {
+    "startScene": "Content/Scenes/Main.mmap",
+    "version": "1.0.0"
+  }
+}
+```
+
+- `build.outputName` names the executables and the package folder. Without it, the manifest's file name is used; `--name` overrides both.
+- `project.version` goes into the version stamp and the zip name. `player.*` goes into the executable's file properties and `Shipping.json` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ShippingInfo.cs" />.
+- `player.iconPath` is the icon source. Without it, the engine's default icon is used; `--icon` overrides it.
+
+The [project files reference](/docs/reference/) describes the rest of the manifest.
+
+</Step>
+<Step title="Check the start scene">
+
+**Start Scene** (`project.startScene`) is the level a packaged build opens. It is on the Project Settings page with **Game Mode Class** and the game window defaults <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp" />. A package that boots into the wrong level, or none, is the most common first-package mistake.
+
+Open the project in the editor at least once before packaging. That writes `Intermediate/AssetRegistry.mdfb`. Without it the package still boots, but every UUID-keyed reference (material overrides, decal materials, particle assets) resolves to nothing, and the packager warns about it <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/ProjectLayout.cs" />.
+
+</Step>
+<Step title="Create the content keys">
+
+A Shipping package encrypts your content and signs every archive and module. It refuses to run when the project has no keys <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/CryptoSettings.cs" />. Create them once, in **Project Settings > Crypto** (**Generate** next to **Encryption Key** and **Signing Keys**, then **Apply**) <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/CryptoSettingsPage.cpp" />, or from the command line:
+
+```powershell
+./mbt.cmd crypto generate --project D:/Projects/MyGame/MyGame.mproject
+```
+
+Commit the `Config/DefaultCrypto.ini` it writes. The signing private key is not in that file: it goes to your per-user key store, and you back it up. [Content protection](/docs/shipping/encrypted-archives/) explains the keys and how a build machine gets the private key.
+
+</Step>
+<Step title="Commit a PSO cache (recommended)">
+
+Play through your game once in a development build, then run `mbt package --promote-pso-cache` and commit `Config/PsoCache.mdfb`. Without it, the package warns that it ships with a cold pipeline cache and hitches the first time each pipeline is used. See [Bundled PSO cache](/docs/shipping/pso-cache/).
+
+</Step>
+<Step title="Run the package">
+
+<Tabs>
+<Tab label="Editor">
+
+Choose **Build > Package Project…**. Select **Shipping** on the toolbar, leave the **Monolithic** row enabled unless you want the modular layout (see [Targets and link modes](/docs/shipping/targets-and-modes/)), pick the folder in **Archive to**, then press **Package**.
+
+The window shows the pipeline and a live log, and **Cancel** stops the whole build. A package always cooks the whole `Content/` tree; the **Used only** choice applies to **Cook Content** only <Source path="Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp" />.
+
+<Screenshot id="shipping-package-window-running" alt="The packaging window during a Shipping run: Shipping selected on the toolbar, the Monolithic row Enabled, the pipeline with Build and Cook done and Stage running, and the log showing lines [3/6] Cooking assets... and [4/6] Staging runtime files...." />
+
+</Tab>
+<Tab label="Command line">
+
+```powershell
+./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject
+./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject -o D:/Builds/MyGame
+./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject -c Test
+```
+
+The first line is the common case: Shipping, monolithic, output in `Saved/Packaged/<Product>/`, with a zip beside it. The third builds the Test configuration, the Shipping code generation with the log and stat commands kept, for profiling.
+
+</Tab>
+</Tabs>
+
+</Step>
+<Step title="Read the output">
+
+The run ends with `Package complete` and the output path. Read the warnings: every optional part that was skipped says why. The package folder, the zip, `<Product>-chunks.json`, `<Product>-Manifest.txt` and the archived symbols sit side by side in the output's parent folder. The [section overview](/docs/shipping/) shows the layout.
+
+The Visual C++ runtime ships app-local: `vcruntime140.dll`, `vcruntime140_1.dll` and `msvcp140.dll` sit next to the host, so a player needs no redistributable installer <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VcRedistStager.cs" />. `--full-crt` bundles the whole redist folder instead.
+
+Behind the app-local DLLs, a Win64 game package also carries `_CommonRedist/vcredist/2022/VC_redist.x64.exe` and a Steam `installscript.vdf` that runs it once per machine, for a store or antivirus that removes loose DLLs <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VcRedistFallback.cs" />. The Mowo Games Launcher runs the same installer when the runtime is missing. `--no-vc-redist`, or `vcRedist=false` in `Config/Packaging.ini`, leaves it out.
+
+</Step>
+<Step title="Launch the package">
+
+Start `<Product>.exe` at the package root, with `--log` so a Shipping build writes its log. Play to the end of the start level and quit. A launch failure shows up as a non-zero exit code; the log goes to the per-user `Saved/Logs` folder of the product.
+
+</Step>
+<Step title="Test on a clean machine">
+
+Copy the folder to a machine or virtual machine that has never had Visual Studio installed, and double-click the launcher. If it starts, the app-local runtime and content resolution are correct. Also try it from a read-only location such as Program Files: the game should write its saves and logs to the per-user folder.
+
+</Step>
+<Step title="Distribute">
+
+Hand out the zip, build an installer, or upload the folder to a store. See [Installers and code signing](/docs/shipping/installers-and-signing/) and [Uploading to Steam](/docs/shipping/steam/). Before a public release, set your own crash endpoint and decide on consent: see [Crash reporting](/docs/shipping/crash-reporting/).
+
+</Step>
+</Steps>
+
+## The committed packaging settings
+
+The packaging window stores the team half of its settings in `Config/Packaging.ini`, which you commit <Source path="Engine/Source/Runtime/Project/Private/PackagingSettings.cpp" />:
+
+```ini title="Config/Packaging.ini"
+[packaging]
+config=3
+compression=2
+mdfText=false
+monolithic=true
+usedContentOnly=false
+targetPlatforms=Win64
+outputDir=Saved/Packaged/MyGame
+cookOutputDir=Saved/Cooked
+```
+
+`config` indexes Debug, Development, Release, Shipping; `compression` indexes None, Fast, Default, Best. Directories are stored relative to the project, so the file never names one developer's machine; a directory outside the project stays absolute, with a warning <Source path="Engine/Source/Runtime/Project/Public/Project/PackagingSettings.h" />.
+
+`mbt package` reads `outputDir`, `monolithic`, `targetPlatforms`, and the keys only it uses: `ioStore`, `vcRedist` and `vcRedistInstaller` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs" />. Packaging for a platform the list does not name works from the command line, with a warning. Per-user choices, such as the skip toggles, go to `Saved/Config/Editor/Packaging.ini` instead.
+
+## When a package fails
+
+| Message | What to do |
+|---|---|
+| Output directory is not empty and does not look like a previous package | `-o` points at a folder with other files. Pick an empty folder. |
+| Shipping packages are encrypted and signed, and the project has no … | Create the keys (see above) or pass `--unprotected` to ship plaintext deliberately. |
+| … its private key is not on this machine | Import the signing private key: `mbt crypto import-signing-key --file <key>`. |
+| Build output not found | You passed `--skip-build` without a build of that configuration. Drop the flag. |
+| MowoGame not found, so texture/mesh sources cannot cook | The texture and mesh cook runs a Debug, Development or Release `MowoGame`; a Shipping binary carries no cook code. Build one (`mbt build -c Development -t MowoGame`), or pass `--allow-raw` to pack sources raw. |
+| No committed Config/PsoCache.mdfb | Not an error. The package works, but hitches on first use of each pipeline. |
+| Monolithic verification FAILED | See [Targets and link modes](/docs/shipping/targets-and-modes/#the-import-table-check). |
+| A Shipping package whose symbols did not reach the crash server … | Retry the upload with `mbt symbols <archive> --wait`, or package with `--no-symbols`. See [Crash reporting](/docs/shipping/crash-reporting/#symbols). |
+
+`--strict-refs` turns quiet degradations into failures: an asset reference that resolves to nothing, or a texture or mesh cook that could not run. Use it on release builds. `--no-validate` skips the asset-validation gate that runs before the cook.
+
+## macOS, Linux and Android
+
+<Callout type="warning" title="In development">
+Only Windows packaging is ready to ship. The packaging window packages for the host only, and Linux packages build only on a Linux host.
+</Callout>
+
+**macOS.** `mbt package -p macos-arm64 --installer` on a Mac builds a `.dmg` holding a self-contained `.app`. The bundle is signed ad hoc only (`codesign --sign -`), and the game package has no Developer ID signing and no notarization step <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs" />. Gatekeeper on a buyer's Mac will not open it; the ROADMAP lists notarization as an open blocker <Source path="Engine/Documentation/ROADMAP.md" />. The `.dmg` step needs a macOS host.
+
+**Linux.** `-p linux` exists. A Shipping or Test package splits debug information out of every shipped image (`objcopy --only-keep-debug` on Linux, `dsymutil` on macOS) and keeps it beside the build for the symbol upload; this path was written on Windows and has not run on a POSIX host yet <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DebugInfoSplitter.cs" />. See [Platforms](/docs/reference/) for the platform status.
+
+**Android.** `mbt package` refuses mobile platforms. A separate command, `mbt package-android`, builds an installable Android Gradle project (Vulkan only, arm64-v8a) <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageAndroidCommand.cs" />. Android is not a supported product platform; treat that command as experimental.
+
+## Related
+
+- [Targets and link modes](/docs/shipping/targets-and-modes/)
+- [Shipping checklist](/docs/shipping/shipping-checklist/)
+- [`FPackagingSettings`](/docs/api/project/)

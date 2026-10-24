@@ -1,0 +1,2688 @@
+{
+	"name": "MowoEngine.MDF",
+	"displayName": "MDF",
+	"slug": "mdf",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/MDF/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf.h",
+			"include": "mdf/mdf.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nHeader-only C++17 library for reading and writing MDF documents.\nSupports both a human-readable text encoding and a compact binary one (mdfb).\nMDF is the data model, not a file extension: every file type that holds it\nnames its own (.mat, .mmap, .prefab, ...; Core/FileTypes.h).\n\nQuick start:\n\n#include <mdf/mdf.h>\n\n// Parse a text file\nMDF::MdfDocument doc;\nMDF::MdfDocument::ParseFromFile(\"Main.mmap\", doc);\nauto& root = doc.Root();\n\n// Read values\nMDF::MdfVec3 pos = root.FindChild(\"Transform\")->GetProperty(\"position\").AsVec3();\n\n// Build a document programmatically\nMDF::MdfDocument out;\nauto& scene = out.CreateRoot(\"Scene\", \"MyScene\");\nscene.SetProperty(\"version\", 1);\nauto& obj = scene.AddChild(\"GameObject\", \"Player\");\nobj.SetProperty(\"active\", true);\nauto& transform = obj.AddChild(\"Transform\");\ntransform.SetProperty(\"position\", MDF::MdfVec3(0, 1, 0));\n\n// Write to file\nout.WriteToFile(\"Main.mmap\");",
+			"types": [],
+			"free": [
+				{
+					"kind": "function",
+					"name": "ParseFromString",
+					"signature": "inline bool MdfDocument::ParseFromString(const std::string& source, MdfDocument& outDoc, std::string* outError)",
+					"line": 59
+				},
+				{
+					"kind": "function",
+					"name": "ParseFromFile",
+					"signature": "inline bool MdfDocument::ParseFromFile(const std::string& filepath, MdfDocument& outDoc, std::string* outError)",
+					"line": 70
+				},
+				{
+					"kind": "function",
+					"name": "WriteToString",
+					"signature": "inline std::string MdfDocument::WriteToString(int indentSize) const",
+					"line": 98
+				},
+				{
+					"kind": "function",
+					"name": "WriteToFile",
+					"signature": "inline bool MdfDocument::WriteToFile(const std::string& filepath, int indentSize) const",
+					"line": 103
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_binary.h",
+			"include": "mdf/mdf_binary.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nBinary format (.mdfb) — compact serialization with string deduplication and CRC32",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "MdfbHeader",
+					"namespace": "MDF",
+					"line": 40,
+					"members": [
+						{
+							"kind": "field",
+							"name": "magic",
+							"signature": "uint32_t magic",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "version",
+							"signature": "uint32_t version",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "flags",
+							"signature": "uint32_t flags",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "stringTableCount",
+							"signature": "uint32_t stringTableCount",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "stringTableOffset",
+							"signature": "uint64_t stringTableOffset",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "dataOffset",
+							"signature": "uint64_t dataOffset",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "dataSize",
+							"signature": "uint64_t dataSize",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "rootCount",
+							"signature": "uint32_t rootCount",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "checksum",
+							"signature": "uint32_t checksum",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "stringTableChecksum",
+							"signature": "uint64_t stringTableChecksum",
+							"line": 50
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "MdfbType",
+					"namespace": "MDF",
+					"bases": "uint8_t",
+					"line": 56,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Null",
+							"signature": "Null = 0",
+							"line": 57
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bool",
+							"signature": "Bool = 1",
+							"line": 58
+						},
+						{
+							"kind": "enumerator",
+							"name": "Int32",
+							"signature": "Int32 = 2",
+							"line": 59
+						},
+						{
+							"kind": "enumerator",
+							"name": "Int64",
+							"signature": "Int64 = 3",
+							"line": 60
+						},
+						{
+							"kind": "enumerator",
+							"name": "Float32",
+							"signature": "Float32 = 4",
+							"line": 61
+						},
+						{
+							"kind": "enumerator",
+							"name": "Float64",
+							"signature": "Float64 = 5",
+							"line": 62
+						},
+						{
+							"kind": "enumerator",
+							"name": "String",
+							"signature": "String = 6",
+							"line": 63
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec2",
+							"signature": "Vec2 = 7",
+							"line": 64
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec3",
+							"signature": "Vec3 = 8",
+							"line": 65
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec4",
+							"signature": "Vec4 = 9",
+							"line": 66
+						},
+						{
+							"kind": "enumerator",
+							"name": "Quat",
+							"signature": "Quat = 10",
+							"line": 67
+						},
+						{
+							"kind": "enumerator",
+							"name": "UUID",
+							"signature": "UUID = 11",
+							"line": 68
+						},
+						{
+							"kind": "enumerator",
+							"name": "AssetRef",
+							"signature": "AssetRef = 12",
+							"line": 69
+						},
+						{
+							"kind": "enumerator",
+							"name": "Array",
+							"signature": "Array = 13",
+							"line": 70
+						},
+						{
+							"kind": "enumerator",
+							"name": "Enum",
+							"signature": "Enum = 15",
+							"line": 71
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bytes",
+							"signature": "Bytes = 16",
+							"doc": "u32 size, u8 pad count, pad zero bytes, then the bytes — starting on a\n16-byte boundary of the buffer, so a mapped file hands them out aligned.",
+							"line": 74
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMdfCrc",
+					"namespace": "MDF::detail",
+					"line": 82,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ComputeCRC32",
+							"signature": "static uint32_t ComputeCRC32(const uint8_t* data, size_t size)",
+							"static": true,
+							"line": 84
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMdfAtomicFile",
+					"namespace": "MDF::detail",
+					"doc": "Every document save in both encodings lands here. Writing in place truncates\nthe target the moment the stream opens, and a bare temp-then-rename is\natomic against a crash but not against lost power, so the write goes through\nthe PAL's durable replace: the old bytes or the new bytes are the only two\noutcomes even across a power cut. The bytes are written verbatim — a\ntext-mode stream once made a document's line endings depend on the host\nthat saved it.",
+					"line": 122,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Write",
+							"signature": "static bool Write(const std::string& filepath, const char* data, size_t size)",
+							"static": true,
+							"line": 124
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfBinaryWriter",
+					"namespace": "MDF",
+					"line": 131,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Write",
+							"signature": "static inline std::vector<uint8_t> Write(const MdfDocument& doc)",
+							"static": true,
+							"line": 133
+						},
+						{
+							"kind": "method",
+							"name": "WriteToFile",
+							"signature": "static inline bool WriteToFile(const MdfDocument& doc, const std::string& filepath)",
+							"static": true,
+							"line": 134
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfBinaryReader",
+					"namespace": "MDF",
+					"line": 190,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Read",
+							"signature": "static inline bool Read(const uint8_t* data, size_t size, MdfDocument& outDoc, std::string* outError = nullptr)",
+							"static": true,
+							"line": 192
+						},
+						{
+							"kind": "method",
+							"name": "Read",
+							"signature": "static inline bool Read(const std::vector<uint8_t>& data, MdfDocument& outDoc, std::string* outError = nullptr)",
+							"static": true,
+							"line": 193
+						},
+						{
+							"kind": "method",
+							"name": "ReadFromFile",
+							"signature": "static inline bool ReadFromFile(const std::string& filepath, MdfDocument& outDoc, std::string* outError = nullptr)",
+							"static": true,
+							"line": 194
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "field",
+					"name": "MDFB_MAGIC",
+					"signature": "constexpr uint32_t MDFB_MAGIC = 0x4246444D",
+					"doc": "\"MDFB\" little-endian",
+					"line": 27
+				},
+				{
+					"kind": "field",
+					"name": "MDFB_VERSION",
+					"signature": "constexpr uint32_t MDFB_VERSION = 1",
+					"line": 28
+				},
+				{
+					"kind": "field",
+					"name": "MDFB_NO_STRING",
+					"signature": "constexpr uint32_t MDFB_NO_STRING = 0xFFFFFFFF",
+					"line": 29
+				},
+				{
+					"kind": "field",
+					"name": "MDFB_STRING_TABLE_CRC_PRESENT",
+					"signature": "constexpr uint64_t MDFB_STRING_TABLE_CRC_PRESENT = 1ull << 32",
+					"doc": "The data CRC covers the node stream only, so a flipped byte in the string\ntable used to pass the check and come out as a wrong type name or a wrong\nasset path. The table's own CRC32 lives in the low 32 bits of the\nformerly unused `stringTableChecksum` slot (`reserved` in v1 readers,\nwhich ignore it), with this bit set so a table whose CRC happens to be\nzero still reads as \"present, verify\".",
+					"line": 37
+				},
+				{
+					"kind": "function",
+					"name": "static_assert",
+					"signature": "static_assert(sizeof(MdfbHeader) == 56, \"MdfbHeader must be 56 bytes\")",
+					"line": 54
+				},
+				{
+					"kind": "field",
+					"name": "MDFB_BYTES_ALIGNMENT",
+					"signature": "constexpr uint32_t MDFB_BYTES_ALIGNMENT = 16",
+					"line": 77
+				},
+				{
+					"kind": "function",
+					"name": "Write",
+					"signature": "inline std::vector<uint8_t> MdfBinaryWriter::Write(const MdfDocument& doc)",
+					"line": 288
+				},
+				{
+					"kind": "function",
+					"name": "WriteToFile",
+					"signature": "inline bool MdfBinaryWriter::WriteToFile(const MdfDocument& doc, const std::string& filepath)",
+					"line": 331
+				},
+				{
+					"kind": "function",
+					"name": "CollectStrings",
+					"signature": "inline void MdfBinaryWriter::CollectStrings(const MdfDocument& doc)",
+					"line": 336
+				},
+				{
+					"kind": "function",
+					"name": "CollectStringsFromNode",
+					"signature": "inline void MdfBinaryWriter::CollectStringsFromNode(const MdfNode& node)",
+					"line": 342
+				},
+				{
+					"kind": "function",
+					"name": "CollectStringsFromValue",
+					"signature": "inline void MdfBinaryWriter::CollectStringsFromValue(const MdfValue& value)",
+					"line": 356
+				},
+				{
+					"kind": "function",
+					"name": "WriteNode",
+					"signature": "inline void MdfBinaryWriter::WriteNode(const MdfNode& node)",
+					"line": 374
+				},
+				{
+					"kind": "function",
+					"name": "WriteValue",
+					"signature": "inline void MdfBinaryWriter::WriteValue(const MdfValue& value)",
+					"line": 390
+				},
+				{
+					"kind": "function",
+					"name": "WriteBlob",
+					"signature": "inline void MdfBinaryWriter::WriteBlob(const std::vector<uint8_t>& bytes)",
+					"line": 486
+				},
+				{
+					"kind": "function",
+					"name": "Read",
+					"signature": "inline bool MdfBinaryReader::Read(const uint8_t* data, size_t size, MdfDocument& outDoc, std::string* outError)",
+					"line": 499
+				},
+				{
+					"kind": "function",
+					"name": "Read",
+					"signature": "inline bool MdfBinaryReader::Read(const std::vector<uint8_t>& data, MdfDocument& outDoc, std::string* outError)",
+					"line": 512
+				},
+				{
+					"kind": "function",
+					"name": "ReadFromFile",
+					"signature": "inline bool MdfBinaryReader::ReadFromFile(const std::string& filepath, MdfDocument& outDoc, std::string* outError)",
+					"line": 516
+				},
+				{
+					"kind": "function",
+					"name": "ReadDocument",
+					"signature": "inline bool MdfBinaryReader::ReadDocument(MdfDocument& doc)",
+					"line": 539
+				},
+				{
+					"kind": "function",
+					"name": "ReadNode",
+					"signature": "inline bool MdfBinaryReader::ReadNode(MdfNode& outNode)",
+					"line": 629
+				},
+				{
+					"kind": "function",
+					"name": "ReadValue",
+					"signature": "inline bool MdfBinaryReader::ReadValue(MdfValue& outValue)",
+					"line": 684
+				},
+				{
+					"kind": "function",
+					"name": "ReadBlob",
+					"signature": "inline bool MdfBinaryReader::ReadBlob(MdfValue& outValue)",
+					"line": 831
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_document.h",
+			"include": "mdf/mdf_document.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nDocument and Node — the core data model for MDF",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "MdfPropertyComments",
+					"namespace": "MDF",
+					"doc": "Comments the text parser found around one property, kept verbatim with\ntheir delimiters so the writer can put them back where they were.\n`Leading` are the lines above the property; `SameLine` is the one after\nits value. Only the text encoding carries these — mdfb drops them.",
+					"line": 32,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Leading",
+							"signature": "std::vector<std::string> Leading",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "SameLine",
+							"signature": "std::string SameLine",
+							"line": 34
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfNode",
+					"namespace": "MDF",
+					"line": 41,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MdfNode",
+							"signature": "MdfNode() = default",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "MdfNode",
+							"signature": "MdfNode(const std::string& type, const std::string& name = \"\") : m_type(type), m_name(name)",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "GetType",
+							"signature": "const std::string& GetType() const",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "const std::string& GetName() const",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "SetType",
+							"signature": "void SetType(const std::string& type)",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "SetName",
+							"signature": "void SetName(const std::string& name)",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "HasProperty",
+							"signature": "inline bool HasProperty(const std::string& key) const",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "GetProperty",
+							"signature": "inline const MdfValue& GetProperty(const std::string& key) const",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "TryGetProperty",
+							"signature": "inline const MdfValue* TryGetProperty(const std::string& key) const",
+							"doc": "nullptr when absent. Prefer over a HasProperty + GetProperty pair in\nhot paths.",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "SetProperty",
+							"signature": "inline void SetProperty(const std::string& key, const MdfValue& value)",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "SetProperty",
+							"signature": "inline void SetProperty(const std::string& key, MdfValue&& value)",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "SetProperty",
+							"signature": "inline void SetProperty(std::string&& key, MdfValue&& value)",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "SetProperty",
+							"signature": "template<typename K, typename V, typename std::enable_if<std::is_constructible<std::string, K&&>::value && std::is_constructible<MdfValue, V&&>::value && !std::is_same<typename std::decay<V>::type, MdfValue>::value, int>::type = 0> void SetProperty(K&& key, V&& value)",
+							"doc": "Anything an MdfValue can be built from sets directly, so call sites\nneed not spell MdfValue(...). Constrained so MdfValue arguments keep\ntaking the overloads above.",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "RemoveProperty",
+							"signature": "inline bool RemoveProperty(const std::string& key)",
+							"doc": "Keeps the sorted lookup index consistent. False when the key is absent.",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "ReserveProperties",
+							"signature": "void ReserveProperties(size_t count)",
+							"doc": "Worth calling when the final property count is known up front, as in\nthe binary reader.",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "GetProperties",
+							"signature": "const std::vector<std::pair<std::string, MdfValue>>& GetProperties() const",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "operator[]",
+							"signature": "inline MdfValue& operator[](const std::string& key)",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "GetComments",
+							"signature": "const std::vector<std::string>& GetComments() const",
+							"doc": "Comments, text encoding only. A node's own comments are the lines\nabove its header; trailing comments sit inside the body after the\nlast child, where a comment has nothing left to attach to. Property\ncomments are indexed the way GetProperties() is, so the writer walks\nboth in one pass; the sparse store costs nothing on the (usual)\ncomment-free node.",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "GetComments",
+							"signature": "std::vector<std::string>& GetComments()",
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "SetComments",
+							"signature": "void SetComments(std::vector<std::string> comments)",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "GetTrailingComments",
+							"signature": "const std::vector<std::string>& GetTrailingComments() const",
+							"line": 114
+						},
+						{
+							"kind": "method",
+							"name": "SetTrailingComments",
+							"signature": "void SetTrailingComments(std::vector<std::string> comments)",
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "GetPropertyCommentsAt",
+							"signature": "inline const MdfPropertyComments& GetPropertyCommentsAt(size_t index) const",
+							"line": 121
+						},
+						{
+							"kind": "method",
+							"name": "GetPropertyComments",
+							"signature": "inline const MdfPropertyComments& GetPropertyComments(const std::string& key) const",
+							"line": 122
+						},
+						{
+							"kind": "method",
+							"name": "SetPropertyComments",
+							"signature": "inline void SetPropertyComments(const std::string& key, MdfPropertyComments comments)",
+							"doc": "No-op when the key is absent — set the value first.",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "SetPropertyCommentsAt",
+							"signature": "inline void SetPropertyCommentsAt(size_t index, MdfPropertyComments comments)",
+							"line": 125
+						},
+						{
+							"kind": "method",
+							"name": "AddChild",
+							"signature": "inline MdfNode& AddChild(const std::string& type, const std::string& name = \"\")",
+							"line": 127
+						},
+						{
+							"kind": "method",
+							"name": "AddChild",
+							"signature": "inline MdfNode& AddChild(MdfNode&& node)",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "GetChildren",
+							"signature": "const std::vector<MdfNode>& GetChildren() const",
+							"line": 129
+						},
+						{
+							"kind": "method",
+							"name": "GetChildren",
+							"signature": "std::vector<MdfNode>& GetChildren()",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "FindChild",
+							"signature": "inline const MdfNode* FindChild(const std::string& type, const std::string& name = \"\") const",
+							"line": 136
+						},
+						{
+							"kind": "method",
+							"name": "FindChild",
+							"signature": "inline MdfNode* FindChild(const std::string& type, const std::string& name = \"\")",
+							"line": 137
+						},
+						{
+							"kind": "method",
+							"name": "FindChildren",
+							"signature": "inline std::vector<const MdfNode*> FindChildren(const std::string& type) const",
+							"line": 138
+						},
+						{
+							"kind": "method",
+							"name": "RemoveChild",
+							"signature": "inline bool RemoveChild(size_t index)",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "RemoveChild",
+							"signature": "inline bool RemoveChild(const std::string& type, const std::string& name = \"\")",
+							"doc": "Removes the first child matching type, and name when non-empty,\nmirroring FindChild's match rule.",
+							"line": 143
+						},
+						{
+							"kind": "method",
+							"name": "Clone",
+							"signature": "MdfNode Clone() const",
+							"line": 145
+						},
+						{
+							"kind": "method",
+							"name": "SetSourcePos",
+							"signature": "void SetSourcePos(uint32_t line, uint32_t column)",
+							"doc": "Source position of the node's type identifier, set by the text parser.\n0 means unknown — built in memory, or read from binary.",
+							"line": 151
+						},
+						{
+							"kind": "method",
+							"name": "GetSourceLine",
+							"signature": "uint32_t GetSourceLine() const",
+							"line": 155
+						},
+						{
+							"kind": "method",
+							"name": "GetSourceColumn",
+							"signature": "uint32_t GetSourceColumn() const",
+							"line": 158
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfDocument",
+					"namespace": "MDF",
+					"line": 191,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MdfDocument",
+							"signature": "MdfDocument() = default",
+							"line": 193
+						},
+						{
+							"kind": "method",
+							"name": "CreateRoot",
+							"signature": "inline MdfNode& CreateRoot(const std::string& type, const std::string& name = \"\")",
+							"line": 195
+						},
+						{
+							"kind": "method",
+							"name": "Root",
+							"signature": "inline MdfNode& Root()",
+							"line": 197
+						},
+						{
+							"kind": "method",
+							"name": "Root",
+							"signature": "inline const MdfNode& Root() const",
+							"line": 198
+						},
+						{
+							"kind": "method",
+							"name": "HasRoot",
+							"signature": "bool HasRoot() const",
+							"line": 199
+						},
+						{
+							"kind": "method",
+							"name": "Roots",
+							"signature": "std::vector<MdfNode>& Roots()",
+							"line": 203
+						},
+						{
+							"kind": "method",
+							"name": "Roots",
+							"signature": "const std::vector<MdfNode>& Roots() const",
+							"line": 206
+						},
+						{
+							"kind": "method",
+							"name": "GetTrailingComments",
+							"signature": "const std::vector<std::string>& GetTrailingComments() const",
+							"doc": "Comments after the last root node, text encoding only.",
+							"line": 211
+						},
+						{
+							"kind": "method",
+							"name": "SetTrailingComments",
+							"signature": "void SetTrailingComments(std::vector<std::string> comments)",
+							"line": 214
+						},
+						{
+							"kind": "method",
+							"name": "ParseFromString",
+							"signature": "static inline bool ParseFromString(const std::string& source, MdfDocument& outDoc, std::string* outError = nullptr)",
+							"static": true,
+							"doc": "Implemented in mdf.h, once parser and writer are available.",
+							"line": 219
+						},
+						{
+							"kind": "method",
+							"name": "ParseFromFile",
+							"signature": "static inline bool ParseFromFile(const std::string& filepath, MdfDocument& outDoc, std::string* outError = nullptr)",
+							"static": true,
+							"line": 220
+						},
+						{
+							"kind": "method",
+							"name": "WriteToString",
+							"signature": "inline std::string WriteToString(int indentSize = 4) const",
+							"line": 221
+						},
+						{
+							"kind": "method",
+							"name": "WriteToFile",
+							"signature": "inline bool WriteToFile(const std::string& filepath, int indentSize = 4) const",
+							"line": 222
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "field",
+					"name": "MPKG_SUMMARY_NODE",
+					"signature": "constexpr const char* MPKG_SUMMARY_NODE = \"Package\"",
+					"doc": "The type of the first root of a text package (mdf_package.h).",
+					"line": 26
+				},
+				{
+					"kind": "function",
+					"name": "PropOrderPos",
+					"signature": "inline size_t MdfNode::PropOrderPos(const std::string& key) const",
+					"line": 229
+				},
+				{
+					"kind": "function",
+					"name": "PropIndex",
+					"signature": "inline size_t MdfNode::PropIndex(const std::string& key) const",
+					"line": 236
+				},
+				{
+					"kind": "function",
+					"name": "HasProperty",
+					"signature": "inline bool MdfNode::HasProperty(const std::string& key) const",
+					"line": 244
+				},
+				{
+					"kind": "function",
+					"name": "GetProperty",
+					"signature": "inline const MdfValue& MdfNode::GetProperty(const std::string& key) const",
+					"line": 248
+				},
+				{
+					"kind": "function",
+					"name": "TryGetProperty",
+					"signature": "inline const MdfValue* MdfNode::TryGetProperty(const std::string& key) const",
+					"line": 257
+				},
+				{
+					"kind": "function",
+					"name": "SetProperty",
+					"signature": "inline void MdfNode::SetProperty(const std::string& key, const MdfValue& value)",
+					"line": 262
+				},
+				{
+					"kind": "function",
+					"name": "SetProperty",
+					"signature": "inline void MdfNode::SetProperty(const std::string& key, MdfValue&& value)",
+					"line": 273
+				},
+				{
+					"kind": "function",
+					"name": "SetProperty",
+					"signature": "inline void MdfNode::SetProperty(std::string&& key, MdfValue&& value)",
+					"line": 284
+				},
+				{
+					"kind": "function",
+					"name": "RemoveProperty",
+					"signature": "inline bool MdfNode::RemoveProperty(const std::string& key)",
+					"line": 295
+				},
+				{
+					"kind": "function",
+					"name": "operator[]",
+					"signature": "inline MdfValue& MdfNode::operator[](const std::string& key)",
+					"line": 315
+				},
+				{
+					"kind": "function",
+					"name": "GetPropertyCommentsAt",
+					"signature": "inline const MdfPropertyComments& MdfNode::GetPropertyCommentsAt(size_t index) const",
+					"line": 326
+				},
+				{
+					"kind": "function",
+					"name": "GetPropertyComments",
+					"signature": "inline const MdfPropertyComments& MdfNode::GetPropertyComments(const std::string& key) const",
+					"line": 331
+				},
+				{
+					"kind": "function",
+					"name": "SetPropertyCommentsAt",
+					"signature": "inline void MdfNode::SetPropertyCommentsAt(size_t index, MdfPropertyComments comments)",
+					"line": 335
+				},
+				{
+					"kind": "function",
+					"name": "SetPropertyComments",
+					"signature": "inline void MdfNode::SetPropertyComments(const std::string& key, MdfPropertyComments comments)",
+					"line": 345
+				},
+				{
+					"kind": "function",
+					"name": "AddChild",
+					"signature": "inline MdfNode& MdfNode::AddChild(const std::string& type, const std::string& name)",
+					"line": 349
+				},
+				{
+					"kind": "function",
+					"name": "AddChild",
+					"signature": "inline MdfNode& MdfNode::AddChild(MdfNode&& node)",
+					"line": 354
+				},
+				{
+					"kind": "function",
+					"name": "FindChild",
+					"signature": "inline const MdfNode* MdfNode::FindChild(const std::string& type, const std::string& name) const",
+					"line": 359
+				},
+				{
+					"kind": "function",
+					"name": "FindChild",
+					"signature": "inline MdfNode* MdfNode::FindChild(const std::string& type, const std::string& name)",
+					"line": 368
+				},
+				{
+					"kind": "function",
+					"name": "FindChildren",
+					"signature": "inline std::vector<const MdfNode*> MdfNode::FindChildren(const std::string& type) const",
+					"line": 377
+				},
+				{
+					"kind": "function",
+					"name": "RemoveChild",
+					"signature": "inline bool MdfNode::RemoveChild(size_t index)",
+					"line": 387
+				},
+				{
+					"kind": "function",
+					"name": "RemoveChild",
+					"signature": "inline bool MdfNode::RemoveChild(const std::string& type, const std::string& name)",
+					"line": 395
+				},
+				{
+					"kind": "function",
+					"name": "CreateRoot",
+					"signature": "inline MdfNode& MdfDocument::CreateRoot(const std::string& type, const std::string& name)",
+					"line": 405
+				},
+				{
+					"kind": "function",
+					"name": "Root",
+					"signature": "inline MdfNode& MdfDocument::Root()",
+					"doc": "Root() never throws: the mutable overload self-heals by creating an\nunnamed root, the const overload hands back a shared empty node. Check\nHasRoot() when the distinction matters.\n\nA text package (mdf_package.h) leads with its summary node; Root() is the\ndocument's own root behind it, so a reader written for the plain document\nreads the package form unchanged and a writer that edits Root() and writes\nthe document back keeps the summary — and with it the asset's id. Code that\nwants the summary takes Roots().front().",
+					"line": 419
+				},
+				{
+					"kind": "function",
+					"name": "Root",
+					"signature": "inline const MdfNode& MdfDocument::Root() const",
+					"line": 431
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_lexer.h",
+			"include": "mdf/mdf_lexer.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nLexer — tokenizes MDF source text",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "MdfTokenType",
+					"namespace": "MDF",
+					"bases": "uint8_t",
+					"line": 18,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Identifier",
+							"signature": "Identifier",
+							"doc": "foo, bar, Transform, GameObject",
+							"line": 19
+						},
+						{
+							"kind": "enumerator",
+							"name": "String",
+							"signature": "String",
+							"doc": "\"hello world\"",
+							"line": 20
+						},
+						{
+							"kind": "enumerator",
+							"name": "Integer",
+							"signature": "Integer",
+							"doc": "42, -5",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "Float",
+							"signature": "Float",
+							"doc": "3.14, -0.5, 1e10",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "True",
+							"signature": "True",
+							"doc": "true",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "False",
+							"signature": "False",
+							"doc": "false",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "Null",
+							"signature": "Null",
+							"doc": "null",
+							"line": 26
+						},
+						{
+							"kind": "enumerator",
+							"name": "LBrace",
+							"signature": "LBrace",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "RBrace",
+							"signature": "RBrace",
+							"line": 29
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfToken",
+					"namespace": "MDF",
+					"line": 50,
+					"members": [
+						{
+							"kind": "field",
+							"name": "type",
+							"signature": "MdfTokenType type = MdfTokenType::Error",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "value",
+							"signature": "std::string value",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "line",
+							"signature": "uint32_t line = 0",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "column",
+							"signature": "uint32_t column = 0",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "intValue",
+							"signature": "int64_t intValue = 0",
+							"doc": "Parsed once at lex time, valid when type is Integer or Float. The\nparser consumes these instead of re-parsing `value` with stoll/stod.",
+							"line": 57
+						},
+						{
+							"kind": "field",
+							"name": "floatValue",
+							"signature": "double floatValue = 0.0",
+							"line": 58
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfLexer",
+					"namespace": "MDF",
+					"line": 61,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MdfLexer",
+							"signature": "explicit MdfLexer(const std::string& source) : m_source(source)",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "Tokenize",
+							"signature": "inline std::vector<MdfToken> Tokenize()",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "GetErrors",
+							"signature": "const std::vector<std::string>& GetErrors() const",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "HasErrors",
+							"signature": "bool HasErrors() const",
+							"line": 71
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "Tokenize",
+					"signature": "inline std::vector<MdfToken> MdfLexer::Tokenize()",
+					"line": 149
+				},
+				{
+					"kind": "function",
+					"name": "NextToken",
+					"signature": "inline MdfToken MdfLexer::NextToken()",
+					"line": 174
+				},
+				{
+					"kind": "function",
+					"name": "ReadString",
+					"signature": "inline MdfToken MdfLexer::ReadString()",
+					"line": 227
+				},
+				{
+					"kind": "function",
+					"name": "ReadNumber",
+					"signature": "inline MdfToken MdfLexer::ReadNumber()",
+					"line": 308
+				},
+				{
+					"kind": "function",
+					"name": "ReadIdentifier",
+					"signature": "inline MdfToken MdfLexer::ReadIdentifier()",
+					"line": 378
+				},
+				{
+					"kind": "function",
+					"name": "ReadHexLiteral",
+					"signature": "inline MdfToken MdfLexer::ReadHexLiteral()",
+					"line": 404
+				},
+				{
+					"kind": "function",
+					"name": "ReadComment",
+					"signature": "inline MdfToken MdfLexer::ReadComment()",
+					"doc": "Carriage returns are dropped from the text so a CRLF file and its LF\ntwin produce the same token, and so the writer — which always emits LF —\nreproduces the comment byte-for-byte on either host.",
+					"line": 429
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_merge.h",
+			"include": "mdf/mdf_merge.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nProperty-level diff and three-way merge of MDF documents (ROADMAP §23.3).\n\nA line diff of a level answers \"which lines moved\"; an artist asks \"which\nproperties changed\". Nodes are matched by (type, name, occurrence among\nsiblings of that type and name) and properties by key, so a reordered file\ndiffs empty and two people who changed different properties of one material\nmerge without a conflict — which a line merge of the same file gets wrong\nwhenever their edits land on adjacent lines.\n\nWorks on any MDF document, packages included: a package's summary is its\nfirst node and diffs like any other. Comments are not part of the diff, but\na merge carries them: each node's and property's comments take whichever\nside changed them, and both sides' lines when both did.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "MdfDiffKind",
+					"namespace": "MDF",
+					"bases": "uint8_t",
+					"line": 32,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Added",
+							"signature": "Added",
+							"line": 33
+						},
+						{
+							"kind": "enumerator",
+							"name": "Removed",
+							"signature": "Removed",
+							"line": 34
+						},
+						{
+							"kind": "enumerator",
+							"name": "Changed",
+							"signature": "Changed",
+							"line": 35
+						},
+						{
+							"kind": "enumerator",
+							"name": "Same",
+							"signature": "Same",
+							"doc": "A property both sides hold with the same value: only when the caller\nasks for the whole document (a side-by-side view that shows context).",
+							"line": 38
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfDiffEntry",
+					"namespace": "MDF",
+					"doc": "Property empty = the whole node was added or removed.",
+					"line": 42,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Kind",
+							"signature": "MdfDiffKind Kind = MdfDiffKind::Changed",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "Path",
+							"signature": "std::string Path",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "Property",
+							"signature": "std::string Property",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "Before",
+							"signature": "std::string Before",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "After",
+							"signature": "std::string After",
+							"line": 47
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfMergeConflict",
+					"namespace": "MDF",
+					"line": 50,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Path",
+							"signature": "std::string Path",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "Property",
+							"signature": "std::string Property",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "Base",
+							"signature": "std::string Base",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "Ours",
+							"signature": "std::string Ours",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "Theirs",
+							"signature": "std::string Theirs",
+							"line": 55
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfStructuralDiff",
+					"namespace": "MDF",
+					"line": 58,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ValuesEqual",
+							"signature": "static bool ValuesEqual(const MdfValue& a, const MdfValue& b)",
+							"static": true,
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "FormatValue",
+							"signature": "static std::string FormatValue(const MdfValue& value)",
+							"static": true,
+							"doc": "The value the way the text encoding spells it.",
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "NodesEqual",
+							"signature": "static bool NodesEqual(const MdfNode& a, const MdfNode& b)",
+							"static": true,
+							"line": 114
+						},
+						{
+							"kind": "method",
+							"name": "NodeLabel",
+							"signature": "static std::string NodeLabel(const MdfNode& node)",
+							"static": true,
+							"line": 135
+						},
+						{
+							"kind": "method",
+							"name": "Keys",
+							"signature": "static std::vector<std::string> Keys(const std::vector<MdfNode>& nodes)",
+							"static": true,
+							"doc": "Identity keys of a node list, in order: type, name and the occurrence\nindex among siblings sharing both.",
+							"line": 141
+						},
+						{
+							"kind": "method",
+							"name": "Compute",
+							"signature": "static std::vector<MdfDiffEntry> Compute(const MdfDocument& before, const MdfDocument& after, bool includeSame = false)",
+							"static": true,
+							"line": 153
+						},
+						{
+							"kind": "method",
+							"name": "DocumentFromBytes",
+							"signature": "static bool DocumentFromBytes(const std::string& bytes, MdfDocument& out, std::string* error = nullptr)",
+							"static": true,
+							"doc": "A document from file bytes of either encoding: a binary package becomes\nits summary node followed by its payload, bulk chunks as tag, size and\nhash (MdfPackage::Dump), so a binary asset diffs by property too.",
+							"line": 163
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfMerge",
+					"namespace": "MDF",
+					"line": 257,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Merge",
+							"signature": "static bool Merge(const MdfDocument& base, const MdfDocument& ours, const MdfDocument& theirs, MdfDocument& out, std::vector<MdfMergeConflict>& conflicts)",
+							"static": true,
+							"doc": "Three-way merge. `out` is always written — on a conflict it holds OUR\nside of each conflicting property or node, so a caller that accepts the\nresult loses nothing it had. True when nothing conflicted.",
+							"line": 262
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_package.h",
+			"include": "mdf/mdf_package.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nAsset packages: one data model, two encodings (ROADMAP §23 D5).\n\nbinary — a fixed header, an mdfb summary, an mdfb payload and 16-byte\naligned bulk chunks (geometry, texels, curves) that load on\ndemand. Meshes, textures, sounds, baked data (.mesh, .tex, ...).\ntext   — the same summary node followed by the payload nodes, no bulk.\nMaterials, prefabs, data assets, actor files, levels (.mat,\n.prefab, .actor, .mmap, ...).\n\nEvery asset type has its own extension (Core/FileTypes.h); the generic\n.masset/.mdf an earlier engine wrote are still read.\n\nThe SUMMARY is what the asset registry and the content browser read without\nloading the asset: class, id, per-subsystem versions, registry tags, the\nimport table (what the asset references, by id and path, hard or soft) and,\nin the binary encoding, the export table and the bulk chunk table.\n\nThe payload holds the asset's objects as MDF nodes — Type \"Name\" { props } —\nwritten by the engine's reflection serializer. The encoding is the type's\nchoice (bulk data => binary), never the author's; the cook turns everything\nbinary.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "MdfPackageHeader",
+					"namespace": "MDF",
+					"line": 49,
+					"members": [
+						{
+							"kind": "field",
+							"name": "magic",
+							"signature": "uint32_t magic",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "version",
+							"signature": "uint32_t version",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "summaryOffset",
+							"signature": "uint64_t summaryOffset",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "summarySize",
+							"signature": "uint64_t summarySize",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "payloadOffset",
+							"signature": "uint64_t payloadOffset",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "payloadSize",
+							"signature": "uint64_t payloadSize",
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "bulkOffset",
+							"signature": "uint64_t bulkOffset",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "bulkSize",
+							"signature": "uint64_t bulkSize",
+							"line": 57
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfPackageImport",
+					"namespace": "MDF",
+					"doc": "A reference to another asset. The path survives a rename through the\nregistry's redirectors; the id is what resolves it.",
+					"line": 65,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Path",
+							"signature": "std::string Path",
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "Id",
+							"signature": "std::string Id",
+							"line": 67
+						},
+						{
+							"kind": "field",
+							"name": "Soft",
+							"signature": "bool Soft = false",
+							"line": 68
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfPackageExport",
+					"namespace": "MDF",
+					"doc": "One object the package defines: the payload root of the same index.",
+					"line": 72,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Class",
+							"signature": "std::string Class",
+							"line": 73
+						},
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 74
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfPackageBulk",
+					"namespace": "MDF",
+					"doc": "A bulk chunk. Editor-only chunks (source geometry, the uncompressed texture\na reimport compares against) are what the cook strips.",
+					"line": 79,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Tag",
+							"signature": "std::string Tag",
+							"line": 80
+						},
+						{
+							"kind": "field",
+							"name": "EditorOnly",
+							"signature": "bool EditorOnly = false",
+							"line": 81
+						},
+						{
+							"kind": "field",
+							"name": "Bytes",
+							"signature": "std::vector<uint8_t> Bytes",
+							"line": 82
+						},
+						{
+							"kind": "field",
+							"name": "Offset",
+							"signature": "uint64_t Offset = 0",
+							"doc": "Set when only the summary was read: where the bytes are, not the bytes.",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "Size",
+							"signature": "uint64_t Size = 0",
+							"line": 86
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfPackageThumbnail",
+					"namespace": "MDF",
+					"doc": "The browser's picture of the asset, carried in the summary so a content\nbrowser shows it from the registry's read without loading or rendering the\nasset. Format names the bytes: \"png\" (encoded) or \"rgba8\" (Width*Height*4).",
+					"line": 92,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Width",
+							"signature": "uint32_t Width = 0",
+							"line": 93
+						},
+						{
+							"kind": "field",
+							"name": "Height",
+							"signature": "uint32_t Height = 0",
+							"line": 94
+						},
+						{
+							"kind": "field",
+							"name": "Format",
+							"signature": "std::string Format",
+							"line": 95
+						},
+						{
+							"kind": "field",
+							"name": "Bytes",
+							"signature": "std::vector<uint8_t> Bytes",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "IsValid",
+							"signature": "bool IsValid() const",
+							"line": 98
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfPackage",
+					"namespace": "MDF",
+					"line": 103,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Class",
+							"signature": "std::string Class",
+							"line": 105
+						},
+						{
+							"kind": "field",
+							"name": "Id",
+							"signature": "std::string Id",
+							"line": 106
+						},
+						{
+							"kind": "field",
+							"name": "FormatVersion",
+							"signature": "uint32_t FormatVersion = MPKG_VERSION",
+							"line": 107
+						},
+						{
+							"kind": "field",
+							"name": "Versions",
+							"signature": "std::map<std::string, uint32_t> Versions",
+							"doc": "Subsystem -> version of the data it wrote (UE's custom versions): a mesh\nloader asks for \"mesh\", an animation loader for \"anim\", and each decides\nalone what an older version means. Keys are identifiers ([A-Za-z0-9_]):\nthey are written as property keys.",
+							"line": 113
+						},
+						{
+							"kind": "field",
+							"name": "Tags",
+							"signature": "std::map<std::string, std::string> Tags",
+							"doc": "Registry tags, sorted by key — the content browser filters on these\nwithout loading the asset.",
+							"line": 117
+						},
+						{
+							"kind": "field",
+							"name": "Imports",
+							"signature": "std::vector<MdfPackageImport> Imports",
+							"line": 119
+						},
+						{
+							"kind": "field",
+							"name": "Exports",
+							"signature": "std::vector<MdfPackageExport> Exports",
+							"doc": "Filled by the readers from the payload (text) or the summary (binary).",
+							"line": 122
+						},
+						{
+							"kind": "field",
+							"name": "Payload",
+							"signature": "MdfDocument Payload",
+							"doc": "The objects, one root node each.",
+							"line": 125
+						},
+						{
+							"kind": "field",
+							"name": "Bulk",
+							"signature": "std::vector<MdfPackageBulk> Bulk",
+							"line": 127
+						},
+						{
+							"kind": "field",
+							"name": "Thumbnail",
+							"signature": "MdfPackageThumbnail Thumbnail",
+							"doc": "Binary encoding only. A text package never carries one: a re-render on\nanother GPU would rewrite the line and every merge of a material would\nconflict on a picture nobody edited.",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "FindBulk",
+							"signature": "const MdfPackageBulk* FindBulk(const std::string& tag) const",
+							"line": 134
+						},
+						{
+							"kind": "method",
+							"name": "IsBinary",
+							"signature": "static bool IsBinary(const uint8_t* data, size_t size)",
+							"static": true,
+							"line": 144
+						},
+						{
+							"kind": "method",
+							"name": "WriteBinary",
+							"signature": "inline std::vector<uint8_t> WriteBinary() const",
+							"doc": "The binary encoding (.mesh, .tex, .anim, ...).",
+							"line": 155
+						},
+						{
+							"kind": "method",
+							"name": "WriteText",
+							"signature": "inline bool WriteText(std::string& out, std::string* error = nullptr) const",
+							"doc": "The text encoding (.mat, .prefab, .mmap, ...). False with `error` set when the package\ncarries bulk data: such a type is binary by definition.",
+							"line": 159
+						},
+						{
+							"kind": "method",
+							"name": "Read",
+							"signature": "static inline bool Read(const uint8_t* data, size_t size, MdfPackage& out, std::string* error = nullptr)",
+							"static": true,
+							"doc": "Either encoding, sniffed by the magic.",
+							"line": 162
+						},
+						{
+							"kind": "method",
+							"name": "ReadSummary",
+							"signature": "static inline bool ReadSummary(const uint8_t* data, size_t size, MdfPackage& out, std::string* error = nullptr, uint64_t fileSize = 0)",
+							"static": true,
+							"doc": "The summary alone: class, id, versions, tags, imports, exports and the\nbulk table (offsets, not bytes). Never decodes the payload of a binary\npackage — this is the registry's read. `fileSize` > `size` says `data`\nis only the front of a binary file (header and summary), so a browser\nreads a thumbnail without pulling a mesh's geometry off disk.",
+							"line": 169
+						},
+						{
+							"kind": "method",
+							"name": "Dump",
+							"signature": "inline std::string Dump() const",
+							"doc": "A whole package rendered as text, bulk chunks listed by tag and size —\nthe `textconv` git runs over a binary asset so a diff and a review read it.",
+							"line": 173
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "field",
+					"name": "MPKG_MAGIC",
+					"signature": "constexpr uint32_t MPKG_MAGIC = 0x474B504D",
+					"doc": "\"MPKG\" little-endian",
+					"line": 41
+				},
+				{
+					"kind": "field",
+					"name": "MPKG_VERSION",
+					"signature": "constexpr uint32_t MPKG_VERSION = 1",
+					"line": 42
+				},
+				{
+					"kind": "field",
+					"name": "MPKG_BULK_ALIGNMENT",
+					"signature": "constexpr uint32_t MPKG_BULK_ALIGNMENT = 16",
+					"line": 43
+				},
+				{
+					"kind": "function",
+					"name": "static_assert",
+					"signature": "static_assert(sizeof(MdfPackageHeader) == 56, \"MdfPackageHeader must be 56 bytes\")",
+					"line": 61
+				},
+				{
+					"kind": "function",
+					"name": "HashBytes",
+					"signature": "inline uint64_t MdfPackage::HashBytes(const std::vector<uint8_t>& bytes)",
+					"line": 184
+				},
+				{
+					"kind": "function",
+					"name": "EncodeBase64",
+					"signature": "inline std::string MdfPackage::EncodeBase64(const std::vector<uint8_t>& bytes)",
+					"doc": "MDF has no byte-string value, and the summary is the one part of a binary\npackage the registry decodes — so the thumbnail rides there as base64.",
+					"line": 195
+				},
+				{
+					"kind": "function",
+					"name": "DecodeBase64",
+					"signature": "inline bool MdfPackage::DecodeBase64(const std::string& text, std::vector<uint8_t>& out)",
+					"line": 215
+				},
+				{
+					"kind": "function",
+					"name": "BuildSummaryNode",
+					"signature": "inline MdfNode MdfPackage::BuildSummaryNode(bool binary, const std::vector<std::pair<uint64_t, uint64_t>>& bulkSpans) const",
+					"line": 265
+				},
+				{
+					"kind": "function",
+					"name": "ParseSummaryNode",
+					"signature": "inline bool MdfPackage::ParseSummaryNode(const MdfNode& node, MdfPackage& out, std::string* error)",
+					"line": 338
+				},
+				{
+					"kind": "function",
+					"name": "DeriveExports",
+					"signature": "inline void MdfPackage::DeriveExports(MdfPackage& out)",
+					"line": 435
+				},
+				{
+					"kind": "function",
+					"name": "WriteBinary",
+					"signature": "inline std::vector<uint8_t> MdfPackage::WriteBinary() const",
+					"line": 445
+				},
+				{
+					"kind": "function",
+					"name": "WriteText",
+					"signature": "inline bool MdfPackage::WriteText(std::string& out, std::string* error) const",
+					"line": 483
+				},
+				{
+					"kind": "function",
+					"name": "ReadSummary",
+					"signature": "inline bool MdfPackage::ReadSummary(const uint8_t* data, size_t size, MdfPackage& out, std::string* error, uint64_t fileSize)",
+					"line": 501
+				},
+				{
+					"kind": "function",
+					"name": "Read",
+					"signature": "inline bool MdfPackage::Read(const uint8_t* data, size_t size, MdfPackage& out, std::string* error)",
+					"line": 572
+				},
+				{
+					"kind": "function",
+					"name": "Dump",
+					"signature": "inline std::string MdfPackage::Dump() const",
+					"line": 611
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_package_text.h",
+			"include": "mdf/mdf_package_text.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nThe text package form of a type that was a plain MDF document before\n(ROADMAP §23.6): a migrated `.loom` or `.ui` is the same document with a\npackage summary as its first node. A loader strips the\nsummary and reads on; a saver puts back the summary the file already had,\nso the asset keeps its id; a scanner asks the class without loading.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MdfPackageText",
+					"namespace": "MDF",
+					"line": 21,
+					"members": [
+						{
+							"kind": "method",
+							"name": "StripSummary",
+							"signature": "static std::string StripSummary(MdfDocument& doc)",
+							"static": true,
+							"doc": "Removes a leading package summary and returns its class; empty (and\n`doc` untouched) when the document is not a package.",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "ClassOf",
+							"signature": "static std::string ClassOf(const std::string& bytes)",
+							"static": true,
+							"doc": "The class a package's bytes declare in any encoding — binary package,\nmdfb (a cooked text package) or text. Empty when it is not a package.",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "IdOf",
+							"signature": "static std::string IdOf(const std::string& bytes)",
+							"static": true,
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "CollectReferences",
+							"signature": "static void CollectReferences(const MdfNode& node, std::vector<std::string>& out)",
+							"static": true,
+							"doc": "Asset references under `node`: `@`-reference values and strings that\nname a Content/ path — what a package lists as its imports.",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "Wrap",
+							"signature": "static bool Wrap(const std::string& payloadText, const std::string& assetClass, const std::string& existingBytes, const std::string& newId, std::string& outText, std::string* error = nullptr)",
+							"static": true,
+							"doc": "The text package around `payloadText` (the document the type writes):\nclass `assetClass`, the id `existingBytes` already carries (a save over\nthe asset) or `newId`, and the payload's references as imports. A\npayload that already leads with a summary is re-wrapped, not nested.",
+							"line": 73
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_parser.h",
+			"include": "mdf/mdf_parser.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nParser — parses MDF text format into a Document\n\nGrammar:\ndocument     = node* comment*\nnode         = comment* IDENTIFIER [STRING] '{' node_body comment* '}'\nnode_body    = (property | node)*\nproperty     = comment* IDENTIFIER ':' value [comment]   // the trailing one on the same line\nvalue        = STRING | INTEGER | FLOAT | TRUE | FALSE | NULL\n| constructor_call | asset_ref | array | enum_value\nconstructor  = IDENTIFIER '(' arg_list ')'     // vec2, vec3, vec4, quat, rgb, rgba, uuid, hex\nasset_ref    = '@' STRING\narray        = '[' [value (',' value)*] ']'\nenum_value   = IDENTIFIER",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MdfParser",
+					"namespace": "MDF",
+					"line": 30,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Parse",
+							"signature": "static inline bool Parse(const std::string& source, MdfDocument& outDoc, std::string* outError = nullptr)",
+							"static": true,
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "Parse",
+							"signature": "static inline bool Parse(const std::vector<MdfToken>& tokens, MdfDocument& outDoc, std::string* outError = nullptr)",
+							"static": true,
+							"line": 33
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "Parse",
+					"signature": "inline bool MdfParser::Parse(const std::string& source, MdfDocument& outDoc, std::string* outError)",
+					"line": 132
+				},
+				{
+					"kind": "function",
+					"name": "Parse",
+					"signature": "inline bool MdfParser::Parse(const std::vector<MdfToken>& tokens, MdfDocument& outDoc, std::string* outError)",
+					"line": 148
+				},
+				{
+					"kind": "function",
+					"name": "Expect",
+					"signature": "inline bool MdfParser::Expect(MdfTokenType type, const std::string& context)",
+					"line": 161
+				},
+				{
+					"kind": "function",
+					"name": "ParseDocument",
+					"signature": "inline bool MdfParser::ParseDocument(MdfDocument& doc)",
+					"line": 180
+				},
+				{
+					"kind": "function",
+					"name": "ParseNode",
+					"signature": "inline bool MdfParser::ParseNode(MdfNode& outNode)",
+					"line": 199
+				},
+				{
+					"kind": "function",
+					"name": "ParseNodeBody",
+					"signature": "inline bool MdfParser::ParseNodeBody(MdfNode& node)",
+					"line": 236
+				},
+				{
+					"kind": "function",
+					"name": "ParseValue",
+					"signature": "inline bool MdfParser::ParseValue(MdfValue& outValue)",
+					"line": 288
+				},
+				{
+					"kind": "function",
+					"name": "ParseConstructorCall",
+					"signature": "inline bool MdfParser::ParseConstructorCall(const std::string& name, MdfValue& outValue)",
+					"line": 349
+				},
+				{
+					"kind": "function",
+					"name": "ParseArray",
+					"signature": "inline bool MdfParser::ParseArray(MdfValue& outValue)",
+					"line": 482
+				},
+				{
+					"kind": "function",
+					"name": "ParseNumberValue",
+					"signature": "inline bool MdfParser::ParseNumberValue(double& out)",
+					"line": 521
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_types.h",
+			"include": "mdf/mdf_types.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nStandalone math types for MDF values (simple POD structs)",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "MdfVec2",
+					"namespace": "MDF",
+					"line": 10,
+					"members": [
+						{
+							"kind": "field",
+							"name": "y",
+							"signature": "float x, y",
+							"line": 11
+						},
+						{
+							"kind": "method",
+							"name": "MdfVec2",
+							"signature": "MdfVec2() : x(0.0f), y(0.0f)",
+							"line": 13
+						},
+						{
+							"kind": "method",
+							"name": "MdfVec2",
+							"signature": "MdfVec2(float x, float y) : x(x), y(y)",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "operator==",
+							"signature": "bool operator==(const MdfVec2& o) const",
+							"line": 18
+						},
+						{
+							"kind": "method",
+							"name": "operator!=",
+							"signature": "bool operator!=(const MdfVec2& o) const",
+							"line": 21
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfVec3",
+					"namespace": "MDF",
+					"line": 26,
+					"members": [
+						{
+							"kind": "field",
+							"name": "z",
+							"signature": "float x, y, z",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "MdfVec3",
+							"signature": "MdfVec3() : x(0.0f), y(0.0f), z(0.0f)",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "MdfVec3",
+							"signature": "MdfVec3(float x, float y, float z) : x(x), y(y), z(z)",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "operator==",
+							"signature": "bool operator==(const MdfVec3& o) const",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "operator!=",
+							"signature": "bool operator!=(const MdfVec3& o) const",
+							"line": 37
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfVec4",
+					"namespace": "MDF",
+					"line": 42,
+					"members": [
+						{
+							"kind": "field",
+							"name": "w",
+							"signature": "float x, y, z, w",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "MdfVec4",
+							"signature": "MdfVec4() : x(0.0f), y(0.0f), z(0.0f), w(0.0f)",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "MdfVec4",
+							"signature": "MdfVec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w)",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "operator==",
+							"signature": "bool operator==(const MdfVec4& o) const",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "operator!=",
+							"signature": "bool operator!=(const MdfVec4& o) const",
+							"line": 53
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MdfQuat",
+					"namespace": "MDF",
+					"line": 58,
+					"members": [
+						{
+							"kind": "field",
+							"name": "w",
+							"signature": "float x, y, z, w",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "MdfQuat",
+							"signature": "MdfQuat() : x(0.0f), y(0.0f), z(0.0f), w(1.0f)",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "MdfQuat",
+							"signature": "MdfQuat(float x, float y, float z, float w) : x(x), y(y), z(z), w(w)",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "operator==",
+							"signature": "bool operator==(const MdfQuat& o) const",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "operator!=",
+							"signature": "bool operator!=(const MdfQuat& o) const",
+							"line": 69
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_value.h",
+			"include": "mdf/mdf_value.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nTyped value representation (variant-based, 13 value types)",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "MdfValueType",
+					"namespace": "MDF",
+					"bases": "uint8_t",
+					"line": 18,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Null",
+							"signature": "Null = 0",
+							"line": 19
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bool",
+							"signature": "Bool",
+							"line": 20
+						},
+						{
+							"kind": "enumerator",
+							"name": "Int",
+							"signature": "Int",
+							"doc": "int64_t",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "Float",
+							"signature": "Float",
+							"doc": "double",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "String",
+							"signature": "String",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec2",
+							"signature": "Vec2",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec3",
+							"signature": "Vec3",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec4",
+							"signature": "Vec4",
+							"line": 26
+						},
+						{
+							"kind": "enumerator",
+							"name": "Quat",
+							"signature": "Quat",
+							"line": 27
+						},
+						{
+							"kind": "enumerator",
+							"name": "UUID",
+							"signature": "UUID",
+							"doc": "stored as string \"XXXXXXXX-XXXX-XXXX\"",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "AssetRef",
+							"signature": "AssetRef",
+							"doc": "stored as string \"@path/to/asset\"",
+							"line": 29
+						},
+						{
+							"kind": "enumerator",
+							"name": "Enum",
+							"signature": "Enum",
+							"doc": "stored as string (bare identifier)",
+							"line": 30
+						},
+						{
+							"kind": "enumerator",
+							"name": "Array",
+							"signature": "Array",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bytes",
+							"signature": "Bytes",
+							"doc": "Raw bytes. mdfb stores them as they are, 16-byte aligned, with no\nstring-table round trip; the text encoding writes the typed literal\nbytes(\"<Base64>\"), which reads back as Bytes. An older text file's bare\nBase64 string reads as a String that DecodeBytes accepts too.",
+							"line": 36
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfBase64",
+					"namespace": "MDF",
+					"doc": "The Base64 the text encoding writes Bytes as (standard alphabet, padded) —\nthe same bytes Core's FBase64 produces, so a blob written either way reads\nback through either.",
+					"line": 42,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Encode",
+							"signature": "static std::string Encode(const uint8_t* data, size_t size)",
+							"static": true,
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "Decode",
+							"signature": "static bool Decode(const std::string& text, std::vector<uint8_t>& out)",
+							"static": true,
+							"line": 74
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "MdfValue",
+					"namespace": "MDF",
+					"doc": "A single typed value in an MDF document.",
+					"line": 115,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "ArrayType",
+							"signature": "using ArrayType = std::vector<MdfValue>",
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue() : m_type(MdfValueType::Null), m_data(std::monostate{})",
+							"line": 119
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(bool val) : m_type(MdfValueType::Bool), m_data(val)",
+							"line": 122
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(int val) : m_type(MdfValueType::Int), m_data(static_cast<int64_t>(val))",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(unsigned int val) : m_type(MdfValueType::Int), m_data(static_cast<int64_t>(val))",
+							"line": 126
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(int64_t val) : m_type(MdfValueType::Int), m_data(val)",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(unsigned long long val) : m_type(MdfValueType::Int), m_data(static_cast<int64_t>(val))",
+							"line": 130
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(float val) : m_type(MdfValueType::Float), m_data(static_cast<double>(val))",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(double val) : m_type(MdfValueType::Float), m_data(val)",
+							"line": 134
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(const char* val) : m_type(MdfValueType::String), m_data(std::string(val))",
+							"line": 136
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(const std::string& val) : m_type(MdfValueType::String), m_data(val)",
+							"line": 138
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(std::string&& val) : m_type(MdfValueType::String), m_data(std::move(val))",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(const MdfVec2& val) : m_type(MdfValueType::Vec2), m_data(val)",
+							"line": 143
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(const MdfVec3& val) : m_type(MdfValueType::Vec3), m_data(val)",
+							"line": 145
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(const MdfVec4& val) : m_type(MdfValueType::Vec4), m_data(val)",
+							"line": 147
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(const MdfQuat& val) : m_type(MdfValueType::Quat), m_data(val)",
+							"line": 149
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(const ArrayType& val) : m_type(MdfValueType::Array), m_data(val)",
+							"line": 152
+						},
+						{
+							"kind": "method",
+							"name": "MdfValue",
+							"signature": "MdfValue(ArrayType&& val) : m_type(MdfValueType::Array), m_data(std::move(val))",
+							"line": 154
+						},
+						{
+							"kind": "method",
+							"name": "MakeUUID",
+							"signature": "static MdfValue MakeUUID(const std::string& uuid)",
+							"static": true,
+							"doc": "Named constructors for types sharing string storage",
+							"line": 158
+						},
+						{
+							"kind": "method",
+							"name": "MakeAssetRef",
+							"signature": "static MdfValue MakeAssetRef(const std::string& path)",
+							"static": true,
+							"line": 165
+						},
+						{
+							"kind": "method",
+							"name": "MakeEnum",
+							"signature": "static MdfValue MakeEnum(const std::string& name)",
+							"static": true,
+							"line": 172
+						},
+						{
+							"kind": "method",
+							"name": "MakeBytes",
+							"signature": "static MdfValue MakeBytes(std::vector<uint8_t> bytes)",
+							"static": true,
+							"line": 179
+						},
+						{
+							"kind": "method",
+							"name": "MakeBytes",
+							"signature": "static MdfValue MakeBytes(const uint8_t* data, size_t size)",
+							"static": true,
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "Type",
+							"signature": "MdfValueType Type() const",
+							"line": 190
+						},
+						{
+							"kind": "method",
+							"name": "IsNull",
+							"signature": "bool IsNull() const",
+							"line": 193
+						},
+						{
+							"kind": "method",
+							"name": "IsBool",
+							"signature": "bool IsBool() const",
+							"line": 196
+						},
+						{
+							"kind": "method",
+							"name": "IsInt",
+							"signature": "bool IsInt() const",
+							"line": 199
+						},
+						{
+							"kind": "method",
+							"name": "IsFloat",
+							"signature": "bool IsFloat() const",
+							"line": 202
+						},
+						{
+							"kind": "method",
+							"name": "IsNumber",
+							"signature": "bool IsNumber() const",
+							"line": 205
+						},
+						{
+							"kind": "method",
+							"name": "IsString",
+							"signature": "bool IsString() const",
+							"line": 208
+						},
+						{
+							"kind": "method",
+							"name": "IsVec2",
+							"signature": "bool IsVec2() const",
+							"line": 211
+						},
+						{
+							"kind": "method",
+							"name": "IsVec3",
+							"signature": "bool IsVec3() const",
+							"line": 214
+						},
+						{
+							"kind": "method",
+							"name": "IsVec4",
+							"signature": "bool IsVec4() const",
+							"line": 217
+						},
+						{
+							"kind": "method",
+							"name": "IsQuat",
+							"signature": "bool IsQuat() const",
+							"line": 220
+						},
+						{
+							"kind": "method",
+							"name": "IsUUID",
+							"signature": "bool IsUUID() const",
+							"line": 223
+						},
+						{
+							"kind": "method",
+							"name": "IsAssetRef",
+							"signature": "bool IsAssetRef() const",
+							"line": 226
+						},
+						{
+							"kind": "method",
+							"name": "IsEnum",
+							"signature": "bool IsEnum() const",
+							"line": 229
+						},
+						{
+							"kind": "method",
+							"name": "IsArray",
+							"signature": "bool IsArray() const",
+							"line": 232
+						},
+						{
+							"kind": "method",
+							"name": "IsBytes",
+							"signature": "bool IsBytes() const",
+							"line": 235
+						},
+						{
+							"kind": "method",
+							"name": "AsBytes",
+							"signature": "const std::vector<uint8_t>& AsBytes() const",
+							"line": 239
+						},
+						{
+							"kind": "method",
+							"name": "DecodeBytes",
+							"signature": "bool DecodeBytes(std::vector<uint8_t>& out) const",
+							"doc": "A blob as either encoding hands it back: Bytes from mdfb (or a document\nbuilt in memory), a Base64 String from text. False for anything else or\na String that is not Base64.",
+							"line": 249
+						},
+						{
+							"kind": "method",
+							"name": "AsBool",
+							"signature": "bool AsBool() const",
+							"doc": "Throw on type mismatch.",
+							"line": 263
+						},
+						{
+							"kind": "method",
+							"name": "AsInt",
+							"signature": "int64_t AsInt() const",
+							"line": 270
+						},
+						{
+							"kind": "method",
+							"name": "AsFloat",
+							"signature": "double AsFloat() const",
+							"line": 280
+						},
+						{
+							"kind": "method",
+							"name": "AsString",
+							"signature": "const std::string& AsString() const",
+							"line": 290
+						},
+						{
+							"kind": "method",
+							"name": "AsVec2",
+							"signature": "MdfVec2 AsVec2() const",
+							"line": 298
+						},
+						{
+							"kind": "method",
+							"name": "AsVec3",
+							"signature": "MdfVec3 AsVec3() const",
+							"line": 305
+						},
+						{
+							"kind": "method",
+							"name": "AsVec4",
+							"signature": "MdfVec4 AsVec4() const",
+							"line": 312
+						},
+						{
+							"kind": "method",
+							"name": "AsQuat",
+							"signature": "MdfQuat AsQuat() const",
+							"line": 319
+						},
+						{
+							"kind": "method",
+							"name": "AsUUID",
+							"signature": "const std::string& AsUUID() const",
+							"line": 326
+						},
+						{
+							"kind": "method",
+							"name": "AsAssetRef",
+							"signature": "const std::string& AsAssetRef() const",
+							"line": 333
+						},
+						{
+							"kind": "method",
+							"name": "AsEnum",
+							"signature": "const std::string& AsEnum() const",
+							"line": 340
+						},
+						{
+							"kind": "method",
+							"name": "AsArray",
+							"signature": "const ArrayType& AsArray() const",
+							"line": 347
+						},
+						{
+							"kind": "method",
+							"name": "AsBool",
+							"signature": "bool AsBool(bool def) const",
+							"doc": "Never throw. MdfNode::GetProperty returns Null for a key that isn't\nthere, so the throwing getters above turn a slightly-older or\nhand-edited document into a crash. These return the caller's fallback\nfor both a missing key and a type mismatch. Prefer them over a\nHasProperty + GetProperty pair.",
+							"line": 359
+						},
+						{
+							"kind": "method",
+							"name": "AsInt",
+							"signature": "int64_t AsInt(int64_t def) const",
+							"line": 363
+						},
+						{
+							"kind": "method",
+							"name": "AsFloat",
+							"signature": "double AsFloat(double def) const",
+							"line": 374
+						},
+						{
+							"kind": "method",
+							"name": "AsString",
+							"signature": "std::string AsString(const std::string& def) const",
+							"doc": "Returns by value (not by reference) so a temporary default can't dangle.",
+							"line": 386
+						},
+						{
+							"kind": "method",
+							"name": "AsUUID",
+							"signature": "std::string AsUUID(const std::string& def) const",
+							"line": 395
+						},
+						{
+							"kind": "method",
+							"name": "AsAssetRef",
+							"signature": "std::string AsAssetRef(const std::string& def) const",
+							"line": 399
+						},
+						{
+							"kind": "method",
+							"name": "AsEnum",
+							"signature": "std::string AsEnum(const std::string& def) const",
+							"line": 403
+						},
+						{
+							"kind": "method",
+							"name": "AsVec2",
+							"signature": "MdfVec2 AsVec2(const MdfVec2& def) const",
+							"line": 407
+						},
+						{
+							"kind": "method",
+							"name": "AsVec3",
+							"signature": "MdfVec3 AsVec3(const MdfVec3& def) const",
+							"line": 411
+						},
+						{
+							"kind": "method",
+							"name": "AsVec4",
+							"signature": "MdfVec4 AsVec4(const MdfVec4& def) const",
+							"line": 415
+						},
+						{
+							"kind": "method",
+							"name": "AsQuat",
+							"signature": "MdfQuat AsQuat(const MdfQuat& def) const",
+							"line": 419
+						},
+						{
+							"kind": "method",
+							"name": "AsArray",
+							"signature": "ArrayType& AsArray()",
+							"line": 423
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/MDF/Public/mdf/mdf_writer.h",
+			"include": "mdf/mdf_writer.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.\nMDF - Mowo Data Format\n\nWriter — serializes MdfDocument to human-readable text format\n\nString escaping contract: the writer escapes '\"' '\\' '\\n' '\\r' '\\t' with\ntheir shorthand forms, NUL as \\0, and every other control character\n< 0x20 as \\xHH (exactly two hex digits). The lexer decodes all of these,\nso any std::string payload round-trips byte-exact through text form.\nBytes >= 0x20 (including UTF-8 sequences) pass through unescaped.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MdfWriter",
+					"namespace": "MDF",
+					"line": 24,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MdfWriter",
+							"signature": "explicit MdfWriter(int indentSize = 4) : m_indentSize(indentSize)",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "Write",
+							"signature": "inline std::string Write(const MdfDocument& doc)",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "WriteNode",
+							"signature": "inline std::string WriteNode(const MdfNode& node)",
+							"line": 30
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "Write",
+					"signature": "inline std::string MdfWriter::Write(const MdfDocument& doc)",
+					"line": 51
+				},
+				{
+					"kind": "function",
+					"name": "WriteComments",
+					"signature": "inline void MdfWriter::WriteComments(const std::vector<std::string>& comments, int depth)",
+					"doc": "Verbatim, one per line at the owner's indent. A block comment keeps its\ninner newlines and whatever indentation its continuation lines had, so a\nfile written at the indent it was read at comes back byte-identical.",
+					"line": 73
+				},
+				{
+					"kind": "function",
+					"name": "WriteNode",
+					"signature": "inline std::string MdfWriter::WriteNode(const MdfNode& node)",
+					"line": 80
+				},
+				{
+					"kind": "function",
+					"name": "SanitizeIdentifier",
+					"signature": "inline std::string MdfWriter::SanitizeIdentifier(std::string_view raw)",
+					"doc": "Node types and property keys are written RAW — unquoted and unescaped — so\nanything that is not an identifier produces a file the parser cannot read\nback (a display name with a space cost a whole scene once). Sanitising here\nkeeps a bad name from destroying the document: the type still round-trips as\nan identifier, and the mismatch surfaces as an unknown-type warning on load\nrather than a parse failure that takes the file with it.",
+					"line": 93
+				},
+				{
+					"kind": "function",
+					"name": "WriteNodeInternal",
+					"signature": "inline void MdfWriter::WriteNodeInternal(const MdfNode& node, int depth)",
+					"line": 112
+				},
+				{
+					"kind": "function",
+					"name": "WriteValue",
+					"signature": "inline void MdfWriter::WriteValue(const MdfValue& value)",
+					"line": 150
+				},
+				{
+					"kind": "function",
+					"name": "EscapeString",
+					"signature": "inline std::string MdfWriter::EscapeString(const std::string& str)",
+					"line": 249
+				},
+				{
+					"kind": "function",
+					"name": "FormatFloat",
+					"signature": "inline std::string MdfWriter::FormatFloat(double val)",
+					"doc": "Shortest round-trip, at the width the value actually came from. Every\nengine float reaches here promoted to double, so 0.35f arrives as\n0.34999999403953552 and a fixed eight significant digits wrote it back as\n0.34999999 — a number nobody typed, re-quantized on every save. Integer-\nvalued floats < 1e15 still print as \"<int>.0\", and \".0\" is appended when\nthe shortest form has neither '.' nor 'e'.",
+					"line": 294
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,89 @@
+---
+title: Objects and garbage collection
+sidebarTitle: Objects and GC
+description: What keeps an actor or component alive, which pointer type to hold it with, and the garbage-collection rules gameplay code must follow.
+order: 6
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Core/Public/Core/NewObject.h
+  - Engine/Source/Runtime/Core/Public/Core/TObjectPtr.h
+  - Engine/Source/Runtime/Core/Public/Core/FMObjectArray.h
+  - Engine/Source/Runtime/Core/Public/Core/MClassRegistry.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/Reflect.h
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+verifiedAt: 08e26df3d
+---
+
+Every actor, actor component, world and subsystem is an `MObject`. The engine frees objects that nothing references any more, the way Unreal manages `UObject`s. This page covers the rules gameplay code has to follow. The object model, the reflection macros and the collector internals are documented in [Programming](/docs/programming/).
+
+## What keeps an object alive
+
+The collector is mark-and-sweep. It starts from the root set, follows references, and deletes everything it did not reach. Only two kinds of reference count: <Source symbol="FMObjectArray" />
+
+- An `MPROPERTY` field that points at an `MObject`. The header tool generates the trace code for each class.
+- The **outer** chain: an inner object keeps its outer alive, not the other way round.
+
+`MWorld` holds its actors in a reflected list, and each actor holds its components the same way. That list is what keeps a spawned actor alive. <Source symbol="MWorld" />
+
+<Callout type="warning">
+A plain pointer member without `MPROPERTY` does not keep its target alive. When nothing else references the target, it is swept and your pointer dangles.
+</Callout>
+
+## Which pointer to use
+
+| Type | Keeps alive | Goes null when the target dies | Use for |
+| --- | --- | --- | --- |
+| `MPROPERTY() TObjectPtr<T>` | Yes | No | Components and objects your class owns |
+| `TWeakObjectPtr<T>` | No | Yes | Actors you look up later, such as the result of `SpawnActor` |
+| `TStrongObjectPtr<T>` | Yes, adds a root | No | Plain C++ code that must hold an object with no reflected owner |
+| `TSoftObjectPtr<T>` | No | Not applicable | An asset by path, loaded on demand |
+
+<Source symbol="TObjectPtr" />
+
+<Callout type="danger">
+Declare object references in your classes as `MPROPERTY() TObjectPtr<T>`, not `MPROPERTY() T*`. The collector runs incrementally across frames, and `TObjectPtr` is what tells it about a reference you store while it is half-way through. A raw-pointer property is not caught by any tool.
+</Callout>
+
+A weak pointer stores a slot index and a serial number, so a stale pointer reports invalid instead of resolving to a new object in the same slot. Check `IsValid()` every time you use one across frames.
+
+## Create and destroy
+
+- Actors come from `MWorld::SpawnActor` and go with `MWorld::Destroy`. See [Actors and the world](/docs/gameplay/actors-and-world/).
+- Components come from `CreateDefaultSubobject` in the constructor, or `AActor::AddComponent` at runtime.
+- Other objects come from `FObjectFactory::NewObject<T>(outer, name)`. The outer does not keep the object alive, so store it in a reflected field or root it. <Source path="Engine/Source/Runtime/Core/Public/Core/NewObject.h" />
+- `MarkPendingKill()` flags any object for removal; weak pointers to it go null at once. <Source symbol="MObject" />
+
+```cpp title="Scratch.cpp" wrap
+#include "Core/MObject.h"
+#include "Core/NewObject.h"
+#include "Core/TObjectPtr.h"
+
+Mowo::MObject* scratch = Mowo::FObjectFactory::NewObject<Mowo::MObject>(nullptr, "Scratch");
+Mowo::TStrongObjectPtr<Mowo::MObject> keeper(scratch);
+
+keeper.Reset();
+```
+
+## When it runs
+
+The collector starts a cycle every few seconds and spreads marking and sweeping across frames, so a collection does not cause a hitch. <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" />
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `mowo.GC.IntervalSeconds` | 5 | Seconds between cycles; 0 disables periodic collection |
+| `mowo.GC.Incremental` | on | Off collects in a single frame |
+| `mowo.GC.StepBudgetMs` | 1.0 | Marking budget per frame |
+| `mowo.GC.SweepBudget` | 128 | Objects deleted per frame |
+
+## Classes by name
+
+`MClassRegistry::Get().FindByName(FName("APointLightActor"))` returns the class descriptor for a name, which `MWorld::SpawnActorByClass` accepts. `FindForType<T>()` does the same for a C++ type. <Source symbol="MClassRegistry" />
+
+## Related
+
+- [Programming](/docs/programming/) for the object model, reflection macros and the collector in depth
+- [Actors and the world](/docs/gameplay/actors-and-world/)
+- [Components](/docs/gameplay/components/)
+- API: [Core module](/docs/api/core/)

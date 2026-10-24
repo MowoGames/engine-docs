@@ -1,0 +1,189 @@
+---
+title: Your first scene
+sidebarTitle: First scene
+description: Find your way around Mowo Editor, place and edit actors, save the level as a .mmap file and test it with Play.
+order: 6
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEnginePie.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/SceneSaveAs.h
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorToolbar.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ModesPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ViewportPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
+  - Engine/Source/Runtime/Game/Private/Game/PlaceableActorRegistry.cpp
+  - Templates/TP_Blank/Content/Scenes/Main.mmap
+verifiedAt: f4c87dd85
+---
+
+This page walks through the loop you repeat every day: open a level, place actors, adjust them, save, and press Play to test. It assumes you have [created a project](/docs/getting-started/create-a-project/). Every shortcut below is the editor's default binding.
+
+## Open the project
+
+If you created the project in the Project Launcher, the editor is already open. Otherwise start it with your manifest:
+
+```powershell
+& .\Engine\Binaries\Win64\MowoEditor-Win64-Debug.exe --project D:\Projects\MyGame\MyGame.mproject
+```
+
+The editor opens the project's start scene. A template project opens `Content/Scenes/Main.mmap`. A project without a start scene, such as one from `mbt init`, opens an empty **Untitled** level <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp" />. To begin a fresh level at any time, use **File › New Scene**.
+
+## The editor layout
+
+| Region | Panel | What it does |
+|---|---|---|
+| Center | **Viewport** | The level, rendered live. You fly through it and move actors with the gizmo |
+| Left | **Modes** | Places actors, and switches to the other editing modes |
+| Right, top | **Outliner** | The level's actors as a tree: select, rename, reparent, delete |
+| Right, bottom | **Details** | The selected actor's components and properties, built from reflection |
+| Bottom | **Content Browser** | The project's `Content/` folder with thumbnails |
+
+Every panel is a tab you can move, split or float. More panels, such as the Output Log, Profiler and Render Debug, open from the **Window** menu. The [Editor](/docs/editor/) section covers each one.
+
+<Screenshot id="getting-started-editor-untitled-scene" alt="Mowo Editor just after opening an mbt init project: an Untitled level in the viewport, the Modes panel on the left showing the Basic category cards, the Outliner and Details panels on the right, and the Content Browser at the bottom showing the Scenes, Materials, Textures, Models and Audio folders." caption="A new project opened in the editor." />
+
+## Move around the viewport
+
+Hold the right mouse button in the viewport to fly the camera, and use <Kbd>W</Kbd> <Kbd>A</Kbd> <Kbd>S</Kbd> <Kbd>D</Kbd> to move, <Kbd>Q</Kbd> and <Kbd>E</Kbd> to go down and up <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ViewportPanel.cpp" />. Without the right mouse button, the same letters are editing shortcuts <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp" />:
+
+| Shortcut | Action |
+|---|---|
+| <Kbd>Q</Kbd> | Select tool |
+| <Kbd>W</Kbd> / <Kbd>E</Kbd> / <Kbd>R</Kbd> | Translate / rotate / scale gizmo |
+| <Kbd>F</Kbd> | Frame the selection |
+| <Kbd>G</Kbd> | Game view: hide editor-only icons |
+| <Kbd>Alt</Kbd>+<Kbd>2</Kbd> … <Kbd>Alt</Kbd>+<Kbd>6</Kbd> | Wireframe, Unlit, Lit, Detail Lighting, Lighting Only |
+| <Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd> | Undo |
+| <Kbd>Ctrl</Kbd>+<Kbd>K</Kbd> | Command palette |
+
+## Place actors
+
+The **Modes** panel places actors. Its cards come from the placeable-actor registry, grouped into categories such as Basic, Lights, Gameplay, Volumes, Visual FX and World <Source path="Engine/Source/Runtime/Game/Private/Game/PlaceableActorRegistry.cpp" />.
+
+<Steps>
+<Step title="Add a floor">
+In **Basic**, drag **Plane** into the viewport. A dragged card lands where the cursor meets the level.
+</Step>
+<Step title="Add something to look at">
+Click **Cube** in **Basic**. The new actor is selected, so the gizmo appears on it. Press <Kbd>W</Kbd> and drag the arrows to lift it above the floor.
+</Step>
+<Step title="Light it">
+In **Lights**, click **Directional Light**.
+</Step>
+<Step title="Add a player start">
+In **Gameplay**, click **Player Start**. It has no mesh, so the viewport shows it as an icon.
+</Step>
+</Steps>
+
+Each placement is one undo step. The last six types you placed appear under **Recently placed** <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ModesPanel.cpp" />.
+
+<Screenshot id="getting-started-editor-modes-place" alt="Mowo Editor with the Modes panel placing actors: the search field, the Basic category expanded with Empty Actor, Character, Pawn, Cube, Sphere, Cylinder, Plane and Cone cards, and the Recently placed view listing Cube, Plane and Directional Light. The viewport shows a cube above a plane with the translate gizmo on the cube." caption="Placing actors from the Modes panel." />
+
+## Edit actors
+
+Click an actor in the viewport or in the **Outliner** to select it. The **Details** panel shows its components and properties, built from the class's reflection data. Type a value or drag a numeric field to change it. Every edit is one undo step.
+
+In the Outliner, drag one actor onto another to make it a child. A child's transform is then relative to its parent.
+
+## Save the level
+
+Press <Kbd>Ctrl</Kbd>+<Kbd>S</Kbd> (**File › Save**). An untitled level has no file yet, so the editor opens a save dialog in the project's `Content/` folder.
+
+<Steps>
+<Step title="Pick a name">
+Open the `Scenes` folder and type a name such as `Main`. You can leave out the extension: the editor adds `.mmap` <Source path="Engine/Source/Editor/MowoEditor/Private/Core/SceneSaveAs.h" />.
+</Step>
+<Step title="Save inside Content">
+Confirm the dialog. The level tab takes the file's name and the Content Browser shows the new asset.
+</Step>
+</Steps>
+
+| Command | Shortcut |
+|---|---|
+| **File › Save** | <Kbd>Ctrl</Kbd>+<Kbd>S</Kbd> |
+| **File › Save Scene As…** | <Kbd>Ctrl</Kbd>+<Kbd>Shift</Kbd>+<Kbd>S</Kbd> |
+| **Save All** | <Kbd>Ctrl</Kbd>+<Kbd>Shift</Kbd>+<Kbd>Alt</Kbd>+<Kbd>S</Kbd> |
+
+<Callout type="warning">
+Levels must live under `Content/`. A path outside the project's content tree is refused, and the level stays untitled. Cancelling the dialog also counts as a failed save.
+</Callout>
+
+To make this level the one your project starts with, open **Edit › Project Settings…**, go to **Maps & Modes** and pick it as **Start Scene** <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp" />.
+
+### What a level file looks like
+
+The Blank template ships its start level as text you can read and diff, a floor and a sun:
+
+```mdf title="Content/Scenes/Main.mmap"
+Scene "Main" {
+	version: 2
+	description: "Blank world"
+
+	Environment {
+		ambient_color: vec3(0.3, 0.3, 0.32)
+		ambient_intensity: 0.6
+		ibl_enabled: false
+	}
+
+	Entity "Floor" {
+		Transform {
+			position: vec3(0.0, -0.5, 0.0)
+			rotation: vec3(0.0, 0.0, 0.0)
+			scale: vec3(40.0, 1.0, 40.0)
+		}
+		MeshRenderer {
+			mesh_type: "cube"
+		}
+		Material {
+			base_color: vec4(0.5, 0.52, 0.55, 1.0)
+			metallic: 0.0
+			roughness: 0.9
+		}
+	}
+	Entity "Sun" {
+		Transform {
+			position: vec3(0.0, 20.0, 0.0)
+			rotation: vec3(-0.9, -0.5, 0.0)
+			scale: vec3(1.0, 1.0, 1.0)
+		}
+		Light {
+			type: Directional
+			color: vec3(1.0, 0.98, 0.92)
+			intensity: 1.3
+		}
+	}
+}
+```
+
+A level the editor saves can be written in the project's package format instead, and the file itself says which. Edit levels in the editor rather than by hand. See [Content pipeline](/docs/content-pipeline/) for the asset formats.
+
+## Play in the editor
+
+Press <Kbd>F5</Kbd> or the toolbar's **Play** button. The level starts running inside the viewport. Press <Kbd>Esc</Kbd> to stop.
+
+<Flow steps={["Editing", "Playing", "Paused", "Stop"]} highlight={1} caption="Play runs a copy of the level. Stop throws the copy away and returns to Editing." branch={{ from: "Playing", label: "Esc stops directly" }} />
+
+| Control | Shortcut | When |
+|---|---|---|
+| Play | <Kbd>F5</Kbd> | Editing |
+| Stop | <Kbd>Esc</Kbd> | Playing or Paused |
+| Frame step | <Kbd>F10</Kbd> | Paused |
+| Eject / possess | <Kbd>F8</Kbd> | Playing; detaches to the editor camera while the game keeps running |
+| Keep simulation changes | <Kbd>K</Kbd> | Simulating, or Playing after <Kbd>F8</Kbd> |
+| Simulate | <Kbd>Alt</Kbd>+<Kbd>S</Kbd> | Editing |
+
+The arrow next to Play opens more modes: **Play in New Window**, **Simulate**, **Play As Client** with a **Multiplayer Clients** count, and **Standalone Game** <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorToolbar.cpp" />.
+
+<Callout type="engine">
+Play runs in a copy of the level <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEnginePie.cpp" />. The level you edit is never ticked or written while you play, so Stop discards whatever gameplay changed. To keep a change you made while simulating, press <Kbd>K</Kbd> before you stop.
+</Callout>
+
+<Screenshot id="getting-started-editor-pie-running" alt="Mowo Editor during Play with the Third Person template: the toolbar's Pause and Stop buttons active and Play greyed out, the character visible in the viewport, and the Outliner showing the runtime-spawned player pawn." caption="Play in the editor with a template project." />
+
+## Next steps
+
+- [Your first build](/docs/getting-started/first-build/) adds C++ and packages the project.
+- [Core concepts](/docs/getting-started/core-concepts/) explains what actors and levels are underneath.
+- [Editor](/docs/editor/) for every panel, the play modes and saving and recovery.

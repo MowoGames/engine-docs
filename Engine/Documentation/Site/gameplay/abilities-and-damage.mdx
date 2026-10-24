@@ -1,0 +1,145 @@
+---
+title: Abilities, health and damage
+sidebarTitle: Abilities and damage
+description: Health components, the damage pipeline, gameplay tags, attributes and gameplay effects, abilities, cues and data-driven status effects.
+order: 24
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/MHealthComponent.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/HealthComponent.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/DamageSystem.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/DamageTypes.h
+  - Engine/Source/Runtime/Core/Public/Core/GameplayTagContainer.h
+  - Engine/Source/Runtime/Core/Private/GameplayTagContainer.cpp
+  - Engine/Source/Runtime/Game/Public/Gameplay/AttributeSet.h
+  - Engine/Source/Runtime/AssetSystem/Public/Gameplay/GameplayEffect.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/AbilitySystemComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MAbilitySystemComponent.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/GameplayAbility.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/MGameplayAbility.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/AbilityTask.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/BuiltInAbilities.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/GameplayCue.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/GameplayEffectExecution.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/StatusEffects.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/StatusEffectAsset.h
+  - Engine/Source/Runtime/Game/Public/Game/MStatusEffectStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/AbilitySystemStateComponent.h
+verifiedAt: 1a346c1c5
+---
+
+Mowo has two layers for health and combat stats. Use the simple one unless you need the other:
+
+| Layer | Use it for |
+| --- | --- |
+| `MHealthComponent` | A clamped health value with damage, heal, death and invulnerability |
+| The gameplay ability system | RPG-style stats: attributes driven by stacking effects, regeneration, resistances, abilities with costs and cooldowns |
+
+`ACharacter` already carries an ability system component with a working set of attributes, so characters can use both.
+
+## Health
+
+Add an `MHealthComponent` to an actor and set `maxHealth` in the Details panel. <Source symbol="MHealthComponent" />
+
+| Function | Effect |
+| --- | --- |
+| `ApplyDamage(amount, instigator)` | Returns the damage actually dealt; 0 if dead or invulnerable |
+| `Heal(amount)`, `Kill(instigator)`, `Revive(health)` | Change state |
+| `IsDead()`, `GetHealth()`, `GetMaxHealth()`, `GetHealthPercent()` | Read state |
+| `SetInvulnerable(bool)` | Ignore damage |
+
+To react, set the `onDamaged`, `onDeath` and `onHealed` callbacks on the inner model, reached through `Health()`. <Source symbol="HealthComponent" />
+
+```cpp title="EnemyDeath.cpp" wrap
+#include "Core/MObject.h"
+#include "Game/AActor.h"
+#include "Game/MHealthComponent.h"
+
+Mowo::AActor* enemy = nullptr;
+Mowo::MHealthComponent* health = enemy->FindComponent<Mowo::MHealthComponent>();
+
+health->Health().onDeath = [](Mowo::MObject* killer) {
+};
+
+health->ApplyDamage(35.0f, nullptr);
+```
+
+## The damage pipeline
+
+`FDamageSystem` routes damage so every system sees it the same way. <Source symbol="FDamageSystem" />
+
+- **Damage types** are data (`FDamageTypeInfo`): a tag, a multiplier, a radial flag, and impact and death cue tags.
+- **The causer chain** (`FDamageContext`) records the causer (the projectile, trap or weapon), the instigator (the responsible pawn) and the controller to credit.
+- **Point damage**: `ApplyPointDamage` drives a health component; `ApplyPointDamageGAS` applies an instant damage effect to a target's `Health` attribute, so clamps, tags and cues all fire.
+- **Radial damage**: `ApplyRadialDamage` falls off from full damage inside an inner radius to a minimum at the outer radius.
+- **Events**: `FDamageSystem::OnAnyDamage()` and `OnAnyDeath()` broadcast every hit and kill, with the full context. Score, UI, quests and the AI director listen here, so the thing that deals damage never needs to know about them.
+
+## Gameplay tags
+
+Gameplay tags are hierarchical names such as `Status.Debuff.Stun`. A container that holds `Status.Debuff.Stun` also matches `Status` and `Status.Debuff`. Declare a project's tags in `Config/DefaultGameplayTags.ini`: <Source symbol="FGameplayTagRegistry" />
+
+```ini title="Config/DefaultGameplayTags.ini"
+[/Script/GameplayTags.GameplayTagsSettings]
++GameplayTagList=(Tag="Ability.Scan.Fill",DevComment="Room-flooding scan")
++GameplayTagList=(Tag="Status.Debuff.Stun")
++GameplayTagRedirects=(OldTagName="Status.Stunned",NewTagName="Status.Debuff.Stun")
+```
+
+Declaring a tag declares its parents. Requesting an undeclared tag still works and is recorded, so a typo is listable rather than fatal. `FGameplayTagContainer` answers `HasTag`, `HasTagExact`, `HasAny` and `HasAll`. <Source symbol="FGameplayTagContainer" />
+
+## Attributes and gameplay effects
+
+The ability system component (`AbilitySystemComponent`, on actors `MAbilitySystemComponent`) owns named float attributes, each with a base and a current value, plus active effects and owned tags. <Source symbol="AbilitySystemComponent" />
+
+A gameplay effect (`GameplayEffectSpec`) changes attributes: <Source symbol="GameplayEffectSpec" />
+
+| Part | Options |
+| --- | --- |
+| Duration | `Instant` changes the base permanently (damage, heal, cost); `Duration` adds to the current value for a time (a buff); `Infinite` until removed |
+| Period | A non-zero `period` applies the modifiers every period instead, for damage or healing over time |
+| Modifiers | `Add`, `Multiply` or `Override` on an attribute; current = (base + adds) × multiplies |
+| Magnitudes | A scalable float, a value derived from another attribute, or a value the caller sets |
+| Stacking | By target or by source, with a limit and refresh rules |
+| Tags | Tags granted while active, tags required or blocking application, immunity and cleansing |
+
+Clamp rules keep attributes in range after every change: `AddAttributeClamp("Health", 0, "MaxHealth")` keeps health between 0 and max health. `MAbilitySystemComponent` sets up `Health`, `MaxHealth`, `Mana`, `MaxMana`, `Stamina`, `MaxStamina` and `MoveSpeed` with their clamps at `BeginPlay`.
+
+## Abilities
+
+An ability has an identity tag, activation requirements, a cost (an instant effect), a cooldown (a duration effect granting a cooldown tag) and its logic. `TryActivateAbility(tag)` checks requirements, affordability and cooldown, pays the cost, starts the cooldown and runs it. <Source symbol="GameplayAbilitySpec" />
+
+For abilities with state or steps over time, subclass `MGameplayAbility` and override `ActivateAbility`. Ability tasks such as `FAbilityTask_WaitDelay` and `FAbilityTask_WaitGameplayEvent` let an ability wait without blocking; the ability ends from a task's callback. Abilities can cancel or block others by tag, own tags while running, and be triggered by gameplay events. <Source symbol="MGameplayAbility" />
+
+From Visual Scripting, `MAbilitySystemComponent` offers `ActivateAbilityByTag`, `GetAttributeValue`, `SetAttributeBase`, `HasGameplayTag` and effect queries. <Source symbol="MAbilitySystemComponent" />
+
+### Gameplay cues
+
+Cues are the cosmetic layer. An effect lists cue tags, and the ability system fires them when the effect applies, ticks and ends. Install one handler per cue-tag subtree with `FGameplayCueDispatcher::SetHandler`, for example a hit particle and sound for everything under `GameplayCue.Damage`. A cue with no handler does nothing, so authored data survives. <Source symbol="FGameplayCueDispatcher" />
+
+### Multiplayer
+
+On the server, attributes and active effects replicate to clients, and ability activation is a client request that the server confirms or rejects, so the client can predict it. See [Multiplayer](/docs/multiplayer/).
+
+## Status effects
+
+A status effect is a `.statuseffect` asset that becomes a gameplay effect: duration (0 is infinite), period, modifiers, granted tags and a stacking policy. <Source symbol="FStatusEffects" />
+
+```mdf title="Content/Status/Poison.statuseffect"
+StatusEffect "poison" {
+	duration: 3.0
+	period: 1.0
+	stacking: "stack"
+	max_stacks: 2
+	tags: ["Status.Debuff.Poison"]
+	Modifier "Health" { op: "add", magnitude: -5 }
+}
+```
+
+`refresh` replaces the running instance; `stack` adds one up to `max_stacks`. Apply them with `MStatusEffectStatics::ApplyStatusEffect`, `RemoveStatusEffect`, `GetStatusStacks` and `HasStatusEffect`, or the `...To` and `...From` forms for a specific entity. <Source symbol="MStatusEffectStatics" />
+
+For XP, levels and item stats, see [Interaction and inventory](/docs/gameplay/interaction-and-inventory/).
+
+## Related
+
+- [Weapons and melee](/docs/gameplay/weapons-and-melee/)
+- [Components](/docs/gameplay/components/)
+- API: [Game module](/docs/api/game/), [Core module](/docs/api/core/)

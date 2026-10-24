@@ -1,0 +1,91 @@
+---
+title: Output layout
+description: Where mbt puts binaries and intermediates, how executables and module libraries are named per configuration, and which builds get a folder of their own.
+order: 5
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/ModuleScopes.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/EngineLayout.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CleanCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs
+  - Engine/Source/Runtime/Platform/Public/Platform/BinaryNames.h
+  - Engine/Source/Runtime/Core/Public/Core/FPaths.h
+  - Engine/Source/Runtime/EngineLoop/EngineLoop.Build.cs
+  - Engine/Source/Runtime/Arc/Arc.Build.cs
+verifiedAt: 08e26df3d
+---
+
+Every build writes into two folders of the checkout: `Engine/Binaries/` for what runs, and `Engine/Intermediate/Build/` for objects and generated code. The layout follows Unreal Engine 5: the configuration is part of the file name, so builds of several configurations share one folder.
+
+## Binaries
+
+Executables and module libraries land in `Engine/Binaries/<Platform>/`, where `<Platform>` is `Win64`, `Linux`, `Mac`, `Android` or `IOS` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />.
+
+| Configuration | Executable | Module library |
+|---|---|---|
+| Development | `MowoEditor.exe` | `MowoEditor-Core.dll` |
+| Debug | `MowoEditor-Win64-Debug.exe` | `MowoEditor-Core-Win64-Debug.dll` |
+| Release | `MowoEditor-Win64-Release.exe` | `MowoEditor-Core-Win64-Release.dll` |
+| Shipping | `MowoGame-Win64-Shipping.exe` | none: Shipping links monolithic |
+
+An executable is `<Name>[-<Platform>-<Config>]`, with Development unsuffixed. A module library is `<Environment>-<Module>[-<Platform>-<Config>]`. The environment is `MowoEditor` for every target that composes modules the default way: the editor, the game, the tests and the programs share one compile of each module. A target with its own composition uses its own name instead, for example the dedicated server's `MowoServer-<Module>` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs" />. Plugin modules are named the same way (`MowoEditor-SteamPlatform.dll`).
+
+On Linux and macOS the extensions and prefixes are the platform's (`libMowoEditor-Core.so`, `.dylib`). On a mobile platform the one image keeps the name its loader asks for (`libmain.so` on Android) and the configuration names a folder instead.
+
+The C++ side reads the same naming through `Platform/BinaryNames.h`, from definitions `mbt` passes to every module, so the engine can find a module's file at run time <Source path="Engine/Source/Runtime/Platform/Public/Platform/BinaryNames.h" />.
+
+### Variant folders
+
+A build whose every image differs from the default one gets a subfolder named after what differs, so it never overwrites the default binaries:
+
+| Build | Folder |
+|---|---|
+| A target with `bSeparateOutputTree` (the dedicated server, `MowoGameNoOnline`, the games launcher) | `Engine/Binaries/Win64/<Target>/` |
+| `--asan`, `--ubsan`, `--tsan` | `.../ASan/`, `.../UBSan/`, `.../TSan/` |
+| `--analyze` | `.../Analyze/` |
+| Monolithic in Debug, DebugGame, Development or Release | `.../Monolithic/` |
+| Modular in Shipping or Test | `.../Modular/` |
+
+Parts combine with a dash, for example `MowoGamesLauncher-Monolithic/` for the launcher's Development build.
+
+### Beside the binaries
+
+The build packs the engine's archives next to the executables <Source path="Engine/Source/Runtime/EngineLoop/EngineLoop.Build.cs" />:
+
+| File | Contents |
+|---|---|
+| `Shaders.meaf` | The engine's compiled shaders |
+| `StandaloneShaders.meaf` | The UI shaders small tools draw with <Source path="Engine/Source/Runtime/Arc/Arc.Build.cs" /> |
+| `EngineContent.meaf` | `Engine/Content` |
+| `MLModels.meaf` | The machine-learning models the editor uses |
+
+Vendor runtime files (SDL3, the D3D12 Agility SDK in `D3D12/`, Steam, upscalers) are staged beside the modules that need them. A binary finds the engine root from its own path, not the working directory, so you can start it from anywhere <Source path="Engine/Source/Runtime/Core/Public/Core/FPaths.h" />.
+
+## Intermediates
+
+| Path | Contents |
+|---|---|
+| `Engine/Intermediate/Build/<Platform>/<Environment>/<Config>[-<Variant>]/<Module>/Obj/` | Object files |
+| `Engine/Intermediate/Build/<Platform>/<Environment>/<Config>[-<Variant>]/<Module>/Deps/` | Dependency files |
+| `Engine/Intermediate/Build/Generated/<Config>/<Module>/` | Generated code, including the header tool's output in `Reflection/` |
+| `<Project>/Intermediate/Build/<Config>/<Module>/Generated/` | A project module's generated code, kept with the project |
+
+<Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/ModuleScopes.cs" /> defines these paths. Everything under `Engine/Intermediate/` is disposable.
+
+`mbt` keeps its own state in `.mbt-cache/` at the engine root: a `build.db` of compile fingerprints per output tree, and `Rules/` with the compiled rules assemblies. `mbt clean` invalidates the fingerprints before it removes build output, so an interrupted clean only makes the next build rebuild more.
+
+## Third-party files
+
+| Path | Contents |
+|---|---|
+| `Engine/Source/ThirdParty/<Lib>/` | Headers, the library's `.Build.cs`, its license |
+| `Engine/Source/ThirdParty/<Lib>/Lib/<Platform>/` | Static and import libraries |
+| `Engine/Binaries/ThirdParty/<Lib>/<Platform>/` | Runtime files and tools: DLLs, DXC, spirv-cross, astcenc, dump_syms, sentry-cli |
+
+<Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/EngineLayout.cs" /> owns these fixed paths.
+
+## Related
+
+- [Build configurations](/docs/build-tool/configurations/)
+- [Toolchains and platforms](/docs/build-tool/toolchains-and-platforms/)
+- [Packaging and shipping](/docs/shipping/), for the layout of a package

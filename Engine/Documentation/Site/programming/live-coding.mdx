@@ -1,0 +1,69 @@
+---
+title: Live coding
+description: Recompile changed .cpp files and patch the new function bodies into a running editor or game without restarting or losing state.
+order: 6
+sources:
+  - Engine/Source/Runtime/EngineLoop/Private/Core/LiveCoding.cpp
+  - Engine/Source/Runtime/EngineLoop/Private/Core/LiveCoding.h
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformLiveCoding.h
+  - Engine/Source/Runtime/Platform/Private/Windows/WindowsLiveCoding.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/LiveCodingCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/LiveCodingCompiler.cs
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
+verifiedAt: 08e26df3d
+---
+
+Edit a `.cpp`, press <Kbd>Ctrl+Alt+F11</Kbd> in the editor, and the running process starts calling the new function bodies. Nothing restarts: statics keep their values, objects keep their vtables, and the level and the play session stay where they are. It is the engine's equivalent of Unreal's Live Coding.
+
+## Starting a patch
+
+- <Kbd>Ctrl+Alt+F11</Kbd> or **Tools > Live Coding** in the editor.
+- The `LiveCoding` console command, in the editor or a development build of the game.
+
+<Source path="Engine/Source/Runtime/EngineLoop/Private/Core/LiveCoding.cpp" />
+
+The compile runs on a worker thread, so the editor keeps drawing. The patch is applied between frames.
+
+## Requirements
+
+- **Windows.** Live coding patches clang-cl COFF objects into a Windows process. On other platforms, rebuild and restart.
+- **A source tree.** The running binary must sit in an engine tree with a published `mbt`. A packaged build has no source tree and says so.
+- **A patchable configuration:** Debug, DebugGame, Development or Release. Shipping and Test build with ThinLTO, whose objects are LLVM bitcode with nothing to patch.
+
+## What happens
+
+<Flow steps={["Changed .cpp", "mbt livecoding compiles objects", "Link into the running image", "Old entry jumps to new body"]} highlight={2} />
+
+1. **Compile.** `mbt livecoding` finds every `.cpp` newer than its module's running binary and compiles it with that module's flags, defines and include paths. Nothing is linked and no build output is touched, so it runs while the process holds every binary open.
+2. **Link into the process.** The engine reads each object file and binds every symbol it references to the address the process already has for it, using the image's debug information. A `static` in the edited file binds to its live storage, so it keeps its value.
+3. **Redirect.** Each old function's entry becomes a jump to its new body, written while every other thread is suspended. Calls through function pointers and vtables land on the old entry and follow the jump.
+
+A second edit of the same file patches over the first.
+
+## What it cannot do
+
+A patch replaces function bodies. It cannot change a type, because the running code was compiled against the old layout of every class.
+
+- **A changed header refuses the patch.** If a header the edited `.cpp` includes is newer than the running binary, that file is refused and the header is named. Rebuild, or [hot-reload the game module](/docs/programming/game-module/#building-and-hot-reload).
+- **A class defined inside the `.cpp` whose layout changes is not detected.** Do not change one.
+- **A new `thread_local` is refused.** A new static with a dynamic initializer does not run its initializer.
+- **A compile error or a refused file stops the whole patch.** Half an edit applied is a state no source describes.
+
+## mbt livecoding
+
+The editor runs the command for you; you can also run it yourself:
+
+```bash
+./mbt.cmd livecoding -c Debug
+./mbt.cmd livecoding -c Debug --report out.tsv
+```
+
+| Option | Description |
+| --- | --- |
+| `-c`, `--config` | Configuration of the running binaries |
+| `--source` | Compile only these files |
+| `--as` | Compile each `--source` as this file of the tree, with its module, flags and includes |
+| `--out` | Object directory (default `.mbt-cache/livecoding/<config>`) |
+| `--report` | Write a tab-separated report the engine reads |
+
+It exits 0 when it compiled (or nothing changed), 1 on a compile error and 3 when a file was refused. <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/LiveCodingCommand.cs" />

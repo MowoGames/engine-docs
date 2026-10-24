@@ -1,0 +1,198 @@
+---
+title: Arc widgets and layout
+sidebarTitle: Widgets and layout
+description: The Arc widget set, how a frame is measured, arranged and painted, and how focus, keyboard shortcuts and gamepad navigation are routed.
+order: 1
+sources:
+  - Engine/Source/Runtime/Arc/Public/Arc/Framework/AWidget.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Framework/ArcDeclarativeSyntax.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Core/CSlot.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Core/ArcTypes.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Core/ArcDelegate.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Widgets/ABoxPanel.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Widgets/AButton.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Widgets/ATextBlock.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Widgets/AComboBox.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Framework/CArcFocusScope.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Commands/CArcCommandSystem.h
+  - Engine/Source/Runtime/Arc/Private/Commands/CArcCommandSystem.cpp
+  - Engine/Source/Runtime/Arc/Public/Arc/Input/CArcInputProcessor.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/CArcUIScreenStack.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Widgets/AEditableTextBox.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Text/CArcTextEditing.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Widgets/CArcCaretBlink.h
+  - Engine/Source/Runtime/ArcUI/Private/FArcUIAsset.cpp
+verifiedAt: 08e26df3d
+---
+
+Arc is a retained-mode widget framework in the `Arcf` namespace. Widgets are C++ classes prefixed with `A`, built with a declarative `ArcNew(...)` syntax, and laid out in slots. This page lists the widget set, explains the three layout passes, and shows how focus decides where keyboard shortcuts and gamepad input go.
+
+## The widget set
+
+Every widget derives from `AWidget` <Source symbol="AWidget" />. The shipped widgets live under `Arc/Widgets/`, plus a few framework and docking widgets.
+
+| Group | Widgets |
+| --- | --- |
+| Panels | `AHorizontalBox`, `AVerticalBox` (both `ABoxPanel`), `AOverlay`, `AGridPanel`, `AUniformGridPanel`, `AWrapPanel`, `AScrollBox`, `ASplitter`, `ASplitBox`, `ABox`, `ABorder`, `AClipBox`, `AScaleBox`, `ADPIScaler`, `AWidgetSwitcher`, `ARetainerBox`, `AExpandableArea`, `ADrawer`, `ACard` |
+| Text | `ATextBlock`, `ARichTextBlock`, `AEditableTextBox`, `AMultiLineEditableTextBox`, `ASearchBox`, `ANumericField`, `AHyperlink` |
+| Input | `AButton`, `ACheckBox`, `ARadioButton`, `AToggleSwitch`, `ASlider`, `AComboBox`, `ASegmentedControl`, `AColorPicker`, `AKeyCap`, `AKeyCaptureField` |
+| Data | `AListView`, `ATreeView`, `ATileView`, `ATableView` with `ATableHeader`, `ALevelTable`, `ADetailsView` |
+| Display | `AImage`, `AIconGlyph`, `AProgressBar`, `ASpinner`, `ASkeleton`, `ABadge`, `AChip`, `AAvatar`, `ABanner`, `AEmptyState`, `ASpacer`, `ASeparator`, `APerformanceOverlay` |
+| Navigation and chrome | `ABreadcrumb`, `AMenu`, `AMenuBar`, `ATabBar`, `AToolbar`, `APopover`, `AWindowFrame` |
+| Editor-grade | `AGraphEditor`, `ACurveEditor`, `ACurvePreview`, `ATimeline`, `AAssetPicker`, `AViewport` |
+
+Two rules for fixed-size art: draw an icon glyph in a box with `AIconGlyph`, which centres the glyph's ink, not a text block with the icon font, which centres the line box and lands the glyph off-centre.
+
+The full list with every member is in the [Arc API reference](/docs/api/arc/). Game screens reach a subset of these through the ArcUI factory; see [ArcUI screens](/docs/ui/arcui-screens/#widget-types).
+
+## Building a widget tree in C++
+
+`ArcNew(T)` expands to a builder that takes named arguments and returns a shared pointer <Source path="Engine/Source/Runtime/Arc/Public/Arc/Framework/ArcDeclarativeSyntax.h" />. Container widgets take children through slots: `+ AVerticalBox::Slot()...[ child ]`. A box slot is either auto-sized to the child's desired size or fills a share of the remaining space, and every slot carries padding and horizontal and vertical alignment <Source path="Engine/Source/Runtime/Arc/Public/Arc/Core/CSlot.h" />.
+
+```cpp title="MainMenu.cpp" wrap
+#include <Arc/Widgets/ABoxPanel.h>
+#include <Arc/Widgets/AButton.h>
+#include <Arc/Widgets/ATextBlock.h>
+#include <Arc/Mowo/ArcMowoStyle.gen.h>
+
+Arcf::COnClicked onPlay;
+onPlay.Bind([]() {});
+
+Arcf::TSharedPtr<Arcf::AWidget> title = ArcNew(Arcf::ATextBlock).Text(Arcf::CText::FromString("Main menu")).ColorAndOpacity(Arcf::Mowo::MowoColors::TextBright);
+Arcf::TSharedPtr<Arcf::AWidget> play = ArcNew(Arcf::AButton).OnClicked(onPlay).CornerRadius(3.0f);
+
+Arcf::TSharedPtr<Arcf::AWidget> menu = ArcNew(Arcf::AVerticalBox)
+	+ Arcf::AVerticalBox::Slot().AutoHeight().Padding(16.0f)[title]
+	+ Arcf::AVerticalBox::Slot().AutoHeight().Padding(16.0f, 4.0f)[play];
+```
+
+Widget arguments come in three kinds, declared in each widget's `ARC_WIDGET_ARGS` block: `ARC_ATTR` for attributes that can hold a value or a bound getter, `ARC_ARG` for plain values, and `ARC_EVENT` for delegates <Source symbol="ATextBlock" /> <Source path="Engine/Source/Runtime/Arc/Public/Arc/Widgets/AButton.h" />.
+
+### Visibility
+
+`EVisibility` has five values <Source symbol="EVisibility" />:
+
+| Value | Painted | Takes space | Hit-testable |
+| --- | --- | --- | --- |
+| `Visible` | yes | yes | yes |
+| `Hidden` | no | yes | no |
+| `Collapsed` | no | no | no |
+| `HitTestInvisible` | yes | yes | no, and nor are its children |
+| `SelfHitTestInvisible` | yes | yes | children only |
+
+## How layout works
+
+Arc lays out a frame in three passes, the same shape Slate uses.
+
+<Flow steps={["Measure (bottom-up)", "Arrange (top-down)", "Paint (top-down)"]} caption="Each pass has its own cache, so an unchanged tree measures and arranges nothing." />
+
+1. **Measure.** Each widget reports its desired size from `ComputeDesiredSize`. Leaves measure their content; containers add up their children <Source symbol="AWidget" />.
+2. **Arrange.** Each parent gives every child a rect in `ArrangeChildren` <Source symbol="AWidget" />.
+3. **Paint.** `OnPaint` draws from the arranged geometry <Source symbol="AWidget" />.
+
+### The desired-size cache
+
+Measure always runs through `CacheDesiredSize(scale)`, which decides whether measuring is needed at all <Source symbol="AWidget" />. When you write a container, read child sizes through the cache:
+
+```cpp nocompile
+child->CacheDesiredSize(geo.GetScale());
+const Arcf::ArcVec2 size = child->GetDesiredSize();
+```
+
+Calling `ComputeDesiredSize` on a child by hand re-measures that child's whole subtree every time. Pass the geometry's scale, not `1.0f`: a different scale counts as a scale change and forces a re-measure.
+
+A widget opts into the cache by returning `true` from `CanCacheDesiredSize()`. The default is `false` <Source symbol="AWidget" />. The rule for opting in: the desired size must depend only on the widget's own attributes and its children's cached sizes, and every input that can change must call `Invalidate()` <Source symbol="AWidget" />. Things that disqualify a widget:
+
+- a bound attribute the widget does not poll, because a getter can change without a write;
+- measure that depends on arrange, like text that elides against its arranged width;
+- children generated during arrange;
+- external state such as a font atlas or a texture that can change under the widget.
+
+A widget whose size never depends on its children (scroll boxes, list, tree and table views, viewports) can also return `false` from `DesiredSizeDependsOnChildren()`, which stops the measure pass from walking below it <Source symbol="AWidget" />.
+
+Change only what is painted (hover, check state, a swatch color) without calling `Invalidate()`. That split is what keeps hover effects from re-running layout.
+
+`AWidget::InvalidateAllWidgets()` drops every cached size at once. It is used for changes no single widget can see, such as a style-set swap or an application scale change <Source symbol="AWidget" />.
+
+### The arrange skip
+
+Arrange has its own cache. A widget opts in with `CanSkipArrange()`. The default is "skippable only when it has no children", so any widget that overrides `ArrangeChildren` must answer for itself <Source symbol="AWidget" />. A skip is safe only when the arrange is a pure function of the allotted geometry, the widget's attributes and its children's cached sizes. Scroll offsets, animation clocks and virtualized row windows disqualify a widget.
+
+If you suspect a stale-layout bug, `AWidget::SetArrangeSkipEnabled(false)` turns the arrange skip off in-process <Source symbol="AWidget" />.
+
+
+
+## Focus and keyboard routing
+
+A widget that can take keyboard focus returns `true` from `IsFocusable()` <Source symbol="AWidget" />. Focus moves with a click, with `CReply::SetUserFocus`, or with Tab: the input processor's `FocusAdjacentWidget` focuses the next or previous focusable widget in paint order <Source path="Engine/Source/Runtime/Arc/Public/Arc/Input/CArcInputProcessor.h" />.
+
+Key events walk the focus path first. A widget that handles a key in its own `OnKeyDown` wins outright. Only when every widget on the path declines does the key reach the command system.
+
+### Focus scopes
+
+The same shortcut can mean different things in different panels. `Ctrl+D` duplicates an actor in the Outliner and an array element in the Details panel. Arc decides by focus, not by where the mouse is.
+
+A subtree becomes a **focus scope** by stamping its root with a scope id. Each `CArcFocusScope` owns its own command list <Source symbol="CArcFocusScope" />:
+
+```cpp title="MyPanel.cpp" nocompile
+m_focusScope.SetId(Arcf::CName("mygame.inventory"));
+m_focusScope.AddRootWidget(m_root);
+m_focusScope.GetCommandList().MapAction(Arcf::CName("inventory.drop"), [this]() { DropSelected(); }, [this]() { return HasSelection(); });
+```
+
+When a command fires, `CArcCommandSystem::ExecuteCommand` tries, in order <Source path="Engine/Source/Runtime/Arc/Private/Commands/CArcCommandSystem.cpp" />:
+
+<Steps>
+<Step title="The focus path">
+Scopes on the path from the focused widget to the root, innermost first.
+</Step>
+<Step title="Pushed command lists">
+Lists added with `PushCommandList`, most recent first.
+</Step>
+<Step title="The global command list">
+The fallback for application-wide shortcuts.
+</Step>
+</Steps>
+
+A scope that binds a command but whose `canExecute` callback returns `false` falls through like an unbound one, so coarser contexts still get their turn <Source symbol="CArcCommandSystem" />.
+
+`OwnsInput(pointerFallback)` is the guard editor panels use: focus decides whenever any scope owns it, and the pointer-hover answer is used only when nothing is focused <Source symbol="CArcFocusScope" />. That keeps shortcuts working for a user who never clicked into a panel.
+
+### Dropdowns own the keyboard
+
+While an `AComboBox` popup is open, it counts as text input, so plain letters go to the dropdown instead of the panel's shortcuts. A list at or above `SearchThreshold` entries grows a filter field; shorter lists use type-ahead. `MaxVisibleItems` caps the popup height <Source symbol="AComboBox" />.
+
+## Gamepad navigation in game screens
+
+Game screens add directional navigation on top of Arc focus. `CArcUIScreenStack` provides <Source symbol="CArcUIScreenStack" />:
+
+| Call | What it does |
+| --- | --- |
+| `HandleDirectional(dx, dy)` | Picks the nearest focusable widget in the pressed direction. Falls back to a linear cycle only when the tree has no geometry (headless). |
+| `HandleAccept()` | Activates the focused widget directly: click, toggle or open. It does not synthesize mouse events. |
+| `HandleBack()` | Runs the back handler set with `SetBackHandler`, then pops the top code-pushed screen. |
+| `NotifyInputDevice(device)` | Switching to `Gamepad` shows the focus highlight; switching to `MouseKeyboard` hides it. |
+
+A modal screen keeps focus inside itself until it is popped. See [ArcUI screens](/docs/ui/arcui-screens/#the-screen-stack).
+
+<Screenshot id="ui-gamepad-focus-highlight" alt="A packaged game or PIE session with the test project's MainMenu.ui open, after pressing a gamepad D-pad direction, so one menu button shows the gamepad focus ring" caption="The focus highlight appears only after gamepad input." />
+
+### Navigation rules in .ui assets
+
+Each `.ui` node can override directional navigation with `nav_up`, `nav_down`, `nav_left` and `nav_right`: `inherit`, `escape`, `stop`, `wrap` or `explicit`, with `nav_<dir>_target` naming the widget an `explicit` rule goes to. Rules inherit down the tree. `clip_to_bounds` clips a container's paint and hit test, and `flow_direction` (`inherit`, `ltr`, `rtl`) mirrors the horizontal layout of a container and everything in it <Source path="Engine/Source/Runtime/ArcUI/Private/FArcUIAsset.cpp" />. A stack created under a right-to-left culture starts mirrored.
+
+## Text input
+
+`AEditableTextBox` (single line), `AMultiLineEditableTextBox`, `ASearchBox` and `ANumericField` share one editing core, `CArcTextEditing` <Source symbol="CArcTextEditing" />:
+
+- The caret, Backspace and Delete move by grapheme cluster, so an emoji sequence, a flag or a letter with combining accents is one step.
+- <Kbd>Ctrl</Kbd>+arrow keys and <Kbd>Ctrl+Backspace</Kbd> move by word. By default a full stop between letters is a word boundary, so `foo.bar/baz` stops at the dot and the slash; pass `EArcWordTailoring::Unicode` for plain Unicode words. A double-click selects the word under the pointer.
+- A single-line field scrolls to keep the caret in view, and a paste turns every line break into a space.
+- Copy and cut with nothing selected do nothing.
+- `IsReadOnly(true)` allows selecting and copying only, and declines editing keys so a panel's own shortcuts still receive them. `IsPassword(true)` masks the text <Source symbol="AEditableTextBox" />.
+- The caret blinks at the operating system's rate, and stays solid when blinking is turned off in the OS.
+
+## Related
+
+- [Arc styling](/docs/ui/arc-styling/) for colors, fonts and per-widget state styles.
+- API pages: [AWidget](/docs/api/arc/awidget/), [AVerticalBox](/docs/api/arc/averticalbox/), [CArcFocusScope](/docs/api/arc/carcfocusscope/), [CArcCommandSystem](/docs/api/arc/carccommandsystem/), [CArcUIScreenStack](/docs/api/arcui/carcuiscreenstack/).

@@ -1,0 +1,133 @@
+---
+title: Visual Scripting
+description: Build gameplay classes by wiring nodes. Learn how a graph becomes a spawnable class, how it runs in the editor and in a packaged game, and where its limits are.
+order: 5
+icon: Workflow
+sources:
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomGraph.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomClass.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomClassRegistry.h
+  - Engine/Source/Runtime/Loom/Private/LoomClassRegistry.cpp
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomClassIndex.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomVM.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomNodeCatalog.h
+  - Engine/Source/Runtime/Game/Public/Game/LoomRuntime.h
+  - Engine/Source/Runtime/Game/Private/LoomRuntime.cpp
+  - Engine/Source/Runtime/Game/Private/ALoomActor.cpp
+  - Engine/Source/Runtime/Game/Public/Game/FLoomRuntimeLoader.h
+  - Engine/Source/Runtime/Game/Public/Game/PieHotReload.h
+  - Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Pie/PieMultiplayerSession.cpp
+verifiedAt: 08e26df3d
+---
+
+Visual Scripting lets you build gameplay logic by wiring nodes on a canvas instead of writing C++. The result is a real gameplay class: it has a name, it spawns, it ticks, it replicates, and other code finds it by name. If you have used Unreal Blueprints, the model is familiar.
+
+Visual Scripting does not replace C++. C++ stays the base gameplay layer. A visual class calls reflected C++ functions, reads and writes reflected properties, and adds per-object behavior that does not belong in engine code.
+
+<Callout type="note">
+
+In code and on disk, Visual Scripting is called **Loom**. The runtime is the `MowoEngine.Loom` module, a class is saved as a `.loom` file, the C++ types start with `Loom` (`LoomVM`, `LoomClass`, `ALoomActor`), and the IDE debugger uses the `mowo-loom` debug type. The docs use those names wherever you type or search them.
+
+</Callout>
+
+## What you get
+
+- Event graphs, functions with parameters and locals, pure functions, macros that are inlined when the class loads, and multicast event dispatchers.
+- Classes that derive from an actor, pawn, character, player controller, game mode or game state, or from another visual class.
+- Every `MFUNCTION` on every reflected C++ class as a node, with no registration step <Source symbol="LoomNodeCatalog" />.
+- Latent nodes (`Delay`, `Timeline`, async actions) that suspend a graph and resume it on a later frame.
+- Replicated variables, RepNotify and RPC functions for multiplayer.
+- Hot reload: a clean compile swaps the class under running actors, and they keep their variable values.
+- A debugger with breakpoints, conditions, logpoints, stepping and live values in the editor, plus a Debug Adapter Protocol (DAP) server for VS Code.
+- A text `.loom` file per class that diffs and merges like source code.
+
+## How a class runs
+
+<Flow steps={[".loom file", "Index and parse", "Expand macros, validate", "Register synthetic MClass", "Spawn backing class", "VM runs event graphs"]} highlight={3} caption="From file to running actor" />
+
+1. **The file.** Each class lives in one `.loom` file under the project's `Content/` folder. It holds the parent class, event graphs, variables, functions, macros, dispatchers, interfaces and component slots. See [The .loom file format](/docs/visual-scripting/loom-file-format/).
+2. **Registration.** The class registry resolves the parent, inlines every macro, runs the load validator and builds a synthetic `MClass` <Source symbol="LoomClassRegistry" />. From then on, `MClassRegistry::FindByName` and `MWorld::SpawnActorByClass` treat it like a native class.
+3. **The backing class.** The Visual Scripting module sits below the gameplay layer, so it cannot see `AActor`. The gameplay layer registers one native backing class per base, and every instance spawns as the backing class for its nearest native parent <Source path="Engine/Source/Runtime/Game/Private/ALoomActor.cpp" />:
+
+| Parent, or anything derived from it | Spawns as |
+| --- | --- |
+| `ACharacter` | `ALoomCharacter` |
+| `APawn` | `ALoomPawn` |
+| `APlayerController` | `ALoomPlayerController` |
+| `AGameMode` | `ALoomGameMode` |
+| `AGameState` | `ALoomGameState` |
+| `AActor`, or a native class with no backing of its own | `ALoomActor` |
+
+4. **Execution.** Each backing class owns an `FLoomRuntime`: the variable store, event dispatch, latent runs, replication and component slots <Source symbol="FLoomRuntime" />. On each lifecycle event the backing class runs its native base's code first, then the event graph of that name on the VM. The VM runs on an explicit exec stack, not the C++ call stack, which is why a `Delay` can suspend a graph and resume it later <Source symbol="LoomVM" />.
+
+### In the editor
+
+When a project opens, the editor indexes every `.loom` under `Content/` and keeps the index in `Intermediate/LoomClassIndex.mdfb`. A file whose size and modification time have not changed is not opened again. A class registers the first time something asks for it by name, with its parents first, so a spawn, a placed actor or a child class finds it as if every class had loaded up front <Source symbol="FLoomClassIndex" />. Anything that lists classes, such as the action palette, registers every pending class first.
+
+### In a packaged game
+
+There is no native back end: a packaged game runs every visual class on the same VM as the editor. Before the start scene loads, `FLoomRuntimeLoader` queues every staged `.loom`, from the loose `Content/` folder or from the cooked archive, and each class registers when first asked for, parents first <Source symbol="FLoomRuntimeLoader" />. The cook always includes every `.loom` under the content root, because scenes reference classes by name, not by path.
+
+## Hot reload
+
+When you compile a class without errors, the editor pushes it live. The registry keeps the same `MClass` object and swaps the definition behind it. Each running instance notices the swap on its next graph run and rebinds without being respawned <Source path="Engine/Source/Runtime/Game/Private/LoomRuntime.cpp" />:
+
+- Variables you changed on the instance keep their values.
+- Variables still equal to the old class default take the new default. This is how raising a default reaches every placed instance that never touched it.
+- Pending `Delay` and `Timeline` runs, and `Do Once`, `Gate` and other latch states, reset. Their state was keyed by node position in the old graphs.
+- Cross-actor dispatcher bindings move to the new definition.
+
+In a multiplayer Play-In-Editor session, the server and the extra clients are separate processes. When you save a `.loom` while the session runs, the editor reloads it and publishes the change on the session's reload channel, and every process of the session reloads the same class between frames <Source symbol="FPieHotReload" />.
+
+<Screenshot id="loom-overview-editor" alt="Mowo Editor with a .loom class open in the Visual Scripting editor: the My Loom panel on the left listing Graphs, Functions, Macros, Variables and Event dispatchers, the BeginPlay event graph on the canvas, and the Save, Compile, Diff, Find, Bookmarks, Resume, Step into, Step over, Stop and Simulate buttons in the toolbar" caption="A class open in the Visual Scripting editor." />
+
+## Lifecycle events
+
+Name an event graph after one of these events and the instance runs it when the event fires. A class with no graph of that name pays nothing for it: an instance with no `OnHit` graph never subscribes to contacts, and one with no `InputAction.` graph never polls input <Source path="Engine/Source/Runtime/Game/Private/LoomRuntime.cpp" />.
+
+| Graph name | Runs when | Values set for the graph |
+| --- | --- | --- |
+| `OnConstruct` | The actor is constructed. Component slots are applied here. | |
+| `BeginPlay` | Play starts, or the actor spawns into a running world. | |
+| `Tick` | Every frame. Read the frame time with `MGameplayStatics::GetWorldDeltaSeconds`. | |
+| `EndPlay` | The actor leaves play. | |
+| `Destroyed` | An explicit destroy, before `EndPlay`. | |
+| `AnyDamage` | The actor takes damage. | `DamageAmount`, `DamageInstigator` |
+| `OnHit` | A physics contact begins on the actor or one of its placed slots. | `PinPayload` (other actor), `HitLocation`, `HitNormal`, `HitImpulse` |
+| `OnTriggerEnter`, `OnTriggerExit` | Something enters or leaves the class's `Trigger` component slot <Source path="Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp" />. | `PinPayload` (other actor) |
+| `InputAction.<Name>` | The input action started this frame. Add `.Released` or `.Held` for completion or every triggered frame. | `InputActionValue` |
+
+A class opts into death by declaring a Bool variable named `IsDead`.
+
+Any other graph name is an **input pin**: an entry point that C++, a timer, level wiring or another actor can fire by name. See [Calling C++](/docs/visual-scripting/calling-cpp/).
+
+## Current limits
+
+<Callout type="warning">
+
+- **Containers do not cross into C++.** An array, map or set cannot be passed to or returned from a reflected function. Read the elements out and pass those.
+- **Struct values need a registered struct.** A struct parameter works when the struct is a copyable `MSTRUCT` (or `FTransform`). Any other type is refused at the call.
+- **Variables pick from four types in the editor.** The **Add variable** field offers Bool, Int, Float and String. Containers appear when a write node first fills a variable.
+- **No delta time in `Tick` scope.** Read it with `GetWorldDeltaSeconds`.
+
+</Callout>
+
+## Where to go next
+
+<CardGrid>
+  <Card title="The editor" href="/docs/visual-scripting/editor/" icon="Workflow">Panels, palette, pins, shortcuts, diff and compile.</Card>
+  <Card title="Variables and types" href="/docs/visual-scripting/variables-and-types/" icon="Braces">Value types, containers, flags and replication.</Card>
+  <Card title="Flow control" href="/docs/visual-scripting/flow-control/" icon="Workflow">Every node kind, grouped by what it does.</Card>
+  <Card title="Functions, macros and dispatchers" href="/docs/visual-scripting/functions-macros-dispatchers/" icon="Braces">Factor graphs and broadcast events.</Card>
+  <Card title="Classes and inheritance" href="/docs/visual-scripting/classes-and-inheritance/" icon="Layers">Parents, backing classes, defaults and component slots.</Card>
+  <Card title="Calling C++" href="/docs/visual-scripting/calling-cpp/" icon="Braces">Expose functions with MFUNCTION and drive classes from C++.</Card>
+  <Card title="Node libraries" href="/docs/visual-scripting/node-libraries/" icon="Boxes">The Statics libraries and async actions you can place.</Card>
+  <Card title="Debugging" href="/docs/visual-scripting/debugging/" icon="FlaskConical">Breakpoints, logpoints, stepping and the DAP server.</Card>
+  <Card title="How-to: a door" href="/docs/visual-scripting/how-to-door/" icon="Workflow">A door that opens when the player walks up.</Card>
+  <Card title="How-to: a pickup" href="/docs/visual-scripting/how-to-pickup/" icon="Workflow">A pickup that adds to an inventory array.</Card>
+</CardGrid>
+
+The API reference for the module is at [Loom API](/docs/api/loom/). The UI side of Visual Scripting (screen controllers and bindings) is in [UI](/docs/ui/).

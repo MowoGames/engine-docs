@@ -1,0 +1,124 @@
+---
+title: Sky, fog and reflections
+sidebarTitle: Sky and reflections
+description: The sky light, atmosphere and clouds, height and volumetric fog, VDB volumes, and how reflection captures and traced reflections combine.
+order: 10
+sources:
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/SkyLightComponent.h
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/ReflectionCaptureComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/PlanarReflectionComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/VdbVolumeComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/ASkyLightActor.h
+  - Engine/Source/Runtime/Game/Public/Game/ASkyAtmosphereActor.h
+  - Engine/Source/Runtime/Game/Public/Game/AVolumetricCloudActor.h
+  - Engine/Source/Runtime/Game/Public/Game/AExponentialHeightFogActor.h
+  - Engine/Source/Runtime/Game/Public/Game/AReflectionCapture.h
+  - Engine/Source/Runtime/RHI/Public/RHI/IBLGenerator.h
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ReflectionProbes.h
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererSky.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererProbes.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererFog.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererVdbVolumes.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/VolumetricFog.cpp
+verifiedAt: 08e26df3d
+---
+
+The environment around a scene is built from a few actors: a sky light for ambient and reflected sky light, a sky atmosphere and clouds for the visible sky, height fog and volumetric fog for the air, and reflection captures for interiors. This page covers how each one renders and the settings that matter. Placing and animating them (time of day, weather) belongs to the [Gameplay](/docs/gameplay/) section.
+
+## Sky light
+
+`ASkyLightActor` (a `SkyLightComponent`) lights the scene from the sky. Its **Source Type** picks where that sky comes from:
+
+| Source Type | Sky |
+|---|---|
+| Captured Scene (default) | The sky as rendered, including atmosphere and clouds, captured into a cubemap every **Capture Interval** frames while **Real Time Capture** is on |
+| Specified Cubemap | An HDR environment you pick in **Cubemap** |
+| Procedural Atmosphere | The procedural sky atmosphere |
+
+From that cubemap the renderer derives a diffuse irradiance map and a prefiltered specular map with one mip per roughness step, plus a BRDF lookup table, through `IBLGenerator` (<Source symbol="IBLGenerator" />). **Intensity** and **Tint** scale the result; **Lower Hemisphere Is Black** removes light from below the horizon.
+
+**Sky Rotation** turns the visible cubemap sky and its lighting together, in degrees; `r.Sky.Rotation` adds to it. A procedural atmosphere ignores rotation, because its sun disc follows the directional light.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `r.SkyLight.CaptureSize` | 128 | Face size of the sky capture cubemap |
+| `r.SkyLight.CaptureClouds` | 1 | Include clouds in the capture, so they shade the ambient and show in reflections |
+| `r.SkyIBL.CrossfadeSeconds` | 1 | Blend time between two captures, so time-of-day changes do not pop |
+| `r.Sky.CoupleAmbient` | 1 | Derive the sky that Global Illumination sees from the sky on screen |
+
+## Sky atmosphere and clouds
+
+`ASkyAtmosphereActor` renders a physically based sky from the directional light's direction, with stars (`r.Sky.Stars`) and a moon (`r.Sky.MoonIntensity`) at night. It also tints distant geometry with aerial perspective (`r.SkyAtmosphere.AerialPerspective`) and reddens and dims the sun toward the horizon (`r.Atmosphere.SunTransmittance`). Translucent surfaces and particles get the same aerial perspective (`r.SkyAtmosphere.Translucency`).
+
+`AVolumetricCloudActor` adds a cloud layer. From Epic up the clouds are a raymarched volume; below that they are a cheaper 2.5D sky plane. Raymarched clouds cast [cloud shadows](/docs/rendering/shadows/#cloud-shadows) onto the scene and into the fog.
+
+## Fog
+
+- **Height fog**: `AExponentialHeightFogActor` adds exponential height fog over everything opaque (`r.HeightFog`, default 1).
+- **Volumetric fog**: from Epic up, a froxel grid integrates height fog and fog volumes lit by the sun (with cascade shadows), the sky and up to `r.VolumetricFog.MaxLocalLights` point and spot lights (default 32, nearest first). A light's **Volumetric Scattering** scales its share. Volumetric fog runs after reflections, so reflections see unfogged surfaces, and applies to translucent surfaces at their own depth (`r.VolumetricFog.Translucency`).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `r.VolumetricFog` | tier | Volumetric fog on or off |
+| `r.VolumetricFog.Anisotropy` | 0.6 | Forward scattering of sunlight; higher gives sharper light shafts |
+| `r.VolumetricFog.HeightFalloff` | 0.02 | Height-fog falloff per world unit |
+| `r.VolumetricFog.Temporal` | 0.9 | Blend with the previous frame |
+| `r.VolumetricFog.GiAmbient` | 1 | Light the fog from the Global Illumination probes, so sealed rooms stay dark |
+
+## VDB volumes
+
+A `VdbVolumeComponent` ray-marches a sparse volume from a `.vdb` file: smoke, explosions or a single cloud. You choose the density and temperature grids by name, and set **Density Scale**, **Albedo**, **Anisotropy**, a temperature scale for blackbody emission and an emission strength. The volume shadows itself toward the sun.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `r.VdbVolumes` | 1 | Draw VDB volumes |
+| `r.VdbVolumes.Steps` | 64 | Samples along each view ray |
+| `r.VdbVolumes.ShadowSteps` | 6 | Self-shadow samples toward the sun; 0 is unshadowed |
+
+## Reflections
+
+Reflections come from several sources. Each pixel takes the best one that has an answer:
+
+<Flow steps={["Sky", "Reflection captures", "Distance field or ray tracing", "Screen space"]} highlight={3} caption="From lowest to highest priority. Where a higher source hits, it replaces the ones below." />
+
+1. **Screen-space reflections** (Medium and up, `r.SSR`) trace the depth buffer. With `r.Reflections.Continuation` (default 1) a ray that leaves the screen continues in the world instead of giving up.
+2. **The world leg** of that ray traces the Global Illumination distance field and shades from its radiance cache, or, with `r.RTReflections` (Epic and up), traces the ray-tracing scene. See [Ray tracing](/docs/rendering/ray-tracing/#ray-traced-reflections).
+3. **Reflection captures** cover the pixels where tracing found nothing.
+4. **The sky** covers everything else.
+
+Translucent surfaces with reflective materials get a one-ray reflection from High up (`r.Reflections.Translucent`).
+
+### Reflection captures
+
+The sky light is one environment for the whole scene, so an interior would reflect the sky. Place an `AReflectionCapture` to fix that locally: the scene is rendered into a cubemap from the capture's position, prefiltered like the sky, and blended over the sky inside the capture's volume.
+
+| Property | Meaning |
+|---|---|
+| Influence Shape | Box (oriented by the entity) or sphere |
+| Box Extents, Influence Radius | The volume the capture owns |
+| Brightness | Multiplier on the captured light |
+| Blend Distance | Fraction of the volume spent fading out at its edge |
+| Capture Resolution | Cube face size, 32 to 256 (default 128) |
+| Capture Offset | Moves the capture point off the entity origin |
+| Recapture | Render the capture again |
+
+Captures are parallax-corrected to their volume, so a captured room lines up with the room. Four captures are bound per frame, those around the camera first, then by distance; a scene may hold any number.
+
+A capture holds static lighting: skinned meshes and translucent surfaces stay out. While Global Illumination runs, captures include local lights and indirect light, so a lamp-lit room does not reflect black. A capture is redrawn when its inputs change and the scene has settled, at most one per frame.
+
+<Callout type="note">
+Captures are baked to the project's derived-data cache and reloaded on scene open (`r.ReflectionProbes.Bake`, default 1). `mbt cook` and `mbt package` ship them, so a packaged game never captures at runtime. See the [Shipping](/docs/shipping/) section.
+</Callout>
+
+<Screenshot id="rendering-reflection-capture-volume" alt="Mowo Editor viewport with a Reflection Capture actor selected inside an interior room, its box influence volume drawn as a wireframe, and the Details panel showing Influence Shape set to Box, Box Extents, Brightness, Blend Distance and Capture Resolution" caption="A box reflection capture and its influence volume." />
+
+### Planar reflections
+
+A `PlanarReflectionComponent` renders the scene a second time, mirrored across a plane, for flat mirrors and calm water. **Extent** sets the size of the plane, **Intensity** its strength. It is a second view of the scene, so it costs about as much as the visible part of the mirrored scene.
+
+## API reference
+
+- [SceneTypes module](/docs/api/scenetypes/): `SkyLightComponent`, `ReflectionCaptureComponent`
+- [Game module](/docs/api/game/): `ASkyLightActor`, `ASkyAtmosphereActor`, `AVolumetricCloudActor`, `AExponentialHeightFogActor`, `AReflectionCapture`, `PlanarReflectionComponent`, `VdbVolumeComponent`
+- [RHI module](/docs/api/rhi/): `IBLGenerator`
+- [SceneRenderer module](/docs/api/scenerenderer/): `FReflectionProbes`

@@ -1,0 +1,138 @@
+---
+title: Functions, macros and dispatchers
+sidebarTitle: Functions, macros, dispatchers
+description: Factor graphs into functions and macros, choose between them, and broadcast events to other actors with dispatchers.
+order: 5
+sources:
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomClass.h
+  - Engine/Source/Runtime/Loom/Private/LoomVM.cpp
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomVM.h
+  - Engine/Source/Runtime/Loom/Private/LoomClassRegistry.cpp
+  - Engine/Source/Runtime/Loom/Private/LoomMacroExpander.cpp
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomDispatcherRegistry.h
+  - Engine/Source/Runtime/Loom/Private/LoomDispatcherRegistry.cpp
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp
+  - Engine/Source/Runtime/Game/Private/LoomRuntime.cpp
+verifiedAt: 08e26df3d
+---
+
+Once a graph grows past a screen, factor it. Visual Scripting gives you two tools with different rules: a **function** is called, and a **macro** is pasted in. A third tool, the **event dispatcher**, lets one actor announce something and any number of others respond.
+
+## Functions
+
+A function is a named sub-graph with typed parameters, call-local variables and an optional return value <Source symbol="LoomFunction" />. It runs to completion and hands back its result.
+
+<Steps>
+<Step title="Add a function">
+
+Click **+** in the **Functions** section of **My Loom**. The function opens in its own tab with an entry node.
+
+</Step>
+<Step title="Declare parameters and locals">
+
+In the function's details, add inputs and locals. Parameter types in the picker are Boolean, Integer, Float and String <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp" />. Each parameter is an output pin on the entry node. **Get Parameter** reads one anywhere in the graph.
+
+</Step>
+<Step title="Return a value">
+
+End the graph with a **Return** node. Its input sets the return value.
+
+</Step>
+<Step title="Call it">
+
+Drag the function from **My Loom** onto another graph. The call node's inputs become the parameters, and its data output is the return value.
+
+</Step>
+</Steps>
+
+Locals are seeded from their defaults on every call and discarded when it returns, so repeated and recursive calls never share them. **Get Local Variable** and **Set Local Variable** reach them. A function runs in a child scope that shares the instance's class variables. It may call itself, up to a depth of 64.
+
+<Callout type="warning">
+
+A function cannot suspend. A Delay or Timeline inside a function runs instantly <Source symbol="LoomContext" />, an Async Action logs an error and stops the chain, and **Collapse to Function** refuses a selection that contains a latent node. Use a macro when you need a wait.
+
+</Callout>
+
+### Pure functions
+
+Tick **Pure** on a function and its call node loses its exec pins. The VM runs the function on demand each time a downstream pin reads the result <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />. Use it for computed getters such as `IsPlayerInRange` or `GetHealthPercent`.
+
+A reflected C++ function declared `const` is pure the same way. You do not need to mark it.
+
+### RPC functions
+
+A function's Details include **Replication** (Not replicated, Server, Client, Multicast) and **Reliable** <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp" />. A replicated function is routed across the session instead of running wherever the call happens:
+
+| Flag | Called on the authority | Called on a client |
+| --- | --- | --- |
+| Server | Runs locally | Sent to the server, not run locally |
+| Client | Sent to the owning client (runs locally when the owner is the listen host) | Runs locally |
+| Multicast | Runs locally and is sent to every client | Runs locally only |
+
+Outside a session everything runs locally. A call that must travel but cannot is dropped with an error, never run on the wrong machine <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />. An RPC must return nothing and must not be pure.
+
+## Macros
+
+A macro is a sub-graph that is **inlined** when the class registers. The VM never sees a macro node: every event graph and function has its macro instances expanded in place first <Source path="Engine/Source/Runtime/Loom/Private/LoomClassRegistry.cpp" />. The definitions stay on the class, so a child class can use its parent's macros and the editor keeps showing the unexpanded form.
+
+Because a macro is pasted in rather than called, it can do two things a function cannot:
+
+- **Several exec inputs and outputs.** A function has one way in and one way out.
+- **Latent nodes and Break Loop work.** After expansion the macro body is part of the caller's graph, so a Delay suspends the caller, and a Break Loop finds the caller's loop.
+
+Add one with **+** in the **Macros** section. Its body starts at a **Macro Input** node, whose outputs are the macro's inputs, and ends at **Macro Output** nodes. Reaching a Macro Output at pin N fires the macro's exec output N.
+
+### Standard macros
+
+Two macros ship with the engine and appear under **Macros (Standard)** in every class <Source path="Engine/Source/Runtime/Loom/Private/LoomMacroExpander.cpp" />:
+
+| Macro | Inputs | Outputs | Does |
+| --- | --- | --- | --- |
+| `IsValidBranch` | `In` (exec), `Object` | `IsValid`, `NotValid` (exec) | Checks an object and branches in one node. |
+| `ForEachWithBreak` | `In` (exec), `Array`, `Break` (exec) | `LoopBody` (exec), `Element`, `Index`, `Completed` (exec) | A For Each whose body can fire `Break` to stop early. |
+
+## Choose between them
+
+<Flow steps={["Need a Delay, Timeline or Break Loop?", "Need several exec ins or outs?", "Need a value in an expression?", "Function"]} caption="Ask in order. A yes on either of the first two means a macro. A yes on the third means a pure function." />
+
+Start with a function. It has its own scope, it shows up in the debugger's call stack as its own frame, and it is easier to reason about. Reach for a macro only when you need a wait, a break or more than one exec path.
+
+**Collapse to Function** and **Collapse to Macro** in the node context menu turn a selection into either one, rewired to the same neighbors.
+
+<Screenshot id="loom-functions-collapse" alt="Visual Scripting editor with four nodes selected in the event graph and the node context menu open, with the Collapse to Function and Collapse to Macro entries visible below Open Function Graph" caption="Collapsing a selection into a function or macro." />
+
+## Event dispatchers
+
+A dispatcher is a multicast event: a name plus a parameter list. A **Broadcast** node fires every bound handler and passes the broadcast arguments as the handler's parameters <Source symbol="LoomDispatcher" />. Handlers are functions.
+
+<Steps>
+<Step title="Declare it">
+
+Click **+** in **Event dispatchers** and give it a name and parameters, for example `OnOpened`.
+
+</Step>
+<Step title="Broadcast it">
+
+Where the event happens, add a **Broadcast** node for the dispatcher and wire the arguments.
+
+</Step>
+<Step title="Listen from another actor">
+
+In the listening class, add **Bind Event On Target**. Wire the broadcasting actor into its Target pin and name one of the listener's own functions as the handler. **Unbind Event On Target** removes the binding.
+
+</Step>
+</Steps>
+
+When the target broadcasts, the listener's handler runs in the **listener's** context, with its own variables <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />. An unlinked Target pin means self.
+
+Bindings are safe to leave behind:
+
+- The registry holds both ends weakly and prunes bindings to dead actors when it broadcasts.
+- When an actor ends play, every binding that mentions it is removed <Source path="Engine/Source/Runtime/Game/Private/LoomRuntime.cpp" />.
+- On hot reload, bindings move to the new class definition.
+- More than 32 nested cross-actor broadcasts are refused <Source symbol="LoomDispatcherRegistry" />.
+
+## Next
+
+- [Classes and inheritance](/docs/visual-scripting/classes-and-inheritance/): how functions and dispatchers resolve through a parent chain.
+- [Calling C++](/docs/visual-scripting/calling-cpp/): reflected functions as nodes.

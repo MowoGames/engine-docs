@@ -1,0 +1,132 @@
+---
+title: AI crowds and director
+sidebarTitle: Crowds and director
+description: Scale AI with significance and crowd tiers, pace threats with the AI director, and build ambient behavior with cover, smart objects, schedules and situations.
+order: 23
+sources:
+  - Engine/Source/Runtime/Game/Public/Gameplay/SignificanceSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/SignificanceComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/CrowdSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/CrowdMemberComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/CrowdSpawnerComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/MCrowdStatics.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIDirectorSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/MDirectorStatics.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/CoverSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/CoverPointComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/ACoverPointActor.h
+  - Engine/Source/Runtime/AINavigation/Private/CoverSystem.cpp
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/SmartObjectComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/SmartObjectSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/MSmartObjectStatics.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/ScheduleAsset.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/ScheduleComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/ScheduleSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/SituationSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/MSituationStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/SmartPointComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/TrespassVolumeComponent.h
+  - Engine/Source/Runtime/Game/Private/SceneEnvironmentSerializer.cpp
+verifiedAt: 08e26df3d
+---
+
+These systems take AI from a handful of enemies to a living level: hundreds of ambient characters at three levels of detail, a director that paces threats, and data-driven cover, smart objects, daily schedules and world events that witnesses react to and gossip about.
+
+## Significance
+
+The significance system scores entities that carry a `Significance` component, from 0 to 1, against the main camera: a falloff to `maxDistance` (150 m), plus `frustumBonus` (0.25) when on screen. `forcedSignificance` of 0 or more overrides the score, for cutscene principals. <Source symbol="SignificanceComponent" />
+
+The score lowers the cost of unimportant characters:
+
+| Consumer | Effect |
+| --- | --- |
+| Animation | Update rate drops with the score |
+| Perception | Low-score perceivers run every `ai.SignificancePerceptionInterval` frames (4) |
+| Behavior trees | Tick no faster than `ai.SignificanceBTMidInterval` (0.2 s) or `ai.SignificanceBTLowInterval` (0.6 s) |
+| Audio | Voice priority scales down, so distant barks lose the voice budget first |
+
+`ai.SignificanceBudget` (128) entities are re-scored per frame, round-robin. <Source symbol="FSignificanceSystem" />
+
+## Crowds
+
+Crowd members carry a `CrowdMember` component and are ranked by significance into three tiers. Changing tier swaps only the brain; the entity keeps its identity and position. <Source symbol="FCrowdSystem" />
+
+| Tier | Cap | Simulation |
+| --- | --- | --- |
+| Full | `ai.Crowd.MaxFull` (24) | A real AI: nav agent with avoidance, perception, optional behavior tree |
+| Bulk | `ai.Crowd.MaxBulk` (128) | A shared idle, walk and flee state machine with avoidance; no perception |
+| Particle | Unbounded | Flow steering with neighbor separation; no nav agent |
+
+Promotions wait `ai.Crowd.TierDwell` (1 s) and incumbents get a small score bonus, so camera jitter does not make members flicker between tiers.
+
+Populate with a `CrowdSpawner` component: `count` members in a disc of `radius`, with `archetypeCount` variants, a `walkSpeed` and a `seed`. Spawning ramps up at `ai.Crowd.SpawnPerFrame` per frame, and members despawn with the spawner. <Source symbol="CrowdSpawnerComponent" />
+
+`MCrowdStatics::BroadcastCrowdReaction(position, radius, type)` panics members in the radius; full-tier AIs hear it as a noise. `GetCrowdFullCount`, `GetCrowdBulkCount` and `GetCrowdParticleCount` report the tiers. <Source symbol="MCrowdStatics" />
+
+## The AI director
+
+The director paces threats the way Left 4 Dead does. It measures each player's stress from damage taken and dealt, deaths, enemy sightings, nearby enemies, low health and low ammo, takes the team's intensity as the highest player's, and cycles through four phases: <Source symbol="FAIDirectorSystem" />
+
+<Flow steps={["BuildUp", "Peak", "PeakFade", "Relax"]} highlight={3} caption="Relax is a guaranteed quiet window: the director never spawns during it." />
+
+Each phase has a wanted population. The director spawns threats in a ring around a random player, on the navmesh and out of every player's sight, and despawns them when far away or insignificant.
+
+Enable it in **World Settings** (`director_enabled`) and assign a `.director` profile (`director_profile`) holding the intensity weights, pacing thresholds and durations, populations and spawn settings. <Source path="Engine/Source/Runtime/Game/Private/SceneEnvironmentSerializer.cpp" />
+
+From C++, `RegisterPlayer` adds co-op pawns, `ReportStress(player, amount)` adds custom stress such as a scripted scare, and `SetSpawner` installs your own spawner. From Visual Scripting, `MDirectorStatics` reads the phase and intensity and offers `ForceDirectorPhase` and `SetDirectorPaused`. <Source symbol="MDirectorStatics" /> A music score can follow the director's phase; see [Music and mixing](/docs/gameplay/music-and-mixing/).
+
+## Cover
+
+The cover system generates cover points from the level's static collision at the start of play, spread over several frames, and classifies each as `Low` (crouch) or `High` (full) cover. Place an `ACoverPointActor`, or add a `CoverPoint` component, for hand-placed points. <Source symbol="FCoverSystem" />
+
+Behavior trees use four native tasks: `FindCover` reserves the best point away from the threat in the blackboard, `MoveToCover` walks there, `InCover` checks the agent is still covered and not flanked, and `LeaveCover` releases the reservation. <Source path="Engine/Source/Runtime/AINavigation/Private/CoverSystem.cpp" />
+
+## Smart objects
+
+A smart object is something an agent can claim and use: a bench, a terminal, a window. The `SmartObject` component sets its `activity`, `slotCount`, `slotSpacing`, `useDuration` and `cooldown`. Each agent holds at most one claim, and a claim dies with either end, so a despawned NPC never keeps a seat. <Source symbol="SmartObjectComponent" />
+
+Use them from a behavior tree with the `FindSmartObject` and `UseSmartObject` native tasks, or from Visual Scripting with `MSmartObjectStatics::ClaimNearestSmartObject(actor, activity, radius)`, `ReleaseSmartObject` and `GetSmartObjectSlotLocation`. <Source symbol="MSmartObjectStatics" />
+
+## Schedules
+
+NPCs can follow a daily routine. Mark activity spots with `ASmartPointActor` or a `SmartPoint` component (`activityTag`, optional `pointName`, `capacity`, `useFacing`), and give the NPC a `Schedule` component naming a `.schedule` asset. <Source symbol="SmartPointComponent" />
+
+```mdf title="Content/AI/TownWorker.schedule"
+Schedule "TownWorker" {
+    schema_version: 1
+
+    Act "work" {
+        start_hour: 8.0
+        end_hour: 12.0
+        activity: "work"
+        behavior: GoToAndIdle
+    }
+    Act "sleep" {
+        start_hour: 20.0
+        end_hour: 8.0
+        activity: "sleep"
+        behavior: Wander
+    }
+}
+```
+
+Hours follow the day-night clock and wrap across midnight; the first matching act wins. Behaviors are `GoToAndIdle`, `GoToAndLoop`, `Patrol` and `Wander`. `ai.Schedule.HourOverride` forces an hour for testing. <Source symbol="ScheduleAsset" />
+
+## Situations
+
+A situation is a world event that witnesses learn about: `Gunshot`, `Explosion`, `BodyFound`, `Trespass`, `Vandalism`, `Suspicious` or `Custom`. <Source symbol="FSituationSystem" />
+
+- Full AIs within earshot learn it, through the same walls-and-portals hearing the player's voice uses, and get blackboard keys such as `KnowsAboutSituation`, `SituationType` and `SituationPosition`. Crowd members in range panic.
+- Two AIs that stay within `ai.Situation.ConversationRange` for `ai.Situation.ConversationTime` pass what they know to each other.
+- `BodyFound` starts dormant and activates only when someone sees the body. Deaths raise one automatically (`ai.AutoBodyFound`).
+- A `TrespassVolume` component raises `Trespass` for anyone inside whose team is not authorized.
+- Situations decay after a per-type lifetime (`ai.Situation.GunshotLifetime` and so on).
+
+Raise and resolve them with `MSituationStatics::RaiseSituation(type, position, radius, severity)`, `ResolveSituation(id)` and `ResolveSituationsAt(position, radius)`. <Source symbol="MSituationStatics" />
+
+## Related
+
+- [AI](/docs/gameplay/ai/)
+- [Navigation](/docs/gameplay/navigation/)
+- [Console variables](/docs/reference/console-variables/) for every `ai.*` setting
+- API: [AINavigation module](/docs/api/ainavigation/), [Game module](/docs/api/game/)

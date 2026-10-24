@@ -1,0 +1,203 @@
+---
+title: Arc styling
+sidebarTitle: Styling
+description: How Arc styles work. Design tokens live in arc-style.json, mbt tokens generates C++ from them, and game screens resolve colors through .theme themes.
+order: 2
+sources:
+  - Engine/Source/Runtime/Arc/Design/arc-style.json
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TokensCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Tokens/ArcStyleGenerator.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs
+  - Engine/Source/Runtime/Arc/Public/Arc/Mowo/ArcMowoStyle.gen.h
+  - Engine/Source/Runtime/Arc/Private/Mowo/ArcMowoStyle.gen.cpp
+  - Engine/Source/Runtime/Arc/Public/Arc/Mowo/CArcMowoStyleLoader.h
+  - Engine/Source/Runtime/Arc/Private/Mowo/ArcMowoBridge.cpp
+  - Engine/Source/Runtime/Arc/Public/Arc/Style/CArcStyle.h
+  - Engine/Source/Runtime/Arc/Private/Framework/CArcWindowManager.cpp
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUITheme.h
+  - Engine/Source/Runtime/ArcUI/Private/FArcUITheme.cpp
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/CArcUIScreenStack.h
+  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/Game.theme
+  - Engine/Source/Runtime/Arc/Public/Arc/Style/CArcDensity.h
+  - Engine/Source/Runtime/Arc/Private/Mowo/CArcMowoTheme.cpp
+  - Engine/Source/Runtime/Arc/Content/Themes/High Contrast.json
+  - Engine/Source/Runtime/Arc/Private/Animation/CArcAnimationManager.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorAppearancePage.cpp
+verifiedAt: 08e26df3d
+---
+
+Arc has two styling layers. The **editor style** ("Mowo Graphite") comes from one design file, `arc-style.json`, which `mbt tokens` compiles into C++. **Game themes** (`.theme` assets) let each game screen resolve color, font and metric tokens against its own palette. This page covers both.
+
+## From design file to pixels
+
+<Flow steps={["arc-style.json", "mbt tokens", "ArcMowoStyle.gen.h / .cpp", "CArcStyle active set", "Widget paint"]} highlight={1} caption="The build regenerates the style code from the design file before it compiles anything." />
+
+The design file is `Engine/Source/Runtime/Arc/Design/arc-style.json` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Tokens/ArcStyleGenerator.cs" />. The generator writes two files into the Arc module:
+
+- `Arc/Mowo/ArcMowoStyle.gen.h`: `inline constexpr` color tables, typography, metrics, motion and one style struct per widget, with every value resolved at generation time.
+- `Private/Mowo/ArcMowoStyle.gen.cpp`: `RegisterMowoStyleSet()`, which builds the "Mowo Graphite" `CArcStyleSet` and makes it the active set <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Tokens/ArcStyleGenerator.cs" />.
+
+Do not edit the generated files. Their header says hand edits are overwritten <Source path="Engine/Source/Runtime/Arc/Public/Arc/Mowo/ArcMowoStyle.gen.h" />.
+
+## What arc-style.json holds
+
+The file has six top-level keys <Source path="Engine/Source/Runtime/Arc/Design/arc-style.json" />.
+
+| Key | Contents | Example |
+| --- | --- | --- |
+| `styleset` | Core colors (surfaces, accent, text, borders, status, selection, focus ring) plus an extended `colors` map | `"AccentColor": "#35A5E5"` |
+| `typography` | Named text styles: family, weight, size, line height, letter spacing | `Body`: Geist Regular 12/16 |
+| `metrics` | Spacing scale, radii, border widths, control heights, icon sizes, and layout numbers for specific editors | `"radius": { "small": 3, ... }` |
+| `shadows` | Elevation shadows | |
+| `motion` | Duration and easing for hover, press, expand, slide, fade, panel open and close, toasts and more | `"hover": { "duration": 100, "easing": "QuadOut" }` |
+| `widgets` | Per-widget sizes and per-state colors | `Button.states.hover.background` |
+
+The core palette:
+
+| Group | Tokens |
+| --- | --- |
+| Surfaces | `Surface0` #0C0D0E, `Surface1` #16181A, `Surface2` #1B1D1F, `Surface3` #24272A, `Surface4` #2B2F33 |
+| Accent | `AccentColor` #35A5E5, `AccentHover` #5CB8EE, `AccentPressed` #2286C4 |
+| Text | `TextPrimary` #C3C7CB, `TextSecondary` #9AA0A6, `TextDisabled` #7C8288 |
+| Borders | `BorderSubtle` #101214, `BorderNormal` #3A3F44, `BorderStrong` #4A5056 |
+| Status | `Success` #58C46A, `Warning` #D9A53F, `Error` #E05F5F, `Info` #58AEF0 |
+| Selection | `Selection` #2E4A5E, `FocusRing` #35A5E5 |
+
+Typography uses three families: Geist for body text, Geist Mono for code, and Sora SemiBold for headings, titles and display text <Source path="Engine/Source/Runtime/Arc/Design/arc-style.json" />. Motion tokens run from 60 ms (press) to 200 ms (slide).
+
+### Editor themes
+
+The palette above is the **Dark** theme. The editor's **Preferences > Appearance > Theme** also offers **Light** and **High Contrast**, which replace the colour tokens; a project can add its own theme as a JSON file of colour tokens under `Config/Themes` <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EditorAppearancePage.cpp" />. High Contrast drops elevation shadows, because popups there rely on their outline <Source path="Engine/Source/Runtime/Arc/Private/Mowo/CArcMowoTheme.cpp" />.
+
+### Widget state styles
+
+Each entry under `widgets` names its sizes and the colors for each state. States reference palette tokens by name, so changing `Surface4` restyles every widget that uses it:
+
+```json title="arc-style.json (excerpt)"
+"Button": {
+  "height": 26, "paddingX": 12, "radius": 3, "border": 1, "textStyle": "Body",
+  "states": {
+    "default": { "background": "Surface1", "border": "BorderNormal", "text": "TextPrimary" },
+    "hover": { "background": "Surface4", "border": "BorderStrong", "text": "TextBright" },
+    "pressed": { "background": "BorderSubtle", "border": "BorderNormal", "text": "TextBright" },
+    "focused": { "background": "Surface1", "border": "FocusRing", "text": "TextPrimary" },
+    "disabled": { "background": "Surface1", "border": "Surface3", "text": "TextDisabled" }
+  }
+}
+```
+
+The file has one entry per styled widget, from `Button` and `TextField` through `DockTabWell`, `GraphNode`, `TreeRow` and `Toast` to editor-specific rows such as `KeyDiamond` and `LODTable`. They are collected in `FMowoWidgetStyles` <Source path="Engine/Source/Runtime/Arc/Public/Arc/Mowo/ArcMowoStyle.gen.h" />.
+
+## Regenerating tokens
+
+You rarely need to run the generator by hand. `mbt build` runs it before compiling, because the generated header is a C++ input. It is incremental on file times, so a build with no style change pays nothing <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs" />. Installed engine builds skip it.
+
+For quick iteration, run it alone:
+
+```powershell
+./mbt.cmd tokens          # regenerate if arc-style.json is newer
+./mbt.cmd tokens --force  # regenerate unconditionally
+```
+
+`--force` is the only option <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TokensCommand.cs" />. The command exits `2` when it cannot find the engine root and `1` when generation fails.
+
+### Live restyling in a dev tree
+
+You can see style edits without rebuilding. When the engine runs from a source tree, the Arc bridge finds `arc-style.json` and watches it <Source path="Engine/Source/Runtime/Arc/Private/Mowo/ArcMowoBridge.cpp" />. Saving the file re-parses it and registers the result under the same "Mowo Graphite" name, which fires the style-changed broadcast. A malformed file logs an error and leaves the running UI alone <Source path="Engine/Source/Runtime/Arc/Public/Arc/Mowo/CArcMowoStyleLoader.h" />.
+
+Limits of the live path:
+
+- It only changes what widgets look up from the active `CArcStyleSet`. The `constexpr` values in `ArcMowoStyle.gen.h` are compiled into each file that uses them and change only when you rebuild.
+- The file watch is Windows-only. On other platforms the watcher is a no-op stub.
+- In a packaged build the design file is not present, so the generated set stays.
+- `MOWO_ARC_STYLE_JSON` overrides the file location.
+
+<Steps>
+<Step title="Start the editor from your source tree">
+Run `MowoEditor.exe` from `Engine/Binaries/<Platform>/` so the bridge can walk up to `Engine/Source/Runtime/Arc/Design/arc-style.json`.
+</Step>
+<Step title="Edit a token">
+Change, for example, `"AccentColor"` in `arc-style.json` and save.
+</Step>
+<Step title="Check the editor">
+Widgets that read the active style set repaint with the new value. The window manager's style listener calls `AWidget::InvalidateAllWidgets()`, so metric changes also re-run layout <Source path="Engine/Source/Runtime/Arc/Private/Framework/CArcWindowManager.cpp" />.
+</Step>
+<Step title="Make it permanent">
+Run `mbt build` (or `mbt tokens`) so the `constexpr` tables match the file.
+</Step>
+</Steps>
+
+<Screenshot id="ui-arc-style-live-edit" alt="Mowo Editor side by side with arc-style.json open in a text editor, AccentColor changed from #35A5E5 to a clearly different hue, and the editor's selected tab and primary buttons showing the new accent" caption="Editing arc-style.json restyles a running dev-tree editor." />
+
+## Using tokens in C++
+
+In C++, read tokens from the generated `Arcf::Mowo` namespace. `ToFontInfo` turns a typography entry into an Arc font description <Source path="Engine/Source/Runtime/Arc/Public/Arc/Mowo/ArcMowoStyle.gen.h" />.
+
+```cpp title="StatusLabel.cpp" wrap
+#include <Arc/Widgets/ATextBlock.h>
+#include <Arc/Widgets/ABorder.h>
+#include <Arc/Mowo/ArcMowoStyle.gen.h>
+
+const Arcf::ArcColor warningText = Arcf::Mowo::MowoColors::WarningText;
+const float radius = Arcf::Mowo::MowoMetrics.Radius.Small;
+const float fadeMs = Arcf::Mowo::MowoMotion.Fade.DurationMs;
+
+Arcf::TSharedPtr<Arcf::AWidget> label = ArcNew(Arcf::ATextBlock).Text(Arcf::CText::FromString("Unsaved changes")).Font(Arcf::Mowo::ToFontInfo(Arcf::Mowo::MowoTypography.Caption)).ColorAndOpacity(warningText);
+```
+
+At run time, `CArcStyle::Get()` is the registry of style sets: `RegisterStyleSet`, `SetActiveStyleSet`, `GetColor(key)`, and a change listener <Source path="Engine/Source/Runtime/Arc/Public/Arc/Style/CArcStyle.h" />. With no set registered it falls back to a built-in dark theme, so widgets can resolve defaults before initialization.
+
+## Density
+
+The editor's **Preferences > Appearance > Density** offers Compact, Default and Comfortable <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EditorAppearancePage.cpp" />. Metric tokens hold the Default values. A widget that lays out from a row height, control height or padding asks `CArcDensity` for the value at the current density, and a density change re-lays out the whole UI without a restart <Source symbol="CArcDensity" />. Rows move by 4 pixels, control heights by 2, and padding scales by 3/4 or 5/4, so the 4-pixel grid holds.
+
+## Motion and reduced motion
+
+Transitions read their duration and easing from the `motion` tokens. When **Reduced Motion** is on (the `ui.ReducedMotion` setting, see [Settings and accessibility](/docs/ui/settings-and-accessibility/)), Arc skips decorative transitions: non-looping animations jump to their end and popups open without sliding <Source path="Engine/Source/Runtime/Arc/Private/Animation/CArcAnimationManager.cpp" />. **High Contrast UI** (`ui.HighContrast`) switches the Mowo theme to its high-contrast colours.
+
+## Game themes (.theme)
+
+Game screens do not use the editor palette directly. A `.ui` screen resolves color tokens such as `"accent"` or `"textbright"` through an `FArcUITheme`, stored as an MDF `.theme` asset <Source path="Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUITheme.h" />.
+
+```mdf title="Content/UI/Game.theme"
+ArcTheme "Sample Game" {
+    Colors {
+        accent: vec4(0.20784314, 0.64705884, 0.8980392, 1.0)
+        textbright: vec4(0.9098039, 0.91764706, 0.9254902, 1.0)
+        scanner: vec4(0.32000002, 0.96, 0.72, 1.0)
+    }
+    Fonts {
+        Font "body" {
+            family: "Geist"
+            size: 14.0
+        }
+    }
+    Metrics {
+        corner_radius: 4.0
+    }
+}
+```
+
+This is an excerpt of the sample theme <Source path="Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/Game.theme" />. A theme can add any token name, like `scanner` above, and screens can reference it.
+
+### Resolution order
+
+<Flow steps={["Screen's own theme:", "Project theme", "Built-in default theme"]} caption="The first theme that defines the token wins." />
+
+1. The `theme:` property at the root of the `.ui`.
+2. The host's project theme, set with `CArcUIScreenStack::SetProjectTheme(path)` <Source path="Engine/Source/Runtime/ArcUI/Public/ArcUI/CArcUIScreenStack.h" />.
+3. The built-in default theme ("Mowo Default").
+
+The default theme defines eight colors taken from the editor palette: `accent`, `success`, `warning`, `error`, `info`, `text`, `textbright` and `surface`, plus the fonts `body` (Geist 14) and `heading` (Sora 22) <Source path="Engine/Source/Runtime/ArcUI/Private/FArcUITheme.cpp" />.
+
+Token names are normalized before lookup. A path prefix is dropped and the rest is lowercased, so `token/accent`, `Content/UI/Game.theme.accent` and the legacy name `AccentColor` all resolve to `accent` <Source path="Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUITheme.h" />.
+
+<Callout type="tip">
+In the [ArcUI Designer](/docs/ui/arcui-designer/), color rows offer the theme's token list before a raw color picker. Prefer tokens: a screen authored in raw colors stops following the theme when the theme changes.
+</Callout>
+
+## Related
+
+- [ArcUI screens](/docs/ui/arcui-screens/) for where `theme:` sits in a `.ui`.
+- [Settings and accessibility](/docs/ui/settings-and-accessibility/) for the high-contrast UI setting.
+- API pages: [CArcStyle](/docs/api/arc/carcstyle/), [CArcStyleSet](/docs/api/arc/carcstyleset/), [FMowoTypography](/docs/api/arc/fmowotypography/), [FMowoMetrics](/docs/api/arc/fmowometrics/), [FArcUITheme](/docs/api/arcui/farcuitheme/).

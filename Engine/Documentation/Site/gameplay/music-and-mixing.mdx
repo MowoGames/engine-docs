@@ -1,0 +1,135 @@
+---
+title: Music and mixing
+description: An adaptive score of layered stems with bar-quantized state changes and stingers, zone ambience, and mix snapshots for ducking, pause and underwater.
+order: 18
+sources:
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MusicSystem.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MusicAsset.h
+  - Engine/Source/Runtime/Narrative/Private/MusicAsset.cpp
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MMusicStatics.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MixSnapshotSystem.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MixSnapshotAsset.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MMixSnapshotStatics.h
+  - Engine/Source/Runtime/Game/Private/SceneEnvironmentSerializer.cpp
+  - Engine/Content/Audio/Mix/DialogueDuck.mixsnapshot
+verifiedAt: 08e26df3d
+---
+
+The music system plays an adaptive score: layered stems that change state on the bar line, stingers, and ambience beds that follow the player's zone. Mix snapshots move the whole mix at once, for dialogue ducking, a pause menu or going underwater. Both run on the game tick and play through the ordinary audio buses.
+
+## The score
+
+A score is a `.music` asset. <Source symbol="FMusicSystem" />
+
+```mdf title="Content/Audio/Music/Main.music"
+Music "main" {
+    schema_version: 1
+    tempo_bpm: 84.0
+    beats_per_bar: 4
+    default_state: "Explore"
+    default_crossfade: 3.0
+    quantize: true
+
+    State "Explore" {
+        gain: 0.55
+        loop: true
+
+        Stem "Content/Audio/Music/pad.ogg" {
+            gain: 1.0
+        }
+        Stem "Content/Audio/Music/pulse.ogg" {
+            gain: 1.0
+            start_muted: true
+        }
+        Transition "Combat" {
+            crossfade: 0.5
+            quantize: false
+            stinger: "reveal"
+        }
+    }
+
+    Stinger "reveal" {
+        clip: "Content/Audio/Music/stab.ogg"
+    }
+
+    Ambience "cellar" {
+        clip: "Content/Audio/Amb/cellar.ogg"
+        gain: 0.5
+    }
+
+    Phase "Peak" {
+        state: "Combat"
+    }
+}
+```
+
+| Node | Meaning |
+| --- | --- |
+| `Music` | Tempo and bar length, the starting state, the default crossfade, and whether state changes wait for the bar line |
+| `State` | A set of stems that play together, with a gain, a loop flag and a crossfade |
+| `Stem` | One layer; `start_muted` starts it silent but in sync with its siblings |
+| `Transition` | Which states this one may move to, with per-move crossfade, quantize and stinger |
+| `Stinger` | A one-shot fired by name or by a transition |
+| `Ambience` | A bed selected by the player's zone |
+| `Phase` | Binds an AI director phase to a state |
+
+Set the scene's score in **World Settings** (`music_score`). <Source path="Engine/Source/Runtime/Game/Private/SceneEnvironmentSerializer.cpp" />
+
+## Drive the score
+
+Every stem of a state starts on the same frame and keeps running, so layers never drift; bringing a layer in or out only moves its gain. <Source symbol="MMusicStatics" />
+
+| Function on `MMusicStatics` | Effect |
+| --- | --- |
+| `SetMusicScore(idOrPath)` | Loads a score |
+| `SetMusicState(state)` | Changes state on the next bar when quantized; false if the move is not allowed |
+| `SetMusicStateImmediate(state)` | Skips the bar wait, still respecting the allowed moves |
+| `PlayStinger(id)` | Fires a stinger |
+| `SetMusicLayerGain(clip, gain)` | Brings a stem in or out |
+| `SetMusicDuck(scale, seconds)` | Scales all music; 1 is no duck |
+| `GetMusicState()`, `GetPendingMusicState()`, `GetTimeToNextBar()` | Read state |
+| `SetDirectorBinding(enabled)` | Lets the AI director's phase pick the state |
+
+A state with no transitions accepts any target; one with transitions accepts only those. When the score has `Phase` nodes, the AI director drives it; see [AI crowds and director](/docs/gameplay/ai-crowds-and-director/).
+
+**Zone ambience.** A zone's `ambience` id selects the matching `Ambience` bed, crossfaded onto the Ambient bus as the player moves between zones. See [Zones and utility grids](/docs/gameplay/zones-and-utility-grids/).
+
+## Mix snapshots
+
+A snapshot is a `.mixsnapshot` asset that sets bus volumes and low-pass filters. Snapshots do not stack: a push/pop stack resolves one winner by `priority` (ties go to the latest push) and every bus blends toward it. <Source symbol="FMixSnapshotSystem" />
+
+```mdf title="Content/Audio/Mix/DialogueDuck.mixsnapshot"
+MixSnapshot "dialogue_duck" {
+    schema_version: 1
+    priority: 40
+    blend_in: 0.25
+    blend_out: 0.45
+
+    Bus "Music" {
+        volume: 0.35
+    }
+    Bus "Ambient" {
+        volume: 0.6
+    }
+}
+```
+
+`volume` is a fraction of the player's own bus setting, so the volume slider keeps its meaning. `lowpass` sets a filter corner in Hz. A bus the snapshot does not name returns to its base level.
+
+| Function on `MMixSnapshotStatics` | Effect |
+| --- | --- |
+| `PushMixSnapshot(idOrPath)` | Pushes a snapshot and returns a handle |
+| `PushTimedMixSnapshot(idOrPath, seconds)` | Pushes one that pops itself |
+| `PopMixSnapshot(handle)`, `PopMixSnapshotById(id)`, `PopAllMixSnapshots()` | Pops |
+| `GetActiveMixSnapshot()`, `GetMixBusVolume(bus)` | Read state |
+| `SetGamePaused(paused)` | Pushes or pops the pause snapshot |
+
+<Source symbol="MMixSnapshotStatics" />
+
+The engine ships five snapshots under `Content/Audio/Mix/`: `DialogueDuck` (applied while a dialogue runs), `VoiceDuck` (while someone speaks on proximity voice), `PauseMenu`, `Underwater` and `Stunned`. Put a file at the same path in your project to override one.
+
+## Related
+
+- [Audio](/docs/gameplay/audio/)
+- [Narrative](/docs/gameplay/narrative/) for dialogue
+- API: [Narrative module](/docs/api/narrative/)

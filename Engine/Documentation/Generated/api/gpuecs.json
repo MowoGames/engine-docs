@@ -1,0 +1,788 @@
+{
+	"name": "MowoEngine.GpuEcs",
+	"displayName": "GpuEcs",
+	"slug": "gpuecs",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/GpuEcs/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/GpuEcs/Public/GpuEcs/FluidVolumeComponent.h",
+			"include": "GpuEcs/FluidVolumeComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FluidVolumeComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"doc": "GPU FLIP water in a box: the grid sits on the entity (floor at its height,\ncentred on it horizontally), the water starts as the Fill box (fractions of\nthe domain), and box and sphere colliders inside the domain are walls it\nflows around. The surface is drawn as a mesh contoured from the particles.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "cellsX",
+							"signature": "int32_t cellsX = 48",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "cellsY",
+							"signature": "int32_t cellsY = 32",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "cellsZ",
+							"signature": "int32_t cellsZ = 48",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "cellSize",
+							"signature": "float cellSize = 0.1f",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "particlesPerAxis",
+							"signature": "int32_t particlesPerAxis = 2",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "fillMin",
+							"signature": "Vec3 fillMin = Vec3(0.05f, 0.05f, 0.05f)",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "fillMax",
+							"signature": "Vec3 fillMax = Vec3(0.4f, 0.7f, 0.95f)",
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "flipRatio",
+							"signature": "float flipRatio = 0.95f",
+							"doc": "1 = pure FLIP (lively, noisy), 0 = pure PIC (smooth, viscous).",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "gravity",
+							"signature": "float gravity = -9.81f",
+							"line": 71
+						},
+						{
+							"kind": "field",
+							"name": "pressureSweeps",
+							"signature": "int32_t pressureSweeps = 40",
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "useSceneColliders",
+							"signature": "bool useSceneColliders = true",
+							"line": 84
+						},
+						{
+							"kind": "field",
+							"name": "surfaceIso",
+							"signature": "float surfaceIso = 2.0f",
+							"line": 88
+						},
+						{
+							"kind": "field",
+							"name": "color",
+							"signature": "Vec3 color = Vec3(0.12f, 0.35f, 0.6f)",
+							"line": 94
+						},
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "int32_t seed = 1",
+							"line": 99
+						},
+						{
+							"kind": "field",
+							"name": "simulateInEditor",
+							"signature": "bool simulateInEditor = false",
+							"line": 105
+						},
+						{
+							"kind": "field",
+							"name": "steps",
+							"signature": "uint64_t steps = 0",
+							"line": 109
+						},
+						{
+							"kind": "field",
+							"name": "particles",
+							"signature": "uint32_t particles = 0",
+							"line": 110
+						},
+						{
+							"kind": "field",
+							"name": "surfaceTriangles",
+							"signature": "uint32_t surfaceTriangles = 0",
+							"line": 111
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuBoids.h",
+			"include": "GpuEcs/GpuBoids.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FGpuBoidsParams",
+					"namespace": "Mowo",
+					"bases": "HLSL::BoidsParams",
+					"doc": "The push-constant block every boids kernel reads, declared once for both\nlanguages in Engine/Shaders/Shared/GpuBoidsParams.hlsli.",
+					"line": 20,
+					"members": []
+				},
+				{
+					"kind": "struct",
+					"name": "FGpuBoidsState",
+					"namespace": "Mowo",
+					"doc": "Agent state as the GPU holds it: xyz and a per-agent scale in w for the\nposition, xyz and the neighbour count of the last step in w for velocity.",
+					"line": 25,
+					"members": [
+						{
+							"kind": "field",
+							"name": "positions",
+							"signature": "std::vector<Vec4> positions",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "velocities",
+							"signature": "std::vector<Vec4> velocities",
+							"line": 27
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FGpuBoids",
+					"namespace": "Mowo",
+					"doc": "A boids swarm on the GPU: the sample GPU ECS world. Fields Position and\nVelocity are GPU-owned; a counting sort into a uniform grid (clear, count,\nscan, scatter) feeds a 27-cell neighbour search, then the agents move and\nwrite their draw instances (foliage instance layout) in the same step.",
+					"line": 34,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MakeParams",
+							"signature": "static FGpuBoidsParams MakeParams(uint32_t count, float halfSize, float radius)",
+							"static": true,
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "MakeInitialState",
+							"signature": "static FGpuBoidsState MakeInitialState(const FGpuBoidsParams& params, uint32_t seed)",
+							"static": true,
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "Create",
+							"signature": "bool Create(const FGpuBoidsParams& params, const FGpuBoidsState& initial, std::string* error = nullptr)",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "Record",
+							"signature": "bool Record(float dt)",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "StepImmediate",
+							"signature": "bool StepImmediate(float dt)",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "ReadState",
+							"signature": "bool ReadState(FGpuBoidsState& out)",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Params",
+							"signature": "const FGpuBoidsParams& Params() const",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "MutableParams",
+							"signature": "FGpuBoidsParams& MutableParams()",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "World",
+							"signature": "FGpuWorld& World()",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Instances",
+							"signature": "Ref<StorageBuffer> Instances() const",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "ReferenceStep",
+							"signature": "static void ReferenceStep(const FGpuBoidsParams& params, FGpuBoidsState& state)",
+							"static": true,
+							"doc": "The same step on the CPU — brute force over the radius, which the\n27-cell search reaches exactly when radius <= cell size — with the same\nfixed-point sums, for parity checks on small swarms.",
+							"line": 60
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuFlip.h",
+			"include": "GpuEcs/GpuFlip.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FGpuFlipParams",
+					"namespace": "Mowo",
+					"bases": "HLSL::FlipParams",
+					"doc": "The push-constant block of the FLIP kernels, declared once for both\nlanguages in Engine/Shaders/Shared/GpuFlipParams.hlsli.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Make",
+							"signature": "static FGpuFlipParams Make(uint32_t nx, uint32_t ny, uint32_t nz, float h, const Vec3& origin)",
+							"static": true,
+							"line": 21
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FGpuFlipObstacle",
+					"namespace": "Mowo",
+					"doc": "A solid the water flows around, in the fluid's local space.",
+					"line": 25,
+					"members": [
+						{
+							"kind": "field",
+							"name": "sphere",
+							"signature": "bool sphere = false",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "center",
+							"signature": "Vec3 center = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "halfExtents",
+							"signature": "Vec3 halfExtents = Vec3(0.5f, 0.5f, 0.5f)",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "radius",
+							"signature": "float radius = 0.5f",
+							"line": 29
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FGpuFlip",
+					"namespace": "Mowo",
+					"doc": "FLIP water on the GPU: particles carry it, a MAC grid solves pressure with\nred-black Gauss-Seidel sweeps, the walls of the domain and the scene's\ncolliders (a signed distance field per cell) bound it.",
+					"line": 35,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MakeBlock",
+							"signature": "static std::vector<Vec4> MakeBlock(const FGpuFlipParams& params, const Vec3& boxMin, const Vec3& boxMax, uint32_t particlesPerAxis, uint32_t seed)",
+							"static": true,
+							"doc": "A block of water filling [boxMin, boxMax] (local), particlesPerAxis^3\njittered particles per cell.",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "BuildSdf",
+							"signature": "static std::vector<float> BuildSdf(const FGpuFlipParams& params, const std::vector<FGpuFlipObstacle>& obstacles)",
+							"static": true,
+							"doc": "Negative inside the solids: the domain's one-cell rim and every obstacle.",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Create",
+							"signature": "bool Create(const FGpuFlipParams& params, const std::vector<Vec4>& particles, const std::vector<float>& sdf, uint32_t pressureSweeps, std::string* error = nullptr)",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "UpdateSdf",
+							"signature": "bool UpdateSdf(const std::vector<float>& sdf)",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "Record",
+							"signature": "bool Record(float dt)",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "StepImmediate",
+							"signature": "bool StepImmediate(float dt)",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "ReadParticles",
+							"signature": "bool ReadParticles(std::vector<Vec4>& positions, std::vector<Vec4>& velocities)",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "ReadDivergence",
+							"signature": "bool ReadDivergence(std::vector<float>& before, std::vector<float>& after)",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "ReadDensity",
+							"signature": "bool ReadDensity(std::vector<uint32_t>& density)",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "ReadDensityLatched",
+							"signature": "bool ReadDensityLatched(std::vector<uint32_t>& density)",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "Params",
+							"signature": "const FGpuFlipParams& Params() const",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "MutableParams",
+							"signature": "FGpuFlipParams& MutableParams()",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "World",
+							"signature": "FGpuWorld& World()",
+							"line": 60
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FFluidSurface",
+					"namespace": "Mowo",
+					"doc": "The water's surface from the per-cell particle counts: a smoothed density\nfield, contoured with surface nets (the dual of marching cubes: one vertex\nper cell the iso-surface crosses, at the mean of its edge crossings, and a\nquad per crossed edge).",
+					"line": 73,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Extract",
+							"signature": "static TerrainChunkMesh Extract(const std::vector<uint32_t>& density, const FGpuFlipParams& params, float iso, const Vec4& color)",
+							"static": true,
+							"line": 75
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuSwarmComponent.h",
+			"include": "GpuEcs/GpuSwarmComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "GpuSwarmComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"doc": "A swarm simulated entirely on the GPU (boids: separation, alignment,\ncohesion) and drawn from the same buffers through the GPU-culled instanced\npath. The agents live in a cube of side 2 x Half Size around the entity and\nwrap at its faces. Changing the count, the cube, the radius or the seed\nrebuilds the swarm from its seed.",
+					"line": 21,
+					"members": [
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "agents",
+							"signature": "int32_t agents = 100000",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "halfSize",
+							"signature": "float halfSize = 40.0f",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "radius",
+							"signature": "float radius = 2.0f",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "maxSpeed",
+							"signature": "float maxSpeed = 6.0f",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "minSpeed",
+							"signature": "float minSpeed = 2.0f",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "separation",
+							"signature": "float separation = 1.5f",
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "alignment",
+							"signature": "float alignment = 1.0f",
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "cohesion",
+							"signature": "float cohesion = 0.6f",
+							"line": 72
+						},
+						{
+							"kind": "field",
+							"name": "agentSize",
+							"signature": "float agentSize = 0.5f",
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "color",
+							"signature": "Vec3 color = Vec3(0.85f, 0.55f, 0.2f)",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "int32_t seed = 1",
+							"line": 90
+						},
+						{
+							"kind": "field",
+							"name": "simulateInEditor",
+							"signature": "bool simulateInEditor = false",
+							"doc": "Off, the swarm stands still in the editor and moves only at play.",
+							"line": 97
+						},
+						{
+							"kind": "field",
+							"name": "steps",
+							"signature": "uint64_t steps = 0",
+							"line": 101
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuWorld.h",
+			"include": "GpuEcs/GpuWorld.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EGpuBufferRole",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Who writes a buffer, and so when the CPU may touch it.\nGpu    — component state the kernels own (positions, velocities). The CPU\nwrites it once, before the first step, and afterwards sees it\nonly through SyncToCpu (blocking: waits for the GPU, exact) or\nReadLatched (non-blocking, up to two frames old). An Upload\nafter the first step is refused: it would race the kernels.\nCpu    — inputs the game authors (targets, parameters); uploaded any time,\napplied by the next step, read-only to the kernels.\nScratch — per-step working memory (grids, sort keys); never read back.",
+					"line": 27,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Gpu",
+							"signature": "Gpu",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "Cpu",
+							"signature": "Cpu",
+							"line": 29
+						},
+						{
+							"kind": "enumerator",
+							"name": "Scratch",
+							"signature": "Scratch",
+							"line": 30
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "EGpuDomain",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "What a kernel runs over: one thread per agent, per grid cell, per scan\nblock, or a single group.",
+					"line": 35,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Agents",
+							"signature": "Agents",
+							"line": 36
+						},
+						{
+							"kind": "enumerator",
+							"name": "Cells",
+							"signature": "Cells",
+							"line": 37
+						},
+						{
+							"kind": "enumerator",
+							"name": "Faces",
+							"signature": "Faces",
+							"line": 38
+						},
+						{
+							"kind": "enumerator",
+							"name": "Blocks",
+							"signature": "Blocks",
+							"line": 39
+						},
+						{
+							"kind": "enumerator",
+							"name": "Single",
+							"signature": "Single",
+							"line": 40
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FGpuBufferDesc",
+					"namespace": "Mowo",
+					"line": 43,
+					"members": [
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "std::string name",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "stride",
+							"signature": "uint32_t stride = 16",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "elements",
+							"signature": "uint64_t elements = 0",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "role",
+							"signature": "EGpuBufferRole role = EGpuBufferRole::Gpu",
+							"line": 47
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FGpuKernelDesc",
+					"namespace": "Mowo",
+					"doc": "A system: an HLSL compute kernel and the buffers it binds, in binding order\n(binding i = bindings[i], set 0). Push constants are the world's parameter\nblock, the same for every kernel of a step.",
+					"line": 53,
+					"members": [
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "std::string name",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "shaderPath",
+							"signature": "std::string shaderPath",
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "bindings",
+							"signature": "std::vector<std::string> bindings",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "domain",
+							"signature": "EGpuDomain domain = EGpuDomain::Agents",
+							"line": 57
+						},
+						{
+							"kind": "field",
+							"name": "groupSize",
+							"signature": "uint32_t groupSize = 256",
+							"line": 58
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FGpuWorld",
+					"namespace": "Mowo",
+					"doc": "Component arrays in GPU buffers (structure of arrays: one buffer per field)\nand the kernels that step them, in registration order with a compute\nbarrier between each. A step is recorded into the frame being built\n(Record) so a draw later in the same frame reads its output, or run on its\nown and waited for (RunImmediate), which tests and readbacks use.",
+					"line": 66,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FGpuWorld",
+							"signature": "FGpuWorld()",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "~FGpuWorld",
+							"signature": "~FGpuWorld()",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "FGpuWorld",
+							"signature": "FGpuWorld(const FGpuWorld&) = delete",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FGpuWorld& operator=(const FGpuWorld&) = delete",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "AddBuffer",
+							"signature": "bool AddBuffer(const FGpuBufferDesc& desc)",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "AddKernel",
+							"signature": "bool AddKernel(const FGpuKernelDesc& desc, std::string* error = nullptr)",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "SetDomainSize",
+							"signature": "void SetDomainSize(EGpuDomain domain, uint32_t elements)",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "RepeatLast",
+							"signature": "bool RepeatLast(uint32_t kernels, uint32_t times)",
+							"doc": "The last `kernels` kernels run `times` times in a row each step — an\niterative solver's sweep.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "Upload",
+							"signature": "bool Upload(const std::string& buffer, const void* data, uint64_t bytes)",
+							"line": 82
+						},
+						{
+							"kind": "method",
+							"name": "SyncToCpu",
+							"signature": "bool SyncToCpu(const std::string& buffer, void* out, uint64_t bytes)",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "ReadLatched",
+							"signature": "bool ReadLatched(const std::string& buffer, void* out, uint64_t bytes)",
+							"line": 84
+						},
+						{
+							"kind": "method",
+							"name": "Record",
+							"signature": "bool Record(const void* params, uint32_t paramBytes)",
+							"doc": "Records every kernel into the open frame (barriers between, and a\ncompute-to-graphics barrier after the last). False without a frame.",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "RunImmediate",
+							"signature": "bool RunImmediate(const void* params, uint32_t paramBytes)",
+							"doc": "The same step in its own frame, waited for: Begin/EndFrame, Present,\nWaitIdle. Use it outside the engine's frame loop only.",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "Buffer",
+							"signature": "Ref<StorageBuffer> Buffer(const std::string& name) const",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "StepCount",
+							"signature": "uint64_t StepCount() const",
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "KernelCount",
+							"signature": "size_t KernelCount() const",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "BufferBytes",
+							"signature": "uint64_t BufferBytes() const",
+							"line": 101
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

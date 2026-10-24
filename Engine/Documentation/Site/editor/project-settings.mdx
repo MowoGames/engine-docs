@@ -1,0 +1,168 @@
+---
+title: Project settings and editor preferences
+sidebarTitle: Settings
+description: The Project Settings and Editor Preferences windows - where each setting is stored, how to find and change it, themes, and rebinding keyboard shortcuts.
+order: 12
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsWindow.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/SettingsStore.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/SettingsCvarPage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferencesPage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferences.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorAppearancePage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorTheme.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorKeybindings.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/KeyboardShortcutsPage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/InputSettingsPage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/CryptoSettingsPage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/LayersSettingsPage.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ScalabilitySettingsPage.cpp
+  - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+verifiedAt: 08e26df3d
+---
+
+Two windows hold every setting you can change from the editor:
+
+| Window | Open with | What it holds |
+| --- | --- | --- |
+| **Project Settings** | **Edit ▸ Project Settings…** (`editor.projectSettings`) | The project manifest and the engine's console variables for this project. Shared with your team |
+| **Editor Preferences** | **Edit ▸ Editor Preferences…** (`editor.editorPreferences`) | How *you* want the editor to behave: startup, autosave, theme, shortcuts, the AI agents server. Per user |
+
+Both are separate windows, so you can keep one open beside the viewport while you tune <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsWindow.cpp" />. The command palette's **Settings** scope searches every row of both.
+
+<Screenshot id="editor-project-settings-window" alt="Project Settings window: category tree on the left with PROJECT, ENGINE sections and modified counts beside some pages, the Engine › Shadows & Lighting page selected on the right with its breadcrumb, Export and Reset section buttons, the info banner saying where the page is stored, and rows with modified dots and reset arrows." />
+
+## The window
+
+- The **category tree** on the left lists the pages by section. A number beside a page counts its rows that differ from the default.
+- The **page header** shows the breadcrumb, **Export** (writes the page's values as an `.ini` under `Saved/Exports/Settings/`) and **Reset section** (click twice to confirm).
+- **Banners** say where the page is stored (*shared* or *local*), warn when a user config overrides a value, and list changes that need a restart, with **Restart now**.
+- Each **row** has a label and description, its control, and a reset arrow. A dot marks a value that is not its default; a *restart* chip marks a value read only at startup.
+
+**Values are written as they change.** There is no Apply button: a page is written once your edits have been still for a moment, and when the window closes. The exception is **Crypto**, which stages generated keys and has its own **Apply** and **Discard**.
+
+### Finding a setting
+
+Type in **Search settings**. The search matches page names and individual rows: their label, their description and their console variable name. Typing `substeps` or `r.Shadow` lands on the row that owns it. Pages with matching rows show how many; the others dim.
+
+## How engine settings are stored
+
+Most Engine pages edit console variables. The Project Settings window writes them into the project's `Config/Engine.ini`, the **project tier** of the configuration <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/SettingsStore.cpp" />.
+
+<Flow steps={["Shipped default", "Project tier: Config/Engine.ini", "User tier: per-user Engine.ini", "Command line"]} highlight={1} caption="Later tiers win. Project Settings writes the project tier." />
+
+| Tier | Where | Who shares it |
+| --- | --- | --- |
+| Project | `<Project>/Config/Engine.ini` | Everyone on the team; commit it |
+| User | `Engine.ini` in your per-user config folder (`%LOCALAPPDATA%\MowoEngine\Config` on Windows) | Only you |
+| Command line | `--cvar=name=value` | That one run |
+
+The user tier overrides the project tier. If you change a value that your user config also sets, the file changes but the running value does not, and the page says so. Otherwise the new value applies immediately, wherever the console variable supports live changes.
+
+<Callout type="tip">
+A control left at its shipped default removes its key rather than writing the default. A page you never touched writes nothing, so `Config/Engine.ini` only holds what your project changed.
+</Callout>
+
+Many rendering rows are tri-state: **Tier default**, **Off** or **On**. *Tier default* leaves the value to the active scalability preset. Each console variable is listed in the [console variables reference](/docs/reference/console-variables/).
+
+## Project Settings pages
+
+A page whose features the active graphics API can never support is hidden; a feature the current GPU lacks stays visible but greyed out <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp" />.
+
+### Project
+
+| Page | Stored in | Contents |
+| --- | --- | --- |
+| General | `.mproject` | Name, version, product, company, copyright, description |
+| Maps & Modes | `.mproject` | Start level, game mode class, game window defaults |
+| Layers | `.mproject` | The named layer slots every layer mask uses <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/LayersSettingsPage.cpp" /> |
+| Platform | `.mproject` | Steam, Discord and Mowo Online Services integration |
+| Crypto | `Config/DefaultCrypto.ini` | Generate the encryption and signing keys, and choose whether packages encrypt content and sign archives and modules <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/CryptoSettingsPage.cpp" /> |
+| Accessibility | `Config/Engine.ini` | Accessibility defaults for the game |
+| Live Ops | `Config/Engine.ini` | Live operations networking settings |
+
+<Callout type="warning">
+Regenerating the crypto keys means archives built with the new keys cannot be opened by older builds, and patches or DLC for a shipped build must be made with that build's keys. See [Shipping](/docs/shipping/).
+</Callout>
+
+### Engine
+
+All Engine pages write `Config/Engine.ini`.
+
+| Area | Pages |
+| --- | --- |
+| Rendering | Rendering, Volumetrics, Global Illumination, Path Tracer, Shadows & Lighting, Geometry, Reflections, Terrain, Foliage & Water, Textures & Materials, Effects (with Scan Points), Post Processing, Upscaling & Display, Frame Generation |
+| Quality and performance | Scalability, Performance |
+| Simulation | Physics, Networking (with Rollback Netcode), Gameplay (with Time Rewind), Audio (with Geometric Acoustics), Voice Chat, AI (with Noise Map), Animation, World Partition (with HLOD) |
+| Systems | Input, Save & Persistence, Content & Import, Garbage Collection |
+
+| Page | Example settings |
+| --- | --- |
+| Rendering | Graphics API and dynamic GI method (both need a restart) |
+| Scalability | The active quality preset (`r.Quality`) and per-category overrides <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ScalabilitySettingsPage.cpp" /> |
+| Physics | Maximum substeps, distance LOD, physics debug drawing |
+| Input | Stick and trigger dead zones, per-gamepad overrides, and a gamepad slot table |
+| Networking | Encryption and pre-shared key, RPC rate limits, replication budgets, character prediction |
+| Save & Persistence | Game autosave and the world persistence journal |
+| Garbage Collection | Collection interval and incremental marking and sweep budgets |
+
+<Callout type="note">
+The Input page's gamepad slot table is per user: which physical pad is Player 2 belongs to one machine, so it is written to your `Saved/Config/` rather than the project config <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/InputSettingsPage.cpp" />.
+</Callout>
+
+Plugins have their own window, not a settings page; see [Plugins and extensions](/docs/editor/plugins/).
+
+## Editor Preferences pages
+
+Editor Preferences are per user and per project. They are written to the project's `Saved/Config/Editor/UserPreferences.json`, never to `Config/`, so one person's inverted mouse does not become the team's <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferences.cpp" />.
+
+### Preferences
+
+| Section | Rows |
+| --- | --- |
+| Startup | **Load level at startup**: the project's start level, the last opened level, or nothing (`--scene=` on the command line always wins). **Show Welcome on startup** |
+| Multi-user editing | Display name, session port, host address, host for other machines ([Multi-user editing](/docs/editor/multi-user/)) |
+| Autosave | **Autosave** and **Autosave interval** ([Saving and recovery](/docs/editor/saving-and-recovery/)) |
+| Viewport | Mouse look sensitivity, invert mouse look Y |
+| Play | **Multiplayer client windows**: inside the editor or separate windows |
+| Message log | **Open on new error** |
+
+### Appearance
+
+| Row | Choices |
+| --- | --- |
+| Theme | **Dark**, **Light** or **High Contrast**; a project that adds its own theme files gets a picker instead <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EditorTheme.cpp" /> |
+| Density | **Compact**, **Default** or **Comfortable**, applied live |
+| Motion | **Follow System** (the OS reduce-motion setting), **Full** or **Reduced** |
+
+<Screenshot id="editor-preferences-appearance" alt="Editor Preferences window on the Appearance page: Theme segmented control with Dark selected, Density with Default selected, Motion with Follow System selected and a caption saying whether the OS reduce-motion setting is on." />
+
+### Interface
+
+UI scale and text shaping. These are read at startup, so they need a restart.
+
+### Keyboard Shortcuts
+
+Every editor command, grouped as General, Viewport, Modes, Transform, Actors, Play, Panels and Animation, with a primary and a secondary chord <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/KeyboardShortcutsPage.cpp" />.
+
+<Steps>
+<Step title="Find the command">
+Open **Editor Preferences ▸ Keyboard Shortcuts** and search by name.
+</Step>
+<Step title="Record the new chord">
+Set a primary or secondary chord.
+</Step>
+</Steps>
+
+Only chords that differ from the default are saved, to `EditorKeybindings.ini` in your per-user config folder <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EditorKeybindings.cpp" />. Tooltips and menus read chords from the command system, so a rebind shows up everywhere at once.
+
+### AI agents
+
+Turns the editor's MCP server on and sets its port, whether remote connections are allowed, and which commands agents may run. See [MCP server](/docs/editor/mcp-server/).
+
+## Related
+
+- [Main window](/docs/editor/main-window/) for layouts, the command palette and default shortcuts.
+- API: [Core](/docs/api/core/), [Project](/docs/api/project/).

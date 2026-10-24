@@ -1,0 +1,124 @@
+---
+title: Extend the renderer
+sidebarTitle: Extend the renderer
+description: Add your own GPU passes at fixed points of the frame from a game module or plugin, and know what the scene renderer accepts from code.
+order: 18
+sources:
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/RenderPassExtension.h
+  - Engine/Source/Runtime/SceneRenderer/Private/RenderPassExtension.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererExtensions.cpp
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/SceneRenderer.h
+  - Engine/Source/Developer/MowoSandbox/Private/SandboxRenderExtension.cpp
+verifiedAt: 08e26df3d
+---
+
+A game module or plugin can add GPU work at a fixed place in the frame without changing `SceneRenderer`. You register a pass at an insertion point, say which scene textures it reads and writes, and record it with the `Renderer::` API. The renderer adds it to its frame graph, so the barriers before and after your pass are handled for you.
+
+## Insertion points
+
+<Source symbol="ERenderPassPoint" /> names six points in the [frame pipeline](/docs/rendering/frame-pipeline/):
+
+| Point | Runs | What the scene textures hold |
+|---|---|---|
+| `AfterGBuffer` | After the G-Buffer pass and GPU foliage | The opaque G-Buffer and depth. Nothing is lit. |
+| `BeforeLighting` | After decals, AO and ray-traced sun shadows | The G-Buffer as lighting will read it. |
+| `AfterLighting` | After direct light, MegaLights, Global Illumination, SSGI and subsurface scattering | `SceneColor` holds opaque lit radiance. The sky is next. |
+| `BeforeTranslucency` | After sky, clouds, fog and reflections | `SceneColor` without glass, water and particles. |
+| `AfterTonemap` | After the tonemap, before TAA, lens flare and the final pass | `PostTonemapColor` holds the display-encoded image. |
+| `BeforeUI` | After the final pass and the editor overlays | `Output` is the presentable image the UI draws over. |
+
+## Scene textures
+
+A pass names the textures it touches with <Source symbol="ESceneTexture" />:
+
+| Texture | Format | Available |
+|---|---|---|
+| `SceneColor` | RGBA16F, lit HDR at render resolution | Every point |
+| `SceneDepth` | D32F, read-only | Every point |
+| `GBufferA` | RGBA8: albedo, metallic | Every point |
+| `GBufferB` | RGBA16F: world normal, roughness | Every point |
+| `GBufferC` | RGBA16F: emissive, AO | Every point |
+| `PostTonemapColor` | RGBA8 for SDR, RGBA16F for an HDR display | `AfterTonemap` and `BeforeUI` |
+| `Output` | The presentable image | `BeforeUI` only |
+
+Each use also has an access: `ShaderRead`, `UnorderedAccess`, `RenderTarget` or `DepthRead`. A pass that names a texture its point does not have yet is skipped there with one warning. A pass that tries to write `SceneDepth` is refused.
+
+## Register a pass
+
+Fill an <Source symbol="FRenderPassExtensionDesc" /> and hand it to <Source symbol="FRenderPassExtensions::Register" />. This example draws letterbox bars over the tonemapped image with the ready-made <Source symbol="FSceneTextureFill" /> body, which overwrites a rectangle of an RGBA8 or RGBA16F texture through a UAV:
+
+```cpp title="LetterboxExtension.cpp"
+#include "Renderer/RenderPassExtension.h"
+#include "RHI/Renderer.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <utility>
+
+static uint64_t s_LetterboxHandle = 0;
+static std::unique_ptr<Mowo::FSceneTextureFill> s_LetterboxFill;
+
+void RegisterLetterbox() {
+	s_LetterboxFill = std::make_unique<Mowo::FSceneTextureFill>();
+
+	Mowo::FRenderPassExtensionDesc desc;
+	desc.Name = "Letterbox";
+	desc.Point = Mowo::ERenderPassPoint::AfterTonemap;
+	desc.Writes = { { Mowo::ESceneTexture::PostTonemapColor, Mowo::ESceneTextureAccess::UnorderedAccess } };
+	desc.Execute = [](const Mowo::FRenderPassContext& ctx) {
+		const uint32_t bar = std::max(1u, ctx.OutputHeight / 16);
+		const Mowo::Vec4 black(0.0f, 0.0f, 0.0f, 1.0f);
+
+		s_LetterboxFill->Fill(ctx, Mowo::ESceneTexture::PostTonemapColor, 0, 0, ctx.OutputWidth, bar, black);
+		s_LetterboxFill->Fill(ctx, Mowo::ESceneTexture::PostTonemapColor, 0, ctx.OutputHeight - bar, ctx.OutputWidth, ctx.OutputHeight, black);
+	};
+
+	s_LetterboxHandle = Mowo::FRenderPassExtensions::Register(std::move(desc));
+}
+
+void UnregisterLetterbox() {
+	if (s_LetterboxHandle != 0) {
+		Mowo::FRenderPassExtensions::Unregister(s_LetterboxHandle);
+		s_LetterboxHandle = 0;
+	}
+
+	if (s_LetterboxFill && Mowo::Renderer::GetDynamicRHI()) {
+		Mowo::Renderer::WaitIdle();
+	}
+
+	s_LetterboxFill.reset();
+}
+```
+
+Call the register function from your module's startup and the unregister function from its shutdown. The `MowoSandbox` game-module template does exactly this (<Source path="Engine/Source/Developer/MowoSandbox/Private/SandboxRenderExtension.cpp" />).
+
+### What the pass body gets
+
+The body receives an <Source symbol="FRenderPassContext" />:
+
+- `GetTexture(texture)` returns each declared texture, already in the state you asked for.
+- `Width` and `Height` are the active render extent. With dynamic resolution the frame renders into the top-left of a larger allocation, so do not use the texture size.
+- `OutputWidth` and `OutputHeight` are the size of `PostTonemapColor` and `Output` when an upscaler resolved the frame.
+- `FrameIndex`, `View` and `Projection` describe the current view.
+
+Record with the `Renderer::` API: bind your pipeline and descriptor sets, then draw or dispatch. Whatever runs after your pass gets its own barriers, so a UAV write into `SceneColor` is transitioned back before the sky draws into it.
+
+### Ordering
+
+Passes at the same point run by `Priority`, lowest first, then in registration order. A pass that reads what another writes is ordered after it by the graph whatever the priority says.
+
+Registration is thread-safe. Each registration bumps a generation number; the renderer checks it once per frame and rebuilds the affected graph, so a new pass appears on the next frame and never in the middle of one.
+
+## Module lifetime
+
+Every entry remembers the module that registered it. When that module unloads, the engine drains the rendering thread and removes its passes, clearing each body while the module is still mapped, so no graph calls into freed code. This is a safety net: still call `Unregister` in your module's shutdown, and destroy your pipelines only after the GPU has finished with them, as the example does with `Renderer::WaitIdle()`.
+
+## Drawing through the scene renderer
+
+Most content reaches the renderer through components in a scene, and the scene's render bridge submits it each frame. When you drive a `SceneRenderer` yourself, bracket a frame with `BeginScene(camera, environment)` and `EndScene()`, and submit between them with `SubmitStaticMesh`, `SubmitSkinnedMesh`, `SubmitDirectionalLight`, `SubmitPointLight`, `SubmitSpotLight`, `SubmitRectLight`, `SubmitDecal`, `SubmitReflectionProbe`, `SubmitFogVolume` and `SubmitDebugLines` (<Source symbol="SceneRenderer" />). One renderer can drive several views with `CreateView`: each view owns its resolution-sized targets and temporal history, and the scene-wide data (shadow atlases, Global Illumination volumes, pipelines) is shared.
+
+## API reference
+
+- [SceneRenderer module](/docs/api/scenerenderer/): `FRenderPassExtensions`, `FRenderPassExtensionDesc`, `FRenderPassContext`, `FSceneTextureFill`, `SceneRenderer`
+- [RHI module](/docs/api/rhi/): `Renderer`, `RenderGraph`

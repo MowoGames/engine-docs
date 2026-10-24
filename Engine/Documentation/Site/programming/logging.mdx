@@ -1,0 +1,84 @@
+---
+title: Logging
+description: Log macros and levels, declaring log categories, the log console command, what Shipping builds keep, and where log files are written.
+order: 12
+sources:
+  - Engine/Source/Runtime/Logging/Public/Logging/Logger.h
+  - Engine/Source/Runtime/Logging/Private/Logger.cpp
+  - Engine/Source/Runtime/Core/Public/Core/Constants.h
+  - Engine/Source/Runtime/Core/Public/Core/AppDataPath.h
+verifiedAt: 08e26df3d
+---
+
+The Logging module writes every message to a set of sinks: the console, a log file, and in the editor the Output Log. Messages carry a level and a category, and each category has its own threshold you can change at run time. <Source symbol="Logger" />
+
+## Logging a message
+
+```cpp wrap
+#include "Logging/Logger.h"
+
+const int32_t count = 12;
+const char* path = "Content/Textures/Rock.tex";
+
+MOWO_LOG_INFO("Loaded %d meshes", count);
+MOWO_LOG_WARN("Texture %s missing", path);
+MOWO_LOG_ERROR("Device lost");
+MOWO_LOG_DEBUG("Streaming pass done");
+```
+
+The macros take a `printf`-style format. The levels are `Trace`, `Debug`, `Info`, `Warning`, `Error` and `Fatal`.
+
+| Macro | Level |
+| --- | --- |
+| `MOWO_LOG_TRACE`, `MOWO_LOG_DEBUG` | Trace, Debug; compiled only in builds with debug logs |
+| `MOWO_LOG_INFO`, `MOWO_LOG_WARN`, `MOWO_LOG_ERROR` | Info, Warning, Error |
+| `MOWO_LOG_FATAL` | Fatal; never compiled out |
+| `MOWO_LOG_INFO_ONCE`, `MOWO_LOG_WARN_ONCE`, `MOWO_LOG_ERROR_ONCE` | Logged the first time the line runs |
+| `MOWO_LOG_RENDER`, `MOWO_LOG_PHYSICS`, `MOWO_LOG_AUDIO`, `MOWO_LOG_INPUT`, `MOWO_LOG_SCRIPT`, `MOWO_LOG_NET` | Debug level in the matching built-in category |
+
+Debug logs (`MOWO_DEBUG_LOGS`) are on in builds with assertions, Debug and Development, and off otherwise. A translation unit can force either by defining `MOWO_DEBUG_LOGS` itself. <Source path="Engine/Source/Runtime/Logging/Public/Logging/Logger.h" />
+
+## Categories
+
+A category is a named channel with its own threshold. Declare it in a header with your module's export macro, define it in exactly one `.cpp` of that module, and log to it with `MOWO_LOG_CAT`:
+
+```cpp nocompile
+MOWO_DECLARE_LOG_CATEGORY(MYGAME_API, LogAI, Info);
+
+MOWO_DEFINE_LOG_CATEGORY(LogAI, Info);
+
+MOWO_LOG_CAT(LogAI, Warning, "lost the path: %s", name);
+```
+
+Define the category once and export it: an inline definition would give every DLL its own copy, and changing the level would reach only one of them. A message below its category's threshold costs one atomic load and is dropped before its arguments are formatted.
+
+## The log command
+
+```text
+log                          list every category and its level
+log LogRender                print one category's level
+log LogRender warning        raise LogRender's threshold to Warning
+log LogRender reset          restore the declared level
+```
+
+Type it in the editor's Output Log or the game console. Levels are case-insensitive.
+
+## Keep the log readable
+
+In a Debug build the Output Log shows every level, so demoting a message to Debug does not hide it. For anything that can fire more than once a second:
+
+- gate it behind a console variable that defaults to off,
+- log on change or once (`MOWO_LOG_WARN_ONCE`) when the message reports a state,
+- never log unconditionally from a per-frame path, including failure branches.
+
+## Shipping builds
+
+A Shipping build passes no source file names into the binary, and messages below a compile-time floor are removed entirely, format string included. The floor is Info by default; `mbt package --log-floor warning` raises it. See [Shipping](/docs/shipping/).
+
+A Shipping game keeps its console and file logs off unless it is started with `--log` or the project's engine config sets `logging.enabled=true`. With logging on, `--loglevel=info` lowers the threshold. <Source path="Engine/Source/Runtime/Logging/Private/Logger.cpp" />
+
+## Where files go
+
+With a project open, logs go to `<Project>/Saved/Logs/`. Without one they go to the per-user folder, `%LOCALAPPDATA%\MowoEngine\Saved\Logs\` on Windows (a packaged game uses its own product name instead of `MowoEngine`). Files are named `Mowo_<date>_<time>_<pid>.log`, and the newest five per folder are kept. <Source path="Engine/Source/Runtime/Core/Public/Core/Constants.h" />
+
+The file sink buffers lines and writes them on a background thread, so a slow disk never stalls the thread that logs. `Logger::Flush()` writes the buffer on demand, and the crash handler flushes it before it copies the log next to a crash dump.

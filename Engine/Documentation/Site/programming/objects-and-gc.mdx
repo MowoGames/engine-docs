@@ -1,0 +1,150 @@
+---
+title: Objects and garbage collection
+sidebarTitle: Objects and GC
+description: MObject, how the incremental garbage collector decides what lives, why every object MPROPERTY must be a TObjectPtr, and the other smart pointers.
+order: 3
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Core/Public/Core/NewObject.h
+  - Engine/Source/Runtime/Core/Public/Core/TObjectPtr.h
+  - Engine/Source/Runtime/Core/Public/Core/FMObjectArray.h
+  - Engine/Source/Runtime/Core/Public/Core/FGCObject.h
+  - Engine/Source/Runtime/Core/Public/Core/FReferenceCollector.h
+  - Engine/Source/Runtime/Core/Public/Core/FCoreDelegates.h
+  - Engine/Source/Runtime/Core/Public/Core/MClassRegistry.h
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+verifiedAt: 08e26df3d
+---
+
+`MObject` is the garbage-collected base class, the equivalent of Unreal's `UObject`. Actors, components, worlds, subsystems and the engine itself are `MObject`s. The engine keeps every live object in one registry and frees the ones nothing reachable refers to. <Source symbol="MObject" />
+
+This page covers the rules C++ code has to follow. For actors, components and spawning, see [Gameplay](/docs/gameplay/).
+
+## Creating objects
+
+Create an object through the factory, not with a bare `new`, so it gets an outer and a name:
+
+```cpp nocompile
+#include "Core/NewObject.h"
+
+MMyThing* thing = Mowo::FObjectFactory::NewObject<MMyThing>(outer, "MyThing");
+```
+
+<Source symbol="FObjectFactory::NewObject" /> In gameplay code you rarely call it directly: `MWorld::SpawnActor<T>()` creates actors, and `AActor::CreateDefaultSubobject<T>()` creates components inside an actor's constructor.
+
+<Callout type="warning">
+The outer does not keep an object alive. An inner keeps its outer alive, not the reverse. Store a new object in an `MPROPERTY` of something reachable, or root it, or the next collection deletes it.
+</Callout>
+
+## What the collector keeps
+
+The collector is mark-and-sweep. It starts from the roots and follows two kinds of edge:
+
+- **The outer chain.** Each reachable object keeps its outer alive.
+- **Reflected references.** Every `MPROPERTY` that refers to an `MObject`. The [header tool](/docs/programming/reflection/) generates the trace function for each class, so you never write one.
+
+Roots are the objects added with `FMObjectArray::AddRoot` (counted: each `AddRoot` needs its own `RemoveRoot`), `TStrongObjectPtr` holders, and the objects `FGCObject` referencers report. The engine roots itself and its subsystems. <Source symbol="FMObjectArray::AddRoot" />
+
+<Flow steps={["Roots", "Outer chain", "MPROPERTY references", "Mark reachable", "Sweep the rest"]} highlight={2} caption="A pointer member without MPROPERTY is invisible to the collector." />
+
+A property can hold an object reference as `T*` or `TObjectPtr<T>`, or inside `std::vector`, `std::array`, `std::set`, `std::unordered_set`, `std::map` or `std::unordered_map`, nested to any depth. A set element or map key must be the reference itself. Any other template that holds an object reference (`std::optional`, `std::pair`, `std::list`) is a compile error rather than an untraced field. <Source path="Engine/Source/Runtime/Core/Public/Core/FReferenceCollector.h" />
+
+## The TObjectPtr rule
+
+The collector is **incremental**: it marks in slices of a frame and sweeps a bounded number of objects per frame, so your code keeps running while a collection is half done. If you store a reference into an object the collector has already scanned, it could miss the new target and free a live object.
+
+`TObjectPtr<T>` prevents that: every store through it runs a write barrier that tells the collector about the new target. When no collection is marking, the barrier costs one atomic load. <Source symbol="FMObjectArray::NotifyReferenceWrite" />
+
+<Callout type="danger">
+**Every object `MPROPERTY` must be a `TObjectPtr<T>`**, including elements of containers. A raw `T*` property written while the collector marks can hide its target, and nothing in the header tool or the build catches it.
+</Callout>
+
+```cpp nocompile
+MCLASS()
+class ADoor : public AActor {
+	MGENERATED_BODY()
+
+	MPROPERTY()
+	TObjectPtr<ADoor> m_LinkedDoor;
+
+	MPROPERTY()
+	std::vector<TObjectPtr<AActor>> m_Watchers;
+};
+```
+
+Inserting a `TObjectPtr` into a container copies it, which runs the barrier, so containers of `TObjectPtr` are safe. `TObjectPtr` has a `std::hash`, so it works as a set element or map key.
+
+## When collection runs
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `mowo.GC.IntervalSeconds` | 5 | Seconds between collections; 0 disables periodic collection |
+| `mowo.GC.Incremental` | on | Off runs the whole collection in one frame |
+| `mowo.GC.StepBudgetMs` | 1.0 | Marking budget per frame |
+| `mowo.GC.SweepBudget` | 128 | Objects deleted per frame |
+
+<Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" /> `FMObjectArray::CollectGarbage()` runs a full synchronous collection when you need one. `FCoreDelegates::OnPreGarbageCollect()` and `OnPostGarbageCollect()` fire around each collection.
+
+## Destroying objects
+
+To remove an actor, call `MWorld::Destroy(actor)`. For other objects, `MarkPendingKill()` flags the object as destroyed; weak pointers to it read null at once, and the next collection frees it. <Source symbol="MWorld::Destroy" />
+
+When the collector frees a destroyed object, it clears every traced reference to it: a `T*` or `TObjectPtr` property, a vector element or a map value becomes null, and a set element or map key is erased. A destroyed object is freed even if it is rooted. Untraced pointers (locals, members without `MPROPERTY`) are not cleared; use `TWeakObjectPtr` for those.
+
+## Smart pointers
+
+| Type | Use it for |
+| --- | --- |
+| `TObjectPtr<T>` | An object reference in an `MPROPERTY`; traced, with the write barrier |
+| `TWeakObjectPtr<T>` | A non-owning reference that reads null once the object dies, even if its slot is reused |
+| `TStrongObjectPtr<T>` | An owning root from code that is not an `MObject`; each copy holds its own root share |
+| `TSoftObjectPtr<T>` | An asset reference by path; `LoadSynchronous()` resolves it |
+
+<Source symbol="TWeakObjectPtr" /> `MWorld::SpawnActor<T>()` returns a `TWeakObjectPtr<T>`, so check `IsValid()` before using a spawned actor in a later frame.
+
+The non-garbage-collected pointers are separate: `Ref<T>` (intrusive reference counting over `RefCounted`), `WeakRef<T>` and `Scope<T>` live in Core for assets, GPU resources and other plain C++ objects.
+
+## C++ owners of objects
+
+A class that is not an `MObject` but holds `MObject`s (a manager, a tool, an editor preview) derives from `FGCObject`. It registers itself on construction and reports its references at the start of every mark: <Source symbol="FGCObject" />
+
+```cpp title="PreviewScene.h"
+#include "Core/FGCObject.h"
+#include "Core/FReferenceCollector.h"
+#include "Core/TObjectPtr.h"
+
+#include <string>
+#include <vector>
+
+class FPreviewScene : public Mowo::FGCObject {
+public:
+	void AddReferencedObjects(Mowo::FReferenceCollector& collector) override {
+		collector.AddReferencedObject(m_PreviewObject);
+		collector.AddReferencedObjects(m_Extras);
+	}
+
+	std::string GetReferencerName() const override {
+		return "FPreviewScene";
+	}
+
+private:
+	Mowo::TObjectPtr<Mowo::MObject> m_PreviewObject;
+	std::vector<Mowo::TObjectPtr<Mowo::MObject>> m_Extras;
+};
+```
+
+Report the field itself, not a copy, so a reference to a destroyed object is cleared in place. `AddReferencedObjects` runs under the collector's lock in the middle of a mark: read and report, nothing else.
+
+## Classes and default objects
+
+Every reflected class has an `MClass` descriptor: its name, super class, size, property table, function table and trace function. `MClassRegistry` finds one by C++ type or by name, and `MClass::GetDefaultObject()` returns the class default object, the instance that holds the class's default property values. <Source symbol="MClassRegistry::FindByName" />
+
+```cpp nocompile
+Mowo::MClass* cls = Mowo::MClassRegistry::Get().FindByName("ADoor");
+Mowo::MObject* defaults = cls->GetDefaultObject();
+```
+
+Spawning copies the default object's reflected values onto the new actor, and a saved level stores only the properties that differ from it, so raising a default reaches every instance that never overrode the field.
+
+`FName` is the interned string used for object, class and property names: comparing two names compares indices.

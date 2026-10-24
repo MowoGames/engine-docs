@@ -1,0 +1,84 @@
+---
+title: Gaussian splats
+description: Import captured 3D Gaussian Splatting scenes and coloured point scans, place them in a level, and control their level of detail, lighting and collision.
+order: 17
+sources:
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/GaussianSplatComponent.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/GaussianSplatCloud.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Importers/GaussianSplatImporter.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/GaussianSplatAsset.h
+  - Engine/Source/Runtime/Game/Public/Game/AGaussianSplatActor.h
+  - Engine/Source/Runtime/Game/Private/Game/PlaceableActorRegistry.cpp
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/GaussianSplatRenderer.h
+  - Engine/Source/Runtime/SceneRenderer/Private/GaussianSplatRenderer.cpp
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+verifiedAt: 08e26df3d
+---
+
+A Gaussian splat asset is a captured scene, a trained 3D Gaussian Splatting reconstruction or a coloured point scan, that you place in a level like any other asset. It is drawn with the world, exposed and graded with it, picks a level of detail by distance and can collide.
+
+## Import
+
+Drop a `.ply` or `.splat` file into the Content Browser. The importer converts it into a `.gsplat` asset (<Source symbol="GaussianSplatImporter" />).
+
+| Source | What is read |
+|---|---|
+| Trained `.ply` (3D Gaussian Splatting output) | Position, the base color term, opacity, scale and rotation. Normals and the higher spherical-harmonic bands are skipped. |
+| Coloured point `.ply` | Position and RGB(A). Each point becomes a round splat sized from the point spacing. |
+| `.splat` | 32-byte records: position, scales, RGBA8 color and rotation |
+
+ASCII and binary little-endian `.ply` files are accepted; big-endian is refused with the reason. Nearly transparent and invalid splats are dropped.
+
+<Callout type="note">
+Only the base color is imported. View-dependent color, which trained captures store in the higher spherical-harmonic bands, is not reproduced.
+</Callout>
+
+`.gsplat` is a binary file type that Git LFS can lock.
+
+## Place a capture
+
+Drag a `.gsplat` into the viewport or the Outliner, or place **Gaussian Splat** from the **Visual FX** category of the Place Actors palette (`AGaussianSplatActor`). The component's fields are in the Details panel:
+
+| Field | Default | Meaning |
+|---|---|---|
+| Splat Asset | — | The `.gsplat` to draw |
+| Opacity | 1 | Multiplier on every splat's opacity |
+| Lighting | 0 | 0 Captured: the colors are the light the capture saw. 1 Lit: the colors are albedo, lit by the sun and sky. |
+| Intensity | 1 | Brightness multiplier |
+| LOD Pixel Error | 1.5 | How many pixels a merged level may blur before a finer level is used |
+| Splat Budget | 1 048 576 | Most splats this instance may draw |
+| Depth Test | on | Test against the scene's depth so geometry hides the capture |
+| Collision | 0 | 0 none, 1 hull, 2 voxels |
+| Collision Cell | 0.5 | Voxel size for voxel collision |
+
+<Screenshot id="rendering-gaussian-splat-actor" alt="Mowo Editor viewport showing an imported Gaussian splat capture of a garden placed in a level next to ordinary meshes, with the Gaussian Splat actor selected and its Details panel showing Splat Asset, Opacity, Lighting, LOD Pixel Error, Splat Budget, Depth Test and Collision" caption="A Gaussian splat capture placed in a level." />
+
+## Level of detail
+
+A `.gsplat` stores the import as level 0 and coarser levels below it, each merging the previous on a grid twice as coarse, until a level holds at most a few thousand splats (<Source symbol="FGaussianSplatCloud" />). Each frame the renderer picks one level per instance: the coarsest whose merge cell stays within **LOD Pixel Error** at the camera's distance, then coarser while it exceeds the **Splat Budget**. `r.GaussianSplat.MaxPerInstance` (default 1 048 576) caps every instance.
+
+Selection is per instance, not per region: when you stand inside a capture, it draws at the level its nearest point needs. Split very large captures into several assets.
+
+## How it renders
+
+Splats draw in the particle stage: after opaque lighting, sky and glass, before depth of field, TAA and tonemapping, so a capture is exposed, graded and anti-aliased with the world. Every frame the GPU sorts the chosen level's splats back to front, culls those behind the camera, and draws one quad per visible splat (<Source symbol="FGaussianSplatRenderer" />). Instances are sorted among themselves on the CPU, so the splats of two overlapping instances do not interleave.
+
+## Collision
+
+With **Collision** set, a static collider is built from the splats that are at least half opaque, and rebuilt only when the mode, the cell or the asset changes:
+
+- **Hull**: one convex hull around them. A flat capture is padded to 10 cm.
+- **Voxels**: the cells of a **Collision Cell** grid they occupy, merged into boxes. It follows floors and walls.
+
+## Limits
+
+- Splats do not receive or cast shadows.
+- Global Illumination, reflections, ray tracing and the path tracer do not see splats.
+- View-dependent color is not imported.
+
+## API reference
+
+- [AssetSystem module](/docs/api/assetsystem/): `GaussianSplatImporter`, `FGaussianSplatCloud`, `GaussianSplatAsset`
+- [SceneTypes module](/docs/api/scenetypes/): `GaussianSplatComponent`
+- [Game module](/docs/api/game/): `AGaussianSplatActor`, `MGaussianSplatComponent`
+- [SceneRenderer module](/docs/api/scenerenderer/): `FGaussianSplatRenderer`

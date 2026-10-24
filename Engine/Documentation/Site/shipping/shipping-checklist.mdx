@@ -1,0 +1,94 @@
+---
+title: Shipping checklist
+description: What to check before every release, and which engine-level shipping items are closed and which are still open.
+order: 13
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/CryptoSettings.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs
+  - Engine/Source/Runtime/Core/Public/Core/CrashReportClientSettings.h
+  - Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp
+  - Engine/Documentation/ROADMAP.md
+verifiedAt: 6caf55861
+---
+
+Use this page before you hand a build to players. The first part is a checklist for your game. The second lists the engine's own shipping items and their status, so you know which limits come from the engine.
+
+## Before every release
+
+<Steps>
+<Step title="Identity and start level">
+
+Set `build.outputName`, the product name, company, copyright and version in **Project Settings**, and check that **Start Scene** names the level the game boots into. See [Package a game](/docs/shipping/package-a-game/).
+
+</Step>
+<Step title="Content keys">
+
+Make sure `Config/DefaultCrypto.ini` is committed with an encryption key and a signing public key, and that the build machine has the signing private key (`MOWO_SIGNING_PRIVATE_KEY`). A Shipping package refuses to build without them <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/CryptoSettings.cs" />. Keep a backup of the private key: patches and DLC for this release must be signed with it. See [Content protection](/docs/shipping/encrypted-archives/).
+
+</Step>
+<Step title="Shipping, monolithic, strict">
+
+Package the Shipping configuration (the default) with `--strict-refs`, so a broken asset reference or a texture that could not cook fails the build instead of shipping. Leave the link mode at its Shipping default, monolithic. See [Targets and link modes](/docs/shipping/targets-and-modes/).
+
+</Step>
+<Step title="PSO cache">
+
+Promote or gather a fresh PSO cache after the last content change and commit `Config/PsoCache.mdfb`. See [Bundled PSO cache](/docs/shipping/pso-cache/).
+
+</Step>
+<Step title="Crash reporting and symbols">
+
+Set your own `Dsn` in the `[CrashReportClient]` section of `Config/Engine.ini` and decide on consent <Source path="Engine/Source/Runtime/Core/Public/Core/CrashReportClientSettings.h" />. Set `SENTRY_AUTH_TOKEN`, `SENTRY_URL`, `SENTRY_ORG` and `SENTRY_PROJECT` on the build machine, and keep the `<Product>-symbols/` archive. See [Crash reporting](/docs/shipping/crash-reporting/).
+
+</Step>
+<Step title="Signing and installers">
+
+Sign the Windows binaries with `--sign` or `MOWO_SIGN_CERT`, and read the log for a skipped or failed signing step. Build the installer you distribute. See [Installers and code signing](/docs/shipping/installers-and-signing/).
+
+</Step>
+<Step title="Store integration">
+
+For Steam, set `platform.steamEnabled` and `platform.steamAppId`, preview the upload with `--preview`, and point the depot's install script at `installscript.vdf`. See [Uploading to Steam](/docs/shipping/steam/).
+
+</Step>
+<Step title="Test the package, not the build tree">
+
+Launch the packaged launcher, not a binary from `Engine/Binaries`. Copy the folder to a clean machine with no development tools, run it from a read-only location such as Program Files, and confirm saves and logs land in the per-user folder. Crash it once on purpose and check that the report arrives with a readable stack.
+
+</Step>
+</Steps>
+
+## Engine shipping status
+
+The ROADMAP keeps a list of items that block shipping, numbered S1 to S18 <Source path="Engine/Documentation/ROADMAP.md" />. This table covers the ones that affect a game you build with Mowo, as of the ROADMAP at this page's `verifiedAt` commit.
+
+### Closed
+
+| Item | What is in place |
+|---|---|
+| Steam depot tooling (S6) | `mbt steam-upload`, script generation, multi-platform `--depot`, the relaunch-through-Steam check, and `--drm-wrap` ordered before signing |
+| Steam overlay (S8) | Wired through the online service, with pause in single player and cursor release |
+| Developer tools out of retail builds (S9) | The Visual Scripting debug adapter and the player's author tools are compiled out of Shipping |
+| Save recovery (S12) | Save slots keep a backup and recover from it |
+| In-game settings and rebinding (S15) | Settings categories with a confirmation countdown, and a rebinding screen with conflict handling |
+| D3D12 Agility SDK (S16) | The Agility SDK ships beside the binaries, so the game's D3D12 feature set does not depend on the player's Windows version |
+| Shipping emits symbols (S4) | Shipping builds produce symbols. Whether a retail dump reads end to end on the server is listed as an open question |
+
+### Open
+
+| Item | Status |
+|---|---|
+| macOS notarization (S3) | Open. Game packages are signed ad hoc, with no Developer ID, no notarization and no stapling <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs" />. Without it, a macOS build does not open on a buyer's Mac. |
+| Linux (S2) | Open. Linux and Steam Deck do not build end to end yet; the third-party libraries still need Linux builds. |
+| Live Steam test (S7) | Open. The two-machine test of lobbies, invites, tickets and cloud saves outside the editor has not been run. |
+| Non-Windows rebuilds (S17) | Open. Several third-party libraries still need macOS and Linux builds, including Opus, which voice chat needs. |
+| Hardware-dependent features (S18) | Written but unverified: newer Streamline and XeSS versions, multi-frame generation, DLSS frame generation under HDR, FSR 4 and XeSS frame generation need hardware the team has not tested on. |
+
+Packaging from the editor covers the host platform only, and a Linux package builds only on a Linux host <Source path="Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp" />. Android packaging (`mbt package-android`) is experimental and not a supported product platform.
+
+## Related
+
+- [Packaging and shipping](/docs/shipping/)
+- [Package a game](/docs/shipping/package-a-game/)
+- [Uploading to Steam](/docs/shipping/steam/)

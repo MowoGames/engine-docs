@@ -1,0 +1,237 @@
+{
+	"name": "MowoSandbox",
+	"displayName": "MowoSandbox",
+	"slug": "mowosandbox",
+	"category": "Developer",
+	"publicDir": "Engine/Source/Developer/MowoSandbox/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Developer/MowoSandbox/Public/Sandbox/ANetShooterActor.h",
+			"include": "Sandbox/ANetShooterActor.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "ANetShooterActor",
+					"namespace": "Mowo",
+					"bases": "public AActor",
+					"reflected": true,
+					"line": 23,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ANetShooterActor",
+							"signature": "ANetShooterActor()",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "ownerPeerId",
+							"signature": "uint32_t ownerPeerId = 0",
+							"doc": "peerId that owns this shooter (its controlling client). 0 = server-owned.\nThe server sets this at spawn; OwnerOnly RPC authority checks against it.",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay() override",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds) override",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay() override",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "FireShot",
+							"signature": "void FireShot(const Vec3& origin, const Vec3& direction)",
+							"doc": "Fire a shot that replicates to every peer. On a client it ships a\nclient→server Fire RPC (the server re-broadcasts it); on the server it\napplies locally and broadcasts to all clients. The shot is an EVENT,\nnot continuous state — exactly the target game's model.",
+							"line": 50
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Developer/MowoSandbox/Public/Sandbox/ASandboxActor.h",
+			"include": "Sandbox/ASandboxActor.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "ASandboxActor",
+					"namespace": "Mowo",
+					"bases": "public AActor",
+					"reflected": true,
+					"line": 21,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ASandboxActor",
+							"signature": "ASandboxActor()",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "spinSpeed",
+							"signature": "float spinSpeed = 90.0f",
+							"doc": "Degrees per second around Y.",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "spinAngle",
+							"signature": "float spinAngle = 0.0f",
+							"doc": "Accumulated angle — preserved across hot reloads, so the cube\ndoesn't snap back to zero on every code change.",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "GetSpinAngle",
+							"signature": "float GetSpinAngle() const",
+							"doc": "Reflected so the actor shows up as a Loom node — and so the module\ntests can watch that node appear and vanish with the DLL.",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds) override",
+							"line": 51
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Developer/MowoSandbox/Public/Sandbox/NetShooterComponent.h",
+			"include": "Sandbox/NetShooterComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "NetShooterComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"line": 25,
+					"members": [
+						{
+							"kind": "field",
+							"name": "shotsFired",
+							"signature": "uint32_t shotsFired = 0",
+							"doc": "discrete-state stream so a dropped RPC never leaves a peer's count wrong.",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "lastShotOrigin",
+							"signature": "Vec3 lastShotOrigin = Vec3(0.0f, 0.0f, 0.0f)",
+							"doc": "Last shot's origin / direction — bookkeeping the demo reads to draw a\ntracer. Not replicated as fields; they arrive via the Fire RPC args.",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "lastShotDir",
+							"signature": "Vec3 lastShotDir = Vec3(0.0f, 0.0f, 1.0f)",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "ServerFire",
+							"signature": "void ServerFire(Vec3 origin, Vec3 direction)",
+							"doc": "Client → server request: \"the owning client fired.\" MFUNCTION(Server)\ndeclares the direction, so registration auto-installs an OwnerOnly\npolicy — only the peer that owns the pawn may send it, with no manual\nAllowClientRpc. The authoritative effect belongs to the multicast, so\nthe body is empty. Void return + POD/Vec3 args keep it marshallable.",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "MulticastFire",
+							"signature": "void MulticastFire(Vec3 origin, Vec3 direction)",
+							"doc": "Server → every client: the shot happened. Runs on the server and on each\nghost, bumping the replicated counter and recording the shot so the demo\ncan react (tracer, sound, hit). MFUNCTION(Multicast, Reliable) declares\nit server-authoritative — a client that tries to send it is refused.",
+							"line": 54
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Developer/MowoSandbox/Public/Sandbox/SandboxContainersComponent.h",
+			"include": "Sandbox/SandboxContainersComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FSandboxStat",
+					"namespace": "Mowo",
+					"reflected": true,
+					"line": 23,
+					"members": [
+						{
+							"kind": "field",
+							"name": "value",
+							"signature": "float value = 0.0f",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "label",
+							"signature": "std::string label",
+							"line": 27
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "SandboxContainersComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"line": 31,
+					"members": [
+						{
+							"kind": "field",
+							"name": "counts",
+							"signature": "std::map<std::string, int32_t> counts",
+							"doc": "An ordered map with a scalar value.",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "stats",
+							"signature": "TMap<uint32_t, FSandboxStat> stats",
+							"doc": "The TMap alias (an unordered map) with a struct value.",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "tags",
+							"signature": "std::set<std::string> tags",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "ids",
+							"signature": "TSet<uint32_t> ids",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "names",
+							"signature": "std::unordered_set<std::string> names",
+							"line": 52
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

@@ -1,0 +1,85 @@
+---
+title: User interface
+sidebarTitle: UI
+description: Arc is the one UI framework behind the editor and the game. ArcUI is the game-UI layer on top of it, the UMG to Arc's Slate.
+order: 6
+icon: PanelsTopLeft
+sources:
+  - Engine/Source/Runtime/Arc/Arc.Build.cs
+  - Engine/Source/Runtime/ArcUI/ArcUI.Build.cs
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/CArcUIScreenStack.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcWidgetFactory.h
+  - Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/ECS/Components/ArcUIComponent.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/ECS/Components/ArcUIWorldWidgetComponent.h
+  - Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp
+  - Engine/Source/Runtime/ArcUI/Private/MUIStatics.cpp
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Source/Runtime/Arc/Design/arc-style.json
+verifiedAt: 08e26df3d
+---
+
+Mowo has one UI framework. **Arc** draws every panel of Mowo Editor and every menu and HUD in a shipped game. **ArcUI** is the game-UI layer built on top of Arc. If you know Unreal, Arc plays the role of Slate and ArcUI plays the role of UMG.
+
+This section covers both halves: how Arc lays out, styles and routes input to widgets, how ArcUI turns a `.ui` asset into a live screen, the designer you author those assets in, the player settings screens that ship with the engine, and how game text is localized.
+
+## Two layers, one widget set
+
+<Flow steps={["arc-style.json tokens", "Arc widgets (C++)", "ArcUI factory", ".ui screen", "Screen stack overlay"]} highlight={3} caption="Arc supplies widgets and style; ArcUI builds screens from assets and mounts them over the game view." />
+
+| Layer | Module | What you use it for |
+| --- | --- | --- |
+| **Arc** | `MowoEngine.Arc` (namespace `Arcf`) | C++ widgets, layout, focus, input routing, text, docking, the style set. The editor is written directly against it. |
+| **ArcUI** | `MowoEngine.ArcUI` | Game screens as assets: the `.ui` format, `.theme` themes, the widget factory, data bindings, animations, the screen stack, world-space widgets and the settings, rebind and lobby screens. |
+
+Arc's public dependencies are SDL3 and MDF; its font and render back ends are private <Source path="Engine/Source/Runtime/Arc/Arc.Build.cs" />. ArcUI sits above Arc and the ECS component tier and depends on the Visual Scripting module, so a screen can call graphs <Source path="Engine/Source/Runtime/ArcUI/ArcUI.Build.cs" />.
+
+<Callout type="engine">
+
+Because the editor and the game share one widget set, a widget in a game HUD is the same class the editor uses in its panels. `FArcWidgetFactory` builds `.ui` nodes into real `Arcf` widgets such as `ATextBlock`, `AButton` and `ASlider`, not into a separate game-only tree <Source symbol="FArcWidgetFactory" />.
+
+</Callout>
+
+## How a game screen gets on screen
+
+<Steps>
+<Step title="Author the screen">
+
+Create a `.ui` asset with **More > Arc Widget** in the Content Browser and lay it out in the [ArcUI Designer](/docs/ui/arcui-designer/). The asset stores a widget tree, bindings, events, animations, and an optional theme and controller class.
+
+</Step>
+<Step title="Mount it">
+
+Attach an `ArcUI` component (fields `asset`, `z_order`, `visible`, `auto_focus`) to an entity, or push the screen from code with `PushScreen(assetPath, zOrder, modal)` <Source symbol="ArcUIComponent" /> <Source symbol="CArcUIScreenStack::PushScreen" />. For a widget in the 3D world, such as a nameplate, use an `ArcUIWorldWidget` component instead <Source symbol="ArcUIWorldWidgetComponent" />.
+
+</Step>
+<Step title="Let the stack run it">
+
+`CArcUIScreenStack` builds the tree, composites every screen into one overlay, re-resolves bindings every tick, routes widget events and drives gamepad focus <Source symbol="CArcUIScreenStack" />.
+
+</Step>
+</Steps>
+
+Details are on [ArcUI screens](/docs/ui/arcui-screens/).
+
+<Screenshot id="ui-overview-hud-in-pie" alt="Mowo Editor in Play mode with the test project's ArcUiOverlay scene: the HUD.ui overlay drawn over the 3D viewport, showing a health bar and text in the top-left corner" caption="An ArcUI screen mounted over the game view in Play-In-Editor." />
+
+## Where to go next
+
+<CardGrid>
+<Card title="Arc widgets and layout" href="/docs/ui/arc-widgets-and-layout/" icon="LayoutDashboard">The widget set, layout passes, focus, keyboard routing and text input.</Card>
+<Card title="Arc styling" href="/docs/ui/arc-styling/" icon="Sun">Design tokens in arc-style.json, mbt tokens, density, motion and game themes.</Card>
+<Card title="ArcUI screens" href="/docs/ui/arcui-screens/" icon="PanelsTopLeft">The .ui format, the screen stack, bindings, events, animations and controllers.</Card>
+<Card title="ArcUI Designer" href="/docs/ui/arcui-designer/" icon="PanelsTopLeft">The editor for .ui assets: canvas, hierarchy, details and Play.</Card>
+<Card title="Settings and accessibility" href="/docs/ui/settings-and-accessibility/" icon="Gamepad2">The shipped settings and rebind screens and every Accessibility option.</Card>
+<Card title="Localization" href="/docs/ui/localization/" icon="FileText">String tables, formatting, extraction, translator exchange and language choice.</Card>
+</CardGrid>
+
+## Current limits
+
+- A screen stack keeps one controller instance per class, keyed by class name, so two screens with the same controller class share its variables <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />. `MUIStatics` talks to a single process-wide active stack <Source path="Engine/Source/Runtime/ArcUI/Private/MUIStatics.cpp" />.
+
+## Related
+
+- [Visual Scripting](/docs/visual-scripting/) for the graphs that drive screen logic.
+- API reference: [Arc](/docs/api/arc/) and [ArcUI](/docs/api/arcui/).

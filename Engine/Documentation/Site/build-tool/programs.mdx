@@ -1,0 +1,97 @@
+---
+title: Programs
+description: The standalone tools under Engine/Source/Programs, how to start a new one with mbt new-program, and how MowoVersionSelector ties projects to engines.
+order: 7
+sources:
+  - Engine/Source/Programs/BlankProgram/BlankProgram.Build.cs
+  - Engine/Source/Programs/BlankProgram/BlankProgram.Target.cs
+  - Engine/Source/Programs/BlankProgram/Private/BlankProgram.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewProgramCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleCategory.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/ModuleScopes.cs
+  - Engine/Source/Programs/MeafBuilder/MeafBuilder.Build.cs
+  - Engine/Source/Programs/MowoVersionSelector/Private/MowoVersionSelector.cpp
+  - Engine/Source/Runtime/Project/Private/EngineRegistry.cpp
+verifiedAt: 08e26df3d
+---
+
+A **program** is a standalone executable under `Engine/Source/Programs/<Name>/`, as in Unreal's `Engine/Source/Programs`. It is a module (`<Name>.Build.cs`) with its own target (`<Name>.Target.cs`, `Type = TargetType.Program`) and a `Private/` folder with its entry point. `mbt build -t <Name>` builds it and nothing else.
+
+The engine never links a program, and no game package ships one. A game, editor or server target that links a program's module fails the build <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleCategory.cs" />, and programs compile in a rules scope of their own, so no engine module sees their `Internal/` headers <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/ModuleScopes.cs" />.
+
+## The engine's programs
+
+| Program | What it does |
+|---|---|
+| MowoBuildTool | The build system (C#), run through `mbt.cmd` / `mbt.sh` |
+| MowoHeaderTool | The reflection code generator, a C# library `mbt` runs in process |
+| MeafBuilder | The `.meaf` archive tool: create, list, extract, verify, info, keygen |
+| MdfTool, MaudioTool | MDF and audio command-line tools |
+| MowoIoStore | Converts archives into IoStore containers for `mbt package --iostore` |
+| MowoDDC | Inspects, prunes and serves the derived data cache |
+| MowoInsights | Trace viewer for profiler captures |
+| MowoMultiUserServer | Headless host for multi-user editing sessions |
+| MowoCrashReporter | Out-of-process crash reporter and watchdog; see [Crash reporting](/docs/shipping/crash-reporting/) |
+| MowoGamesLauncher | The player-facing games launcher; see [Mowo Games Launcher](/docs/shipping/games-launcher/) |
+| MowoVersionSelector | Associates `.mproject` files with engines; see below |
+| BlankProgram | The minimal program behind `mbt new-program` |
+
+## Start a new program
+
+```powershell
+./mbt.cmd new-program MowoAssetDump
+./mbt.cmd new-program MowoAssetViewer --arc
+./mbt.cmd new-program MyTool --dir D:/Tools
+./mbt.cmd build -t MowoAssetDump
+```
+
+The console form is a renamed copy of `Engine/Source/Programs/BlankProgram`, which the build compiles like any other target, so the template cannot rot without a failing build. `--arc` writes a windowed program from `Engine/Source/Programs/MowoBuildTool/Templates/ArcProgram/` instead: an engine with no game runtime and one UI window <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewProgramCommand.cs" />. `--dir` puts it somewhere other than `Engine/Source/Programs`.
+
+BlankProgram is a few lines:
+
+```cpp title="Engine/Source/Programs/BlankProgram/Private/BlankProgram.cpp"
+#include <Core/FCommandLine.h>
+#include <Logging/Logger.h>
+
+int main(int argc, char* argv[]) {
+	Mowo::FCommandLine::Set(argc, argv);
+	Mowo::Logger::Get().Initialize();
+
+	MOWO_LOG_INFO("Hello from %s", Mowo::FCommandLine::GetProgramName().c_str());
+
+	Mowo::Logger::Get().Shutdown();
+
+	return 0;
+}
+```
+
+Its rules depend on `Core` and `Logging` only <Source path="Engine/Source/Programs/BlankProgram/BlankProgram.Build.cs" />. Add what your program needs to `PrivateDependencyModuleNames`. Depending on `EngineLoop` brings the renderer, windowing and physics with it, so tools that only read files, such as MeafBuilder, stay below it <Source path="Engine/Source/Programs/MeafBuilder/MeafBuilder.Build.cs" />.
+
+Conventions:
+
+- A windowed program sets `bIsWindowsApp` (Windows) and `bIsMacOSBundle` (macOS) in its rules; a console program leaves both off.
+- `IconPath = BrandingFile("Windows/<icon>.ico")` sets the executable's icon.
+- Platform differences go through the platform layer (`Platform/…`), not `#ifdef` in the program.
+
+## MowoVersionSelector
+
+MowoVersionSelector is the counterpart of Unreal's version selector. It keeps the per-user list of installed engines, owns the `.mproject` file association, and sends a project to the engine it names <Source path="Engine/Source/Programs/MowoVersionSelector/Private/MowoVersionSelector.cpp" />:
+
+```text
+MowoVersionSelector register [<root>]        register an engine (default: the one this program belongs to)
+MowoVersionSelector unregister <id>
+MowoVersionSelector list
+MowoVersionSelector associate                associate .mproject files with this program, current user only
+MowoVersionSelector unassociate
+MowoVersionSelector switch <project> [<id>]  point a project at a registered engine (prompts without <id>)
+MowoVersionSelector editor <project>         open the project in its engine's editor
+MowoVersionSelector game <project>           run the project with its engine's game host
+MowoVersionSelector projectfiles <project>   generate IDE project files with its engine's build tool
+```
+
+The registry is `InstalledEngines.ini` in the per-user engine config folder <Source path="Engine/Source/Runtime/Project/Private/EngineRegistry.cpp" />. After `associate`, a `.mproject` file opens in the editor of its engine, and its context menu offers **Launch game**, **Generate project files** and **Switch engine version...**. On macOS the app bundle declares the document type, so `associate` has nothing to do. A project that names an engine this machine does not have opens with the selector's own engine and a warning.
+
+## Related
+
+- [Modules and targets](/docs/build-tool/modules-and-targets/)
+- [Commands](/docs/build-tool/commands/)

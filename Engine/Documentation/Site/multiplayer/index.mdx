@@ -1,0 +1,119 @@
+---
+title: Multiplayer
+description: How Mowo networks a game - a listen-server co-op model with an authoritative host, replication, RPCs, prediction and an optional dedicated server.
+order: 7
+icon: Network
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/FNetSession.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
+  - Engine/Source/Runtime/Networking/Private/NetSession.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
+  - Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/NetworkTypes.h
+  - Engine/Source/Runtime/Networking/Public/Networking/CompositeTransport.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/NetworkObjectComponent.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/PlayerStateComponent.h
+  - Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp
+  - Engine/Source/Runtime/GameNet/GameNet.Build.cs
+verifiedAt: 08e26df3d
+---
+
+Mowo's networking is built for small co-op sessions: a handful of friends, one of whom hosts. The host runs the authoritative simulation, every other machine runs a client copy of the world, and the engine keeps those copies in step. This page explains the model and how a networked frame flows. The pages that follow cover each part in detail.
+
+## The network model
+
+The engine is **listen-server first**. One player hosts and plays at the same time, and that machine is the authority over the world. The hosting player gets player id 1 and peer id 0, and receives a pawn like everyone else, so host and clients run the same code path <Source symbol="FNetSession" />.
+
+- **The host is the authority.** A client may send only input, RPCs that pass the authority gate, and acknowledgements. The host owns spawns, destroys and replicated state.
+- **There is no host migration.** When the host leaves, the session ends and clients return to the menu (`HostEndedSession` or, after the automatic rejoin attempts fail, `HostLost`) <Source symbol="ENetSessionFailure" />.
+- **A headless dedicated server exists.** The `MowoServer` target runs the same authoritative simulation with no window and no renderer, and hosts through the same session layer with no host pawn. See [Dedicated server](/docs/multiplayer/dedicated-server/).
+- **Sessions default to five players**, host included (`FNetSessionSettings::maxPlayers = 5`) <Source symbol="FNetSessionSettings" />.
+
+<Callout type="note">
+The `GameNet` module (WebSocket, REST, snapshot sync, match connection) is a separate client library for server-authoritative online titles that talk to a web backend. It registers no systems and is not part of the co-op netcode described here <Source path="Engine/Source/Runtime/GameNet/GameNet.Build.cs" />. Its API is listed under [GameNet](/docs/api/gamenet/).
+</Callout>
+
+## Two clocks: the server tick and the snapshot rate
+
+The host runs two independent clocks inside `ReplicationManager`:
+
+| Clock | Default | What it drives |
+|---|---|---|
+| Server tick | 30 Hz (`kDefaultServerTickHz`) | The tick number stamped on every packet, and the lag-compensation history |
+| Snapshot rate | 20 Hz (`kDefaultSnapshotHz`) | How often the host builds and sends state updates to clients |
+
+`SetServerTickRateHz` changes the tick and `SetSnapshotRateHz` changes the snapshot rate <Source symbol="ReplicationManager::SetServerTickRateHz" />. Because they are separate, the lag-compensation window stays 15 ticks (about 500 ms at 30 Hz) no matter how often snapshots go out. A frame hitch advances at most four ticks, so a stall cannot flood the history with copies of one pose <Source path="Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp" />.
+
+<Callout type="engine">
+The dedicated server passes its `--tickrate` to `SetServerTickRateHz`, so on `MowoServer` the tick follows that flag rather than the 30 Hz default.
+</Callout>
+
+## How a networked frame flows
+
+`ReplicationManager` is an ECS system that the scene runs in its runtime and simulation system sets. Each frame, its `Update` first pumps the session state machine, then runs the host or client half depending on the machine's role.
+
+<Flow steps={["Transport poll", "Replication filter", "Session pump", "Gameplay systems", "Server tick", "Snapshot build", "Send"]} highlight={4} caption="Host side. Incoming client input and RPCs are decoded and gated before gameplay runs; the server tick advances the lag history; at the snapshot rate the host sends deltas to each client." />
+
+On the host:
+
+1. The transport delivers packets. The replication filter decodes replication packets, checks the protocol version and schema, and applies authority gates before anything reaches the simulation.
+2. The session pump runs first, so a pawn spawned for a joining player already has a network id when this frame's spawns and snapshots are built.
+3. Gameplay and physics systems simulate the authoritative world, including client moves applied to each player's pawn.
+4. The server tick advances the tick counter and captures a lag-compensation pose for every networked object.
+5. At the snapshot rate, the host builds field-level deltas per client and sends them: continuous fields on an unreliable channel, discrete fields on a reliable one.
+
+<Flow steps={["Receive snapshot", "Apply to ghost", "Interpolation buffer", "Reconcile own pawn", "Predict next input", "Send input"]} highlight={3} caption="Client side. Remote objects are drawn 100 ms in the past from an interpolation buffer; the local pawn is predicted and corrected against the server's acknowledgements." />
+
+On a client, remote objects play back from an interpolation buffer 100 ms behind the newest snapshot (`FNetSessionSettings::interpolationDelay`). The locally controlled pawn is predicted immediately and reconciled when the server acknowledges input. See [Prediction and lag compensation](/docs/multiplayer/prediction-and-lag-compensation/).
+
+## What replicates
+
+The rule that runs through the design is **replicate events and small authoritative state, not their consequences**. A networked object is an ECS entity carrying a `NetworkObjectComponent` <Source symbol="NetworkObjectComponent" />. Its transform replicates by default, and any reflected component field marked `MREPLICATED` replicates as well. Each player in the session also has a replicated [player state](/docs/multiplayer/player-state/) record (name, score, team, ping, ready).
+
+| Travels on the wire | Stays local |
+|---|---|
+| Transform pose and movement state (continuous, unreliable) | Rendering, audio and VFX state |
+| Discrete state such as health, ammo, flags (reliable) | Anything a peer can recompute from replicated inputs |
+| RPCs, gameplay events and fast-array deltas | Types without a wire codec (asset references, arrays of strings) |
+
+## Channels
+
+Every transport exposes four channels <Source symbol="NetworkChannel" />:
+
+| Channel | Delivery | Used for |
+|---|---|---|
+| `Reliable` | Reliable, ordered | Discrete state, join and leave, events |
+| `Unreliable` | Unreliable, sequenced | Transform snapshots |
+| `BulkReliable` | Reliable, unordered | Large batches |
+| `Voice` | Unreliable, unsequenced | Voice frames, so the jitter buffer can reorder them |
+
+## Layers at a glance
+
+| Layer | Class | Role |
+|---|---|---|
+| Session | [`FNetSession`](/docs/api/networking/fnetsession/) | Host, join, leave, players, pawns, travel, gameplay events |
+| Replication | [`ReplicationManager`](/docs/api/networking/replicationmanager/) | Spawns, snapshots, relevancy, RPC gates, prediction bookkeeping, lag history |
+| RPC marshalling | [`FRpcDispatcher`](/docs/api/networking/frpcdispatcher/) | Serializes and invokes reflected `MFUNCTION` calls |
+| Peers | [`NetworkManager`](/docs/api/networking/networkmanager/) | Peer events, send and broadcast |
+| Transport | [`FCompositeTransport`](/docs/api/networking/fcompositetransport/) | ENet for IP addresses, Steam P2P for SteamID64 addresses <Source symbol="FCompositeTransport" /> |
+
+Most games only call `FNetSession` (or the `MNetSessionSubsystem` wrapper) and annotate their components. The layers below it are the machinery it drives.
+
+To try multiplayer in the editor, use multiplayer Play in Editor and the Network Debug panel, described in [Play in Editor](/docs/editor/play-in-editor/).
+
+## Where to go next
+
+<CardGrid>
+  <Card title="Replication" href="/docs/multiplayer/replication/" icon="Network">Networked objects, replicated fields, relevancy and budgets.</Card>
+  <Card title="Player state" href="/docs/multiplayer/player-state/" icon="Users">The per-player record every machine sees.</Card>
+  <Card title="RPCs and events" href="/docs/multiplayer/rpcs/" icon="Workflow">Server, client and multicast calls, and the authority gate.</Card>
+  <Card title="Prediction and lag compensation" href="/docs/multiplayer/prediction-and-lag-compensation/" icon="Gamepad2">Responsive movement and fair hit tests.</Card>
+  <Card title="Rollback and net rewind" href="/docs/multiplayer/rollback/" icon="History">Deterministic rollback sessions and the rewind recorder.</Card>
+  <Card title="Sessions and hosting" href="/docs/multiplayer/sessions-and-hosting/" icon="Rocket">Host, join, rejoin, kick and travel.</Card>
+  <Card title="Dedicated server" href="/docs/multiplayer/dedicated-server/" icon="Server">Build, run and package the headless server.</Card>
+  <Card title="Transport and encryption" href="/docs/multiplayer/transport-and-encryption/" icon="ShieldCheck">ENet, Steam P2P and the encrypted handshake.</Card>
+  <Card title="Online platforms" href="/docs/multiplayer/online-platforms/" icon="PackageCheck">Steam, Discord and Mowo Online plugins.</Card>
+  <Card title="Voice chat" href="/docs/multiplayer/voice-chat/" icon="AudioLines">Proximity and radio voice.</Card>
+  <Card title="Split-screen" href="/docs/multiplayer/split-screen/" icon="Users">Two to four local players on one machine.</Card>
+  <Card title="How-to: a replicated actor" href="/docs/multiplayer/how-to-replicated-actor/" icon="Hammer">Build a networked door step by step.</Card>
+</CardGrid>

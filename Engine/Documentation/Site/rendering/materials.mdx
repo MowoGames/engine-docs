@@ -1,0 +1,155 @@
+---
+title: Materials
+description: The PBR material model, the material graph and how it compiles, domains, shading models, blend modes, material instances and Substrate slabs.
+order: 14
+sources:
+  - Engine/Source/Runtime/Renderer/Public/Renderer/Material.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialGraph.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialFunction.h
+  - Engine/Source/Runtime/AssetSystem/Private/AssetPackageMigration.cpp
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/MaterialEditorPanel.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererGeometry.cpp
+  - Engine/Shaders/Private/Lighting/Substrate.hlsli
+verifiedAt: 1a346c1c5
+---
+
+A Mowo material is a physically based parameter set: base color, metallic, roughness, normal, emissive, ambient occlusion and opacity, plus a shading model and flags for clear coat, anisotropy, subsurface, hair, detail maps and parallax. You author it as a node graph in the Material Editor and save it as a `.mat` file. Material instances (`.matinst`) override a parent's parameters, and material functions (`.matfunc`) are reusable sub-graphs. The renderer draws opaque materials in the G-Buffer pass and translucent ones in the forward pass.
+
+## How a material graph compiles
+
+Each graph produces two things:
+
+<Flow steps={["Material graph", "Fold to flat Material fields", "Emit per-material HLSL on save", "mbt shaders --project", "Per-material shader blobs", "Renderer swaps the pipeline per draw"]} highlight={4} caption="Graph compilation. A missing blob falls back to the folded parameters with a warning." />
+
+- **The fold.** The graph is reduced to the flat `Material` fields and texture slots the G-Buffer already reads. A textured, tinted or blended material renders through this path with no new pipeline.
+- **A compiled permutation.** On save, the editor writes the graph's evaluator next to the asset (`<name>.mat.material.hlsl`, plus one file per static-switch combination), and `mbt shaders --project` compiles it against every pass that draws materials: G-Buffer (static, skinned, instanced), shadows, velocity, post-process, forward translucent and, where mesh shaders exist, the meshlet passes. The renderer finds the blobs by the graph's hash and swaps the pipeline for each draw. A missing blob falls back to the fold with a warning, never to stale code.
+
+In the editor you do not rebuild by hand: when a material finishes its background compile, the editor reloads the changed shader blobs and the viewport updates without a restart.
+
+<Screenshot id="rendering-materials-graph-editor" alt="Mowo Editor Material Editor with a graph connecting a Texture Sample node to Base Color, a Constant 0.35 to Roughness and a Normal Map node to Normal on the Material Output node, the palette on the left with Constants, Math, Coordinates, Vectors, Scene, Texture, Parameters, Utility, Layers and Substrate groups, the live preview sphere, and the details rail showing the selected Texture Sample's texture picker" caption="The Material Editor: palette, graph, live preview and details rail." />
+
+## The Material Output node
+
+The output node has one pin per channel: **Base Color**, **Metallic**, **Roughness**, **Normal**, **Emissive**, **AO** and **Opacity**, plus **Substrate**. It also stores a fallback value for every channel, the shading model, and flags for clear coat, anisotropy, subsurface, hair, double-sided and alpha-masked.
+
+Its **Domain** decides where the graph runs (<Source symbol="MaterialGraph" />):
+
+| Domain | Use |
+|---|---|
+| Surface | Meshes, the default |
+| Post Process | A fullscreen pass after tonemapping. Can read Scene Depth, Custom Depth and Custom Stencil, for outlines and screen effects. |
+| Decal | A deferred decal projector: base color, opacity, normal, metallic and roughness |
+| Light Function | A filter projected through a light; its Emissive is the filter. See [Lights](/docs/rendering/lights/#cookies-and-light-functions). |
+
+### Node palette
+
+| Group | Nodes |
+|---|---|
+| Constants | Constant, Constant3 Vector, Time |
+| Math | Multiply, Add, Lerp, One Minus, Dot, Normalize, Saturate, Power, Clamp, Sine, Length |
+| Coordinates | Texture Coordinate, Panner, Rotator, Tiling & Offset |
+| Vectors | World Normal, View Direction, World Position, Vertex Color |
+| Scene | Scene Depth, Custom Depth, Custom Stencil (Post Process domain only; they read zero elsewhere) |
+| Procedural | Value Noise |
+| Texture | Texture Sample |
+| Parameters | Scalar Parameter, Vector Parameter, Static Bool, Static Switch |
+| Utility | Fresnel, Normal Map, Mask, Custom HLSL, Material Function Call |
+| Layers | Make Material Attributes, Material Layer Blend |
+| Substrate | Substrate Slab, Substrate Layer Blend |
+| Function Pins | Function Input, Function Output |
+
+What the larger features give you:
+
+- **Layers**: whole surfaces blended under a mask. All layers compile into one shader and one draw.
+- **Functions**: reusable sub-graphs saved as `.matfunc` assets, called with Material Function Call.
+- **Static switches**: compile-time branches. The unselected branch emits no code and uses no texture slot. A material may produce at most `r.Material.MaxStaticPermutations` (default 32) permutations.
+- **Parameters**: named scalar and vector lanes that material instances change without recompiling.
+- **Custom HLSL**: an expression of your own, compiled into the graph's evaluator.
+
+## Shading models
+
+The shading model is a per-material setting, not a graph expression (<Source symbol="EShadingModel" />).
+
+| Model | Use for |
+|---|---|
+| `DefaultLit` | Ordinary GGX surfaces |
+| `Unlit` | Emissive-only surfaces; lighting is skipped |
+| `Subsurface` | Wrap diffuse, blurred by the screen-space subsurface pass (skin, wax) |
+| `ClearCoat` | A second specular lobe (car paint, lacquer). `r.Material.ClearCoat 0` turns the lobe off everywhere. |
+| `Hair` | Kajiya-Kay strands over the anisotropy tangent frame |
+| `TwoSidedFoliage` | Back-lit transmission for leaves |
+| `Cloth` | A sheen lobe for velvet, felt and brushed fabric |
+| `ThinTranslucent` | Colored glass that tints what is behind it |
+| `Eye` | Iris and cornea shading |
+
+## Opacity and blending
+
+- **Opaque**: opacity 1, drawn in the G-Buffer.
+- **Masked**: turn on alpha-masked and set a cutoff. Masked surfaces stay in the G-Buffer, cast shadows through their mask and are alpha-tested in ray-traced passes.
+- **Translucent**: opacity below 1, drawn in the forward pass, sorted back to front. `EMaterialBlendMode` picks how it combines: `Alpha`, `Additive` (fire, glows) or `Modulate` (stained glass). A translucent mesh with Cast Shadows on casts a partial shadow by its opacity, and it is visible to ray-traced reflections.
+
+`r.OIT 1` switches the standard translucent path to weighted-blended order-independent transparency; water keeps the sorted pass.
+
+Translucent surfaces take their ambient light from the Global Illumination probes, and reflective glass casts one reflection ray from High up. See [Sky, fog and reflections](/docs/rendering/sky-and-reflections/#reflections).
+
+## Materials from C++
+
+You can create and change materials in code through the Renderer module's `Material` class (<Source symbol="Material" />). Instances point at a parent and override only the fields you set:
+
+```cpp title="MakeMaterials.cpp" wrap
+#include "Renderer/Material.h"
+
+Mowo::Ref<Mowo::Material> paint = Mowo::Material::CreatePBR(Mowo::Vec4(0.6f, 0.05f, 0.05f, 1.0f), 0.0f, 0.4f);
+paint->SetShadingModel(Mowo::EShadingModel::ClearCoat);
+paint->SetClearCoatIntensity(1.0f);
+paint->SetClearCoatRoughness(0.05f);
+
+Mowo::Ref<Mowo::Material> bluePaint = Mowo::Material::CreateInstance(paint.Get());
+bluePaint->SetBaseColor(Mowo::Vec4(0.05f, 0.1f, 0.6f, 1.0f));
+
+Mowo::Ref<Mowo::Material> glass = Mowo::Material::CreatePBRDielectric(Mowo::Vec4(0.9f, 0.95f, 1.0f, 1.0f), 0.05f);
+glass->SetOpacity(0.3f);
+glass->SetBlendMode(Mowo::EMaterialBlendMode::Alpha);
+glass->SetReflective(true);
+```
+
+<Callout type="warning">
+An instance does not own its parent. Whoever holds the parent's reference, usually its asset, must outlive the instance. In-place hot reload replaces a material's internals, so hold the `Ref` and never cache a raw `Material*`.
+</Callout>
+
+## Textures
+
+- Normal maps are block-compressed to BC5, which stores two channels. Every shader rebuilds Z with `MowoUnpackTangentNormal`; do the same in your own HLSL. See [Shaders](/docs/rendering/shaders/).
+- While a temporal upscaler is active, texture samples take a negative mip bias so they keep output-resolution detail (`r.MaterialMipBias.Auto`).
+- Terrain and large surfaces can use [virtual texturing](/docs/rendering/virtual-texturing/).
+
+## Substrate <Status />
+
+Substrate replaces "pick one shading model" with "stack two BSDF slabs": a coat, a snow deposit or fabric fuzz layered over the base surface. It is **off by default** behind `r.Substrate`.
+
+<Steps>
+<Step title="Turn it on">
+Set `r.Substrate 1` in the console, or under `[ConsoleVariables]` in your project's `Config/DefaultEngine.ini`.
+</Step>
+<Step title="Recompile the materials that use it">
+The gate is in the material compiler. Save the material again, or run `mbt shaders --project <project>.mproject`. A graph compiled while Substrate was off has no slab.
+</Step>
+<Step title="Add a slab">
+Add a **Substrate Slab** node and wire it into the Output node's **Substrate** pin. The base slab is the ordinary Base Color, Metallic, Roughness and Normal. Set the slab's **Coverage**, **Roughness**, **Specular (F0)** and **Albedo** mode (None, White, Base Color or Base Sheen). Use **Substrate Layer Blend** to crossfade two slabs under a mask.
+</Step>
+</Steps>
+
+What Substrate cannot do yet:
+
+- The slab has no normal of its own.
+- Albedo is one of four modes, not a color, because the slab rides sixteen G-Buffer bits. Both sides of a blend must use the same mode.
+- Two slabs only; there is no vertical stacking.
+- Meshlet meshes fall back to the default shader, so a slab on a meshlet mesh does not appear.
+- A slab reaches ray tracing and the Global Illumination surface cache only when it is constant over the material.
+
+## API reference
+
+- [Renderer module](/docs/api/renderer/): `Material`, `EShadingModel`, `EMaterialBlendMode`
+- [AssetSystem module](/docs/api/assetsystem/): `MaterialGraph`, `FMaterialFunction`

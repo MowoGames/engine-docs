@@ -1,0 +1,77 @@
+---
+title: Dedicated server
+description: Build, run and package MowoServer, the headless authoritative server that hosts a session with no player on the host machine.
+order: 7
+sources:
+  - Engine/Source/MowoServer.Target.cs
+  - Engine/Source/Runtime/MowoServer/MowoServer.Build.cs
+  - Engine/Source/Runtime/MowoServer/Private/MowoServer.cpp
+  - Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp
+  - Engine/Source/Runtime/MowoServer/Private/ServerEngine.h
+  - Engine/Source/Runtime/Networking/Public/Networking/PlatformInit.h
+  - Engine/Plugins/DiscordPlatform/DiscordPlatform.mplugin
+  - Engine/Plugins/MowoOnlinePlatform/MowoOnlinePlatform.mplugin
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
+verifiedAt: 6caf55861
+---
+
+`MowoServer` is the headless dedicated server. It loads a scene, runs the full runtime simulation with no window and no renderer, and hosts through the same `FNetSession` layer a listen server uses, with no host pawn. Listen-server co-op stays the default for shipped games; the dedicated server is the option for standalone hosting, and it is the process multiplayer Play in Editor starts in **Dedicated Server** net mode.
+
+## What the server does
+
+<Flow steps={["Open project", "Load scene", "Init game mode", "Host session", "Tick at --tickrate"]} highlight={3} caption="MServerEngine brings up a world before it hosts, then runs the runtime systems every tick." />
+
+1. It opens the project (or the cooked package's manifest) and reads the start scene, the game mode class and the `platform.*` settings <Source path="Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp" />.
+2. It loads the `--map` scene, or the project's start scene, or an empty world when neither is set.
+3. With a game mode, it initializes that `AGameMode` on the actor world without a local player. Each player who joins is spawned through `AGameMode::RestartPlayer`; without a game mode, joining players get bare replicated pawns.
+4. It hosts the session with `spawnHostPawn` off, relevancy off, no lobby or rich presence, and no host-wide uplink cap (only the per-client budget applies).
+5. Every tick it runs the scene's runtime systems, including `ReplicationManager`, at `--tickrate`. The server tick for [lag compensation](/docs/multiplayer/prediction-and-lag-compensation/) follows the same rate.
+
+## Build and run
+
+Build the `MowoServer` target, then start it with a project and a scene:
+
+```powershell
+./mbt.cmd build -t MowoServer
+MowoServer.exe --project=MyGame.mproject --map=Content/Maps/Level01.mmap --port=7777 --maxclients=4
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--project <path>` | discovered | Project to open. Without it the server looks for `Game.mproject` at the package root, then for a `.mproject` in the working or executable directory. |
+| `--map <scene>` | project start scene | Scene to load and simulate |
+| `--gamemode <class>` | project game mode | `AGameMode` class to initialize |
+| `--port <n>` | `7777` | Listen port |
+| `--maxclients <n>` | `4` | Connection cap (the session allows this many clients) |
+| `--tickrate <hz>` | `60` | Frame cap and fixed server tick |
+| `--appid <id>` | none | Steam App ID for ticket validation |
+| `--ticket-key <hex>`, `--ticket-key-file <path>` | none | Encrypted app ticket key |
+| `--travel-after <s>`, `--travel-to <scene>` | none | Travel to another scene after this many seconds |
+
+Options parse through the engine command line, so `--port 7777` and `--port=7777` both work <Source path="Engine/Source/Runtime/MowoServer/Private/MowoServer.cpp" />. Ctrl+C, SIGTERM or closing the console stops the server gracefully: clients see the session close rather than a timeout, and the process exits with code 0. That makes it a well-behaved citizen under systemd, containers or another supervisor.
+
+<Callout type="tip">
+The server writes its log to an unbuffered stdout, so a supervising process sees lines as they happen.
+</Callout>
+
+## Authenticate players
+
+When both `--appid` and a ticket key are given, the server requires an encrypted Steam app ticket from every client. An unauthenticated peer's traffic never reaches the simulation, and a peer that presents no valid ticket within 15 seconds is dropped. Without them, the server logs that ticket validation is disabled and accepts every connection. See [Online platforms](/docs/multiplayer/online-platforms/#encrypted-app-tickets) for the client side.
+
+## Steam game server
+
+With `platform.steamEnabled` on in the project, the server logs on anonymously as a Steam game server on the session port, with the query port one above it, and listens on both ENet and Steam P2P. Plugins load on the server too, except those that opt out: the Discord and Mowo Online plugins are client-only <Source path="Engine/Plugins/DiscordPlatform/DiscordPlatform.mplugin" />.
+
+## Package the server
+
+```powershell
+./mbt.cmd package --target Server
+```
+
+`--target Server` produces a headless server package instead of the branded player <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />. A packaged server mounts the same encrypted, signed content as the game, carries its manifest as `Game.mproject` at the package root, and reports crashes through the game's crash settings. See [Shipping](/docs/shipping/) and the [mbt CLI reference](/docs/reference/mbt-cli/).
+
+## Related
+
+- [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/) for the session layer the server hosts through.
+- [Transport and encryption](/docs/multiplayer/transport-and-encryption/) for the transports it listens on.
+- [Play in Editor](/docs/editor/play-in-editor/) for multiplayer PIE against a server process.

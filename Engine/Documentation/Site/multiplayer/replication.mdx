@@ -1,0 +1,269 @@
+---
+title: Replication
+description: How networked objects, replicated component fields, relevancy and per-client budgets keep every client's copy of the world in step with the host.
+order: 1
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/NetworkObjectComponent.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationPackets.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/NetFastArray.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/NetPush.h
+  - Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/PropertyReplicator.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/PropertyInfo.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/NetBitStream.h
+  - Engine/Source/Runtime/Components/Public/Components/TransformComponent.h
+verifiedAt: 1a346c1c5
+---
+
+Replication is how the host keeps each client's copy of the world in sync. Every networked entity has an authoritative version on the host and a **ghost** on each client. The host sends only the fields that changed, and the client applies them to its ghost. Which fields travel is decided by reflection: you mark a field, and it replicates.
+
+## Networked objects
+
+An entity joins replication by carrying a `NetworkObjectComponent` <Source symbol="NetworkObjectComponent" />. It is a reflected component in the **Networking** category, so it saves into scenes and prefabs and you can add it from the Details panel with no code.
+
+<Screenshot id="multiplayer-networkobject-details" alt="Mowo Editor Details panel with a static mesh actor selected and a NetworkObject component added, showing the Owner Peer, Prefab, Replicate Transform, Relevancy, Net Cull Distance, Net Priority, Net Priority Tier, Net Relevancy Groups, Net Update Frequency, Net Dormant, Net Push Model and Net State rows" caption="The NetworkObject component in the Details panel." />
+
+| Field | Default | Meaning |
+|---|---|---|
+| `networkId` | assigned at spawn | Session-local id the host assigns. Runtime only. |
+| `ownerPeerId` | `0` | Peer that owns and drives the object. `0` is the host. An object is always relevant to its owner. |
+| `prefabPath` | empty | Prefab the client instantiates for the ghost. Empty spawns a bare transform ghost. |
+| `replicateTransform` | `true` | Whether the transform replicates. Other replicated components are unaffected. |
+| `relevancy` | `Distance` | `Distance`, `Always` or `Never` (host only). |
+| `netCullDistance` | `0` | Relevancy radius. `0` or less falls back to `net.cull_distance`. |
+| `netPriority` | `1.0` | Send-order weight when the budget is tight. |
+| `netPriorityTier` | `Normal` | `Critical`, `High`, `Normal` or `Low`. |
+| `netRelevancyGroups` | `0` | Bitmask of relevancy groups. `0` means no restriction. |
+| `netUpdateFrequency` | `0` | How many times a second the object's continuous state is considered. `0` or less means every snapshot tick. |
+| `netDormant` | `false` | A dormant object's continuous state is neither diffed nor sent until it wakes. |
+| `netPushModel` | `false` | The object promises to mark itself dirty after every change. |
+| `netState` | `0` | A replicated 32-bit word for small discrete state. Ships reliably. |
+
+Scene-placed networked objects also carry a hidden `placedGuid`, stamped when the scene is saved. Both peers load the same scene, so when the host's spawn message arrives the client adopts the local entity with the same id instead of creating a duplicate.
+
+## Replicate a component field
+
+Mark a field of any reflected component with `MREPLICATED`. There is no engine list to extend: every reflected component with at least one replicated field joins replication automatically, and per object the set is whatever components that entity carries.
+
+```cpp title="TurretComponent.h"
+#pragma once
+
+#include "Core/Platform.h"
+#include "ECS/Component.h"
+#include "Math/Vec3.h"
+#include "Reflection/Reflect.h"
+
+#include <cstdint>
+
+namespace Mowo {
+
+struct MOWO_REFLECTED_NAMED("Turret") MCATEGORY("Gameplay") TurretComponent {
+	MOWO_COMPONENT(TurretComponent)
+
+	MOWO_KEY("aim") MOWO_DISPLAY("Aim Direction")
+	MREPLICATED MNET_QUANTIZE(Normal) Vec3 aimDirection = Vec3(0.0f, 0.0f, 1.0f);
+
+	MOWO_KEY("ammo") MOWO_DISPLAY("Ammo")
+	MREPLICATED_USING(OnRep_Ammo) MNET_CONDITION(OwnerOnly) uint32_t ammo = 30;
+
+	MOWO_RUNTIME_ONLY bool lowAmmoWarning = false;
+
+	void OnRep_Ammo() {
+		lowAmmoWarning = ammo < 5;
+	}
+};
+
+}
+```
+
+`MREPLICATED_USING(fn)` implies `MREPLICATED` and names a member function the receiving side calls when an update actually changes the field's value. A resend of identical bytes does not call it again.
+
+### Continuous and discrete fields
+
+The host splits each object's changed fields in two:
+
+| Kind | Types | Channel | Why |
+|---|---|---|---|
+| Continuous | `float`, `Vec2`, `Vec3`, `Vec4`, `Quat` | Unreliable `Snapshot` | The next update overwrites a lost one while the object keeps moving. |
+| Discrete | Everything else (`bool`, integers, enums, UUIDs, strings, arrays, structs) | Reliable `StateSnapshot` | A lost update must never leave a client on a stale value. |
+
+A component with both kinds of field appears on both streams, with an independent baseline on each.
+
+### Which types may replicate
+
+Every field is written by value through a per-type codec <Source symbol="PropertyReplicator" />:
+
+- Fixed-width types: `Bool`, `Int`, `UInt8`, `UInt32`, `Float`, `Vec2`, `Vec3`, `Vec4`, `Quat`, `UUID` and `Enum`.
+- Strings, by value with a length prefix.
+- `MSTRUCT` values, member by member, when every member has a codec.
+- Arrays of fixed-width elements, count-prefixed. An array is resent whole when any element changes; use a [fast array](#fast-arrays) for lists that change one item at a time.
+
+Asset references, custom types, maps and sets are refused. A struct with a member that has no codec refuses the whole struct rather than silently skipping a member. For anything else, replicate a fixed-width handle such as an id or an enum and resolve it locally.
+
+### Quantization
+
+`MNET_QUANTIZE(q)` narrows a float, vector or quaternion on the wire <Source symbol="PropertyInfo" />:
+
+| Quantizer | Encoding |
+|---|---|
+| `Whole`, `Deci`, `Centi`, `Milli` | Fixed point at 1, 0.1, 0.01 or 0.001 of the stored unit. A value that is not finite or does not fit after scaling falls back to raw floats. |
+| `Normal` | 16 bits per component in [-1, 1]. |
+| `Angle` | 16 bits per radian component, wrapped to one turn. |
+| `SmallestThree` | A unit quaternion in three 15-bit components plus a 2-bit index. |
+
+Change detection compares the quantized encodings, so jitter below the quantum costs nothing. `TransformComponent` position and rotation ship as `Milli`.
+
+### Conditions
+
+`MNET_CONDITION(c)` limits a field to some of the peers the object is relevant to:
+
+| Condition | Reaches |
+|---|---|
+| `OwnerOnly` | Only the peer in `ownerPeerId`. |
+| `SkipOwner` | Every relevant peer except the owner. |
+| `InitialOnly` | Each peer once, when the component is first sent to it (spawn or becoming relevant). |
+| `InitialOrOwner` | The owner always, everyone else once. |
+
+A field a peer may not see is left out of its delta, never zeroed, so a non-owner keeps the spawn default of an owner-only field. An object owned by the host (`ownerPeerId == 0`) has no owning client, so its `OwnerOnly` fields reach nobody. Ownership changes do not resend owner-only fields the new owner missed: call `ServerResyncPeer` for that peer.
+
+<Callout type="warning">
+Both machines must run the same build. The replication header carries a protocol version and a schema id computed from every replicated type, field, quantizer and condition. A peer on a different build is refused at the header and the client fails with `ProtocolMismatch`, so adding or changing a replicated field means shipping the new binary to everyone.
+</Callout>
+
+## Object references
+
+A field that points at another networked object holds its `NetworkId`. The id can reach a client before the object it names (a reliable delta overtaking a spawn, or an object not yet relevant), so resolve it with `WhenNetworkIdResolves(nid, fn)` <Source symbol="ReplicationManager::WhenNetworkIdResolves" />. The callback runs at once when the id is already mapped, otherwise when the spawn that maps it arrives. `FindEntityByNetworkId` is the synchronous lookup.
+
+## Fast arrays
+
+`TNetFastArray<TItem>` <Source symbol="TNetFastArray" /> replicates a list item by item: only added, changed and removed items travel, on the reliable channel, and the receiver gets per-item callbacks. Use it for inventories, active effects and other lists that change one entry at a time.
+
+```cpp title="Inventory.cpp"
+#include "Networking/Replication/NetFastArray.h"
+#include "Networking/Replication/ReplicationManager.h"
+
+struct FInventorySlot : Mowo::FNetFastArrayItem {
+	uint32_t ItemId = 0;
+	int32_t Count = 0;
+
+	void NetSerialize(Mowo::FNetBitWriter& w) const {
+		w.WritePackedUInt(ItemId);
+		w.WritePackedInt(Count);
+	}
+
+	bool NetDeserialize(Mowo::FNetBitReader& r) {
+		ItemId = r.ReadPackedUInt();
+		Count = r.ReadPackedInt();
+		return !r.IsOverflowed();
+	}
+};
+
+static Mowo::TNetFastArray<FInventorySlot> sm_Inventory;
+
+static void BindInventory(Mowo::ReplicationManager& replication, uint64_t pawnEntity) {
+	replication.RegisterFastArray(pawnEntity, 1, &sm_Inventory, true);
+}
+
+static void UseItem(size_t index) {
+	FInventorySlot& slot = sm_Inventory.Items[index];
+	slot.Count -= 1;
+	sm_Inventory.MarkItemDirty(slot);
+
+	sm_Inventory.RemoveItems([](const FInventorySlot& s) { return s.Count <= 0; });
+}
+```
+
+On the host, `AddItem` adds and marks an item, `MarkItemDirty` marks an item you changed in place, and `RemoveItems` (or an erase from `Items` followed by `MarkArrayDirty`) removes. The client binds the same entity and array id; `OnAdded`, `OnChanged` and `OnRemoving` run on the receiver only. The last argument of `RegisterFastArray` limits the list to the owning peer.
+
+## What the wire carries
+
+The replication protocol is version 7 <Source symbol="ReplicationPacketType" />. The host sends:
+
+- **Spawn** when an object becomes known to a client: network id, owner, full pose, `netState`, prefab path and placed-object id.
+- **Destroy** when an object is removed or leaves a client's relevancy.
+- **Snapshot** with continuous field deltas, on the unreliable channel.
+- **StateSnapshot** with discrete field deltas, on the reliable channel.
+- **FastArrayDelta** with fast-array changes, on the reliable channel after the snapshot.
+
+Clients send input, RPCs and acknowledgements. The host drops any spawn, destroy or snapshot that arrives from a client, so a client cannot create entities or overwrite replicated state.
+
+## Acknowledged baselines
+
+Continuous deltas are built per client against the last state that client **acknowledged**, not the last state the host sent:
+
+<Steps>
+<Step title="The host sends a snapshot">Each snapshot carries a per-client packet id. The new state is recorded as pending against that id.</Step>
+<Step title="The client acknowledges">The client sends back the highest snapshot id it received.</Step>
+<Step title="The baseline advances">Pending state at or below the acknowledged id becomes the new baseline. Until then, the host keeps diffing against the old one, so a dropped snapshot is repaired on the next send.</Step>
+</Steps>
+
+A client that stops acknowledging for `net.max_unacked_sends` snapshots is treated as stalled. The host then sends it only an empty probe every `net.ack_probe_interval` ticks, and resynchronizes it when it recovers.
+
+## Doing less work per object
+
+Three per-object switches cut the host's diffing cost:
+
+- **Update frequency.** `netUpdateFrequency` (Hz) makes a slow object be considered only that often. A 5 Hz prop under a 20 Hz snapshot rate is diffed every fourth tick.
+- **Dormancy.** A `netDormant` object's continuous state is skipped until it wakes. `FlushNetDormancy(entityId)` sends one update without waking it <Source symbol="ReplicationManager::FlushNetDormancy" />. A dormant object still spawns on clients it becomes relevant to, and its discrete state still ships on change.
+- **Push model.** A `netPushModel` object is diffed only after it calls `MarkNetDirty` <Source symbol="ReplicationManager::MarkNetDirty" />. An unmarked change is **not sent**: opting in is a promise to mark every change. `FNetPush::Set(world, entity, &Component::field, value)` writes a field and marks the entity only when the value changed; `FNetPush::Touch(world, entity)` marks after a write you made yourself <Source symbol="FNetPush" />.
+
+## Relevancy and budgets
+
+Relevancy is on by default (`net.relevancy 1`), and every session sets it from `FNetSessionSettings::relevancyEnabled`. Each client receives only the objects relevant to it:
+
+- objects with `relevancy = Always`,
+- objects it owns,
+- `Distance` objects within their cull distance of the client's viewer,
+
+and, when the object has `netRelevancyGroups` set, only if the client's group mask shares a bit with it. The owner always sees its own object. `Never` objects reach nobody.
+
+When an object becomes relevant, the client gets a full spawn plus every field in full. When it leaves, the client gets a destroy. Set the viewer with `SetPeerViewEntity` (usually the client's pawn) or `SetPeerViewer` (a fixed position), and a peer's groups with `SetPeerRelevancyGroups` <Source symbol="ReplicationManager::SetPeerRelevancyGroups" />. A player's [team](/docs/multiplayer/player-state/) becomes its relevancy group automatically.
+
+<Callout type="tip">
+Relevancy groups keep team-only state private. A player on team `t` gets the group mask `1 << t` (team 0 sees every group), so a marker with `netRelevancyGroups = 4` reaches only players on team 2, whatever its distance.
+</Callout>
+
+Changed, relevant objects then compete for a per-client budget each snapshot:
+
+1. **Tier first.** Nothing in a lower `netPriorityTier` ships while a higher tier still has changes.
+2. **Priority within a tier.** The score is `netPriority * (1 + ticks since this client last got the object)`, multiplied by `net.OwnerPriorityBoost` for objects the client owns and by up to `net.ViewConePriorityBoost` for objects inside its view cone (`net.ViewConeDegrees`).
+3. **Starvation.** An object waiting `net.starvation_ticks` is promoted by exactly one tier, so nothing waits forever and nothing outranks `Critical`.
+4. **Caps.** At most `net.max_updates_per_tick` entries and `net.max_snapshot_bytes` bytes per client per snapshot, within a per-second byte budget. Overflow is deferred to the next tick, not dropped.
+
+The per-second outgoing budget is 6000 bytes per client (48 kbit/s) by default. The session also divides `hostUplinkBytesPerSecond` (30000 by default) among `maxPlayers - 1` clients and uses the lower of the two figures. Reliable traffic is charged but never dropped; the unreliable snapshot uses what is left. Relayed voice is charged to the same budget, capped at `net.voice_budget_share` of it. An incoming budget of 8192 bytes per second limits how much the host decodes from each client.
+
+## Client interpolation
+
+Clients never snap a remote ghost straight to a snapshot. Poses go into an interpolation buffer and are drawn `interpolationDelay` behind the newest one (0.1 s by default), interpolated between the two samples around that time. Playback clamps at the newest sample rather than extrapolating. Your own pawn is not interpolated; it is [predicted](/docs/multiplayer/prediction-and-lag-compensation/).
+
+You can read decoded server state on a client with `TryGetAuthoritativeTransform`, `TryGetReplicatedNetState` and `TryGetReplicatedField`. They work even when no ghost entity exists.
+
+## Console variables
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `net.relevancy` | `1` | Per-client relevancy, priority and byte budget. `0` sends every object to every peer, still within the byte caps. |
+| `net.cull_distance` | `100` | Default relevancy radius in world units. |
+| `net.max_updates_per_tick` | `64` | Snapshot entries per client per snapshot. `0` is unlimited. |
+| `net.max_snapshot_bytes` | `1200` | Snapshot bytes per client per snapshot. `0` is unlimited. |
+| `net.starvation_ticks` | `32` | Staleness that promotes an object one tier. `0` disables. |
+| `net.OwnerPriorityBoost` | `4` | Priority multiplier for objects the client owns. |
+| `net.ViewConePriorityBoost` | `2` | Priority multiplier inside the client's view cone, fading to 1 at its edge. |
+| `net.ViewConeDegrees` | `60` | Half-angle of that view cone. |
+| `net.max_unacked_sends` | `64` | Snapshots a client may miss before it is treated as stalled. |
+| `net.ack_probe_interval` | `16` | Snapshot ticks between probes to a stalled client. |
+| `net.peer_byte_budget` | `6000` | Outgoing bytes per second per client. `0` is unlimited. |
+| `net.peer_in_byte_budget` | `8192` | Incoming bytes per second accepted from one client. `0` is unlimited. |
+| `net.voice_budget_share` | `0.5` | Largest share of the outgoing budget that relayed voice may use. |
+
+See the [console variable reference](/docs/reference/console-variables/) for the full list.
+
+## Related
+
+- [Player state](/docs/multiplayer/player-state/) for per-player records.
+- [RPCs and events](/docs/multiplayer/rpcs/) for one-off actions.
+- [How-to: a replicated actor](/docs/multiplayer/how-to-replicated-actor/) for a worked example.
+- API: [`NetworkObjectComponent`](/docs/api/networking/networkobjectcomponent/), [`ReplicationManager`](/docs/api/networking/replicationmanager/), [`TNetFastArray`](/docs/api/networking/tnetfastarray/).

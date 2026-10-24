@@ -1,0 +1,100 @@
+---
+title: Transport and encryption
+description: How Mowo picks ENet or Steam P2P per address, and how ENet sessions are encrypted with an X25519 handshake and XChaCha20-Poly1305 via Monocypher.
+order: 8
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/CompositeTransport.h
+  - Engine/Source/Runtime/Networking/Private/CompositeTransport.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/NetCrypto.h
+  - Engine/Source/Runtime/Networking/Private/NetCrypto.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/ENetTransport.h
+  - Engine/Source/Runtime/Networking/Private/ENetTransport.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/NetworkTypes.h
+  - Engine/Plugins/SteamPlatform/Private/SteamTransport.cpp
+verifiedAt: 08e26df3d
+---
+
+Under the session layer, a transport moves bytes between peers. Mowo has two: **ENet** over UDP for direct and LAN play, and **Steam P2P** through the SteamPlatform plugin. A composite transport picks between them for each connection, and ENet sessions are encrypted at the application layer.
+
+## Choosing a transport
+
+`FCompositeTransport` is the default transport. It always owns an ENet backend and creates a Steam backend only when the Steam client is available <Source symbol="FCompositeTransport" />. It decides from the form of the address alone, with no network calls <Source path="Engine/Source/Runtime/Networking/Private/CompositeTransport.cpp" />:
+
+| Address | Example | Backend |
+|---|---|---|
+| Contains `.` or `:` | `192.168.1.20`, `fe80::1` | ENet |
+| Contains any non-digit | `myserver` | ENet |
+| All digits, fits in 32 bits | `7777` | ENet |
+| All digits, larger than 32 bits (a SteamID64) | `76561198000000000` | Steam P2P |
+
+<Flow steps={["Connect(address)", "ClassifyAddress", "IP or host", "ENet"]} highlight={1} branch={{ from: "ClassifyAddress", label: "SteamID64 → Steam P2P" }} caption="The same Connect call reaches an IP server or a Steam friend." />
+
+`FNetSession::GetRoute()` reports `Direct` or `SteamP2P`, so a game can show which one carries the session. If an address looks like a SteamID64 but Steam is not available, the connect fails with a clear error instead of silently falling back to ENet <Source path="Engine/Source/Runtime/Networking/Private/CompositeTransport.cpp" />.
+
+### Hosting on both
+
+When the Steam backend is up, a development build hosts on ENet and Steam P2P at the same time, so an IP client and a Steam client can join the same session. Steam peer ids carry a high bit so the two id spaces never collide <Source symbol="FCompositeTransport" />.
+
+A **Shipping** listen server with Steam running hosts through the Steam relay only, so peers never see the host's IP address. Set `net.ShipExposeEnetHost 1` to open the ENet listener as well, for example to allow direct `--connect ip:port` joins <Source path="Engine/Source/Runtime/Networking/Private/CompositeTransport.cpp" />.
+
+### Channels on each transport
+
+All four [network channels](/docs/multiplayer/#channels) exist on both backends. ENet maps them to reliable ordered, unreliable sequenced, reliable unordered and unreliable unsequenced delivery. The Steam backend maps them to Steam's reliable and unreliable send flags, adding no-Nagle for the bulk and voice channels <Source path="Engine/Plugins/SteamPlatform/Private/SteamTransport.cpp" />.
+
+## ENet encryption
+
+ENet owns the UDP socket and its own reliability and sequencing, so encryption sits on the packet payload: encrypt before ENet sends, decrypt after it receives <Source symbol="FNetCryptoSession" />. The primitives come from **Monocypher**: X25519 for key exchange, XChaCha20-Poly1305 for authenticated encryption, and BLAKE2b for key derivation. The engine's own layer covers ENet only; traffic on the Steam route goes through Steam Networking Sockets.
+
+### The handshake
+
+One ephemeral X25519 exchange per connection, on the reliable channel:
+
+<Steps>
+<Step title="Hello">The client sends its public key.</Step>
+<Step title="Reply">The server sends its public key and a confirmation tag.</Step>
+<Step title="Confirm">The client sends its own confirmation tag.</Step>
+</Steps>
+
+Both sides hash a label, the optional pre-shared key, the X25519 shared secret and both public keys with BLAKE2b, then expand the result into a key and nonce salt per direction plus a confirmation key <Source path="Engine/Source/Runtime/Networking/Private/NetCrypto.cpp" />. A peer that derived different material cannot produce the tags. A peer is announced as connected only after confirmation, and a handshake that does not finish within 5 seconds drops the peer <Source symbol="FNetCrypto" />. A second Hello on an established session is ignored rather than resetting its keys.
+
+### Data frames
+
+```text
+[type][channel][counter, 8 bytes LE][MAC, 16 bytes][ciphertext]
+```
+
+The overhead is 26 bytes per packet. The header is authenticated as associated data. The nonce is the direction's salt plus the channel plus the counter, and each channel has its own counter starting at 1, so a nonce never repeats under one key.
+
+### Replay protection
+
+Each receive channel keeps a 1024-entry sliding window. A counter above the highest seen advances the window; an older one is accepted only if it is inside the window and not seen before. A strict "must increase" rule would drop legitimate traffic, because ENet reorders unreliable packets. The window is updated only after the MAC verifies, so a forged counter cannot poison it <Source path="Engine/Source/Runtime/Networking/Private/NetCrypto.cpp" />.
+
+## Configure encryption
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `net.encrypt` | `on` | `on` encrypts every link, LAN included. `auto` encrypts only non-private addresses and leaves LAN and loopback in plaintext. `off` disables encryption. |
+| `net.psk` | empty | Pre-shared key mixed into the handshake. A peer without it fails confirmation. Empty means the host makes up a join key per session. |
+| `MOWO_NET_ENCRYPT`, `MOWO_NET_PSK` | unset | Environment overrides for the two cvars. |
+
+The cvars are registered in `NetCrypto.cpp` <Source path="Engine/Source/Runtime/Networking/Private/NetCrypto.cpp" />. In code, `ENetTransport::SetEncryptionMode` and `SetPreSharedKey` override them for one transport before `Host` or `Connect` <Source symbol="ENetTransport::SetEncryptionMode" />.
+
+### Join keys
+
+With encryption on and no `net.psk`, the host generates a 26-character **join key** for the session and uses it as the pre-shared key for every link from another machine <Source symbol="FNetCrypto::GenerateJoinKey" />. Links from the same machine (loopback) need no key. The host logs the key and `FNetSession::GetJoinKey()` returns it as `<address>:<port>#<key>`; a player joins with `--connect=<address>:<port>#<key>` or by setting `FNetSessionSettings::joinKey`. Dashes and spaces in a typed key are ignored, letters are case-insensitive, and `O`, `I` and `L` are read as `0`, `1` and `1`.
+
+So by default a direct session is both encrypted and authenticated: only someone the host gave the key to can complete the handshake. A configured `net.psk` replaces the per-session key for everybody.
+
+<Callout type="warning">
+A client that connects from another machine without the key, or with the wrong one, fails key confirmation and is dropped. A link that establishes with no key at all is encrypted but anonymous: safe from passive capture, open to an active man-in-the-middle. On a public address the transport logs a warning when that happens <Source path="Engine/Source/Runtime/Networking/Private/ENetTransport.cpp" />.
+</Callout>
+
+### The plaintext gate
+
+`ENetTransport::Connect` refuses to connect to a public internet address in plaintext. Loopback and private ranges are always allowed. Setting the environment variable `MOWO_ALLOW_PLAINTEXT_INTERNET=1` overrides the refusal knowingly <Source path="Engine/Source/Runtime/Networking/Private/ENetTransport.cpp" />. With `net.encrypt` set to `on` or `auto`, public addresses are encrypted and the gate stays open.
+
+## Related
+
+- [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/) for the session layer above the transport.
+- [Online platforms](/docs/multiplayer/online-platforms/) for the Steam backend, relay and ticket authentication.
+- API: [`FCompositeTransport`](/docs/api/networking/fcompositetransport/), [`INetworkTransport`](/docs/api/networking/inetworktransport/), [`FNetCrypto`](/docs/api/networking/fnetcrypto/), [`FNetCryptoSession`](/docs/api/networking/fnetcryptosession/), [`ENetEncryptionMode`](/docs/api/networking/enetencryptionmode/).

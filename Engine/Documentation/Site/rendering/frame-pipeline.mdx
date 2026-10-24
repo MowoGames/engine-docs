@@ -1,0 +1,141 @@
+---
+title: Frame pipeline
+description: Every pass SceneRenderer records in a frame, in order, with what each one reads, writes and replaces.
+order: 1
+sources:
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRenderer.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererShadows.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererGeometry.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererExtensions.cpp
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/SceneRenderer.h
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/RenderPassExtension.h
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/RHI/Public/RHI/RenderGraph.h
+verifiedAt: 1a346c1c5
+---
+
+`SceneRenderer` is a deferred renderer. Opaque geometry writes a G-Buffer, lighting runs once per pixel over it, translucent surfaces are drawn forward afterward, and post-processing finishes the frame. It records a whole frame in `SceneRenderer::RenderFrame`, after the host has called `BeginScene`, submitted its draws and called `EndScene`. This page walks through that function in the order the passes run. Use it to find where an effect happens, what it depends on, and what replaces it on another tier.
+
+## Where the frame sits in the engine loop
+
+Every host runs the same loop: `Renderer::BeginFrame`, then the host's `Tick` (which records scene rendering into the frame's command buffer), then `Draw` for the UI, then the swapchain pass that presents. Nothing renders after the swapchain pass (<Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" />).
+
+## Overview
+
+<Flow steps={["GI volumes", "Shadows", "Cluster cull", "Sky + probes", "G-Buffer", "Velocity", "VSM", "Decals", "AO", "Hi-Z", "RT sun / MegaLights", "Lighting", "GI composite", "Sky + clouds", "SSR", "Fog", "Translucency", "Post", "Overlays"]} highlight={11} caption="The deferred frame. Lighting is the pivot: everything before it fills inputs, everything after it composites onto the lit HDR image." />
+
+Three facts shape the order:
+
+- The Global Illumination volume builds and the shadow passes come first, because lighting samples both.
+- Reflections are traced before translucency, so glass and particles composite over the resolved reflections instead of appearing inside them.
+- Temporal upscalers resolve before tonemapping, on the linear HDR image. Built-in TAA and the spatial upscaler run after it.
+
+The six [render-pass extension](/docs/rendering/extending-the-renderer/) points are marked in the tables below.
+
+## 1. Before geometry
+
+| Stage | What it does |
+|---|---|
+| Ray scene | When any ray-traced consumer is active, the bottom-level structures and the per-frame top-level structure are built or refitted. See [Ray tracing](/docs/rendering/ray-tracing/). |
+| SDF build | Builds the world signed distance field that Global Illumination, SDF reflections and SDF far shadows trace. |
+| GI cascades and probes | Updates the radiance cascades and traces the irradiance probes. These can run on the async-compute queue. |
+| Shadow | Renders the sun's cascaded shadow map, then the local shadow atlas for spot, point and rect lights. |
+| Light functions | Renders light-function tiles before anything reads a light. |
+| Cluster cull | Builds the froxel grid and culls local lights into per-cluster lists. Clustered lighting is on at every tier. |
+| Sky and captures | Updates the sky atmosphere and sky-light capture, then planar reflections and one stale reflection-probe capture. A mirror is a second view of the same frame, so these run before the G-Buffer. |
+| Cloud shadow | Builds the sun-space cloud transmittance map (raymarched clouds, High and up). |
+
+## 2. Geometry
+
+| Stage | What it does |
+|---|---|
+| G-Buffer | Draws opaque geometry into four color targets plus depth, after an optional depth prepass (High and up). The projection is jittered when a temporal resolve consumes the jitter. At Epic and Cinematic, eligible meshes use the meshlet (mesh-shader) path where the GPU supports it. |
+| **`AfterGBuffer`** | Extension point. |
+| Custom depth | Draws only meshes that opted in, into a depth plus 8-bit stencil pair that post-process materials can read. |
+| Velocity | Writes motion vectors for moving objects whenever a temporal resolve or a per-effect temporal filter needs them. |
+| VSM | Virtual shadow maps: page marking, page raster and resolve. Epic and up. |
+| Decals | Box-projected deferred decals, written over the G-Buffer before AO and lighting read it. |
+| GTAO | Ground-truth AO. Ray-traced AO fills this slot when `r.RTAO` is active. Off at Low. |
+| Capsule shadows | Soft shadows from skinned meshes that have capsule shadows turned on (`r.CapsuleShadows`). |
+| Hi-Z | Builds the depth pyramid that the next frame's occlusion cull reads. |
+
+### G-Buffer layout
+
+| Target | Format | Contents |
+|---|---|---|
+| A | RGBA8 | Albedo, metallic |
+| B | RGBA16F | World normal, roughness |
+| C | RGBA16F | Emissive, material AO |
+| D | Extended pack | Clear coat, anisotropy, light channels and the shading-model code |
+| Depth | D32F | Scene depth |
+
+## 3. Lighting
+
+<Flow steps={["RT sun shadow", "MegaLights", "Deferred lighting", "MegaLights composite", "Probe and screen-probe gather", "SDF reflections", "GI denoise + composite", "SSGI", "Local exposure", "SSS"]} highlight={2} caption="The lighting block. Stages that are off at the current tier are skipped." />
+
+- **`BeforeLighting`** extension point runs first.
+- **Ray-traced sun shadow** cone-samples the sun disc through the scene's acceleration structure before lighting reads it. See [Shadows](/docs/rendering/shadows/).
+- **MegaLights** shades the shadow-casting local lights that missed the atlas budget, stochastically. The deferred pass skips those lights so nothing counts twice.
+- **Deferred lighting** resolves direct light for every G-Buffer pixel: sun, clustered local lights, area lights, sky lighting and contact shadows. See [Lights](/docs/rendering/lights/).
+- **Global Illumination** gathers indirect diffuse, traces SDF reflections, denoises and composites onto the HDR image. See [Global Illumination](/docs/rendering/global-illumination/).
+- **SSGI** is a screen-space one-bounce term. No tier enables it; `r.SSGI 1` forces it.
+- **SSS** blurs diffuse light on subsurface pixels once direct and indirect light are both in the HDR target.
+- **`AfterLighting`** extension point.
+
+## 4. Sky, reflections and translucency
+
+| Stage | What it does |
+|---|---|
+| Skybox and clouds | Draws the cubemap or procedural atmosphere behind opaque geometry, then the cloud layer. |
+| Atmosphere composite | Aerial perspective and height fog over everything opaque. |
+| Virtual texture | The virtual-textured ground surface, when enabled. See [Virtual texturing](/docs/rendering/virtual-texturing/). |
+| SSR | Screen-space reflections: trace, temporal filter and resolve. A ray that leaves the screen can continue into the SDF or, with `r.RTReflections`, into the ray-tracing scene. |
+| Volumetric fog | Froxel fog, after SSR so reflections see unfogged surfaces. Epic and up. |
+| VDB volumes | Sparse volumes such as smoke and clouds from VDB files. |
+| **`BeforeTranslucency`** | Extension point. |
+| Transparent | Forward-shaded translucent surfaces, sorted back to front, plus water. |
+| Particles | CPU and GPU particles and ribbons. |
+| World widgets | World-space UI quads, depth-tested against opaque geometry. |
+| Selection mask | Editor only: the selected and hovered meshes into a mask for the outline. |
+
+## 5. Post-processing
+
+<Flow steps={["DoF", "Motion blur", "Auto-exposure", "Bloom", "Temporal upscale", "Tonemap + grading", "Post-process material", "TAA", "Lens flare", "Spatial upscale", "FXAA / CAS / Final", "Point clouds", "Grid + debug draw", "Selection outline"]} highlight={[4, 5]} caption="The post chain. A temporal upscaler (TSR, FSR, DLSS, XeSS, MetalFX) resolves before the tonemap; built-in TAA runs after it." />
+
+- **Depth of field, motion blur, auto-exposure and bloom** run on the HDR image. Auto-exposure runs before bloom, because the bloom threshold works on exposed luminance.
+- **Temporal upscale** consumes the linear HDR scene after depth of field and motion blur. After it, the rest of the chain runs at output resolution.
+- **Tonemap** applies the operator and the grading chain.
+- **`AfterTonemap`** extension point.
+- **Post-process material** is a PostProcess-domain material evaluated as a fullscreen pass.
+- **TAA** runs only when no temporal upscaler is active. It resolves the tonemapped image before lens flare and editor overlays, so they never enter its history.
+- **Spatial upscale** (FSR1) is the only resolve after tonemapping.
+- **Final** runs FXAA when no temporal resolve ran, or contrast-adaptive sharpening, or a plain copy.
+- **Overlays** draw last on the presentable target: point clouds, then the grid and debug lines, then the selection outline. They stay out of the temporal history, the upscaler and the exposure histogram.
+- **`BeforeUI`** extension point.
+
+See [Post-processing and volumes](/docs/rendering/post-processing-and-volumes/) and [Upscaling and anti-aliasing](/docs/rendering/upscaling-and-anti-aliasing/).
+
+## Debug and reference stages
+
+These replace the presented image and are not part of a normal frame:
+
+- **Path trace**: the progressive reference renderer. See [Ray tracing](/docs/rendering/ray-tracing/#path-tracer).
+- **SDF debug**: a sphere-traced view of the distance field.
+- **Buffer visualization**: G-Buffer channels, velocity, Global Illumination, reflections and other intermediate targets.
+
+See [Debug views](/docs/rendering/debug-views/).
+
+## Render graph
+
+Every pass runs through the RHI's <Source symbol="RenderGraph" />. Each pass declares its reads and writes, and the graph orders the passes and emits the state transitions. The geometry, lighting and post passes share one frame graph, so transient targets with disjoint lifetimes can share memory. See [RHI programming](/docs/rendering/rhi/#the-render-graph).
+
+<Callout type="note">
+The scene renderer does not turn on the graph's dead-pass culling: every pass it adds runs.
+</Callout>
+
+## API reference
+
+- [SceneRenderer module](/docs/api/scenerenderer/): `SceneRenderer`, `SceneRenderer::Options`
+- [RHI module](/docs/api/rhi/): `RenderGraph`
+- [Renderer module](/docs/api/renderer/): `RenderFrameData`

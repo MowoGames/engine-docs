@@ -1,0 +1,98 @@
+---
+title: LiDAR scanning and point clouds
+sidebarTitle: LiDAR and point clouds
+description: Persistent point clouds, the LiDAR scanner, scan replication, the ScanHierarchy plugin, player scan settings and the attention meter.
+order: 32
+sources:
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/PointCloudComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MPointCloudComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/APointCloudActor.h
+  - Engine/Source/Runtime/Game/Public/PointCloud/PointCloudAccumulator.h
+  - Engine/Source/Runtime/Game/Public/PointCloud/LidarScanService.h
+  - Engine/Source/Runtime/Game/Public/PointCloud/LidarTracer.h
+  - Engine/Source/Runtime/Game/Public/PointCloud/LidarShotJournal.h
+  - Engine/Source/Runtime/Game/Public/PointCloud/ScanBvhWorld.h
+  - Engine/Source/Runtime/PointCloud/Public/PointCloud/PointCloudScannerComponent.h
+  - Engine/Source/Runtime/PointCloud/Public/PointCloud/ScanMeshComponent.h
+  - Engine/Source/Runtime/Scan/Public/Scan/ScanResponse.h
+  - Engine/Plugins/ScanHierarchy/ScanHierarchy.mplugin
+  - Engine/Plugins/ScanHierarchy/Public/Scan/ScanScene.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/AttentionProfile.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/AttentionSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/MAttentionStatics.h
+verifiedAt: 08e26df3d
+---
+
+Mowo can reveal a dark world with a LiDAR scanner: each shot traces rays into the level and leaves points behind as screen-space splats. The cloud persists, can fade with age, is reproducible from a seed, and is shared between players by sending shots, not points.
+
+## Point clouds
+
+A `PointCloud` component (on actors, `MPointCloudComponent`, or place an `APointCloudActor`) holds a cloud. Points are colored in the shader from their surface material, so changing the palette never touches the data. <Source symbol="PointCloudComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `pointSize`, `splatRoundness`, `depthTest` | Splat look |
+| `fadeEnabled`, `fadeSeconds`, `fadeExponent`, `fadeHold`, `fadeFloor`, `fadeDissolve`, `fadeSizeMin` | Age fade: full opacity until `fadeHold`, down to `fadeFloor` by `fadeDissolve`, then each point dissolves. Re-scanning a point re-reveals it. |
+| `ephemeralEnabled`, `ephemeralCapacity` | A short-lived layer for points that should vanish quickly |
+
+<Source symbol="MPointCloudComponent" />
+
+The accumulator chunks points by 8 m sectors, pages them into a GPU pool, removes duplicates and keeps within a point budget. Clouds are saved with world-state save slots and stream with world-partition cells. <Source symbol="FPointCloudAccumulator" /> See [Save games](/docs/gameplay/save-games/).
+
+## The scanner
+
+Add a `PointCloudScanner` component and set `firing` while the player holds the trigger, or turn on `autoFire` for a turret. <Source symbol="PointCloudScannerComponent" />
+
+| Field | Default | Effect |
+| --- | --- | --- |
+| `scansPerSecond` | 10 | Shot rate |
+| `range`, `coneDegrees`, `raysPerShot` | 60, 12, 512 | Each shot |
+| `densityFalloff` | 1 | How density drops with distance |
+| `cloudMaxPoints`, `sharedShare` | 2,000,000, 0.2 | Point budget, and the share kept for other players' scans |
+| `fillRays`, `fillRange`, `waveSpeed` | 12000, 25, 18 | The **fill**: set `fillRequested` to fire one sphere of rays that spreads as a wave |
+| `traceBackend` | 0 | 0 automatic, 1 physics colliders, 2 the scan hierarchy |
+
+Each machine holds two clouds: what this player scanned and what other players scanned. <Source symbol="FLidarScanService" />
+
+### What the scanner sees
+
+A `ScanMesh` component controls how an entity appears to the scan: an authored scan mesh can stand in for the render mesh, a moving body is traced as a live instance, and an animated character gets a capsule per bone that follows its pose. A response table decides what each ray does when it hits a material. <Source path="Engine/Source/Runtime/PointCloud/Public/PointCloud/ScanMeshComponent.h" />
+
+The **LiDAR Scan Hierarchy** plugin traces shots against an Embree hierarchy of the level's render triangles, on all cores, with moving bodies and bone capsules re-posed every frame. Without it, the engine's own deterministic scan hierarchy is used. The plugin adds about 6.8 MB to a packaged game, so it is off by default. <Source path="Engine/Plugins/ScanHierarchy/ScanHierarchy.mplugin" /> Sound uses the same geometry; see [Acoustics](/docs/gameplay/acoustics/).
+
+## Multiplayer
+
+Shots replicate, not points. A shot carries its origin, direction, cone, range, ray count, seed and tick, so every machine traces the same cloud from it. The host keeps a history of shots for late joiners and limits what each player may send. <Source symbol="FLidarShotJournal" />
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `lidar.MaxShotsPerSecond`, `lidar.MaxRaysPerSecond` | 30, 60000 | Per-player rate limits on the host |
+| `lidar.MaxRaysPerShot`, `lidar.MaxShotRange` | 16384, 120 | Caps on one shot |
+| `lidar.MaxOriginDistance` | 4 | How far a shot may start from the shooter |
+| `lidar.HistoryMaxShots`, `lidar.CatchupShotsPerTick` | 50000, 64 | Late-joiner history |
+
+## Player settings
+
+These options are on the Accessibility settings screen:
+
+| Console variable | Effect |
+| --- | --- |
+| `r.PointCloud.Palette` | 0 authored, 1 red-green safe, 2 blue-yellow safe, 3 monochrome |
+| `r.PointCloud.SizeScale` | 0.75 to 2 times splat size |
+| `r.PointCloud.Density` | 0.5 to 1.5 times density, as a stable subset |
+| `r.PointCloud.StreamMode` | Larger, sparser, steadier points that survive video compression |
+| `r.PointCloud.FlashLimit`, `r.PointCloud.FlashStep`, `r.PointCloud.FlashRiseSeconds` | Photosensitivity: limits how fast the scan layer may brighten the screen |
+
+Rendering options such as eye-dome lighting, hole fill and grown Gaussian splats are under `r.PointCloud.*` in the [console variable reference](/docs/reference/console-variables/).
+
+## Attention
+
+The attention meter measures how much the world has noticed the scanning: it rises with every shot and decays when players go quiet. All numbers live in one `.attention` asset: maximum, cost per shot, multipliers for a fill or a mounted scanner, the decay rate, per-band weights and four stage thresholds. <Source symbol="FAttentionProfile" />
+
+The host computes it and sends it to clients. `MAttentionStatics` offers `GetAttention`, `GetAttentionNormalized`, `GetAttentionStage` (0 to 4), `GetAttentionStageProgress`, and on the host `AddAttention` and `LoadAttentionProfile`. Drive AI aggression, ambience or music from the stage. <Source symbol="MAttentionStatics" />
+
+## Related
+
+- [Rendering](/docs/rendering/)
+- [AI](/docs/gameplay/ai/), which hears scans and sees their flash
+- API: [Game module](/docs/api/game/), [PointCloud module](/docs/api/pointcloud/)

@@ -1,0 +1,114 @@
+---
+title: Redirectors
+description: How Mowo keeps references working when you rename an asset, a reflected field, a type or an enum value, and how Fix Up Redirectors retires them.
+order: 8
+sources:
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetRegistry.h
+  - Engine/Source/Runtime/AssetSystem/Private/AssetRegistry.cpp
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetRedirectFixup.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/FieldRedirects.h
+  - Engine/Source/Runtime/Reflection/Private/FieldRedirects.cpp
+  - Engine/Source/Runtime/Reflection/Private/ReflectionSerializer.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Runtime/GameHost/Private/FCookDeps.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CookCommand.cs
+verifiedAt: 08e26df3d
+---
+
+Renaming things breaks references unless something remembers the old name. Mowo has two kinds of redirect for this, and both live in one committed file, `Config/Redirects.ini`, in the `[CoreRedirects]` section Unreal developers know:
+
+- **Asset redirects** keep an old asset path resolving after you rename or move the asset.
+- **Field, type and enum redirects** keep old data loading after you rename a reflected property, a class or struct, or an enum value in C++.
+
+## Why asset paths need redirects
+
+References through the asset registry use ids, and an id survives a rename because it lives in the asset's package summary or [sidecar](/docs/content-pipeline/sidecars-and-uuids/). But many references store a path string, such as a mesh component's model path, and that string is written verbatim into `.mmap`, `.actor` and `.prefab` files. A rename would leave every one of those pointing at nothing.
+
+A redirect records where the asset went, so the old path keeps resolving until the files that name it are rewritten.
+
+<Flow steps={["Rename in the Content Browser", "AddRedirect(old, new)", "Config/Redirects.ini", "Old paths still resolve", "Fix Up Redirectors"]} highlight={1} caption="A redirect is a temporary indirection. Fix Up Redirectors rewrites the references and retires it." />
+
+## What creates a redirect
+
+Renaming or moving an asset in the Content Browser calls `AssetRegistry::AddRedirect(old, new)` <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp" />. So does **Reimport With New File…** when the new file has a different extension. Opening an older project adds one for every file it renames to its new extension, and `mbt asset migrate --source-art` adds one from each moved source to its package (see [File types](/docs/content-pipeline/file-types/#old-spellings-migrate-on-open)).
+
+Redirects behave predictably:
+
+- **Chains collapse.** After A→B and then B→C, A resolves straight to C.
+- **Round trips cancel.** Renaming A to B and back to A drops the redirect instead of storing A→A <Source path="Engine/Source/Runtime/AssetSystem/Private/AssetRegistry.cpp" />.
+- **They are saved at once.** Each change is written to `Config/Redirects.ini` straight away, so a crash after a rename does not lose it. A folder rename that records one redirect per file writes the file once, at the end <Source symbol="AssetRegistry" />.
+
+The editor, the cook and the packaged game all read the file. A packaged game loads `Config/Redirects.ini` from its game root and logs how many field, type and path redirects it read <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />. The dependency-driven cook also passes it to the dependency collector, so a scene that still names an old path cooks the right file <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CookCommand.cs" />.
+
+## Fix up redirectors
+
+A redirect is meant to be temporary. Fix Up Redirectors rewrites every file that still names an old path, then retires the redirects nothing references any more.
+
+<Steps>
+<Step title="Open the folder menu">
+In the Content Browser, right-click a folder. **Fix Up Redirectors** is enabled when the project has at least one outstanding redirect <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp" />.
+</Step>
+<Step title="Run it">
+Choose **Fix Up Redirectors**. The pass scans the project's content tree and rewrites references in place.
+</Step>
+<Step title="Read the result">
+A notification reports how many references it rewrote, in how many files, and how many redirects it retired. If it kept any, the notification is a warning and names up to three files it could not rewrite.
+</Step>
+<Step title="Commit">
+Commit the rewritten assets together with the updated `Config/Redirects.ini`.
+</Step>
+</Steps>
+
+<Screenshot id="content-pipeline-fix-up-redirectors" alt="Content Browser with a folder right-clicked and its context menu open, the Fix Up Redirectors entry highlighted" caption="Fix Up Redirectors is in the folder context menu." />
+
+<Callout type="engine">
+The rewrite is textual and anchored on the surrounding quotes. Only a complete quoted value can match, never part of a longer path, and the file's formatting and comments stay untouched. Which files are rewritable is decided by looking at their bytes, not their extension, so new MDF asset types are covered automatically. A redirect is retired only after every file that could name it was examined. When a file cannot be rewritten, its redirects are kept <Source symbol="FAssetRedirectFixup" />.
+</Callout>
+
+## Field and type redirects
+
+Renaming a reflected property in C++ would otherwise lose data. The stored key no longer matches any property, so the loader drops the value and only logs it at debug level. Renaming a component type is worse: the whole node is skipped with a warning <Source symbol="FFieldRedirects" />.
+
+`FFieldRedirects` tells the loader where the value went. When the reflection serializer cannot find a property under its current name, it asks for the old spelling and reads that instead <Source path="Engine/Source/Runtime/Reflection/Private/ReflectionSerializer.cpp" />.
+
+### Declare redirects in Config/Redirects.ini
+
+A game declares its own renames without code:
+
+```ini title="Config/Redirects.ini"
+[CoreRedirects]
++PropertyRedirects=(OldName="LightComponent.colour",NewName="LightComponent.color")
++ClassRedirects=(OldName="PointLight",NewName="LightComponent")
++StructRedirects=(OldName="FOldStats",NewName="FStats")
++EnumRedirects=(OldName="LightType",ValueChanges=(("Omni","Point"),("Sun","Directional")))
++PackageRedirects=(OldName="Content/Old.tex",NewName="Content/New.tex")
+```
+
+The editor writes the `+PackageRedirects` lines for asset renames and leaves your other lines and their comments as they were. When no entries are left, the editor removes the file instead of committing an empty one.
+
+The editor loads the file when a project opens, the cook passes it to the dependency collector, and the packaged game reads it at startup. A missing file is not an error. An older project's `Config/Redirects.mdf` is still read and is converted to the INI the first time the editor writes to it.
+
+### Register redirects in code
+
+Engine renames belong next to the code that caused them. Register them at startup:
+
+```cpp wrap title="Register a rename"
+#include "Reflection/FieldRedirects.h"
+
+Mowo::FFieldRedirects::RegisterProperty("LightComponent", "colour", "color");
+Mowo::FFieldRedirects::RegisterType("PointLight", "LightComponent");
+Mowo::FFieldRedirects::RegisterEnumValue("LightType", "Omni", "Point");
+```
+
+Property chains are followed on lookup, so a field renamed twice still finds its oldest spelling.
+
+<Callout type="tip">
+Add the redirect in the same change as the rename. A redirect handles a new name. It does not convert units or split one field into two.
+</Callout>
+
+## Related
+
+- [Sidecars and UUIDs](/docs/content-pipeline/sidecars-and-uuids/) explains the references that do not need redirects.
+- API: [AssetRegistry](/docs/api/assetsystem/assetregistry/), [FAssetRedirectFixup](/docs/api/assetsystem/fassetredirectfixup/), [FFieldRedirects](/docs/api/reflection/ffieldredirects/).

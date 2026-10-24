@@ -1,0 +1,64 @@
+---
+title: Virtual texturing
+description: How feedback-driven page streaming works, the terrain runtime virtual texture, and cooked virtual-texture tile files.
+order: 16
+status: in-development
+sources:
+  - Engine/Source/Runtime/Renderer/Public/Renderer/VirtualTexture.h
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererVirtualTexture.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererTerrain.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/TextureImportSidecar.cpp
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/TextureViewerPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+  - Engine/Shaders/Private/GBuffer/VirtualTextureSurface.hlsl
+  - Engine/Shaders/Public/VirtualTexture.hlsli
+verifiedAt: 08e26df3d
+---
+
+Virtual texturing streams texture **pages** on demand instead of keeping a whole large texture resident. Today it drives two things: the terrain's runtime virtual texture, which is on from High up, and a virtual-textured ground surface that streams pages from a cooked tile file. General materials cannot mark a texture slot as virtual yet.
+
+## How it works
+
+<Flow steps={["Surface samples the page table", "Feedback records wanted pages", "Host reads feedback a few frames later", "Missing pages stream in, a budget per frame", "Least recently used slot is evicted when full"]} caption="The virtual texturing loop." />
+
+A GPU page table maps every virtual page to a slot in a fixed physical atlas. Each page is 128 texels with a border ring, so filtering never bleeds between neighbours. While a surface samples the texture, it also writes the page it wanted into a feedback buffer. The renderer reads that feedback back after the frames in flight have finished, decodes the unique pages, and streams the missing ones a few per frame, evicting the least recently used slot when the atlas is full. Near surfaces ask for detailed pages and far ones for coarse mips, so the resident set follows the view.
+
+The resources are allocated on first use, so the feature costs no memory while it is off.
+
+## Terrain runtime virtual texture
+
+From High up, terrain bakes its layer blend into virtual-texture pages and samples the composite per pixel, instead of blending every layer at every pixel (`r.Terrain.RVT`, -1 tier, 0 off, 1 on).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `r.Terrain.RVT` | tier (High and up) | Use the runtime virtual texture for terrain |
+| `r.Terrain.RVTVirtualPages` | 64 | Virtual size in pages per axis (64 pages is 8192 texels across the terrain). Applies to caches created after the change. |
+
+## Streamed tile files <Status />
+
+A texture can be cooked into a **virtual-texture tile file** (`.mvtiles`) that holds every page of every mip, BC7-compressed:
+
+<Steps>
+<Step title="Turn on Virtual Texture Tiles">
+Open the texture in the Texture Viewer and turn on **Virtual Texture Tiles** in its import settings.
+</Step>
+<Step title="Cook">
+The next cook writes `<texture>.mvtiles` next to the cooked texture.
+</Step>
+<Step title="Point the surface at it">
+Set **Virtual Texture Source** on **Project Settings > Engine > Textures** (`r.VirtualTexture.Source`) to the file's path, and turn on `r.VirtualTexture 1`.
+</Step>
+</Steps>
+
+The virtual-textured ground surface then streams pages straight from the file into a BC7 atlas, a quarter of the memory of an uncompressed atlas, with no CPU decode. A file that does not open falls back to procedural test pages with a warning.
+
+<Callout type="warning">
+The ground surface is a single large plane at height 0, used to exercise the streaming loop end to end. Reading a page is synchronous inside the per-frame budget, and only that one surface samples through it. Use the terrain runtime virtual texture for production terrain.
+</Callout>
+
+## API reference
+
+- [Renderer module](/docs/api/renderer/): the virtual texture page cache types in `Renderer/VirtualTexture.h`
+- [Console variables](/docs/reference/console-variables/): `r.VirtualTexture`, `r.VirtualTexture.Source`, `r.Terrain.RVT`

@@ -1,0 +1,111 @@
+---
+title: Loading assets
+description: How game code loads assets at runtime - the asset manager, hard and soft references, two-phase loading, upload budgets and memory eviction.
+order: 12
+sources:
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetManager.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/RuntimeAssetManager.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetHandle.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Asset.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetRegistry.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetUploadBudget.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/SoftAssetResolvers.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/PrimaryAssetManager.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/DataTableAsset.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/DataAsset.h
+  - Engine/Source/Runtime/Core/Public/Core/TObjectPtr.h
+verifiedAt: 08e26df3d
+---
+
+The asset system loads, caches and tracks every asset a game uses: levels, prefabs, materials, meshes, textures, audio, UI and data. Assets are identified by id and addressed by project-relative path, they load in two phases (CPU, then GPU), and the asset manager evicts what nothing uses when memory runs short.
+
+## The asset manager
+
+`AssetManager` <Source symbol="AssetManager" /> is the front door. `AssetManager::Get()` returns the active one: an editor manager in the editor, a runtime manager in a game.
+
+| Concern | Calls |
+|---|---|
+| Get a loaded or loadable asset | `GetAsset<T>(id)`, `GetAssetByPath<T>(path)` |
+| Start a load without blocking | `RequestAssetAsync(path)`: returns the asset if it is resident, otherwise starts an off-thread load; poll again |
+| Resolve a handle | `ResolveHandle(handle)` |
+| Memory | `SetMemoryBudget`, `PinAsset`, `UnloadAsset`, `IsAssetLoaded` |
+| Ids and paths | `GetRegistry()` returns the `AssetRegistry` <Source symbol="AssetRegistry" />, which maps ids to paths, follows [redirects](/docs/content-pipeline/redirectors/) and holds the dependency graph |
+
+Assets are reference counted (`Ref<T>`), not garbage-collected objects. Hold the `Ref` for as long as you use an asset.
+
+<Callout type="warning">
+Never cache a raw `Material*` or mesh pointer taken from an asset. A reimport or hot reload rebuilds the asset's internals in place, and the raw pointer then points at freed memory. Keep the `Ref` and read through it.
+</Callout>
+
+## References in components
+
+A component or property refers to an asset in one of two ways:
+
+- **Hard references** (`AssetHandle<T>` <Source symbol="AssetHandle" />): an id that resolves to a loaded asset. A handle is empty, pending (it has an id but the asset is not resolved yet) or ready.
+- **Soft references** (`TSoftObjectPtr<T>` <Source symbol="TSoftObjectPtr" />): a path that loads only when you ask, with `LoadSynchronous()` or `LoadAsync(callback)`. Use them for assets that may not be needed, such as a weapon's alternate skin.
+
+```cpp title="AssetLoading.cpp"
+#include "AssetSystem/AssetManager.h"
+#include "AssetSystem/Assets/DataTableAsset.h"
+#include "AssetSystem/Assets/TextureAsset.h"
+#include "Core/TObjectPtr.h"
+
+#include <string>
+
+static Mowo::Ref<Mowo::TextureAsset> LoadIcon() {
+	return Mowo::AssetManager::Get().GetAssetByPath<Mowo::TextureAsset>("Content/UI/T_Icon.tex");
+}
+
+static Mowo::DataTableAsset* LoadLootTable(Mowo::TSoftObjectPtr<Mowo::DataTableAsset>& table) {
+	return table.LoadSynchronous();
+}
+
+static void PrefetchLootTable(Mowo::TSoftObjectPtr<Mowo::DataTableAsset>& table) {
+	table.LoadAsync([](Mowo::Ref<Mowo::DataTableAsset> loaded) {
+		if (!loaded) {
+			return;
+		}
+	});
+}
+```
+
+A soft reference returns null when its path is empty, when no resolver is installed for the type (a headless tool that never started the asset module), or when the load fails.
+
+## Two-phase loading
+
+Every asset loads in two phases <Source symbol="Asset" />:
+
+1. **`Load()`** reads and decodes the CPU-side data. It runs on worker threads and creates no GPU objects. For a mesh this is the heavy part: decoding, LODs, meshlets and texture payloads.
+2. **`CreateGPU()`** creates GPU resources on the main thread. The asset manager drains these uploads in `Update()`, a limited number per frame, so a burst of loads finishing together does not hitch one frame.
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `asset.UploadsPerFrame` | `8` | GPU uploads drained per frame. `0` or less is unbounded. |
+| `asset.UploadMBPerFrame` | `32` | Megabytes of GPU uploads per frame. The first upload of a frame always goes, so an asset larger than the budget is never starved. |
+
+A level loaded in a packaged game loads its assets in parallel and waits for all of them once.
+
+## Memory and eviction
+
+The manager keeps resident assets under a memory budget <Source symbol="AssetManager::SetMemoryBudget" />. Over budget, it unloads the least recently used assets that are not pinned and that nothing else references. `asset.MemoryBudgetMB` sets the budget; `0` keeps the current one (4 GB out of the box). The editor and the game set it at startup from the GPU's dedicated memory unless config or the command line set it. `PinAsset(id, true)` keeps an asset resident whatever the budget.
+
+In the editor, closing a level or an asset editor releases the assets no open document still uses, a few frames later. This never happens during Play.
+
+## Data tables and data assets
+
+Two asset types hold data-driven gameplay values as reflected structs, so adding a field to the struct needs no asset-system change:
+
+- **`DataTableAsset`** (`.datatable`) <Source symbol="DataTableAsset" />: named rows of one struct type, looked up with `FindRow<T>(name)`, which returns null on a type mismatch. Tables can be imported from CSV: the first column is the row name and the other headers name the fields.
+- **`DataAsset`** (`.data`) <Source symbol="DataAsset" />: a single struct instance as an asset.
+
+Reference either with a `TSoftObjectPtr` and load it when needed.
+
+## Primary assets
+
+The Asset Manager's primary asset rules in `DefaultGame.ini` name the roots a game loads by id rather than path (`Map:Rooftop`), with their chunk, cook rule and named **bundles** of assets that load alongside them, such as a level's UI <Source symbol="FPrimaryAssetManager" />. `FPrimaryAssetManager::LoadPrimaryAsset` loads a primary asset and the bundles you name through the runtime asset manager. The rules also drive the cook; see [Cooking](/docs/content-pipeline/cooking/#cook-rules).
+
+## Related
+
+- [Asset formats](/docs/content-pipeline/asset-formats/) for what a package holds.
+- [Archives](/docs/content-pipeline/archives/) for where a packaged game reads assets from.
+- API: [`AssetManager`](/docs/api/assetsystem/assetmanager/), [`AssetRegistry`](/docs/api/assetsystem/assetregistry/), [`AssetHandle`](/docs/api/assetsystem/assethandle/), [`TSoftObjectPtr`](/docs/api/core/tsoftobjectptr/).

@@ -1,0 +1,68 @@
+---
+title: Accessibility for players
+sidebarTitle: Accessibility
+description: On-device auto-subtitles, captions, color-vision correction, camera shake and rumble scaling, and the other accessibility options a game gets for free.
+order: 28
+sources:
+  - Engine/Source/Runtime/Accessibility/Public/Accessibility/AutoSubtitleSystem.h
+  - Engine/Source/Runtime/Accessibility/Public/Accessibility/AccessibilityAPI.h
+  - Engine/Source/Runtime/ML/Public/ML/SpeechRecognizer.h
+  - Engine/Source/Runtime/ML/Public/ML/MLModels.h
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/AutoSubtitlesShipping.cs
+  - Engine/Source/Runtime/Narrative/Public/Narrative/SubtitleSystem.h
+  - Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp
+  - Engine/Source/Runtime/Input/Private/InputActionSystem.cpp
+  - Engine/Source/Runtime/Audio/Public/Audio/MAudioStatics.h
+verifiedAt: 08e26df3d
+---
+
+Every accessibility option below is a console variable that an engine system reads, so a game gets it without extra wiring. The project sets defaults in **Project Settings › Engine › Accessibility**, and each player picks their own on the shipped settings screen, described in [UI](/docs/ui/).
+
+## Options
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `audio.Subtitles` | 1 | Subtitles for spoken dialogue and captioned voice cues |
+| `audio.ClosedCaptions` | 0 | Also show non-speech sounds such as `[door creaks]` |
+| `audio.SubtitleScale`, `audio.SubtitleMaxLines`, `audio.SubtitleSpeakerNames`, `audio.SubtitleBackgroundOpacity` | | Subtitle size, line count, speaker names and backing plate |
+| `audio.AutoSubtitles` | 0 | Subtitle speech nobody captioned, below |
+| `r.ColorBlind.Mode`, `r.ColorBlind.Strength` | 0, 1 | Color-vision correction for protanopia, deuteranopia or tritanopia |
+| `cam.ShakeScale` | 1 | Scales every camera shake; 0 keeps the camera still |
+| `cam.FOV` | 0 | The player's field of view for the gameplay camera; 0 keeps each camera's own |
+| `i.RumbleScale` | 1 | Scales every gamepad rumble and trigger haptic; 0 turns them off |
+| `i.HoldToToggle` | 0 | Hold actions marked to allow it latch on the first press and release on the next |
+| `ui.HighContrast`, `ui.ReducedMotion` | 0, 0 | High-contrast UI theme and fewer decorative transitions |
+
+<Source path="Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp" /> <Source path="Engine/Source/Runtime/Input/Private/InputActionSystem.cpp" />
+
+Players also rebind every action; see [Input](/docs/gameplay/input/).
+
+## Captions in your content
+
+Subtitles are only as good as the captions in your content. Give voice and important sound cues a caption (key, text, duration, and whether it is speech) in the Sound Cue editor, and dialogue lines show automatically. See [Quests, dialogue and subtitles](/docs/gameplay/narrative/). <Source symbol="FSubtitleSystem" />
+
+For players who cannot hear where a sound comes from, `MAudioStatics::GetAudibleSoundCount`, `GetAudibleSoundAzimuth` and `GetAudibleSoundCaption` list what is audible and from which direction, so your HUD can show a sound compass or directional captions. <Source symbol="MAudioStatics" />
+
+## Auto-subtitles
+
+With `audio.AutoSubtitles` on, speech that nobody captioned, such as other players on proximity voice and radio, is transcribed on the player's machine and shown as subtitles under the speaker's name. Nothing is sent anywhere and audio is kept only until its line is out. <Source symbol="FAutoSubtitleSystem" />
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `audio.AutoSubtitles.Voice` | 1 | Caption other players' voice chat |
+| `audio.AutoSubtitles.MinConfidence` | 0.55 | Hide lines the recognizer is less sure of |
+| `audio.AutoSubtitles.PauseSeconds` | 0.45 | A pause this long ends a line |
+
+To caption another audio stream, push its samples with `FAutoSubtitleSystem::PushAudio(source, speaker, samples, count, sampleRate)`.
+
+The recognizer runs a speech model through ONNX Runtime. <Source symbol="FSpeechRecognizer" /> Shipping it adds about 110 MB to a package, so it is a project option: turn on **Ship Auto Subtitles** in Project Settings › Accessibility (`audio.AutoSubtitles.Available`), and `mbt package` includes the module, ONNX Runtime and the model. Without it the package carries none of it. <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/AutoSubtitlesShipping.cs" />
+
+## Check your game
+
+`r.ColorBlind.Simulate` shows the frame as a viewer with a color-vision deficiency sees it, after any correction. Use it while designing to check that nothing important relies on color alone.
+
+## Related
+
+- [UI](/docs/ui/) for the settings and rebinding screens
+- [Console variables](/docs/reference/console-variables/)
+- API: [Accessibility module](/docs/api/accessibility/)

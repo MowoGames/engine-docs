@@ -1,0 +1,210 @@
+---
+title: RPCs and events
+description: Send one-off actions between client and host with directional MFUNCTION RPCs and session gameplay events, behind a default-deny authority gate.
+order: 3
+sources:
+  - Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
+  - Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/RpcDispatcher.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/FNetSession.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/NetEventCodec.h
+  - Engine/Source/Runtime/Networking/Private/NetSession.cpp
+  - Engine/Source/Developer/MowoSandbox/Public/Sandbox/NetShooterComponent.h
+  - Engine/Source/Developer/MowoSandbox/Private/SandboxNetGame.cpp
+  - Engine/Source/Runtime/Game/Public/Game/ALoomActor.h
+verifiedAt: 1a346c1c5
+---
+
+Replication keeps state in sync. RPCs and events carry the other kind of traffic: "this happened". A client asks the host to fire, the host checks the request, and the host tells every peer. RPCs and gameplay events ride the same packet type, so they share one authority gate and one set of rate limits.
+
+## Declare an RPC
+
+An RPC is a reflected `MFUNCTION` on a component, with a direction keyword <Source path="Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h" />:
+
+| Annotation | Direction | Typical use |
+|---|---|---|
+| `MFUNCTION(Server)` | Client to host | A request from the owning client |
+| `MFUNCTION(Client)` | Host to the owning client | A private reply |
+| `MFUNCTION(Multicast)` | Host to every peer | An effect everyone must see |
+| add `Reliable` | Uses the reliable channel | Anything that must arrive |
+
+```cpp title="NetShooterComponent.h"
+#pragma once
+
+#include "Core/Platform.h"
+#include "ECS/Component.h"
+#include "Math/Vec3.h"
+#include "Reflection/Reflect.h"
+
+#include <cstdint>
+
+namespace Mowo {
+
+struct MOWO_REFLECTED_NAMED("NetShooter") MCATEGORY("Networking") NetShooterComponent {
+	MOWO_COMPONENT(NetShooterComponent)
+
+	MOWO_KEY("shots_fired") MOWO_DISPLAY("Shots Fired")
+	MREPLICATED uint32_t shotsFired = 0;
+
+	MFUNCTION(Server) void ServerFire(Vec3 origin, Vec3 direction) {
+		(void)origin;
+		(void)direction;
+	}
+
+	MFUNCTION(Multicast, Reliable) void MulticastFire(Vec3 origin, Vec3 direction) {
+		++shotsFired;
+	}
+};
+
+}
+```
+
+This is the shape of the engine's own sandbox example <Source symbol="NetShooterComponent" />. Arguments must be marshallable: `bool`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `float`, `double`, `Vec2`, `Vec3`, `Vec4`, `Quat` and `std::string`. RPC methods return `void`. Object and custom parameter types make a method unusable as an RPC <Source symbol="FRpcDispatcher" />.
+
+## What the annotation does for you
+
+- **It installs the authority policy.** `InstallAnnotatedRpcPolicies` walks every reflected component and allows each `Server` method for its owner only. `Client` and `Multicast` methods stay denied from clients <Source symbol="ReplicationManager::InstallAnnotatedRpcPolicies" />. It runs when the manager initializes; call it again after a game module that adds RPC components has loaded.
+- **It rejects the wrong direction.** Sending a `Multicast` method to the server, or a `Server` method to clients, is refused on both the sending and receiving side.
+
+## Send an RPC
+
+`FRpcDispatcher` serializes the arguments from reflection, and `ReplicationManager` sends them. The wire names a component and a method index, so a grant opens exactly one method.
+
+```cpp title="FireRequest.cpp"
+#include "Core/Platform.h"
+#include "Networking/Components/NetworkObjectComponent.h"
+#include "ECS/World.h"
+#include "Math/Vec3.h"
+#include "Networking/Replication/ReplicationManager.h"
+#include "Networking/Replication/RpcDispatcher.h"
+#include "Reflection/ReflectionRegistry.h"
+#include "Reflection/TypeDescriptor.h"
+
+#include <cstdint>
+#include <vector>
+
+static bool RequestFire(Mowo::World& world, Mowo::EntityID entity, const Mowo::Vec3& origin, const Mowo::Vec3& direction) {
+	Mowo::ReplicationManager* replication = world.GetSystem<Mowo::ReplicationManager>();
+	Mowo::NetworkObjectComponent* netObject = world.GetComponent<Mowo::NetworkObjectComponent>(entity);
+	const Mowo::TypeDescriptor* desc = Mowo::ReflectionRegistry::Get().FindByDisplayName("NetShooter");
+
+	if (!replication || !netObject || !desc) {
+		return false;
+	}
+
+	const int index = Mowo::FRpcDispatcher::FindFunctionIndex(*desc, "ServerFire");
+
+	if (index < 0) {
+		return false;
+	}
+
+	Mowo::Vec3 o = origin;
+	Mowo::Vec3 d = direction;
+	void* args[] = { &o, &d };
+	std::vector<uint8_t> payload;
+
+	if (!Mowo::FRpcDispatcher::BuildArgsPayload(*desc, static_cast<uint16_t>(index), args, payload)) {
+		return false;
+	}
+
+	return replication->SendRpcToServer(netObject->networkId, static_cast<uint16_t>(desc->componentId), static_cast<uint16_t>(index), payload.data(), payload.size());
+}
+```
+
+The host uses `SendRpcToAllClients` or `SendRpcToClient` for the other directions. On the receiving side, `FRpcDispatcher::DispatchComponentRpcByIndex` resolves the component on the target entity and invokes the method.
+
+<Callout type="engine">
+While a session is running, `FNetSession` owns the RPC receiver. For component RPCs it looks up the entity and calls `DispatchComponentRpcByIndex` itself, then runs any fallback you installed with `SetRpcFallback` <Source path="Engine/Source/Runtime/Networking/Private/NetSession.cpp" />. You do not need to install a receiver of your own; the sandbox uses the fallback to turn a received `ServerFire` into a `MulticastFire` <Source path="Engine/Source/Developer/MowoSandbox/Private/SandboxNetGame.cpp" />.
+</Callout>
+
+## The authority gate
+
+Client-to-server RPCs are **denied by default**. Each one clears these checks in order before it reaches your code <Source path="Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp" />:
+
+<Flow steps={["Known peer", "Direction allowed", "Method allow-listed", "Within rate limit", "Owner check", "Invoke"]} highlight={4} caption="A client RPC that fails any check is dropped and counted in GetRpcSecurityStats()." />
+
+1. The sender is a registered peer.
+2. The method's direction allows client to server.
+3. The component and method index pair is allow-listed.
+4. The peer is within its token bucket (`net.rpc_rate_limit`, 32 per second by default).
+5. For `OwnerOnly`, the target object exists and its `ownerPeerId` matches the sender.
+
+Server-to-client RPCs are not policed; the host is the trust root.
+
+To grant a method by hand, or widen one:
+
+| Call | Effect |
+|---|---|
+| `AllowClientRpc(componentId, methodIndex, OwnerOnly)` | The owner may call this one method. The default for `Server` methods. |
+| `AllowClientRpc(componentId, methodIndex, AnyClient)` | Any peer may call it. Use for global verbs like chat or ready-up, and validate the payload. |
+| `AllowClientRpcComponent(componentId, authority)` | Every method on the component. Logged, and overridden by per-method grants. |
+| `DenyClientRpc(componentId, methodIndex)` | Retract a grant. |
+
+The enum is `ReplicationManager::ENetRpcAuthority` with `Denied`, `OwnerOnly` and `AnyClient` <Source symbol="ReplicationManager::ENetRpcAuthority" />.
+
+### High-rate methods
+
+The default bucket suits actions a player triggers by hand. A continuously swept sensor or a held trigger needs more. Register such a method with `AllowClientRpcHighRate` or `SetRpcChannelClass(..., HighRate)`. It then uses a separate bucket (`net.rpc_rate_limit_high`, 200 per second) and defaults to the unreliable channel. A wider bucket is not a wider grant: owner checks still apply <Source symbol="ReplicationManager::AllowClientRpcHighRate" />.
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `net.rpc_rate_limit` | `32` | Client RPCs accepted per peer per second |
+| `net.rpc_rate_limit_high` | `200` | The same, for `HighRate` methods |
+| `net.input_rate_limit` | `120` | Client input packets accepted per peer per second |
+
+## Gameplay events
+
+Events are a lighter layer on the same packet for actions that are not tied to a component method. You pick a 16-bit id at or above `0x8000`; ids from `0xFF00` up are reserved for the join protocol <Source symbol="FNetSessionEventIds" />. Payloads use `FNetEventWriter` and `FNetEventReader`, which bounds-check every read and latch a failure flag.
+
+```cpp title="DoorEvents.cpp"
+#include "Networking/Session/FNetSession.h"
+#include "Networking/Session/NetEventCodec.h"
+
+#include <cstdint>
+
+static constexpr uint16_t kDoorOpened = 0x8010;
+
+static void OpenDoorLocally(uint32_t doorId) {
+	(void)doorId;
+}
+
+static void InstallDoorEvents(Mowo::FNetSession& session) {
+	session.RegisterEventHandler(kDoorOpened, [](uint32_t senderPlayerId, Mowo::FNetEventReader& reader) {
+		uint32_t doorId = 0;
+		reader.ReadU32(doorId);
+
+		if (reader.IsValid()) {
+			OpenDoorLocally(doorId);
+		}
+	});
+
+	session.AllowClientEvent(kDoorOpened, true);
+}
+
+static void ReportDoorOpened(Mowo::FNetSession& session, uint32_t doorId) {
+	Mowo::FNetEventWriter writer;
+	writer.WriteU32(doorId);
+
+	session.BroadcastEvent(kDoorOpened, writer);
+}
+```
+
+- `BroadcastEvent` works from either role. On the host it runs the handler locally and sends the event to every client. On a client it asks the host, which checks and relays it, so every peer runs the event once <Source symbol="FNetSession::BroadcastEvent" />.
+- `SendEventToServer`, `SendEventToAllClients` and `SendEventToPlayer` exist when you need a specific direction.
+- Client events are refused until `AllowClientEvent` is called. With `ownerOnly` (the default), the sender must own the pawn the event is stamped with. Pass `ENetEventRate::HighRate` as the third argument for an event a client sends continuously; it then draws on the high-rate bucket. `DenyClientEvent` retracts the grant.
+
+<Callout type="tip">
+`LeaveSession` clears every handler and client event policy you installed, because they usually live in a hot-reloadable game module. Install them each time you start a session, not once per process <Source symbol="FNetSession::ClearGameCallbacks" />.
+</Callout>
+
+## RPCs from Loom graphs
+
+Actor functions can carry the same annotations. When a Loom graph calls an `MFUNCTION(Server, Reliable)` or a `Multicast` function on an actor, the call is routed through the session to where it should run instead of executing locally <Source symbol="ALoomActor" />.
+
+## Related
+
+- [Replication](/docs/multiplayer/replication/) for continuous state.
+- [How-to: a replicated actor](/docs/multiplayer/how-to-replicated-actor/) for a Server RPC wired end to end.
+- API: [`FRpcDispatcher`](/docs/api/networking/frpcdispatcher/), [`ReplicationManager`](/docs/api/networking/replicationmanager/), [`FNetSession`](/docs/api/networking/fnetsession/), [`FNetEventWriter`](/docs/api/networking/fneteventwriter/), [`FNetEventReader`](/docs/api/networking/fneteventreader/).

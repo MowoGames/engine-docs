@@ -1,0 +1,104 @@
+---
+title: Rendering
+description: How Mowo draws a frame. A deferred renderer on one RHI with four backends, real-time Global Illumination and five quality tiers.
+order: 3
+icon: Sun
+sources:
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/SceneRenderer.h
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRenderer.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RHIFactory.h
+  - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
+verifiedAt: 08e26df3d
+---
+
+Mowo renders every scene through one deferred renderer, `SceneRenderer`. It records its passes through an abstract RHI, so the same frame runs on each backend: <Fact id="rhiBackends" />. A quality tier decides which features run, and every feature has a console variable that can override the tier.
+
+This section explains how a frame is built, how to choose a backend and a tier, and how lights, shadows, Global Illumination, ray tracing, upscaling, materials and post-processing fit together.
+
+## The layers
+
+Rendering code is split into layers. You mostly work with the top one.
+
+| Layer | Module | What it owns |
+|---|---|---|
+| Scene components | SceneTypes, Game | Lights, sky, reflection captures, mesh, splat and volume components and their actors |
+| Scene renderer | SceneRenderer | The deferred pipeline, Global Illumination, shadows, post-processing, quality tiers (<Source symbol="SceneRenderer" />) |
+| Renderer data | Renderer | Materials, meshes, light structs and per-frame data (`RenderFrameData`, `ScenePostProcess`) |
+| RHI | RHI plus `D3D12RHI`, `VulkanRHI`, `MetalRHI`, `D3D11RHI` | The abstract GPU API, the render graph, upscaler and frame-generation interfaces. The RHI module holds no backend code. |
+
+<Callout type="engine">
+Each backend registers a factory when its module loads, and the abstract `Create()` calls dispatch through it. Capability gating has two axes: <Source symbol="FRHIApiCeiling" /> says what an API can ever do, and the live `RendererCapabilities` say what this device can do now. The editor hides a control the API can never support and greys one the device lacks.
+</Callout>
+
+## How a frame is drawn, in short
+
+Opaque geometry writes a G-Buffer first, and lighting runs once per pixel over it. Translucent surfaces are drawn forward afterward, and post-processing finishes the frame.
+
+<Flow steps={["Shadows", "G-Buffer", "Velocity", "AO", "Lighting", "GI", "Sky", "Reflections", "Fog", "Translucency", "Post", "Upscale", "Tonemap", "Overlays"]} highlight={[4, 5]} caption="A simplified view of the pass order. The full order is on the Frame pipeline page." />
+
+Read [Frame pipeline](/docs/rendering/frame-pipeline/) for every stage in order.
+
+## What you get at each tier
+
+There are five tiers: Low, Medium, High, Epic and Cinematic (<Source symbol="EQualityPreset" />). High is the code default; when you do not pick one, the engine picks a tier for the machine at launch.
+
+| Tier | What it adds |
+|---|---|
+| Low | Clustered lighting, 2-cascade sun shadows, 0.75 render scale. No live Global Illumination (a baked field if present), no SSR, no GTAO. |
+| Medium | Global Illumination with world probes, SSR, GTAO, bloom, motion blur, subsurface scattering, SDF far sun shadows. |
+| High | The screen-probe gather, 4 cascades, soft shadows, a depth prepass, translucent reflections, the terrain virtual texture. |
+| Epic | Virtual shadow maps for sun and local lights, MegaLights, ray-traced reflections and AO, the ray-traced GI gather, volumetric fog and clouds, the meshlet G-Buffer. |
+| Cinematic | Ray-traced sun shadows, larger budgets everywhere, no small-object or occlusion culling, native resolution. |
+
+The rows come from <Source path="Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp" />. Ray-traced features need a GPU and backend with ray query; without one they fall back to their raster or screen-space versions each frame.
+
+<Callout type="note">
+The editor viewport always renders at native resolution with a temporal AA resolve, whatever the tier's upscaler says, so you never judge reconstructed pixels. The shipped game keeps the tier's upscaling.
+</Callout>
+
+<Screenshot id="rendering-overview-tier-comparison" alt="Four side-by-side captures of the same sunlit interior scene from the Sample project at identical camera positions, rendered at the Low, Medium, High and Epic tiers selected from Edit > Engine Quality, each labeled with its tier name in the top-left corner" caption="The same view at four quality tiers." />
+
+## Backends at a glance
+
+| Platform | Default | Also available |
+|---|---|---|
+| Windows x64 | Direct3D 12 | Vulkan (selectable), Direct3D 11 (automatic fallback only) |
+| macOS on Apple silicon | Metal | None |
+| Linux x64 | Vulkan <Status /> | None |
+
+See [Backends](/docs/rendering/backends/) for how to switch and what each API supports.
+
+## Pages in this section
+
+<CardGrid>
+  <Card title="Frame pipeline" href="/docs/rendering/frame-pipeline/" icon="Workflow">Every pass in order, and what it does.</Card>
+  <Card title="Backends" href="/docs/rendering/backends/" icon="Layers">Pick D3D12, Vulkan, Metal or D3D11, and see what each API can do.</Card>
+  <Card title="RHI programming" href="/docs/rendering/rhi/" icon="Braces">Resources, pipelines, the render graph and async compute.</Card>
+  <Card title="Quality tiers" href="/docs/rendering/quality-tiers/" icon="LayoutDashboard">The five tiers, the auto-tier, scalability groups and Scalability.ini.</Card>
+  <Card title="Display and HDR" href="/docs/rendering/display-and-hdr/" icon="PanelsTopLeft">Window modes, VSync, frame-rate cap and HDR output.</Card>
+  <Card title="Lights" href="/docs/rendering/lights/" icon="Sun">Light types, physical units, area lights, light functions and channels.</Card>
+  <Card title="Shadows" href="/docs/rendering/shadows/" icon="Layers">Cascades, local shadows, virtual shadow maps, soft shadows and MegaLights.</Card>
+  <Card title="Global Illumination" href="/docs/rendering/global-illumination/" icon="Sun">Real-time indirect light and the baked fallback.</Card>
+  <Card title="Sky, fog and reflections" href="/docs/rendering/sky-and-reflections/" icon="Sun">Sky light, atmosphere, clouds, fog, VDB volumes and reflection captures.</Card>
+  <Card title="Ray tracing" href="/docs/rendering/ray-tracing/" icon="Boxes">Ray-traced reflections, AO and shadows, and the path tracer.</Card>
+  <Card title="Upscaling and anti-aliasing" href="/docs/rendering/upscaling-and-anti-aliasing/" icon="Layers">TAA, TSR, FSR, DLSS, XeSS, MetalFX, frame generation and low latency.</Card>
+  <Card title="Post-processing and volumes" href="/docs/rendering/post-processing-and-volumes/" icon="PanelsTopLeft">Tonemapping, exposure, bloom, grading and blend volumes.</Card>
+  <Card title="Materials" href="/docs/rendering/materials/" icon="Braces">The material graph, domains, shading models and Substrate.</Card>
+  <Card title="Shaders" href="/docs/rendering/shaders/" icon="FileText">One HLSL source for four targets, virtual paths and hot reload.</Card>
+  <Card title="Virtual texturing" href="/docs/rendering/virtual-texturing/" icon="Layers">Page streaming and the terrain virtual texture.</Card>
+  <Card title="Gaussian splats" href="/docs/rendering/gaussian-splats/" icon="Boxes">Captured splat scenes as level assets.</Card>
+  <Card title="Extend the renderer" href="/docs/rendering/extending-the-renderer/" icon="Workflow">Add your own passes at fixed points of the frame.</Card>
+  <Card title="Debug views" href="/docs/rendering/debug-views/" icon="FlaskConical">View modes, debug drawing, GPU timings and captures.</Card>
+  <Card title="Known limitations" href="/docs/rendering/known-limitations/" icon="FlaskConical">What the renderer does not do yet.</Card>
+</CardGrid>
+
+## API reference
+
+- [SceneRenderer module](/docs/api/scenerenderer/): `SceneRenderer`, `EQualityPreset`, `FQualityAutoTier`, `FRenderPassExtensions`
+- [Renderer module](/docs/api/renderer/): `Material`, `ScenePostProcess`, `RenderFrameData`
+- [RHI module](/docs/api/rhi/): `RendererAPI`, `FRHIApiCeiling`, `IUpscaler`, `RenderGraph`
+- [Volumes module](/docs/api/volumes/): `VolumeManager`, `VolumeProfile`
+- [Console variables](/docs/reference/console-variables/)

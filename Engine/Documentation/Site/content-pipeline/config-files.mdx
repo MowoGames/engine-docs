@@ -1,0 +1,91 @@
+---
+title: Config files
+description: Mowo's INI config files in Unreal's dialect - the layer hierarchy, array operators, console variables, class config sections, and which file holds what.
+order: 5
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/ConfigIni.h
+  - Engine/Source/Runtime/Core/Private/ConfigIni.cpp
+  - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Runtime/Core/Private/GameplayTagContainer.cpp
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/TextureImportSidecar.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetRegistry.h
+verifiedAt: 08e26df3d
+---
+
+Project and engine configuration is INI, in the dialect Unreal developers know: sections, `Key=Value` lines, array operators and layered files where a project overrides the engine and a user overrides the project <Source symbol="FConfigIniFile" />. Game data is [MDF](/docs/content-pipeline/mdf/); the `.mproject` and `.mplugin` manifests are JSON; per-user editor state nobody edits by hand is binary MDF (`.mdfb`).
+
+## Syntax
+
+```ini title="Config/DefaultEngine.ini"
+[ConsoleVariables]
+r.Shadow.Cascades=3
+net.peer_byte_budget=8000
+
+[/Script/MyGame.Turret]
+Range=40.0
+
+[/Script/MyGame.LootTable]
++Items="Content/Items/Medkit.item"
+-Items="Content/Items/Debug.item"
+```
+
+| Line | Effect |
+|---|---|
+| `[Section]` | Starts a section |
+| `Key=Value` | Replaces every value a lower layer gave `Key` |
+| `+Key=Value` | Appends, unless the value is already there |
+| `.Key=Value` | Appends, even when the value is already there |
+| `-Key=Value` | Removes that value |
+| `!Key=` | Clears `Key` |
+
+Values are typed by their spelling: `True` and `False`, integers, floats, `(X=,Y=,Z=)` vectors, and text. A value in quotes is always text, so `"1"` is the string, not the number. Struct values use Unreal's spelling, `(Name="Jump",Type=Button,Keys=("A","B"))`.
+
+## Layers
+
+For a config named `Engine`, the files combine bottom-up, each layer overriding the ones below it <Source symbol="FConfigHierarchy" />:
+
+<Flow steps={["Engine/Config/BaseEngine.ini", "Engine/Config/<Platform>/<Platform>Engine.ini", "Config/DefaultEngine.ini", "Config/<Platform>/<Platform>Engine.ini", "Saved/Config/<Platform>/Engine.ini"]} highlight={2} caption="Engine defaults, the project's committed settings, then the user's own. <Platform> is Win64, Linux or Mac." />
+
+Because the array operators apply per layer, a project that extends an engine list with `+` keeps what the engine put in it. The same scheme applies to `Game`, `Scalability` and `GameplayTags`. The project's legacy `Config/Engine.ini` sits under the hierarchy, so `DefaultEngine.ini` wins over it.
+
+When a project opens, the editor builds the `Engine` and `Game` hierarchies, applies `[ConsoleVariables]` to cvars, applies the `[/Script/...]` sections to class defaults, loads the gameplay tag tree, and applies scalability. Command-line `--cvar=` arguments are applied last and still win.
+
+## Console variables
+
+`[ConsoleVariables]` sets cvars as project settings. A name that is not registered yet (a plugin that loads later) is remembered and applied when it registers, so a plugin that is off does not fail the load. `Scalability.ini` sections named `[<Group>@<Level>]` set the cvars a scalability level adds, for example `[ShadowQuality@3]`. See the [console variable reference](/docs/reference/console-variables/).
+
+## Class config sections
+
+A section named `[/Script/<Module>.<Class>]` sets the `MPROPERTY(Config)` fields of that class's default object <Source symbol="FConfigClassBinder" />. The class name drops its `M` or `A` prefix the way Unreal drops `U` and `A`: a class `MTurret` in module `MyGame` reads `[/Script/MyGame.Turret]`. Supported field types are `bool`, integers, `float`, `double`, `std::string` and `std::vector<std::string>` (from a list). A field without the `Config` flag is never written, whatever the file says. Super-class sections apply first, and `Game` applies after `Engine`, so a subclass section and a `Game` section win.
+
+## Which file holds what
+
+All project config lives in `Config/`, which you commit. Per-user files live in `Saved/Config/`, which you do not.
+
+| File | Holds |
+|---|---|
+| `DefaultEngine.ini`, `Engine.ini` | Engine settings and `[ConsoleVariables]` |
+| `DefaultGame.ini` | Game class config |
+| `DefaultScalability.ini` | Scalability level overrides |
+| `DefaultGameplayTags.ini` | The project's [gameplay tags](/docs/gameplay/) |
+| `Plugins.ini` | Which plugins the project enables (`[enabled]` section) |
+| `Input.ini` | Input actions and bindings |
+| `Redirects.ini` | Asset, property, class, struct and enum [redirects](/docs/content-pipeline/redirectors/) |
+| `Chunks.ini` | How the cooked archive splits into [chunks](/docs/content-pipeline/cooking/#split-the-archive-into-chunks) |
+| `ImportPresets.ini` | Named [import presets](/docs/content-pipeline/importing/#named-presets) |
+| `TextureImport.ini` | Texture name-suffix rules |
+| `Packaging.ini` | Packaging options |
+| `DefaultCrypto.ini` | The project's content encryption and signing keys. Never staged into a package. |
+| `Saved/Config/<Platform>/*.ini` | The user's own overrides |
+| `Saved/Config/Editor/*.mdfb` | Per-user editor state: import preferences, layouts, output log settings |
+
+## Older MDF configs convert on first use
+
+Older projects kept configs as MDF documents (`Engine.mdf`, `Plugins.mdf`, `Input.mdf`, `Redirects.mdf` and others). The engine reaches every config file through one resolver, `FProjectLayout::ResolveConfigFile` <Source symbol="FProjectLayout::ResolveConfigFile" />. When it finds only the old file, it converts it to INI and moves the original to `Saved/MigratedSources/Config/`. It also fixes the case of a misspelled file name, which matters on case-sensitive file systems. The converters are scheduled for removal, so open older projects with a current engine before then.
+
+## Related
+
+- [File types](/docs/content-pipeline/file-types/) for every extension.
+- [MDF](/docs/content-pipeline/mdf/) for game data.
+- API: [`FConfigIniFile`](/docs/api/core/fconfiginifile/), [`FConfigHierarchy`](/docs/api/core/fconfighierarchy/), [`FConfigClassBinder`](/docs/api/core/fconfigclassbinder/).

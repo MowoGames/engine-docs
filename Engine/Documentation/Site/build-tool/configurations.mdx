@@ -1,0 +1,81 @@
+---
+title: Build configurations
+description: What Debug, DebugGame, Development, Release, Test and Shipping change, which definitions they set, and which one to use for each job.
+order: 3
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Targets/TargetDefines.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/ClangClDriver.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/Pgo.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleOptimization.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
+verifiedAt: 6caf55861
+---
+
+A build configuration decides how the code is compiled: optimized or not, with asserts or without, with editor code or stripped for a player. `mbt build` takes it with `-c`, and builds Debug when you pass none <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs" />. `mbt package` defaults to Shipping.
+
+## At a glance
+
+| Configuration | Optimized | Engine asserts | Editor code | Link-time optimization | Live Coding | Typical use |
+|---|---|---|---|---|---|---|
+| Debug | no | yes | yes | no | yes | Stepping through engine code |
+| DebugGame | engine yes, game no | yes | yes | no | yes | Stepping through your gameplay at playable speed |
+| Development | yes | yes | yes | no | yes | Daily editor and game work |
+| Release | yes | no | yes | no | yes | Performance numbers on a build with tools |
+| Test | yes | no | no | ThinLTO | no | Profiling the code a player runs |
+| Shipping | yes | no | no | ThinLTO | no | What players receive |
+
+<Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs" /> defines each property.
+
+## Which one to use
+
+- **Working in the editor:** Development. It is optimized, keeps every engine assert, and its executables carry no configuration suffix (`MowoEditor.exe`).
+- **Debugging engine code:** Debug.
+- **Debugging your game module:** DebugGame. The engine compiles as in Development; the game's own modules compile unoptimized, so you can step through gameplay without running the renderer at debug speed. A module can opt in or out with `OptimizeCode` in its rules <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleOptimization.cs" />.
+- **Measuring performance with tools:** Release.
+- **Measuring the shipped code:** Test. It is the Shipping binary, with the log, the console's stat commands and GPU timers left on.
+- **Shipping:** Shipping, through `mbt package`.
+
+The editor target builds in Debug, DebugGame, Development and Release only; it is refused in Test and Shipping.
+
+## Definitions every module sees
+
+On top of a target's own definitions, every module of a build gets <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Targets/TargetDefines.cs" />:
+
+| Configuration | Definitions |
+|---|---|
+| Shipping | `MOWO_SHIPPING=1`, `WITH_EDITOR=0`, `MOWO_OPTIMIZED=1` |
+| Test | `MOWO_SHIPPING=1`, `WITH_EDITOR=0`, `MOWO_TEST_BUILD=1`, `MOWO_OPTIMIZED=1` |
+| Release | `WITH_EDITOR=1`, `MOWO_OPTIMIZED=1` |
+| Development | `WITH_EDITOR=1`, `MOWO_WITH_ASSERTS=1`, `MOWO_OPTIMIZED=1` |
+| DebugGame | `WITH_EDITOR=1`, `MOWO_WITH_ASSERTS=1`, `MOWO_OPTIMIZED=1` |
+| Debug | `WITH_EDITOR=1`, `MOWO_WITH_ASSERTS=1` |
+
+The engine's `MOWO_ASSERT` and `MOWO_CHECK_SLOW` key on `MOWO_WITH_ASSERTS`, not on `_DEBUG`, so Development fires every engine invariant while compiling against the release C runtime.
+
+`WITH_EDITOR` follows the configuration, not the target, because the game and editor targets build into one shared tree. If it followed the target, whichever was built last would leave every shared library compiled the other way. Shipping is where editor code comes out. No configuration defines a test switch: tests live only in the Test targets.
+
+## Symbols and the C runtime
+
+Every configuration emits debug symbols, Shipping included. They stay beside the binaries in `Engine/Binaries/<Platform>/`, and packaging never stages them, so the crash server can symbolicate a retail dump without a player ever receiving a symbol file.
+
+Every configuration, Debug included, compiles against the release dynamic C runtime, because the vendored third-party libraries exist only as release builds <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/ClangClDriver.cs" />.
+
+Optimized configurations other than DebugGame build deterministically: the same source gives the same bytes, with no link timestamp and no build-machine path in the image. That keeps patches and store uploads small.
+
+## Link mode follows the configuration
+
+Debug, DebugGame, Development and Release build modular: one shared library per module. Test and Shipping game packages link monolithic by default: one executable with the engine linked in <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs" />. A build whose link mode is not its configuration's default goes to its own folder, `Monolithic/` or `Modular/`, so the two never overwrite each other <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />. See [Targets and link modes](/docs/shipping/targets-and-modes/).
+
+## Profile-guided optimization
+
+`mbt package --pgo instrument` builds Shipping or Test binaries that write raw profiles when you run them; `--pgo optimize` merges those profiles into `Engine/Build/PGO/<Platform>/Engine.profdata` and compiles with it <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/Pgo.cs" />. Record on the same machine that built the instrumented package, because the profile path is compiled in.
+
+## Related
+
+- [Output layout](/docs/build-tool/output-layout/)
+- [Packaging and shipping](/docs/shipping/)

@@ -1,0 +1,70 @@
+---
+title: World environment
+description: The day-night cycle, water queries, buoyancy and swimming, and loading streaming regions and data layers from gameplay.
+order: 29
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/Components/DayNightComponent.h
+  - Engine/Source/Runtime/Game/Public/Terrain/DayNightSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/MWaterStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/MWaterComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/AWaterActor.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/WaterZoneComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/BuoyancyComponent.h
+  - Engine/Source/Runtime/Game/Public/Water/BuoyancySystem.h
+  - Engine/Source/Runtime/Game/Public/Water/CharacterWaterSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/MLevelStatics.h
+  - Engine/Source/Runtime/Game/Public/Scene/LevelDataLayers.h
+verifiedAt: 08e26df3d
+---
+
+Terrain, water, foliage and sky are authored in the editor; see [World building](/docs/editor/world-building/) and [Rendering](/docs/rendering/). This page covers what gameplay code does with them at runtime.
+
+## Day and night
+
+A `DayNight` component drives the sun, sky and night lighting from a time of day. <Source symbol="DayNightComponent" />
+
+| Field | Default | Effect |
+| --- | --- | --- |
+| `timeOfDay` | 12 | Hours, 0 to 24 |
+| `animate`, `dayLengthSeconds` | off, 120 | Advance the clock; a full day takes this many real seconds |
+| `azimuthDegrees` | 0 | Compass direction of the sun's path |
+| `sunIntensity`, `nightIntensity` | 1.4, 0.02 | Sun light by day and night |
+| `skyDayIntensity`, `skyNightIntensity` | 1.0, 0.15 | Sky light by day and night |
+
+NPC schedules read the same clock; see [AI crowds and director](/docs/gameplay/ai-crowds-and-director/).
+
+## Water
+
+Place water with `AWaterActor`; its `MWaterComponent` describes the body. A `WaterZone` component bounds which bodies take part and fills the horizon past them. <Source symbol="WaterZoneComponent" />
+
+`MWaterStatics` answers water questions at any point, from C++ or Visual Scripting: <Source symbol="MWaterStatics" />
+
+| Function | Returns |
+| --- | --- |
+| `IsUnderwater(point)`, `HasWaterAt(point)` | Whether a point is under or over water |
+| `GetWaterHeightAt`, `GetWaterDepthAt`, `GetWaterFlowAt` | Surface height including waves, depth and river flow |
+| `GetNearestShorePoint`, `GetDistanceToShore` | The shore |
+| `SampleWaterAt` then `GetLastWaterHeight`, `GetLastWaterNormal`, `GetLastWaveHeight` and the other `GetLast...` functions | Everything about one point from a single query |
+
+### Buoyancy and swimming
+
+Add a `Buoyancy` component to a dynamic rigid body to make it float: `strength`, `sampleRadius`, `maxDepth`, and `linearDrag` and `angularDrag` while in the water. <Source symbol="BuoyancyComponent" />
+
+Characters switch to swimming on their own when the water reaches their chest; see [Character movement](/docs/gameplay/character-movement/).
+
+## Streaming regions and data layers
+
+In an open world, levels stream by cells around the player. Gameplay can also load parts by hand through `MLevelStatics`: <Source symbol="MLevelStatics" />
+
+| Function | Effect |
+| --- | --- |
+| `LoadStreamingRegion(name)`, `UnloadStreamingRegion(name)`, `IsStreamingRegionLoaded(name)` | Keep a named region loaded, for example ahead of a cutscene or a fast-travel destination |
+| `SetDataLayerActive(name, active)`, `IsDataLayerActive(name)` | Switch a data layer, such as a story state of a village, on or off |
+
+`MLevelStatics` also reads and writes scene environment settings by key, such as fog and ambient color: `GetSceneFloat`, `SetSceneFloat`, `GetSceneVector`, `SetSceneVector`, `GetSceneBool` and `SetSceneBool`.
+
+## Related
+
+- [World building](/docs/editor/world-building/)
+- [Procedural content (PCG)](/docs/gameplay/pcg/)
+- API: [Game module](/docs/api/game/)

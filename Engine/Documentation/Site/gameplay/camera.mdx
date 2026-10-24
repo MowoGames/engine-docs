@@ -1,0 +1,77 @@
+---
+title: Cameras
+description: Camera components, the main camera and view targets with blends, built-in camera controllers, the camera rig and spring arm, and camera shake.
+order: 15
+sources:
+  - Engine/Source/Runtime/Camera/Public/Camera/Components/CameraComponent.h
+  - Engine/Source/Runtime/Camera/Public/Camera/Components/CameraControllerComponent.h
+  - Engine/Source/Runtime/Camera/Public/Camera/Components/CameraShakeComponent.h
+  - Engine/Source/Runtime/Camera/Public/Camera/CameraSystem.h
+  - Engine/Source/Runtime/Camera/Public/Camera/CameraControllerSystem.h
+  - Engine/Source/Runtime/Camera/Public/Camera/CameraShakeSystem.h
+  - Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp
+  - Engine/Source/Runtime/Camera/Public/Camera/CameraModifier.h
+  - Engine/Source/Runtime/Game/Public/Game/MCameraComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MCameraStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/ACameraActor.h
+  - Engine/Source/Runtime/Game/Public/Game/ACameraRigActor.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/SpringArmComponent.h
+verifiedAt: 08e26df3d
+---
+
+A scene renders through its **main camera**. Gameplay can switch the view to another camera with a smooth blend, attach a ready-made controller, or shake it.
+
+## Camera components
+
+The `Camera` ECS component holds the projection: `fieldOfView`, perspective or orthographic (`orthographicSize`), `nearPlane` and `farPlane`, the clear color, a `cullingMask` of layers, a normalized viewport rectangle for split-screen, and `isMain`. <Source symbol="CameraComponent" />
+
+On actors, use `MCameraComponent` or place an `ACameraActor`. `SetFieldOfView`, `SetClipPlanes`, `SetOrthographic`, `SetOrthoSize` and `SetAsMainCamera` change it at runtime. <Source symbol="MCameraComponent" />
+
+## View targets
+
+The camera system keeps one main camera and lets gameplay blend the view to another actor's camera, like Unreal's view targets. <Source symbol="CameraSystem" />
+
+| Function on `MCameraStatics` | Effect |
+| --- | --- |
+| `SetViewTargetWithBlend(actor, seconds)` | Blends the view to the actor's camera |
+| `PushViewTarget(actor, seconds)`, `PopViewTarget(seconds)` | A stack, so a cutscene camera can hand the view back to whatever was before |
+| `IsViewBlending()` | Whether a blend is in progress |
+| `StartCameraShake(amplitude, frequency, duration, fovPunch)` | A one-shot shake; returns a handle |
+| `StopCameraShake(handle)`, `StopAllCameraShakes()`, `IsCameraShakePlaying(handle)` | Shake control |
+
+<Source symbol="MCameraStatics" />
+
+Cinematics take over the view through a separate override; see [Sequencer and cinematics](/docs/gameplay/sequencer/).
+
+## Camera controllers
+
+A `CameraController` component drives its entity's camera from input without code. Its `mode` picks the behavior: <Source symbol="CameraControllerComponent" />
+
+| Mode | Behavior |
+| --- | --- |
+| `Free` | WASD and mouse, like the editor's fly camera |
+| `FirstPerson` | At `followTarget` plus `eyeOffset`; the mouse rotates the view |
+| `ThirdPersonOrbit` | Orbits `followTarget` at `distance` |
+| `TopDown` | Above the target at `topDownPitch` |
+| `Follow` | Chases the target smoothly with no rotation control |
+
+With `collisionEnabled`, an orbit camera sweeps a `probeRadius` sphere and pulls in front of walls. Look settings include `mouseSensitivity`, `invertY`, `gamepadLookSensitivity`, `minPitch` and `maxPitch`, and smoothing for following, looking and collision.
+
+For actor-based characters, `ACameraRigActor` is a third-person rig that orbits a target at arm length with lag; the template characters spawn one. For a boom on any entity, use the `SpringArm` component; see [Components](/docs/gameplay/components/). <Source symbol="ACameraRigActor" />
+
+## Camera shake
+
+Two ways to shake:
+
+- **Trauma**: add a `CameraShake` component and raise its `trauma` (0 to 1). Shake grows with trauma squared and decays at `traumaDecay` per second; `maxOffsetPosition`, `maxRotationAngle` and `noiseFrequency` shape it. Good for continuous shake from explosions and damage. <Source symbol="CameraShakeComponent" />
+- **One-shot**: `MCameraStatics::StartCameraShake`, which adds a camera modifier that removes itself when done. It keeps shaking while the game is paused.
+
+`cam.ShakeScale` scales every shake, trauma-driven and one-shot alike; 0 keeps the camera still for players who need it. <Source path="Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp" />
+
+Camera modifiers in general are view mutators applied after the view-target blend; implement `ICameraModifier` and add it with `CameraSystem::AddModifier` for your own effects. <Source symbol="ICameraModifier" />
+
+## Related
+
+- [Gameplay framework](/docs/gameplay/gameplay-framework/) for the template characters' cameras
+- [Split-screen](/docs/multiplayer/) for one camera per local player
+- API: [Camera module](/docs/api/camera/), [Game module](/docs/api/game/)

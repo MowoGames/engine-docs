@@ -1,0 +1,186 @@
+---
+title: Project files
+description: The .mproject manifest, the project folder layout, the configuration files under Config/ and how the INI layers combine.
+order: 1
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+  - Engine/Source/Runtime/Core/Public/Core/ConfigIni.h
+  - Engine/Source/Runtime/Core/Private/ConfigIni.cpp
+  - Engine/Source/Runtime/Core/Private/ProjectLayout.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectSerializer.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Runtime/Project/Public/Project/Project.h
+  - Engine/Source/Runtime/Project/Public/Project/EngineRegistry.h
+  - Engine/Source/Runtime/Project/Private/PluginManager.cpp
+  - Engine/Source/Runtime/Project/Private/PackagingSettings.cpp
+  - Engine/Source/Runtime/MowoGame/Private/MowoGame.cpp
+  - Samples/SampleProject/SampleProject.mproject
+  - Samples/SampleProject/Config/Plugins.ini
+verifiedAt: 08e26df3d
+---
+
+A project is a folder with a `.mproject` manifest. The layout follows Unreal's: `Content/`, `Config/`, `Source/` and `Plugins/` are the project and go into version control; `Saved/` and `Intermediate/` are per machine and are ignored.
+
+## Folder layout
+
+```text
+MyGame/
+  MyGame.mproject        JSON manifest
+  Content/               assets: levels, meshes, textures, materials, audio, Visual Scripting graphs
+  Config/                project configuration (INI)
+  Source/                the game module and MyGame.Target.cs
+  Plugins/               project plugins
+  Saved/                 per user, not committed
+    Logs/  Crashes/  Autosaves/  SaveGames/
+    Config/Editor/       editor layout, viewport and other per-user state
+    Config/<Platform>/   the user layer of the INI configs
+    Cooked/              cook output
+    Packaged/            package output
+  Intermediate/          disposable, not committed
+    AssetRegistry.mdfb   the asset index, rebuilt when missing
+    DerivedDataCache/  ThumbCache/  CookedAssets/
+```
+
+`FProjectLayout` owns every one of these names; code never spells them itself. <Source symbol="FProjectLayout" /> The rule is: `Intermediate/` nobody opens, `Saved/` only its own user opens, and everything else the team commits. A package lives under `Saved/` because a person hands it to someone, even though it can be rebuilt.
+
+A new project's `.gitignore` keeps the transient folders out of version control: `Intermediate/`, `Saved/`, and the `build/` and `.mbt-cache/` folders a project that is its own build root writes.
+
+## The .mproject manifest
+
+The manifest is JSON, read by the project serializer. Sections and keys: <Source path="Engine/Source/Runtime/AssetSystem/Private/ProjectSerializer.cpp" />
+
+| Key | Meaning |
+| --- | --- |
+| `project.name`, `project.version` | The project's name and version |
+| `project.uuid` | The project's identity |
+| `project.engineVersion` | The engine version the project was made with |
+| `project.engineAssociation` | Optional: which installed engine opens the project, a release version or a source tree's id |
+| `project.startScene` | The level the game opens, as a `Content/` path |
+| `project.gameModeClass` | The `MCLASS` name of the game mode spawned at scene start |
+| `project.assetFormat` | The asset package format version |
+| `project.created`, `project.modified` | ISO 8601 timestamps |
+| `build.outputName`, `build.packAssets` | The packaged executable name; whether content is packed into an archive |
+| `graphics.defaultWidth`, `defaultHeight`, `defaultFullscreen`, `defaultVSync`, `resizable` | The game window's defaults |
+| `player.productName`, `companyName`, `copyright`, `description`, `iconPath` | What the packaged executable reports |
+| `platform.steamEnabled`, `discordEnabled`, `mowoOnlineEnabled`, `mowoProductId`, … | Online platform settings, read by the platform plugins |
+| `layers.names` | The 32 named collision and render layers |
+
+```json title="MyGame.mproject"
+{
+  "project": {
+    "name": "MyGame",
+    "version": "1.0.0",
+    "engineVersion": "0.3.0-alpha",
+    "startScene": "Content/Scenes/Main.mmap",
+    "gameModeClass": ""
+  },
+  "graphics": {
+    "defaultWidth": 1920,
+    "defaultHeight": 1080,
+    "defaultFullscreen": true
+  }
+}
+```
+
+The engine you are reading about is version <Fact id="engine.version" />.
+
+The [Plugin manifest](/docs/programming/plugins/#the-manifest) (`.mplugin`) is the other JSON file a project carries.
+
+## Configuration files
+
+Configuration is INI in Unreal's dialect. Every file name under `Config/` is PascalCase:
+
+| File | Holds |
+| --- | --- |
+| `Engine.ini`, `DefaultEngine.ini` | Engine settings: rendering, the graphics backend, console variables, logging |
+| `DefaultGame.ini` | Game settings and class sections |
+| `Plugins.ini` | Which plugins the project enables |
+| `Input.ini` | Input contexts and actions |
+| `Packaging.ini` | The committed half of the packaging settings: target platforms, output folders, options |
+| `Redirects.ini` | Renamed properties, classes and asset paths (`[CoreRedirects]`) |
+| `DefaultCrypto.ini` | The archive encryption and signing keys a Shipping package needs |
+| `DefaultScalability.ini` | Per-level settings of the scalability groups |
+
+A project made by an older engine is adopted when it opens: old file spellings are renamed, and legacy MDF configs are converted to INI with the original moved to `Saved/MigratedSources/Config/`.
+
+### Layers
+
+For a base name such as `Engine`, layers combine from lowest to highest:
+
+| Layer | File |
+| --- | --- |
+| Engine | `Engine/Config/Base<Name>.ini` |
+| Engine, per platform | `Engine/Config/<Platform>/<Platform><Name>.ini` |
+| Project | `Config/Default<Name>.ini` |
+| Project, per platform | `Config/<Platform>/<Platform><Name>.ini` |
+| User | `Saved/Config/<Platform>/<Name>.ini` |
+
+`<Platform>` is `Win64`, `Linux` or `Mac`. A layer that does not exist is skipped. The project's `Config/Engine.ini` is read beneath the `Engine` hierarchy, so `DefaultEngine.ini` wins over it. <Source path="Engine/Source/Runtime/Core/Public/Core/ConfigIni.h" />
+
+### Syntax
+
+```ini
+[Section]
+Key=Value
++List=AppendedValue
+.List=AppendedEvenIfPresent
+-List=RemovedValue
+!List=
+```
+
+`Key=Value` replaces what lower layers set. `+Key=` appends unless already present, `.Key=` always appends, `-Key=` removes that value and `!Key=` clears the key. Lines starting with `;` or `#` are comments. Values are typed by spelling: `True`/`False`, integers, floats, `(X=,Y=,Z=)` vectors; a quoted value is always text. Nested data uses Unreal's struct form, `+Rows=(Key="text",Number=1)`.
+
+### Console variables
+
+```ini title="Config/DefaultEngine.ini"
+[ConsoleVariables]
+r.VSync=0
+mowo.GC.IntervalSeconds=10
+
+[ScalabilityGroups]
+sg.ShadowQuality=3
+```
+
+`[ConsoleVariables]` sets console variables by their full name, and `[ScalabilityGroups]` sets the `sg.*` groups. A pinned group level also applies the `[<Group>@<Level>]` section of the `Scalability` hierarchy (for example `[ShadowQuality@3]`). The command line wins over both. See the [console variable reference](/docs/reference/console-variables/).
+
+### Class sections
+
+A section named `[/Script/<Module>.<Class>]` sets the `MPROPERTY(Config)` fields of that class, named without its `M` or `A` prefix. Super-class sections apply first. Fields without `Config` are never written, whatever the file says. Bool, integer, float, double, string and string-list fields are supported. <Source symbol="FConfigClassBinder" />
+
+```cpp nocompile
+MCLASS()
+class MHealthComponent : public MActorComponent {
+	MGENERATED_BODY()
+
+	MPROPERTY(EditAnywhere, Config)
+	float maxHealth = 100.0f;
+};
+```
+
+```ini title="Config/DefaultGame.ini"
+[/Script/Mowo.HealthComponent]
+maxHealth=250
+```
+
+When a project opens, the `Engine` hierarchy and then the `Game` hierarchy are applied to the class default object of every class with a `Config` field, so a `Game` section wins. Spawned objects start from the class default, so the value reaches every instance that does not override it. Classes from modules loaded later (the game module, a plugin, a hot reload) get the same pass when they load. <Source path="Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp" />
+
+### Plugins.ini
+
+```ini title="Config/Plugins.ini"
+[enabled]
+Combat=True
+SteamPlatform=False
+```
+
+See [Writing a plugin](/docs/programming/plugins/#enabling-a-plugin).
+
+## Migrating an old project
+
+Projects from before the `Content/`, `Saved/`, `Intermediate/` layout (an `Assets/` folder, a hidden `.mowo/` folder) are migrated when they open: folders move and every serialized `Assets/` reference is rewritten to `Content/`. To migrate without opening the editor, or to refuse:
+
+```bash
+MowoGame.exe --migrate-project=MyGame.mproject
+MowoEditor.exe --project MyGame.mproject --no-migrate
+```
+
+`--no-migrate` refuses to open a project that needs migration, so you can back it up first. Migration never overwrites an existing folder and can be run again safely.

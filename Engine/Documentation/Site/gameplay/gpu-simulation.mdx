@@ -1,0 +1,77 @@
+---
+title: GPU simulation
+description: Run swarms and fluids as compute kernels with the GPU ECS world, the GpuSwarm boids component and the FluidVolume FLIP water component.
+order: 20
+sources:
+  - Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuWorld.h
+  - Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuBoids.h
+  - Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuFlip.h
+  - Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuSwarmComponent.h
+  - Engine/Source/Runtime/GpuEcs/Public/GpuEcs/FluidVolumeComponent.h
+  - Engine/Source/Runtime/GpuEcs/Public/GpuEcs/GpuEcsAPI.h
+verifiedAt: 08e26df3d
+---
+
+Some simulations are too large for the CPU: a swarm of a million agents, a tank of water. The GPU ECS module runs them as compute kernels over component arrays held in GPU buffers. The state never travels back to the CPU, and the renderer draws straight from the same buffers. The module is not built for the dedicated server, which has no GPU.
+
+## Ready-made components
+
+Both components are in the **Simulation** category of the Add Component picker. Turn on `simulateInEditor` to see them run without pressing Play.
+
+### GpuSwarm
+
+A boids swarm of up to millions of agents, drawn instanced from the GPU buffers through the renderer's GPU culling. <Source symbol="GpuSwarmComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `agents` | Number of agents |
+| `halfSize` | Half-size of the cube they live in; agents wrap at its faces |
+| `radius` | Neighbor radius |
+| `minSpeed`, `maxSpeed` | Speed range |
+| `separation`, `alignment`, `cohesion` | The three steering weights |
+| `agentSize`, `color`, `seed` | Look and reproducibility |
+
+### FluidVolume
+
+A FLIP fluid: particles carry the water and a grid solves for pressure. The scene's box and sphere colliders inside the domain become its walls, and the surface is drawn as a contoured mesh that trails the particles by a frame or two so the frame never waits for the GPU. <Source symbol="FluidVolumeComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `cellsX`, `cellsY`, `cellsZ`, `cellSize` | Grid size; the domain sits on the entity |
+| `particlesPerAxis` | Particles per cell along each axis |
+| `fillMin`, `fillMax` | The box, as fractions of the domain, filled with water at start |
+| `flipRatio` | FLIP versus PIC blend; higher is livelier, lower is calmer |
+| `gravity`, `pressureSweeps` | Forces and solver iterations |
+| `useSceneColliders` | Collide with the scene's colliders |
+| `surfaceIso`, `color` | Surface threshold and color |
+
+<Screenshot id="gameplay-fluid-volume" alt="Mowo Editor viewport in Simulate mode with a FluidVolume tank: water sloshing around a sphere collider placed inside the domain, its contoured surface shaded blue" caption="A FluidVolume flows around the colliders inside its domain." />
+
+## Write your own GPU system
+
+`FGpuWorld` holds buffers, one per component field, and kernels, each an HLSL compute shader with the buffers it binds. <Source symbol="FGpuWorld" />
+
+| Buffer role | Written by | CPU access |
+| --- | --- | --- |
+| `Gpu` | Kernels, such as positions and velocities | Upload only before the first step; read back with `SyncToCpu` (blocking) or `ReadLatched` (non-blocking, up to two frames old) |
+| `Cpu` | The game, such as targets and parameters | Upload any time; read-only to kernels |
+| `Scratch` | Kernels, within one step | Never read back |
+
+A step dispatches the kernels in registration order with a barrier between each. `RepeatLast(n, times)` loops the last kernels, for solver sweeps. `Record` puts a step into the current frame so a later draw reads its output; `RunImmediate` runs one step and waits, for tools and tests.
+
+```cpp title="Drift.cpp" nocompile
+FGpuWorld world;
+world.AddBuffer({ "Position", 16, count, EGpuBufferRole::Gpu });
+world.AddKernel({ "Drift", "MyGame/Drift", { "Position" }, EGpuDomain::Agents, 256 });
+world.SetDomainSize(EGpuDomain::Agents, count);
+world.Upload("Position", initial.data(), bytes);
+world.Record(&params, sizeof(params));
+```
+
+Kernels that gather from many writers accumulate in fixed-point integers, so a step gives the same result every run regardless of thread order. `FGpuBoids` and `FGpuFlip` are complete examples built this way. <Source symbol="FGpuBoids" /> <Source symbol="FGpuFlip" />
+
+## Related
+
+- [Particles and VFX](/docs/gameplay/particles/)
+- [Destruction](/docs/gameplay/destruction/)
+- API: [GpuEcs module](/docs/api/gpuecs/)

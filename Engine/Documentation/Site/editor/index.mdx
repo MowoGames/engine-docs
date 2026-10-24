@@ -1,0 +1,91 @@
+---
+title: The Mowo Editor
+sidebarTitle: Editor
+description: What Mowo Editor is, how to open a project in it, how editing flows through it, and where each tool is documented.
+order: 2
+icon: LayoutDashboard
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorShell.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/EditorTransaction.h
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferences.cpp
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorExtensionRegistry.h
+verifiedAt: f5ba7fec2
+---
+
+Mowo Editor is the desktop application you use to build a game: place actors in a level, author assets, play the game in place and package it. It is built on Arc, the engine's own UI framework, so every panel, menu and asset editor is drawn by the engine itself, with the same renderer your game uses. This section covers every part of it.
+
+## Opening a project
+
+The editor always works on one project: a folder with a `.mproject` file. Open it from the Mowo Project Launcher, which lists your projects and creates new ones from templates, or start the editor directly <Source path="Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp" />:
+
+```powershell
+& ".\MowoEditor.exe" --project D:\Games\MyGame\MyGame.mproject
+```
+
+| Option | Effect |
+| --- | --- |
+| `--project <path>` | The project to open |
+| `--scene <path>` | The level to open, overriding the startup preference |
+| `--no-splash` | Skip the splash screen |
+| `--no-user-config` | Ignore your per-user configuration and preferences <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferences.cpp" /> |
+
+The editor UI is in English. See [Getting started](/docs/getting-started/) to install the engine and create your first project.
+
+<Screenshot id="editor-overview-default-layout-index" alt="Mowo Editor main window at 1920x1080 with a template project open and the default layout: mode rail on the left, Place actors panel, the level viewport in the center, Content Browser and Output Log along the bottom, Outliner above Details on the right." caption="The default layout. The main window page explains each part." />
+
+## How work flows through the editor
+
+Most editing follows the same loop: you pick something, change it, and the change goes through one transaction system so it can be undone, saved and replayed.
+
+<Flow steps={["Select in viewport or Outliner", "Edit in Details or an asset editor", "Transaction recorded (undoable)", "Document marked unsaved", "Save or autosave"]} highlight={2} caption="Every edit is one undo entry on the document it belongs to, and marks that document unsaved." />
+
+- Each level and each asset document has its own undo history <Source path="Engine/Source/Editor/MowoEditor/Private/Core/EditorTransaction.h" />. <Kbd>Ctrl+Z</Kbd> and <Kbd>Ctrl+Y</Kbd> act on whichever one you are working in.
+- An unsaved document shows a dot on its tab. <Kbd>Ctrl+S</Kbd> saves it and <Kbd>Ctrl+Shift+Alt+S</Kbd> saves everything. Autosave keeps copies for crash recovery.
+- <Kbd>F5</Kbd> plays the level in a copy, so stopping leaves the level as it was, with your play-time tweaks kept.
+- <Kbd>Ctrl+K</Kbd> opens the command palette, which finds actors, assets, commands and settings.
+
+## In this section
+
+### The editor
+
+<CardGrid>
+  <Card title="Main window" href="/docs/editor/main-window/" icon="PanelsTopLeft">Menus, toolbar, status bar, docking, layouts, palette and shortcuts.</Card>
+  <Card title="Viewport" href="/docs/editor/viewport/" icon="Boxes">Camera, selection, gizmos, snapping, groups, merging and view modes.</Card>
+  <Card title="Outliner and Details" href="/docs/editor/outliner-and-details/" icon="Layers">Organize actors, edit properties, bulk-edit and set World Settings.</Card>
+  <Card title="Content Browser" href="/docs/editor/content-browser/" icon="FolderInput">Import, find, organize and migrate assets.</Card>
+  <Card title="Asset tools" href="/docs/editor/asset-tools/" icon="FileText">References, sizes, audits, validation, chunks and localization.</Card>
+  <Card title="World building" href="/docs/editor/world-building/" icon="Sun">Terrain, water, splines, foliage, navigation and world partition.</Card>
+  <Card title="Geometry tools" href="/docs/editor/geometry-tools/" icon="Boxes">Block out and model level geometry, and edit UVs.</Card>
+  <Card title="Play in editor" href="/docs/editor/play-in-editor/" icon="Gamepad2">Play, simulate and test multiplayer locally.</Card>
+  <Card title="Saving and recovery" href="/docs/editor/saving-and-recovery/" icon="FileText">Save, undo, autosave and crash recovery.</Card>
+  <Card title="Source control" href="/docs/editor/source-control/" icon="Workflow">Git changelists, submit, locks, merges and diffs.</Card>
+  <Card title="Multi-user editing" href="/docs/editor/multi-user/" icon="Network">Edit one level together, live.</Card>
+  <Card title="Settings" href="/docs/editor/project-settings/" icon="Hammer">Project Settings and Editor Preferences.</Card>
+  <Card title="Working with C++" href="/docs/editor/working-with-cpp/" icon="Braces">New classes, hot reload, Live Coding and the Class Viewer.</Card>
+  <Card title="Plugins and extensions" href="/docs/editor/plugins/" icon="PackageCheck">The Plugins window and extending the editor.</Card>
+</CardGrid>
+
+### Asset editors
+
+<CardGrid>
+  <Card title="Asset editors" href="/docs/editor/asset-editors/" icon="PanelsTopLeft">The shared frame, preview scene and a map of every editor.</Card>
+  <Card title="Mesh and texture editors" href="/docs/editor/mesh-and-texture-editors/" icon="Boxes">Static and skeletal meshes, textures, physics assets, fracture.</Card>
+  <Card title="Animation editors" href="/docs/editor/animation-editors/" icon="Workflow">Clips, montages, blend spaces, poses, retargeting, control rigs.</Card>
+  <Card title="Audio editors" href="/docs/editor/audio-editors/" icon="Layers">Sounds, sound cues, MetaSounds and attenuation.</Card>
+  <Card title="Data and gameplay editors" href="/docs/editor/data-editors/" icon="FileText">Tables, curves, input, AI assets and Smart Props.</Card>
+</CardGrid>
+
+### Diagnostics and automation
+
+<CardGrid>
+  <Card title="Logs and console" href="/docs/editor/logs/" icon="FileText">Output Log, console, Message Log and Map Check.</Card>
+  <Card title="Profiler" href="/docs/editor/profiler/" icon="FlaskConical">Insights, Frame Timeline and render debug views.</Card>
+  <Card title="Perf Trends" href="/docs/editor/perf-trends/" icon="FlaskConical">Performance across commits and regressions.</Card>
+  <Card title="Automation and tests" href="/docs/editor/automation/" icon="FlaskConical">Editor scripts and the Automation panel.</Card>
+  <Card title="MCP server" href="/docs/editor/mcp-server/" icon="Network">Let AI agents drive the editor.</Card>
+</CardGrid>
+
+Editor plugins extend the editor through the EditorFramework module: menu entries, toolbar buttons, Details rows, dock panels, viewport modes and agent tools <Source symbol="FEditorExtensionRegistry" />. See [Plugins and extensions](/docs/editor/plugins/).

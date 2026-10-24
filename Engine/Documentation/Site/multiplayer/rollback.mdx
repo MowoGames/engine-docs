@@ -1,0 +1,156 @@
+---
+title: Rollback and net rewind
+sidebarTitle: Rollback and rewind
+description: Run a deterministic rollback session where only inputs travel, catch desyncs with checksums, and record replicated frames for the rewind debugger.
+order: 5
+sources:
+  - Engine/Source/Runtime/Game/Public/Rollback/RollbackSession.h
+  - Engine/Source/Runtime/Game/Public/Rollback/RollbackWorld.h
+  - Engine/Source/Runtime/Game/Public/Rollback/RollbackSystem.h
+  - Engine/Source/Runtime/Game/Public/Rollback/RollbackTransports.h
+  - Engine/Source/Runtime/Game/Public/Rollback/DeterministicMath.h
+  - Engine/Source/Runtime/Game/Private/Rollback/RollbackSystem.cpp
+  - Engine/Source/Runtime/Game/Public/Game/Components/RollbackPlayerComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MRollbackStatics.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsWorld.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Debug/NetRewindRecording.h
+  - Engine/Source/Runtime/Networking/Private/NetRewindRecording.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+verifiedAt: 08e26df3d
+---
+
+The default network model is host-authoritative: the host simulates, clients interpolate and predict. Some games need every player to see the same frame instead: fighting games, physics brawlers, anything where interpolation feels late. For those, Mowo has **rollback netcode**: every machine runs the whole simulation and only inputs travel. This page also covers the **net rewind recorder**, which captures replicated frames on every peer so you can find where a client and the host stopped agreeing.
+
+## How a rollback session works
+
+`FRollbackSession` <Source symbol="FRollbackSession" /> drives any `IRollbackGame` over any `IRollbackTransport`:
+
+<Steps>
+<Step title="Local input is delayed and sent">Each frame, the local input is filed `inputDelay` frames ahead and sent. Every message carries all input the peer has not acknowledged yet, so a lost message costs nothing once the next one arrives.</Step>
+<Step title="Missing input is predicted">A peer's input that has not arrived is predicted (its last known input repeated) and the frame is simulated at once.</Step>
+<Step title="Wrong predictions roll back">When the real input for an already simulated frame differs from the prediction, the session restores the state saved before that frame and resimulates every frame since.</Step>
+<Step title="Far-behind peers stall the simulation">A peer more than `maxPrediction` frames behind stalls the local simulation instead of letting it predict further.</Step>
+<Step title="Checksums catch desyncs">Once every player's input up to a frame is known, that frame is final. Every `checksumInterval` frames each peer sends the final state's checksum; a mismatch reports the frame where the machines stopped agreeing.</Step>
+</Steps>
+
+Each message names its sender's player index, and the session drops a message whose index is not the player the transport received it from.
+
+## Turn it on for a play session
+
+Rollback is off by default. Turn it on in **Project Settings › Engine › Networking › Rollback Netcode**, or with the cvars:
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `net.Rollback` | `0` | Rollback netcode for the play session. |
+| `net.Rollback.TickRate` | `60` | Rollback simulation frames per second. |
+| `net.Rollback.InputDelay` | `2` | Frames a local input waits before it is simulated. |
+| `net.Rollback.MaxPrediction` | `8` | Frames the simulation may run ahead of a peer's last input before it stalls. |
+| `net.Rollback.ChecksumInterval` | `10` | Frames between desync checks. |
+| `net.Rollback.OnDesync` | `0` | `0` logs a desync and plays on; `1` logs it and ends the rollback session on every machine. |
+
+With it on, `FRollbackSystem` <Source symbol="FRollbackSystem" /> makes every player of the online session a rollback player in player-id order and runs the scene's ECS world at the fixed rate. Its messages ride session event `0xFE40`, and the host relays them between clients. Offline, a one-player session runs the same fixed-step loop, so a game behaves the same alone and online. A change of roster restarts the session.
+
+<Screenshot id="multiplayer-rollback-settings" alt="Mowo Editor Project Settings window on Engine › Networking › Rollback Netcode, showing the ROLLBACK section with Enable rollback netcode, Input delay, maximum prediction, checksum interval and On desync rows" caption="Rollback settings in Project Settings." />
+
+## Write deterministic gameplay
+
+Every machine must step to the same bits. Put the gameplay that rolls back into **steps** and keep its state in components:
+
+1. Add a **RollbackPlayer** component (Add Component › Networking) to the entity each player drives, and set its `playerIndex`. Every simulated frame the session writes that player's `buttons`, `axisX` and `axisY` into it <Source symbol="RollbackPlayerComponent" />.
+2. Register a step with `FRollbackSystem::RegisterStep(name, step)`. Steps run in name order on every frame and again on every resimulation.
+3. Register a checksum for each gameplay component with `FRollbackWorld::RegisterChecksum`, feeding the fields that matter. The engine registers Transform and RollbackPlayer.
+
+```cpp title="FighterRollback.cpp"
+#include "ECS/World.h"
+#include "Game/Components/RollbackPlayerComponent.h"
+#include "Rollback/DeterministicMath.h"
+#include "Rollback/RollbackSystem.h"
+#include "Rollback/RollbackWorld.h"
+
+#include <cstdint>
+
+struct FFighterState {
+	int32_t Health = 100;
+	Mowo::FFixed X;
+};
+
+static void StepFighters(Mowo::World& world, const Mowo::FRollbackInput* inputs, uint32_t playerCount, float fixedDt) {
+	world.ForEach<Mowo::RollbackPlayerComponent>([&](Mowo::Entity entity, Mowo::RollbackPlayerComponent& player) {
+		FFighterState* fighter = world.GetComponent<FFighterState>(entity.GetID());
+		if (!fighter) {
+			return;
+		}
+
+		fighter->X += Mowo::FFixed::FromInt(player.axisX);
+	});
+}
+
+static void HashFighter(const FFighterState& fighter, Mowo::FRollbackHasher& hasher) {
+	hasher.I32(fighter.Health);
+	hasher.I32(fighter.X.raw);
+}
+
+static void RegisterFighterRollback() {
+	Mowo::FRollbackSystem::RegisterStep("MyGame.Fighters", &StepFighters);
+	Mowo::FRollbackWorld::RegisterChecksum<FFighterState>("MyGame.Fighter", &HashFighter);
+}
+```
+
+The deterministic toolkit:
+
+- **`FFixed`** <Source symbol="FFixed" />: Q16.16 fixed point for state that must match across builds and platforms (a replay, a server on another OS). Within one binary, the engine's strict float mode is already deterministic.
+- **`FDeterministicRandom`** <Source symbol="FDeterministicRandom" />: a PCG32 generator. One seed is one sequence everywhere. Keep it in a component so rollback saves and restores it.
+- **`PhysicsWorld::SaveState` and `RestoreState`** <Source symbol="PhysicsWorld::SaveState" />: the full Jolt state, including the contact cache, so a restored world steps to the same bits. A restore needs the same set of bodies.
+
+<Callout type="warning">
+The scene's own physics is **not** part of the scene rollback: `PhysicsSystem` steps on wall-clock time and owns its bodies. Physics that must roll back belongs in a physics world your step advances and hands to an `FRollbackWorld` <Source symbol="FRollbackWorld" />.
+</Callout>
+
+From Loom, `MRollbackStatics` <Source symbol="MRollbackStatics" /> offers `SetRollbackInput(buttons, x, y)` each frame, `IsRollbackActive`, `GetRollbackFrame`, `GetRollbackLocalPlayer`, `GetRollbackCount` and `GetRollbackDesyncCount`.
+
+### Transports
+
+Outside a play session you can drive `FRollbackSession` yourself. `FRollbackNetTransport` <Source symbol="FRollbackNetTransport" /> runs over any network transport (ENet or Steam, unreliable channel). `FRollbackLoopbackNetwork` <Source symbol="FRollbackLoopbackNetwork" /> connects peers in one process with simulated latency, jitter and loss, which is useful for tuning input delay against a target ping.
+
+## Record replicated frames
+
+The net rewind recorder answers "what did each peer see at that moment?" for ordinary host-authoritative sessions. With `net.rewind.record` on, every replication manager in the process keeps a ring of the last `net.rewind.frames` frames (1800, a minute at 30 Hz) and writes it when its session ends to:
+
+```text
+<project>/Saved/NetRecordings/<yyyyMMdd-HHmmss>_<server|client>_<pid>_<n>.mdfb
+```
+
+Each frame holds every replicated entity (network id, owner, `netState`, dormancy, position and rotation), the bytes sent and received per peer during that frame, every RPC that arrived, the number of prediction corrections, and the server and client ticks <Source symbol="FNetRewindRecording" />. Recording costs nothing while the cvar is off.
+
+A multiplayer Play in Editor session passes the setting to every child process and collects their recordings when it stops. The **Rewind** tab of the Network Debug panel loads a server and client recording, aligns them on the server tick, marks desyncs and corrections on a timeline, and can apply a recorded frame to the paused play world. See [Play in Editor](/docs/editor/play-in-editor/) for the panel.
+
+From code:
+
+```cpp title="RewindCompare.cpp" wrap
+#include "Networking/Debug/NetRewindRecording.h"
+
+#include <string>
+#include <vector>
+
+Mowo::FNetRewindRecorder::SetRecording(true);
+
+Mowo::FNetRewindRecording server;
+Mowo::FNetRewindRecording client;
+Mowo::FNetRewindRecording::Load(std::string("Saved/NetRecordings/server.mdfb"), server);
+Mowo::FNetRewindRecording::Load(std::string("Saved/NetRecordings/client.mdfb"), client);
+
+std::vector<Mowo::FNetRewindDivergence> rows;
+for (const Mowo::FNetRewindFrame& frame : server.Frames()) {
+	if (const Mowo::FNetRewindFrame* other = client.FindByServerTick(frame.ServerTick)) {
+		Mowo::FNetRewindRecording::Compare(frame, *other, rows);
+	}
+}
+```
+
+Not recorded: component property changes beyond pose and `netState`.
+
+## Related
+
+- [Prediction and lag compensation](/docs/multiplayer/prediction-and-lag-compensation/) for the host-authoritative model.
+- [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/) for the online session rollback rides on.
+- API: [`FRollbackSession`](/docs/api/game/frollbacksession/), [`FRollbackSystem`](/docs/api/game/frollbacksystem/), [`FRollbackWorld`](/docs/api/game/frollbackworld/), [`FNetRewindRecording`](/docs/api/networking/fnetrewindrecording/).

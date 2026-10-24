@@ -1,0 +1,184 @@
+---
+title: Game modules
+description: Create your project's C++ game module, understand its Build.cs and Target.cs rules, add classes, and hot-reload the module into a running editor.
+order: 5
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewClassCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs
+  - Engine/Source/Developer/MowoSandbox/MowoSandbox.Build.cs
+  - Templates/TP_FirstPerson/Source/TP_FirstPerson/TP_FirstPerson.Build.cs
+  - Templates/TP_FirstPerson/Source/TP_FirstPerson.Target.cs
+  - Templates/TP_FirstPerson/Source/TP_FirstPersonEditor.Target.cs
+  - Templates/TP_FirstPerson/Source/TP_FirstPerson/Private/TP_FirstPersonModule.cpp
+  - Engine/Source/Runtime/Core/Public/Core/FModuleManager.h
+  - Engine/Source/Runtime/Game/Public/Game/HotReload.h
+  - Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
+verifiedAt: 08e26df3d
+---
+
+Your gameplay code lives in a **game module**: a shared library in your project's `Source/` folder that depends on the engine, declares reflected classes, and is loaded at run time. Nothing links against it. Its classes register themselves when the library loads, which is what lets the editor rebuild it and swap it in while running.
+
+## Creating a class
+
+You do not write the module boilerplate by hand.
+
+- **In the editor:** **Tools > New C++ Class…** opens a wizard. Pick a base class, name the class, and the editor writes the header and source, scaffolding the module on first use, then builds and loads it. See [Editor](/docs/editor/).
+- **From a terminal:** `mbt newclass` does the same.
+
+```bash
+./mbt.cmd newclass ADoorActor --project MyGame
+./mbt.cmd newclass UHealthComponent --project MyGame --parent component
+./mbt.cmd newclass FDamageEvent --project MyGame --parent none
+./mbt.cmd newclass AMyCharacter --project MyGame --parent-class ACharacter --parent-include Game/ACharacter.h
+```
+
+`--parent` is `actor` (the default), `component` or `none`; `--parent-class` with `--parent-include` subclasses any reflected class. `--module` names the module; it defaults to the project's name. All options are in the [mbt CLI reference](/docs/reference/mbt-cli/).
+
+`newclass ADoorActor` writes `Public/MyGame/ADoorActor.h`:
+
+```cpp nocompile title="ADoorActor.h"
+#pragma once
+
+#include "Game/AActor.h"
+#include "Game/MSceneComponent.h"
+
+#include "ADoorActor.generated.h"
+
+namespace Mowo {
+
+MCLASS()
+class ADoorActor : public AActor {
+public:
+	MGENERATED_BODY()
+
+	ADoorActor() {
+		MSceneComponent* root = CreateDefaultSubobject<MSceneComponent>("Root");
+		SetRootComponent(root);
+	}
+
+	void Tick(float deltaSeconds) override;
+};
+
+} // namespace Mowo
+```
+
+and `Private/ADoorActor.cpp`, which includes `stdafx.h` and the header and calls `AActor::Tick`. The component variant derives from `MActorComponent` and overrides `TickComponent`; the `none` variant writes a plain class without reflection. To fill the class in (components, the actor lifecycle, input), continue in [Gameplay](/docs/gameplay/).
+
+## The module's files
+
+A project made from a template nests the module in `Source/<Module>/`; a project made with `mbt init` keeps it directly in `Source/`. Either way the layout is:
+
+```text
+Source/
+  MyGame.Target.cs            the game: the player host named after the project
+  MyGameEditor.Target.cs      the editor with this module beside it (templates)
+  MyGame/
+    MyGame.Build.cs           the module's rules
+    Public/MyGame/            reflected headers
+    Private/                  sources, including MyGameModule.cpp
+```
+
+### Build.cs
+
+```csharp title="MyGame.Build.cs"
+public class MyGame : ModuleRules
+{
+	public MyGame(ReadOnlyTargetRules Target) : base(Target)
+	{
+		PublicDependencyModuleNames.Add("EngineLoop");
+
+		PrivateIncludePaths.Add(EngineLoopPrivateDirectory);
+		CompilerFlags.Add("/FIstdafx.h");
+
+		bUseHeaderTool = true;
+		HeaderToolDirectories.Add("Public/MyGame");
+	}
+}
+```
+
+- **It depends on `EngineLoop`**, the engine umbrella library, and so sees the whole engine. The module exports nothing.
+- **`/FIstdafx.h` and the EngineLoop private path** give every source and every generated `.refl.cpp` the engine's `stdafx.h`.
+- **`bUseHeaderTool`** turns on [reflection](/docs/programming/reflection/) for the headers under `Public/MyGame`. Without it your `MCLASS` types have no class descriptor.
+
+The full rules API is in [Build tool](/docs/build-tool/).
+
+### Target.cs
+
+The game target is the engine's player host built under your project's name, with your module beside it:
+
+```csharp title="MyGame.Target.cs"
+public class MyGameTarget : TargetRules
+{
+	public MyGameTarget(TargetInfo Target) : base(Target)
+	{
+		Type = TargetType.Game;
+		LaunchModuleName = "MowoGame";
+		OutputName = "MyGame";
+		ExtraModuleNames.Add("MyGame");
+	}
+}
+```
+
+A package of the project is therefore named `MyGame-<Platform>-<Config>`. Templates add an editor target (`Type = TargetType.Editor`, `LaunchModuleName = "MowoEditor"`) so the module builds beside the editor.
+
+### The module entry points
+
+`MyGameModule.cpp` exports the module's ABI version and two optional hooks:
+
+```cpp nocompile title="MyGameModule.cpp"
+#include "stdafx.h"
+
+#include "Core/FModuleManager.h"
+
+MOWO_IMPLEMENT_MODULE_API_VERSION()
+
+extern "C" __declspec(dllexport) void InitializeModule() {
+}
+
+extern "C" __declspec(dllexport) void ShutdownModule() {
+}
+```
+
+<Callout type="warning">
+Keep the `MOWO_IMPLEMENT_MODULE_API_VERSION()` line. The module loader refuses a binary that does not export the engine's module ABI version, so a game module without it never loads. See [the module ABI check](/docs/programming/plugins/#the-module-abi-check).
+</Callout>
+
+`InitializeModule` runs after the library loads; register anything that is not a reflected type (scene systems, serializers, console commands) there. `ShutdownModule` runs before it unloads.
+
+## Building and hot reload
+
+From a terminal:
+
+```bash
+./mbt.cmd build -t MyGame --extra-source MyGame/Source
+```
+
+`--extra-source` points the build tool at the project's `Source/` tree. To rebuild while the editor is running, the editor's **Build > Compile Game Module** command runs:
+
+```bash
+./mbt.cmd build -t MyGame --hot-reload --frozen-engine --extra-source MyGame/Source
+```
+
+- **`--hot-reload`** links the module to a versioned file (`<name>.v<N>.dll`), so the new build can load while the old one is still mapped.
+- **`--frozen-engine`** treats the engine binaries as up to date and builds only your module, so the build does not try to relink DLLs the running editor holds open.
+
+<Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp" />
+
+When the build finishes, the editor swaps the module (`FHotReload::ReloadModule`):
+
+<Steps>
+  <Step title="Snapshot">Every actor whose class lives in the module is saved and destroyed.</Step>
+  <Step title="Collect">A garbage collection runs so nothing holds code from the old module.</Step>
+  <Step title="Unload">The module's classes are unregistered and the library is freed.</Step>
+  <Step title="Load">The newest versioned binary loads and its classes register again.</Step>
+  <Step title="Restore">The actors are recreated against the new class tables with their saved state.</Step>
+</Steps>
+
+<Source symbol="FHotReload::ReloadModule" /> Hot reload replaces the whole module, so it handles header and layout changes. To patch only changed function bodies without reloading, use [live coding](/docs/programming/live-coding/).
+
+## The sandbox module
+
+`Engine/Source/Developer/MowoSandbox` is the engine's own game module: the smallest example of game code against the actor API, and the module the engine's hot-reload tests load. It is never linked by a target; build it with `./mbt.cmd build -t MowoSandbox`.

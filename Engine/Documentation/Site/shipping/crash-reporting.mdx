@@ -1,0 +1,158 @@
+---
+title: Crash reporting
+description: How the crash handler and out-of-process reporter capture a crash, how a game sets its own endpoint and consent, and how mbt archives and uploads symbols.
+order: 7
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/FCrashHandler.h
+  - Engine/Source/Runtime/Core/Private/FCrashHandler.cpp
+  - Engine/Source/Runtime/Core/Public/Core/CrashReportClientSettings.h
+  - Engine/Source/Runtime/Core/Private/CrashReportClientSettings.cpp
+  - Engine/Source/Runtime/Core/Public/Core/FAssertions.h
+  - Engine/Source/Runtime/Core/Public/Core/Constants.h
+  - Engine/Source/Programs/MowoCrashReporter/Private/MowoCrashReporter.cpp
+  - Engine/Source/Programs/MowoCrashReporter/Private/CrashWatchdog.cpp
+  - Engine/Source/Programs/MowoCrashReporter/Private/CrashReporterApp.cpp
+  - Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h
+  - Engine/Source/Runtime/Http/Private/SentryCrashUploader.cpp
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/EngineLoop/Private/Core/ShippingManifest.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/SymbolsCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SymbolUploader.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SymbolArchive.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ShippingInfo.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DebugInfoSplitter.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs
+  - Engine/Config/CrashReporting.example.ini
+verifiedAt: 6caf55861
+---
+
+When a packaged game crashes, Mowo writes a report to disk and shows the player a crash dialog. With the player's consent the report goes to a Sentry-compatible server, and with the build's symbols uploaded too, the server turns the raw dump into a readable call stack.
+
+This page follows a crash from the fault to the server, then covers what you configure before a release.
+
+## How a crash is captured
+
+<Flow steps={["Crash handler installed", "Fault", "Watchdog writes .dmp", "Crash dialog", "Upload with consent", "Server symbolicates"]} highlight={2} caption="The Windows crash path. The dump is written by a separate process, not by the one that crashed." />
+
+**The handler.** Every shippable host calls <Source symbol="FCrashHandler::Install" /> first thing, before engine initialization, so even startup faults are caught. On Windows it hooks the unhandled-exception filter plus the C runtime's terminate, pure-virtual and invalid-parameter handlers <Source path="Engine/Source/Runtime/Core/Public/Core/FCrashHandler.h" />.
+
+**The watchdog.** On Windows, `Install()` also starts the crash reporter executable in watchdog mode <Source path="Engine/Source/Programs/MowoCrashReporter/Private/MowoCrashReporter.cpp" />. When the game faults, the watchdog writes the minidump of the crashed process from outside, so the dump survives heap and stack corruption the crashed process could not write around. Without a watchdog, the handler writes the dump itself.
+
+**Hangs.** The main loop sends a heartbeat every frame. If it stops for 60 seconds, the watchdog writes a hang report with every thread's stack, without killing the game <Source path="Engine/Source/Programs/MowoCrashReporter/Private/CrashWatchdog.cpp" />.
+
+**Ensures.** `MOWO_ENSURE(expr)` and `MOWO_ENSURE_MSG(expr, ...)` write a non-fatal report the first time a call site fails, and let execution continue <Source path="Engine/Source/Runtime/Core/Public/Core/FAssertions.h" />.
+
+### What a report contains
+
+Each report is a group of files named `crash_<YYYYMMDD_HHMMSS>` in the crash folder:
+
+| File | Contents |
+|---|---|
+| `.dmp` | The minidump |
+| `.txt` | Exception details, a symbolized stack of the crashing thread, the other threads, the loaded modules, the tags, and the game's crash settings |
+| `.log` | The last 128 KB of the game's log |
+
+Only the newest 5 report groups are kept <Source path="Engine/Source/Runtime/Core/Public/Core/Constants.h" />. A packaged game writes them to its per-user `Saved/Crashes` folder.
+
+Tags describe the machine and the run: OS, CPU, memory and displays, then GPU, driver, graphics API and configuration once the renderer starts, and the package's `build_id`. Add your own with `FCrashHandler::SetTag(key, value)`, for example the current level; every tag set before the fault rides along.
+
+```cpp wrap title="MyGameMode.cpp"
+#include "Core/FCrashHandler.h"
+
+Mowo::FCrashHandler::SetTag("level", "Content/Scenes/Swamp.mmap");
+```
+
+<Callout type="warning" title="macOS and Linux">
+Minidumps are Windows-only. On macOS the handler writes a text report from `backtrace()`, with no minidump <Source path="Engine/Source/Runtime/Core/Public/Core/FCrashHandler.h" />.
+</Callout>
+
+## The crash dialog
+
+After a crash the player sees the reporter window, headed "`<Product>` closed unexpectedly". It has a "What were you doing?" field, **Attach log** and **Attach minidump** checkboxes with their sizes, a **Technical details** disclosure with the call stack and modules, a privacy note, and three buttons: **Close without sending**, **Send and close** and **Send and restart** <Source path="Engine/Source/Programs/MowoCrashReporter/Private/CrashReporterApp.cpp" />. **Close without sending** is recorded in the report, so a later launch does not send it either.
+
+<Screenshot id="shipping-crash-reporter-dialog" alt="The crash reporter window after a deliberate crash of a packaged game: headline 'MyGame closed unexpectedly', the 'What were you doing? Optional' field with a typed comment, Attach log and Attach minidump checked with their sizes, the Technical details section expanded on the Callstack tab, and the Close without sending, Send and close and Send and restart buttons." />
+
+The reporter ships as `Binaries/<Platform>/<Product>CrashReporter.exe` in both link modes, and `Shipping.json` tells the game where it is. Dedicated server packages do not include it.
+
+The player-facing switches `--no-crash-reporter` and `--silent` suppress the dialog. The environment variable `MOWO_NO_CRASH_REPORTER=1` does the same for automated runs. None of them stop the dump from being written <Source path="Engine/Source/Runtime/Core/Private/FCrashHandler.cpp" />.
+
+## Endpoint and consent
+
+A game's crash settings live in the `[CrashReportClient]` section of the project's `Config/Engine.ini`, as in Unreal <Source path="Engine/Source/Runtime/Core/Public/Core/CrashReportClientSettings.h" />:
+
+```ini title="Config/Engine.ini"
+[CrashReportClient]
+bEnabled=True
+Dsn=https://<public-key>@<your-sentry-host>/<project-id>
+bAgreeToCrashUpload=False
+bSendUnattendedBugReports=False
+```
+
+| Key | Meaning |
+|---|---|
+| `bEnabled` | `False` keeps reports on disk; nothing is sent |
+| `Dsn` | Your Sentry project's DSN |
+| `bAgreeToCrashUpload` | The player already consented, for example in your EULA or an options toggle: the next launch sends reports without asking |
+| `bSendUnattendedBugReports` | Send with no reporter window, for servers and kiosks. Needs `bAgreeToCrashUpload` |
+
+`mbt package` copies the section into `Shipping.json` as `crashReporter.*` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ShippingInfo.cs" />. Priority for the DSN: `mbt package --crash-dsn <dsn>`, then `Config/Engine.ini`, then the legacy `crashReporter.dsn` block in the `.mproject`, then the DSN compiled into the engine. `--no-crash-reporter` writes `enabled: false` and an empty DSN.
+
+The game applies the manifest before engine initialization, and every report carries the game's DSN and consent in its `.txt` <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/ShippingManifest.cpp" />. That decides what leaves the machine:
+
+- **With `bAgreeToCrashUpload=False`** (the default), nothing is sent until the player presses a **Send** button in the dialog.
+- **With consent given**, the next launch uploads pending reports. `Engine::Initialize` calls `SentryCrashUploader::FlushPending()`, which posts each dump with its text report and log and deletes it on success <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" />. A failed upload stays on disk for the next try.
+- **With `bEnabled=False`**, reports stay on disk, and the dialog says sending is disabled.
+
+Reports are never uploaded from the crashing process, whose heap may be corrupt. See [`SentryCrashUploader`](/docs/api/http/) for the API.
+
+<Callout type="danger" title="Set your own DSN before you release">
+Without your own `Dsn`, a game's reports go to the engine team's Sentry project, not yours.
+</Callout>
+
+## Symbols
+
+A minidump holds addresses, not function names. For the server to show a readable stack, it needs the build's symbols. Every configuration emits them, Shipping included, and they stay beside the binaries in `Engine/Binaries/<Platform>/`; they never ship in a package <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs" />.
+
+`mbt package` handles symbols as its symbol step <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />:
+
+1. It copies every shipped binary and its symbol file into `<Product>-symbols/<buildId>/` beside the package, so the next build cannot overwrite the only copy <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SymbolArchive.cs" />.
+2. It converts each one to a smaller Breakpad `.sym` with `dump_syms`, falling back to the raw file when a conversion fails, and uploads them with `sentry-cli debug-files upload` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SymbolUploader.cs" />.
+3. For Shipping, it waits until the server has processed the files, and **an upload that was attempted and failed fails the package**: a build whose crashes cannot be read should not ship. Retry with `mbt symbols <archive> --wait`, or package with `--no-symbols`.
+
+A machine without `sentry-cli` or an auth token skips the upload with a warning and keeps the archive.
+
+On Linux and macOS, Shipping and Test packages first split debug information out of each shipped image into `<binary>.debug` or `<binary>.dSYM` beside the build, and those are what the archive and the upload pick up <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DebugInfoSplitter.cs" />. This path has not run on a POSIX host yet.
+
+To upload separately, use `mbt symbols`:
+
+```powershell
+./mbt.cmd symbols -c Shipping
+./mbt.cmd symbols D:/Projects/MyGame/Saved/Packaged/MyGame-symbols/<buildId> --wait
+```
+
+Without paths it scans `Engine/Binaries/<Platform>`, and `-c` picks one configuration's files by their name suffix <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/SymbolsCommand.cs" />. Standalone `mbt symbols` fails when it cannot upload.
+
+Point the upload at your own server:
+
+| Setting | Purpose |
+|---|---|
+| `SENTRY_AUTH_TOKEN` (environment) | Required. A token with upload rights. It is a secret; keep it in your CI secret store or shell, never in a file in the repository |
+| `SENTRY_URL`, `SENTRY_ORG`, `SENTRY_PROJECT` (environment) | Your server, organization and project |
+| `--url`, `--org`, `--project` | The same, on the `mbt symbols` command line |
+| `Engine/Config/CrashReporting.ini`, section `[CrashReporting]`, keys `Url`, `Org`, `Project` | A developer machine's defaults. Gitignored; copy `CrashReporting.example.ini`. An auth token in this file is ignored |
+
+Options win over environment variables, which win over the file. The built-in defaults point at the engine team's server, so set all of them for your own project.
+
+## Before a release
+
+- Set your own `Dsn` in `[CrashReportClient]` and decide on `bAgreeToCrashUpload`.
+- Set `SENTRY_AUTH_TOKEN`, `SENTRY_URL`, `SENTRY_ORG` and `SENTRY_PROJECT` on the build machine, and check the package log for the symbol line.
+- Keep the `<Product>-symbols/` archive of every build you release.
+- Crash a test build on purpose, send the report, and confirm it arrives with a readable stack.
+
+## Related
+
+- [`FCrashHandler`](/docs/api/core/), [`SentryCrashUploader`](/docs/api/http/)
+- [Mowo Games Launcher](/docs/shipping/games-launcher/#crash-reports), which reports crashes of the games it starts
+- [mbt command reference](/docs/reference/mbt-cli/)

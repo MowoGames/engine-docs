@@ -1,0 +1,93 @@
+---
+title: Content pipeline
+sidebarTitle: Content pipeline
+description: How a source file becomes shippable game content - import into asset packages, the derived data cache, mbt cook and the archives a game mounts.
+order: 8
+icon: FolderInput
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/FileTypes.h
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_package.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/AssetPackageTypes.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/DerivedDataCache.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/MEAFFormat.h
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/ImportDialog.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CookCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/ProjectLayout.cs
+verifiedAt: 08e26df3d
+---
+
+Everything a game is made of lives under the project's `Content/` folder: meshes, textures, sounds, materials, levels, prefabs, UI and data. This section explains how that content moves from an artist's export to the bytes a shipped game reads, and which files the pipeline writes along the way.
+
+## The path a file takes
+
+<Flow steps={["Source file (SourceArt/)", "Import", "Asset package (Content/)", "Derived Data Cache", "mbt cook", "Archives"]} highlight={2} caption="The package is the asset. The cache and the archives can always be rebuilt from it." branch={{ from: "Import", label: "assets authored in the editor are packages from the start" }} />
+
+1. **Source file.** An FBX, glTF, PNG, EXR or WAV that you export from a content tool. Keep sources in `SourceArt/` beside `Content/`; the game never references them.
+2. **Import.** The editor builds the source into [asset packages](/docs/content-pipeline/asset-formats/) in the `Content/` folder you chose: `.mesh` or `.skmesh`, `.skel`, `.anim`, `.tex`, `.mat`, `.sound`. Each package carries its id, its source path and hash, and the options you chose. See [Importing assets](/docs/content-pipeline/importing/).
+3. **Derived Data Cache.** Expensive derived forms, such as a texture's compressed mips or a built mesh, are cached under `Intermediate/DerivedDataCache`, keyed by content, settings and producer version. A team can share the cache through a folder or a server. See [Derived Data Cache](/docs/content-pipeline/derived-data-cache/).
+4. **Cook.** `mbt cook` builds every package for the target platform, turns text assets into binary MDF, and packs everything into `.meaf` [archives](/docs/content-pipeline/archives/), optionally split into chunks. See [Cooking](/docs/content-pipeline/cooking/).
+
+Levels, materials, prefabs, UI and the other assets you author in the editor are text packages from the start. They have no import step, but they still pass through the cook and reach the archive in binary form.
+
+## What you commit and what you do not
+
+The team commits sources, packages and project config. Everything the engine can regenerate lives in folders you do not commit.
+
+| Path | What it holds | Commit it? |
+|---|---|---|
+| `SourceArt/**` | Source files you import from | Yes |
+| `Content/**` | Asset packages, levels with their `__ExternalActors__/` files, and the `.mdfmeta` sidecars of loose files | Yes |
+| `Config/*.ini` | Project [config](/docs/content-pipeline/config-files/): redirects, import presets, chunks, plugins, input | Yes |
+| `.gitattributes` | The file-type block (LFS and merge drivers), generated from the file-type table | Yes |
+| `Intermediate/DerivedDataCache/` | Cached derived data | No |
+| `Saved/Cooked/` | Default output folder of `mbt cook` | No |
+| `Saved/MigratedSources/` | Originals that a migration converted or replaced | No |
+| `Saved/OrphanedMeta/` | Sidecars whose file disappeared | No, restore by hand |
+
+The engine and the build tool name these folders in one place <Source symbol="FProjectLayout" />.
+
+<Callout type="warning">
+Never delete a `.mdfmeta` file to "reset" an asset, and never delete and re-create a package to "clean" it. The sidecar or the package summary carries the asset's id, and every reference by id breaks without it. Reimport instead.
+</Callout>
+
+Binary packages (`.mesh`, `.skmesh`, `.skel`, `.anim`, `.tex`, `.sound`, `.pointcloud`, `.gsplat`) are stored in Git LFS and are lockable, because two people cannot merge them. Text packages merge property by property. See [File types](/docs/content-pipeline/file-types/#git-attributes) and [Source control](/docs/editor/source-control/).
+
+<Screenshot id="content-pipeline-content-browser-overview" alt="Mowo Editor with the Content Browser docked at the bottom, the Content root expanded to show Meshes, Materials, Textures and Maps folders, and the Meshes folder selected so its .mesh, .mat and .tex package tiles are visible in the grid" caption="The Content Browser shows packages. Sidecars are hidden." />
+
+## How the game finds content
+
+Assets are never addressed by absolute disk path. A level stores a project-relative path such as `Content/Props/Crate.mesh`, and the virtual file system resolves it against a stack of mounts: the project's `Content/` folder in the editor, cooked archives in a game, and engine content beneath both. See [Archives](/docs/content-pipeline/archives/#how-the-game-finds-content).
+
+## Formats at a glance
+
+| Format | Used for |
+|---|---|
+| [MDF](/docs/content-pipeline/mdf/) text | Levels, actor files, materials, prefabs, UI, gameplay data, sidecars |
+| [Asset packages](/docs/content-pipeline/asset-formats/) | Every asset: an MDF summary and payload, plus bulk data for binary types |
+| `.mmodel`, `.mtex`, `.maudio` | The cooked mesh, texture and audio data the runtime decodes |
+| [INI](/docs/content-pipeline/config-files/) | Project and engine configuration |
+| [`.meaf`, `.mutoc`/`.mucas`](/docs/content-pipeline/archives/) | Cooked archives and IoStore containers |
+| JSON | Only the `.mproject` and `.mplugin` manifests |
+
+Older projects used generic extensions (`.mdfscene`, `.mdfmat`, `.masset`) and kept sources in `Content/`. Opening such a project renames its files to their own extensions; `mbt asset migrate --source-art` moves sources out. See [File types](/docs/content-pipeline/file-types/#old-spellings-migrate-on-open).
+
+## In this section
+
+<CardGrid>
+<Card title="File types" href="/docs/content-pipeline/file-types/" icon="FileText">Every extension and how old spellings migrate.</Card>
+<Card title="Asset formats" href="/docs/content-pipeline/asset-formats/" icon="Boxes">Asset packages and the cooked binary formats.</Card>
+<Card title="MDF" href="/docs/content-pipeline/mdf/" icon="Braces">The text and binary data format behind every asset.</Card>
+<Card title="Config files" href="/docs/content-pipeline/config-files/" icon="FileText">INI layers, operators and which file holds what.</Card>
+<Card title="Importing assets" href="/docs/content-pipeline/importing/" icon="FolderInput">Supported sources, import options and reimport.</Card>
+<Card title="Sidecars and UUIDs" href="/docs/content-pipeline/sidecars-and-uuids/" icon="FolderInput">What `.mdfmeta` holds and how orphans are rescued.</Card>
+<Card title="Redirectors" href="/docs/content-pipeline/redirectors/" icon="FolderInput">How renames keep old references working.</Card>
+<Card title="Cooking" href="/docs/content-pipeline/cooking/" icon="PackageCheck">What `mbt cook` produces and how to control it.</Card>
+<Card title="Archives" href="/docs/content-pipeline/archives/" icon="Layers">`.meaf` archives, IoStore containers and mounting.</Card>
+<Card title="Derived Data Cache" href="/docs/content-pipeline/derived-data-cache/" icon="FolderInput">Where cached data lives and how to share it.</Card>
+<Card title="Loading assets" href="/docs/content-pipeline/loading-assets/" icon="Braces">The asset manager, references and memory.</Card>
+</CardGrid>

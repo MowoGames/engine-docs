@@ -1,0 +1,228 @@
+---
+title: "How-to: a door that opens on overlap"
+sidebarTitle: "How-to: overlap door"
+description: Build two visual classes, a door and a trigger, so a door slides open when the player walks up and closes when they leave.
+order: 10
+sources:
+  - Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp
+  - Engine/Source/Runtime/Game/Public/Game/MTriggerComponent.h
+  - Engine/Source/Runtime/Game/Private/LoomRuntime.cpp
+  - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Loom/Private/LoomVM.cpp
+  - Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp
+  - Templates/TP_FirstPerson/Content/Blueprints/BP_SlidingDoor.loom
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp
+verifiedAt: 08e26df3d
+---
+
+This guide builds a door that slides open when the player walks into a trigger, and slides shut when they leave. You will use a component slot, the `OnTriggerEnter` and `OnTriggerExit` events, functions, and a call from one visual class into another.
+
+You build two classes:
+
+- **`BP_SlidingDoor`** knows how to open and close itself. It has two functions and no idea what triggers it.
+- **`BP_DoorTrigger`** carries a trigger volume. When something enters or leaves, it finds the door by tag and calls the door's functions.
+
+<Flow steps={["Player enters trigger", "BP_DoorTrigger: OnTriggerEnter", "Get Actor By Tag", "Call On Target: OpenDoor", "BP_SlidingDoor moves"]} highlight={3} caption="What happens when the player walks up" />
+
+<Callout type="tip">
+
+Why two actors? A trigger slot lives on its actor. If the door carried its own trigger and moved itself out of the way, the trigger would move with it, the player would "leave" it, and the door would close again.
+
+</Callout>
+
+## Before you start
+
+You need a project open in Mowo Editor with a level that has a player character. A trigger reports actors whose origin is inside its volume, and character controllers <Source path="Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp" />.
+
+## Part 1: the door
+
+<Steps>
+<Step title="Create the class">
+
+In the Content Browser, right-click a folder and choose **Loom Class > Actor**. Name it `BP_SlidingDoor` and double-click it.
+
+</Step>
+<Step title="Add a variable">
+
+In **Variables**, add `IsOpen` of type Bool. Leave its default at `false`.
+
+</Step>
+<Step title="Give it a mesh">
+
+Click **+** in the **My Loom** header and add a **MeshRenderer** component. The editor switches to the class layout. Select the slot, set its mesh, and save. See [Component slots](/docs/visual-scripting/classes-and-inheritance/#component-slots).
+
+</Step>
+<Step title="Write OpenDoor">
+
+Open the **Event graph** tab and click **+** in **Functions** and name the function `OpenDoor`. In its graph, wire:
+
+1. The entry node into a **SetActorLocation** call. This is `AActor`'s own `MFUNCTION`, so it runs on the door itself <Source symbol="AActor" />.
+2. A **Make Vector** node into its location pin. Type the open position into X, Y and Z.
+3. **SetActorLocation** into a **Set Variable** for `IsOpen`, with the value `true`.
+
+</Step>
+<Step title="Write CloseDoor">
+
+Add a second function, `CloseDoor`, the same way. Use the closed position in **Make Vector** and set `IsOpen` to `false`.
+
+</Step>
+<Step title="Compile and save">
+
+Click **Compile**, then **Save**.
+
+</Step>
+</Steps>
+
+The FirstPerson template's `BP_SlidingDoor.loom` uses the same `SetActorLocation` pattern, driven by an `OnInteract` graph <Source path="Templates/TP_FirstPerson/Content/Blueprints/BP_SlidingDoor.loom" />.
+
+## Part 2: the trigger
+
+<Steps>
+<Step title="Create the class">
+
+Create another class with **Loom Class > Actor**, named `BP_DoorTrigger`.
+
+</Step>
+<Step title="Add the door tag variable">
+
+Add a String variable `DoorTag` with the default `FrontDoor`. Turn on **Instance Editable**, so each placed trigger can point at a different door.
+
+</Step>
+<Step title="Add a Trigger slot">
+
+Add a **Trigger** component the same way. Set its shape to Sphere and its radius to cover the doorway. Save.
+
+A class with a `Trigger` slot gets a live trigger component when it spawns, and stays in the tick schedule so the overlap check runs <Source path="Engine/Source/Runtime/Game/Private/LoomRuntime.cpp" />. The trigger's shape can be Box, with half extents, or Sphere, with a radius <Source symbol="MTriggerComponent" />.
+
+</Step>
+<Step title="Handle OnTriggerEnter">
+
+In **Graphs**, type `OnTriggerEnter` into **Add event graph...**. In the new graph, wire:
+
+1. The **Event** node into a **Call On Target** node. In its details, set the function to `OpenDoor`.
+2. **Get Variable** `DoorTag` into a **Get Actor By Tag** node.
+3. **Get Actor By Tag** into the Target pin of **Call On Target**.
+
+</Step>
+<Step title="Handle OnTriggerExit">
+
+Add an `OnTriggerExit` graph that is the same, but calls `CloseDoor`.
+
+</Step>
+<Step title="Compile and save">
+
+Compile, then save.
+
+</Step>
+</Steps>
+
+When the trigger fires, `OnTriggerEnter` runs with the overlapping actor in `PinPayload` <Source path="Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp" />. **Call On Target** finds no reflected `OpenDoor` on the door's class, so it runs the door's visual function in the door's own context, where `IsOpen` lives <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />.
+
+<Screenshot id="loom-howto-door-trigger-graph" alt="Visual Scripting editor with BP_DoorTrigger open on the OnTriggerEnter graph: an Event OnTriggerEnter node wired to a Call On Target node whose details show function OpenDoor; a Get Variable DoorTag node feeds a Get Actor By Tag node whose output feeds the Target pin" caption="The trigger's OnTriggerEnter graph." />
+
+### What the trigger class looks like on disk
+
+Saved, `BP_DoorTrigger.loom` has this shape. Defaults are written only when they differ from the built-in default, which is why `execElse` does not appear <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />.
+
+```mdf title="Content/Blueprints/BP_DoorTrigger.loom"
+LoomClass {
+    schema: 9
+    class: "BP_DoorTrigger"
+    parent: "AActor"
+
+    Variable {
+        name: "DoorTag"
+        editable: true
+        vtype: "String"
+        val: "FrontDoor"
+    }
+    Component {
+        name: "Trigger"
+        type: "Trigger"
+
+        Default {
+            prop: "shape"
+            vtype: "Int"
+            val: 1
+        }
+        Default {
+            prop: "radius"
+            vtype: "Float"
+            val: 3.0
+        }
+    }
+    Graph {
+        event: "OnTriggerEnter"
+        entry: 0
+
+        Node {
+            kind: "Event"
+            name: "OnTriggerEnter"
+            execNext: 1
+        }
+        Node {
+            kind: "CallOn"
+            function: "OpenDoor"
+            execNext: -1
+
+            Input {
+                link: 2
+                pin: 0
+            }
+        }
+        Node {
+            kind: "GetActorByTag"
+            execNext: -1
+
+            Input {
+                link: 3
+                pin: 0
+            }
+        }
+        Node {
+            kind: "GetVar"
+            var: "DoorTag"
+            execNext: -1
+        }
+    }
+}
+```
+
+The `OnTriggerExit` graph is the same with `CloseDoor`. A `shape` of 1 is Sphere.
+
+## Part 3: place and play
+
+<Steps>
+<Step title="Place the door">
+
+Drag `BP_SlidingDoor` into the level. In its Details panel, add the tag `FrontDoor` under **Tags** <Source symbol="AActor" />.
+
+</Step>
+<Step title="Place the trigger">
+
+Drag `BP_DoorTrigger` in front of the door. Its `DoorTag` row already reads `FrontDoor`.
+
+</Step>
+<Step title="Play">
+
+Start Play-In-Editor and walk into the trigger. The door moves to its open position. Walk away and it closes.
+
+</Step>
+</Steps>
+
+## If it does not work
+
+| Symptom | Check |
+| --- | --- |
+| Nothing happens | Is the trigger's radius large enough to contain the player's origin? |
+| The log says "CallOn 'OpenDoor': target is null/invalid" | The door has no tag matching `DoorTag`, so Get Actor By Tag returned null. |
+| The log names an unknown function | `OpenDoor` is misspelled on the Call On Target node, or the door class was not compiled. |
+| The door opens once and never closes | There is no `OnTriggerExit` graph, or it calls `OpenDoor`. |
+
+To see the calls happen, open `BP_DoorTrigger` while playing: the nodes pulse as they run. Put a breakpoint on **Call On Target** with <Kbd>F9</Kbd> to stop there. See [Debugging](/docs/visual-scripting/debugging/).
+
+## Take it further
+
+- **Only open for the player.** In `OnTriggerEnter`, **Cast To** your player class on `PinPayload` before calling the door.
+- **Guard against repeats.** In `OpenDoor`, **Branch** on `IsOpen` first and do nothing when it is already open.
+- **Animate the slide or close on a timer.** A Timeline or Delay only suspends in an event graph. Inside a function it runs instantly, and Call On Target reaches functions, not event graphs. To animate, put the Timeline in an event graph on the door, for example `Open`, and fire it as an input pin: from the trigger with `SetTimerByPin` from the **Timer Library** and a short delay, or from C++ with `ReceivePin`. See [Calling C++](/docs/visual-scripting/calling-cpp/#timers-and-level-wiring).

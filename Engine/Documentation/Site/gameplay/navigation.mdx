@@ -1,0 +1,109 @@
+---
+title: Navigation
+description: Bake a navigation mesh, move agents with crowd avoidance, add links, area modifiers and dynamic obstacles, support several agent sizes and rebuild at runtime.
+order: 22
+sources:
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavAgentComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavAgentSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavMeshBuilder.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavMeshAsset.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavMeshRebuildSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavMeshObstacleSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/ANavMeshBoundsVolume.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/LoomAIMoveProvider.h
+  - Engine/Source/Runtime/SceneTypes/Public/Scene/NavMeshSettings.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshLinkComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshModifierComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshObstacleComponent.h
+  - Engine/Source/Editor/MowoEditor/Private/Panels/NavigationPanel.cpp
+verifiedAt: 08e26df3d
+---
+
+Agents find their way over a navigation mesh baked from the level with Recast, and move with Detour's crowd steering, which adds local avoidance so agents walk round each other.
+
+## Bake the navigation mesh
+
+Open the **Navigation** panel and click **Build navigation**. The bake walks every mesh and terrain in the scene, and leaves out holes painted in a terrain. Place an `ANavMeshBoundsVolume` to limit the bake to where agents walk; with none, the whole level is baked. <Source symbol="ANavMeshBoundsVolume" />
+
+The result is saved beside the scene as `<scene>.navmesh` and loaded with it in the editor and the packaged game. <Source symbol="NavMeshAsset" />
+
+<Screenshot id="gameplay-navigation-panel" alt="Mowo Editor Navigation panel next to the viewport: Generation settings (Cell size, Cell height), an Agent types list with Human and Large rows showing radius, height, step and slope, the Build navigation button, and the viewport showing the baked navmesh as a green overlay over the floor" caption="Bake settings, agent types and the baked mesh overlaid on the level." />
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `cellSize`, `cellHeight` | 0.3, 0.2 | Voxel resolution of the bake |
+| `agentRadius`, `agentHeight` | 0.6, 2.0 | The agent capsule |
+| `agentMaxClimb`, `agentMaxSlopeDeg` | 0.4, 45 | Tallest step and steepest slope |
+| `tiled`, `tileSize` | off, 32 | Bake in tiles; needed for large levels and runtime rebuilds |
+| `dynamicObstacles` | off | Lets obstacles cut the mesh at runtime |
+
+<Source path="Engine/Source/Runtime/SceneTypes/Public/Scene/NavMeshSettings.h" />
+
+Tiles bake in parallel on the job system (`nav.ParallelTileBake`), with the same result as a serial bake.
+
+### Several agent sizes
+
+Add agent types (name, radius, height, step, slope) in the panel. Every type is baked together and saved as `<scene>.<Agent>.navmesh`. An agent paths on the mesh its `agentType` names, else on the smallest mesh its radius fits, so a large creature never paths through a gap only a small one fits. <Source symbol="NavMeshBuilder" />
+
+## Move an agent
+
+Add a `NavAgent` component to the entity. <Source symbol="NavAgentComponent" />
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `speed`, `angularSpeed` | 3.5, 360 | Meters and degrees per second |
+| `stoppingDistance` | 0.1 | How close counts as arrived |
+| `radius`, `height` | 0.5, 1.8 | The agent's size for avoidance |
+| `agentType` | empty | Which baked mesh to use |
+
+Set `destination` and `hasDestination` on the component to send it somewhere; `arrived` turns true when it gets there. From a behavior tree use the **Move To** task, and from Visual Scripting the `AIMoveTo` node. <Source path="Engine/Source/Runtime/AINavigation/Public/AINavigation/LoomAIMoveProvider.h" />
+
+```cpp title="SendAgent.cpp" wrap
+#include "AINavigation/NavAgentComponent.h"
+#include "ECS/World.h"
+#include "Math/Vec3.h"
+
+Mowo::World* world = nullptr;
+Mowo::EntityID guard = 0;
+
+if (Mowo::NavAgentComponent* agent = world->GetComponent<Mowo::NavAgentComponent>(guard)) {
+	agent->destination = Mowo::Vec3(12.0f, 0.0f, -4.0f);
+	agent->hasDestination = true;
+}
+```
+
+Without a baked mesh, agents steer in a straight line.
+
+### Path queries
+
+`NavAgentSystem` answers path questions for gameplay: <Source symbol="NavAgentSystem" />
+
+- `RequestPathAsync(start, end, priority)` queues a path search and returns an id; `TakePathResult(id, waypoints)` returns it when ready. At most `nav.PathQueryBudget` search iterations (default 2048) run per frame, so many requests at once do not cause a hitch.
+- `QueryPathLength(start, end)` returns a path length at once.
+- `ProjectPoint(point, verticalExtent, out)` snaps a point onto the mesh.
+
+## Shape the mesh
+
+| Component | Does |
+| --- | --- |
+| `NavMeshLink` | Joins two points the bake cannot connect, such as a jump down or a ladder; `endA`, `endB`, `radius`, `bidirectional` <Source symbol="NavMeshLinkComponent" /> |
+| `NavMeshModifier` | Overrides the area type of its entity's geometry, for example to make a hazard costly <Source symbol="NavMeshModifierComponent" /> |
+| `NavMeshObstacle` | A cylinder or box that cuts the mesh at runtime; needs `dynamicObstacles` <Source symbol="NavMeshObstacleComponent" /> |
+
+## Rebuild at runtime
+
+On a tiled mesh, the rebuild system watches for static geometry that moved, appeared or disappeared, and rebakes the touched tiles on a worker once things settle. Gameplay can mark an area dirty itself, for a door or a deployed barricade. <Source symbol="NavMeshRebuildSystem" />
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `nav.Rebuild` | 1 | Runtime rebuild on or off |
+| `nav.Rebuild.SettleTime` | 0.3 | Seconds the change must stay still |
+| `nav.Rebuild.MaxDelay` | 2.0 | Rebuild anyway after this long |
+| `nav.Rebuild.MaxTiles` | 16 | Tiles per pass |
+| `nav.UseCrowd` | 1 | 0 uses single-agent path following without avoidance |
+
+## Related
+
+- [AI](/docs/gameplay/ai/)
+- [AI crowds and director](/docs/gameplay/ai-crowds-and-director/)
+- API: [AINavigation module](/docs/api/ainavigation/)

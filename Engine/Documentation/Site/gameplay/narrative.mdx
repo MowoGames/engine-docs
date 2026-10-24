@@ -1,0 +1,131 @@
+---
+title: Quests, dialogue and subtitles
+sidebarTitle: Quests and dialogue
+description: Data-driven quests with objectives, branching dialogue that starts and completes quests, and the subtitle and caption queue behind the on-screen text.
+order: 25
+sources:
+  - Engine/Source/Runtime/Narrative/Public/Narrative/QuestAsset.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/QuestSystem.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MQuestStatics.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MQuestStartComponent.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MQuestInteractComponent.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/DialogueAsset.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/DialogueSystem.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MDialogueComponent.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MDialogueStatics.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/SubtitleSystem.h
+  - Engine/Source/Runtime/Narrative/Public/Narrative/MSubtitleStatics.h
+  - Engine/Source/Runtime/Audio/Public/Audio/SoundCue.h
+verifiedAt: 08e26df3d
+---
+
+Quests and conversations are text assets (`.quest`, `.dialogue`) run by two scene systems. Both are scriptable from Visual Scripting, survive save games and level travel, and show their text through the subtitle system. User-facing strings carry a localization key and the authored text.
+
+## Quests
+
+A quest is a list of objectives. <Source symbol="QuestAsset" />
+
+```mdf title="Content/Quests/q_clear_camp.quest"
+Quest "q_clear_camp" {
+    schema_version: 1
+    name_key: "q_clear_camp.name"
+    name_text: "Clear the Camp"
+    parallel: false
+    prerequisites: ["q_intro"]
+    next_quests: ["Content/Quests/q_report_back.quest"]
+
+    Objective "kill_raiders" {
+        text_key: "q_clear_camp.kill"
+        text_text: "Kill the raiders"
+        type: Kill
+        target_tag: "Enemy.Raider"
+        count: 5
+    }
+    Objective "reach_camp" {
+        text_key: "q_clear_camp.reach"
+        text_text: "Reach the camp"
+        type: ReachLocation
+        position: vec3(120, 4, -35)
+        radius: 8.0
+    }
+}
+```
+
+| Objective type | Advances when |
+| --- | --- |
+| `Kill` | An actor dies whose tags match `target_tag` hierarchically (or whose class is `target_class`) |
+| `ReachLocation` | The player pawn is within `radius` of `position` |
+| `Interact` | `MQuestStatics::ReportInteract(actor)` is called for an actor with a matching `MQuestInteractComponent` |
+| `Collect`, `CustomEvent` | `MQuestStatics::ReportQuestEvent(event, amount)` names the objective's `event` |
+
+Objectives can be `optional` or `hidden`. With `parallel: false`, objectives complete in order. `next_quests` start when the quest completes.
+
+### Run quests
+
+Drop an `MQuestStartComponent` (`questPath`, `autoStart`) on any placed actor to start a quest line when the level begins. From code or Visual Scripting, `MQuestStatics` offers `StartQuest`, `AdvanceObjective`, `CompleteObjective`, `FailQuest`, `ReportQuestEvent`, `ReportInteract`, `IsQuestActive`, `IsQuestCompleted`, `GetObjectiveProgress`, `GetActiveQuestName` and `GetActiveObjectiveText`. <Source symbol="MQuestStatics" />
+
+`QuestSystem::OnQuestStarted()` and its siblings for completion, failure and objective updates broadcast to C++ listeners. <Source symbol="QuestSystem" />
+
+For the HUD, game UI can bind text to `quest.name`, `quest.objective` and `quest.progress`. See [UI](/docs/ui/).
+
+## Dialogue
+
+A dialogue is a graph of nodes. A node shows a line, can play a voice clip on the Voice bus at the speaker, fire named events, and start or complete quests. Choices branch and can be gated on a quest's state. <Source symbol="DialogueAsset" />
+
+```mdf title="Content/Dialogue/dlg_guard.dialogue"
+Dialogue "dlg_guard" {
+    schema_version: 1
+    start_node: "greet"
+
+    Node "greet" {
+        speaker_key: "dlg_guard.name"
+        speaker_text: "Gate Guard"
+        text_key: "dlg_guard.greet"
+        text_text: "Halt. State your business."
+        events: ["met_guard"]
+
+        Choice {
+            text_key: "dlg_guard.ask"
+            text_text: "I'm looking for work."
+            target: "give_quest"
+        }
+        Choice {
+            text_key: "dlg_guard.done"
+            text_text: "The camp is cleared."
+            target: "reward"
+            condition_quest: "q_clear_camp"
+            condition_state: Active
+        }
+    }
+    Node "give_quest" {
+        text_key: "dlg_guard.work"
+        text_text: "Clear the raider camp and I'll pay well."
+        start_quest: "Content/Quests/q_clear_camp.quest"
+    }
+    Node "reward" {
+        text_key: "dlg_guard.thanks"
+        text_text: "Impressive. Here's your pay."
+        complete_quest: "q_clear_camp"
+    }
+}
+```
+
+One conversation runs at a time. Put an `MDialogueComponent` (`dialoguePath`, `autoStart`) on an NPC to make it talkable. `MDialogueStatics` drives the conversation: `StartDialogue(actor)`, `StartDialogueByPath`, `Advance`, `Choose(index)`, `EndDialogue`, and reads `GetDialogueSpeaker`, `GetDialogueText`, `GetChoiceCount` and `GetChoiceText` for your dialogue UI. <Source symbol="MDialogueStatics" />
+
+While a dialogue runs, the mix ducks music and ambience; see [Music and mixing](/docs/gameplay/music-and-mixing/).
+
+## Subtitles and captions
+
+The subtitle system holds the lines currently on screen, sorted by priority and expiring on their own timers. Lines come from three places: <Source symbol="FSubtitleSystem" />
+
+- **Dialogue**: every dialogue line becomes a subtitle with its speaker.
+- **Sound cues**: a cue with a caption announces itself when it plays. A caption marked as speech is a subtitle; one that is not, such as `[door creaks]`, shows only with closed captions on. <Source symbol="SoundCue" />
+- **Code**: `MSubtitleStatics::ShowSubtitle` and `ShowCaption`.
+
+Players control them with `SetSubtitlesEnabled`, `SetClosedCaptions` and `SetSubtitleScale`, or the matching console variables `audio.Subtitles`, `audio.ClosedCaptions`, `audio.SubtitleScale`, `audio.SubtitleMaxLines`, `audio.SubtitleSpeakerNames` and `audio.SubtitleBackgroundOpacity`. <Source symbol="MSubtitleStatics" /> Speech nobody captioned can be subtitled automatically; see [Accessibility](/docs/gameplay/accessibility/).
+
+## Related
+
+- [Save games](/docs/gameplay/save-games/) for how quest state persists
+- [Audio](/docs/gameplay/audio/)
+- API: [Narrative module](/docs/api/narrative/)

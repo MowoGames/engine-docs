@@ -1,0 +1,74 @@
+---
+title: Platform abstraction
+description: The Platform module is the only place OS-specific code lives. Reach processes, files, paths, threads, time and windows through FPlatform.
+order: 9
+sources:
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformAbstraction.h
+  - Engine/Source/Runtime/Platform/Public/Platform/IPlatformProcess.h
+  - Engine/Source/Runtime/Platform/Public/Platform/IPlatformPaths.h
+  - Engine/Source/Runtime/Platform/Public/Platform/IPlatformThread.h
+  - Engine/Source/Runtime/Platform/Public/Platform/IPlatformLibrary.h
+  - Engine/Source/Runtime/Platform/Public/Platform/IPlatformCrypto.h
+  - Engine/Source/Runtime/Platform/Public/Platform/IPlatformDialog.h
+  - Engine/Source/Runtime/Platform/Platform.Build.cs
+verifiedAt: 08e26df3d
+---
+
+The **Platform** module (`MowoEngine.Platform`) holds every call into the operating system the engine makes: processes, dynamic libraries, well-known folders, environment variables, threads, the clock, files, sockets, dialogs and native window state. Everything above it calls these services through interfaces and never includes `windows.h` or `dlfcn.h`. Platform sits at the bottom of the module order, below Core.
+
+## FPlatform
+
+One accessor reaches every interface: <Source symbol="FPlatform" />
+
+| Accessor | Interface | Covers |
+| --- | --- | --- |
+| `FPlatform::Process()` | `IPlatformProcess` | The executable's path, spawning and waiting on processes, opening URLs and files in the shell |
+| `FPlatform::Library()` | `IPlatformLibrary` | Loading libraries and resolving symbols; the platform's library extension |
+| `FPlatform::Paths()` | `IPlatformPaths` | Per-user config, state and cache folders, the home folder |
+| `FPlatform::Env()` | `IPlatformEnv` | Environment variables |
+| `FPlatform::Thread()` | `IPlatformThread` | Thread names, affinity and priority |
+| `FPlatform::Time()` | `IPlatformTime` | The monotonic clock, sleeping, calendar time |
+| `FPlatform::File()` | `IPlatformFile` | Positioned reads, memory mapping, shared streams, directory watching |
+| `FPlatform::Event()` | `IPlatformEvent` | An auto-reset wait event |
+| `FPlatform::Memory()` | `IPlatformMemory` | Physical memory and the process working set as the OS reports them |
+| `FPlatform::Crypto()` | `IPlatformCrypto` | Random bytes from the OS entropy source |
+| `FPlatform::Dialog()` | `IPlatformDialog` | Native open, save and folder dialogs |
+| `FPlatform::Socket()` | `IPlatformSocket` | Small loopback TCP and UDP sockets for tools (not game traffic) |
+| `FPlatform::Console()` | `IPlatformConsole` | Console colours and debugger output |
+| `FPlatform::Locale()` | `IPlatformLocale` | The user's preferred UI languages |
+| `FPlatform::Window()` | `IPlatformWindow` | Native window state and monitor geometry |
+| `FPlatform::AppMenu()` | `IPlatformAppMenu` | The application menu where the OS has one |
+
+```cpp wrap
+#include "Platform/PlatformAbstraction.h"
+#include "Platform/IPlatformProcess.h"
+#include "Platform/IPlatformPaths.h"
+
+#include <string>
+
+const std::string exeDir = Mowo::FPlatform::Process().ExecutableDir();
+const std::string configDir = Mowo::FPlatform::Paths().UserConfigDir();
+const std::string serverExe = Mowo::FPlatform::Process().ExecutableFileName("MowoServer");
+```
+
+`ExecutableFileName("MowoServer")` returns `MowoServer.exe` on Windows and the name unchanged elsewhere.
+
+Other headers in `Platform/` cover services that are not singletons: video decoding and encoding (`PlatformVideo.h`), asynchronous file reads (`PlatformAsyncIO.h`), shared memory between processes (`PlatformSharedMemory.h`), and the desktop services in [Platform services](/docs/programming/platform-services/). The full list is on the [Platform API page](/docs/api/platform/).
+
+## Differences the interfaces expose
+
+Where platforms genuinely differ, the interface reports it instead of pretending:
+
+- **Thread names.** `MaxThreadNameLength()` reports the platform's limit including the terminating null (16 on Linux, 64 on macOS, none on Windows), and `CanNameForeignThreads()` is false where only the calling thread can be named (macOS).
+- **Thread priority.** `SetCurrentThreadPriority` returns false when the OS refuses a raise, as POSIX does without privileges.
+- **Child processes.** `SpawnChildTiedToParent` starts a process that dies with its parent. `GetChildLifetimeCapability()` says how strong that tie is: enforced by the kernel on Windows and Linux, best effort on macOS, where a parent killed by `SIGKILL` still orphans its children. <Source path="Engine/Source/Runtime/Platform/Public/Platform/IPlatformProcess.h" />
+- **Randomness.** `GenerateRandomBytes` returns false rather than falling back to a predictable generator.
+- **Dialogs.** A cancel and an unimplemented backend both return false, so a caller's cancel path covers both.
+
+## The rule
+
+Code outside Platform contains no `_WIN32`, `__APPLE__` or `__linux__` branches. Platform's own backends live in `Private/Windows/`, `Private/Linux/`, `Private/Mac/` and shared POSIX folders, and the build tool compiles only the folders for the target platform, so the backends themselves need no `#ifdef` either. <Source path="Engine/Source/Runtime/Platform/Platform.Build.cs" />
+
+The exceptions are things a function call cannot do: the export macros in `Core/Platform.h`, debugger break intrinsics, and the per-OS entry point (`WinMain` or `main`). The RHI backends are the platform layer for their graphics APIs.
+
+When you need something the interfaces do not offer, add it to Platform with a backend per OS rather than branching at the call site.

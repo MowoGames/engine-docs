@@ -1,0 +1,158 @@
+---
+title: File types
+description: Every file extension a Mowo project uses (assets, levels, config, sources, sidecars and cooked output) and how older spellings migrate.
+order: 2
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/FileTypes.h
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/FileTypes.cs
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Runtime/Project/Private/ProjectMigration.cpp
+verifiedAt: 08e26df3d
+---
+
+Every asset type in Mowo has its own file extension: a material is `.mat`, a level is `.mmap`, a texture is `.tex`. One table in the engine, `FFileTypes` <Source symbol="FFileTypes" />, lists every type with its canonical extension, whether it is text or binary, what category it belongs to, whether Git LFS stores and locks it, and the older spellings it still reads. The editor, the asset registry, the cook and the build tool all read the same table, so an extension means the same thing everywhere. This page explains the groups; the [file types reference](/docs/reference/file-types/) lists every row of the table, generated from the code.
+
+## Assets
+
+Assets live under `Content/`. Text assets are [MDF](/docs/content-pipeline/mdf/) documents you can diff and merge. Binary assets hold bulk data (geometry, texels, samples) and are stored in Git LFS with a lock.
+
+### Binary assets
+
+| Extension | Type |
+|---|---|
+| `.mesh` | Static Mesh |
+| `.skmesh` | Skeletal Mesh |
+| `.skel` | Skeleton |
+| `.anim` | Animation Sequence |
+| `.tex` | Texture |
+| `.sound` | Sound Wave |
+| `.pointcloud` | Point Cloud |
+| `.gsplat` | Gaussian Splat |
+
+These are [asset packages](/docs/content-pipeline/asset-formats/) that [import](/docs/content-pipeline/importing/) builds from your source files.
+
+### Text assets
+
+| Area | Extensions |
+|---|---|
+| Materials | `.mat` (Material), `.matinst` (Material Instance), `.matfunc` (Material Function), `.physmat` (Physical Material) |
+| Scene building blocks | `.prefab`, `.prop` (Smart Prop), `.propset` (Smart Prop Set), `.physasset` (Physics Asset), `.fracture` (Fracture Bake) |
+| Scripting and UI | `.loom` (Loom graph), `.ui` (UI widget), `.theme` (UI theme) |
+| Effects | `.particle` (Particle System), `.vfx` (VFX Graph), `.rendertarget`, `.waves` (Wave Spectrum), `.noise` (Noise Stack) |
+| Animation | `.animgraph`, `.montage`, `.pose`, `.mirror` (Mirror Table), `.controlrig`, `.retarget`, `.brickclip` (Motion Bricks Clip) |
+| Cinematics | `.seq` (Level Sequence) |
+| AI | `.btree` (Behavior Tree), `.statetree`, `.eqs` (Environment Query), `.attention`, `.director` (Director Profile) |
+| World | `.volume` (Volume Profile), `.environment` (Environment Profile), `.levelgrammar`, `.pcg` (PCG Graph) |
+| Data | `.data` (Data Asset), `.datatable`, `.curve`, `.collection` |
+| Input | `.inputaction`, `.inputcontext` (Input Mapping Context) |
+| Audio | `.soundcue`, `.cuegraph`, `.metasound`, `.attenuation`, `.mixsnapshot`, `.music`, `.media` (Media Source) |
+| Gameplay data | `.quest`, `.dialogue`, `.schedule`, `.item`, `.weapon`, `.impact` (Impact Table), `.recipe`, `.progression`, `.statuseffect`, `.buildable`, `.shop` |
+
+## Levels and built data
+
+| Extension | Type | Notes |
+|---|---|---|
+| `.mmap` | Level | Text. Each actor is saved in its own `.actor` file. |
+| `.actor` | External Actor | Text, under `Content/__ExternalActors__/<Level>/`, so two people can edit different actors of one level without conflicts. |
+| `.navmesh` | Navigation Mesh | Binary, built from the level. |
+| `.mgi` | Baked GI | Binary. |
+| `.sectors` | Streaming Sectors | Text. |
+| `.mhlod` | HLOD Proxy | Binary. |
+| `.mtel`, `.mtro` | Terrain edit layers, terrain retopology | Binary. |
+
+## Config and manifests
+
+| Extension | Type | Notes |
+|---|---|---|
+| `.ini` | Config | Unreal-style INI. See [Config files](/docs/content-pipeline/config-files/). |
+| `.mproject` | Project | JSON manifest at the project root. |
+| `.mplugin` | Plugin | JSON plugin descriptor. |
+
+## Source files
+
+Source files are what you export from content tools. They are inputs to import, and a project keeps them outside `Content/` (in `SourceArt/`).
+
+| Category | Extensions |
+|---|---|
+| Images | `.png`, `.jpg` (`.jpeg`), `.tga`, `.bmp`, `.gif`, `.psd`, `.dds`, `.hdr`, `.exr`, `.pic`, `.pnm` (`.ppm`, `.pgm`) |
+| Models | `.fbx`, `.gltf`, `.glb`, `.obj` (with `.mtl`) |
+| Audio | `.wav`, `.mp3`, `.ogg`, `.flac`, `.opus` |
+| Fonts | `.ttf`, `.otf`, `.woff` |
+| Video | `.mp4`, `.webm`, `.mkv`, `.mov`, `.avi` |
+| Other data | `.r16` (raw heightmap), `.ply` and `.splat` (Gaussian splats) |
+
+## Sidecars
+
+| Extension | Type |
+|---|---|
+| `.mdfmeta` | [Asset sidecar](/docs/content-pipeline/sidecars-and-uuids/) of a loose file. Appends to the file name: `rock.png.mdfmeta`. |
+| `.mmeshmeta`, `.manimmeta` | Older mesh and clip settings sidecars. Their content now lives inside the mesh package. |
+| `.graphview` | Graph layout of a node editor. |
+| `.mowosig` | Module signature. |
+
+## Cooked and runtime files
+
+These files are written by the cook, by packaging or by a running game. You do not author or commit them.
+
+| Extension | Type |
+|---|---|
+| `.meaf` | Mowo archive (a cooked content pak) |
+| `.mutoc`, `.mucas` | IoStore container: table of contents and blocks |
+| `.mpatch` | Patch bundle |
+| `.mtex`, `.mmodel`, `.maudio` | Cooked texture, model and audio |
+| `.mvtiles` | Virtual texture tiles |
+| `.mdfb` | Binary MDF document |
+| `.msavegame`, `.mwsave` | Save game, world save |
+| `.mtrace`, `.mprof` | Profiler trace and capture |
+| `.dmp` | Crash dump |
+
+## Old spellings migrate on open
+
+Older engine versions wrote generic extensions such as `.mdfmat`, `.marcui`, `.mdfscene`, `.mdfprefab`, `.masset` and `.mdf`. The engine still **reads** every older spelling, but never writes one. When you open a project, it renames each file under `Content/` to its type's own extension <Source symbol="FAssetPackageMigration::RenameLegacyExtensions" />:
+
+- `.mdfmat` becomes `.mat`, or `.matinst` when the material has a parent.
+- `.marcui` becomes `.ui` and `.mtheme` becomes `.theme`.
+- A level becomes `.mmap`.
+- A generic `.masset` or `.mdf` package takes the extension of the class its summary names.
+
+The file keeps its UUID, a redirect from the old path is added to `Config/Redirects.ini`, and quoted references under `Content/` are rewritten, so nothing that pointed at the file breaks. A rename that would overwrite an existing file is skipped and reported.
+
+To see what would change without touching the project, run `mbt asset migrate <project> --report-only`. To refuse migration, start the editor or game with `--no-migrate`, which stops with an error naming the command to run. See the [mbt CLI reference](/docs/reference/mbt-cli/).
+
+<Callout type="warning">
+The legacy spellings are scheduled for removal. Open and save older projects with a current engine before then, so their files carry the new extensions.
+</Callout>
+
+## Git attributes
+
+The table also generates the file-type block of `.gitattributes`, between `# BEGIN file types` and `# END file types` <Source symbol="FFileTypes::GitAttributesBlock" />:
+
+- binary asset types: Git LFS, lockable, diffed through `mbt asset dump`;
+- other binary types: `binary`;
+- MDF text types: LF line endings and a property-level merge driver; `.loom` merges by node id.
+
+A new project is created with the block, and opening a project refreshes it. Do not edit the block by hand; it is regenerated.
+
+## In code
+
+Never spell an extension in code. Ask the table:
+
+```cpp title="FileTypeChecks.cpp" wrap
+#include "Core/FileTypes.h"
+
+#include <string>
+
+const bool isLevel = Mowo::FFileTypes::Is("Content/Maps/Arena.mmap", Mowo::EFileType::Map);
+const Mowo::EFileType type = Mowo::FFileTypes::FromPath("Content/Props/Crate.prefab");
+const std::string materialPath = std::string("Content/Materials/Rock") + Mowo::FFileTypes::Extension(Mowo::EFileType::Material);
+```
+
+`FromPath` and `Is` recognize older spellings too; `Extension` always returns the canonical one. `PackageTypeFor(assetClass)` gives the extension a package of a given class saves under.
+
+## Related
+
+- [Asset formats](/docs/content-pipeline/asset-formats/) for what is inside a package.
+- [Importing assets](/docs/content-pipeline/importing/) for how source files become packages.
+- API: [`FFileTypes`](/docs/api/core/ffiletypes/), [`EFileType`](/docs/api/core/efiletype/).

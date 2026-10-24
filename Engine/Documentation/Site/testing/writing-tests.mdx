@@ -1,0 +1,177 @@
+---
+title: Writing tests
+description: Add a case to one of the engine's test executables with MowoTestKit, report pass, fail or skip through FTestReport, and declare what the case needs to run.
+order: 2
+sources:
+  - Engine/Source/Developer/MowoTestKit/Public/TestKit/MowoTest.h
+  - Engine/Source/Developer/MowoTestKit/Public/TestKit/TestProcess.h
+  - Engine/Source/Developer/MowoTestKit/MowoTestKit.Build.cs
+  - Engine/Source/Developer/MowoTestKit/Private/TestCase.cpp
+  - Engine/Source/Developer/MowoTestKit/Private/TestReport.cpp
+  - Engine/Source/Developer/MowoTestKit/Private/TestProcess.cpp
+  - Engine/Source/Developer/CoreTests/CoreTests.Build.cs
+  - Engine/Source/Developer/CoreTests/Private/CurveTests.cpp
+  - Engine/Source/Developer/RendererTests/Private/TestEngine.h
+  - Engine/Source/Developer/RendererTests/Private/TestEngineFixture.h
+  - Engine/Source/Developer/RendererTests/Private/EngineTestCases.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TestCommand.cs
+verifiedAt: 1a346c1c5
+---
+
+A new engine test is a doctest case in one of the six test executables. The case declares its tags and run options next to its body, so there is no separate runner table to keep in step: `mbt test` asks each executable for its cases and runs what it finds. This page walks through a headless case, then covers skips, GPU cases and the rules that keep the suite honest.
+
+## Pick the executable
+
+Put the case in the executable for the area it tests: `CoreTests` for core libraries, `RuntimeTests` for gameplay and runtime systems, `NetTests` for networking, `ProgramsTests` for the launcher and other programs, `RendererTests` for rendering, `MowoEditorTests` for the editor. See the [Testing overview](/docs/testing/) for what each covers.
+
+Every `.cpp` under the executable's `Private/` folder is compiled, so a new file needs no rules change <Source path="Engine/Source/Developer/MowoTestKit/MowoTestKit.Build.cs" />. The executables build as unity files, which put several `.cpp` files into one translation unit: give file-static helpers names unique to your file.
+
+## The API
+
+Include `<TestKit/MowoTest.h>`. It declares the verdict sink and the registration macros <Source path="Engine/Source/Developer/MowoTestKit/Public/TestKit/MowoTest.h" />:
+
+| Name | Use |
+|---|---|
+| `MOWO_TEST_FUNCTION_OPTS(name, tags, fn, options)` | Register `bool fn()` as a case with run options. The common form |
+| `MOWO_TEST_FUNCTION(name, tags, fn)` | The same with default options |
+| `MOWO_TEST_EXIT_CODE_OPTS(name, tags, fn, options)` | Register `int fn()`: 0 passes, 77 skips, anything else fails |
+| `MOWO_TEST_CASE(name, tags)` | A plain doctest case, body follows |
+| `FTestReport` <Source symbol="FTestReport" /> | `ReportResult(bool)`, `ReportSkipped(reason)` |
+| `FTestCaseOptions` <Source symbol="FTestCaseOptions" /> | What the case needs from its run (below) |
+
+Short doctest macro names such as `CHECK` are switched off because they collide with engine names. Write the `DOCTEST_*` forms, for example `DOCTEST_CHECK`.
+
+## Add a headless case
+
+<Steps>
+<Step title="Write the body">
+A body is a `bool()` function. Count individual checks, log each one, and return `true` only when every check passed. The existing suites follow this pattern: a local `check` lambda and a final `N/M checks passed` line <Source path="Engine/Source/Developer/CoreTests/Private/CurveTests.cpp" />.
+
+Create `Engine/Source/Developer/CoreTests/Private/VectorMathTests.cpp`:
+
+```cpp title="VectorMathTests.cpp"
+#include <TestKit/MowoTest.h>
+#include <Logging/Logger.h>
+#include <Math/Vec3.h>
+
+#include <cmath>
+
+static bool RunVectorMathTest() {
+	int pass = 0;
+	int total = 0;
+
+	auto check = [&](const char* name, bool ok) {
+		++total;
+
+		if (ok) {
+			++pass;
+		}
+
+		MOWO_LOG_INFO("[VectorMathTest]   %-40s %s", name, ok ? "PASS" : "FAIL");
+	};
+
+	const Mowo::Vec3 x(1.0f, 0.0f, 0.0f);
+	const Mowo::Vec3 y(0.0f, 1.0f, 0.0f);
+	const Mowo::Vec3 z = Mowo::Vec3::Cross(x, y);
+
+	check("x cross y is +z", z.x == 0.0f && z.y == 0.0f && z.z == 1.0f);
+	check("orthogonal axes have a zero dot", Mowo::Vec3::Dot(x, y) == 0.0f);
+	check("a 3-4-0 vector has length 5", std::fabs(Mowo::Vec3(3.0f, 4.0f, 0.0f).Length() - 5.0f) < 1e-5f);
+
+	MOWO_LOG_INFO("[VectorMathTest] %d/%d checks passed", pass, total);
+
+	return pass == total;
+}
+
+MOWO_TEST_FUNCTION_OPTS("vector-math-test", "[core]", &RunVectorMathTest, ::Mowo::FTestCaseOptions().WithDescription("vector-math"));
+```
+
+The kit runs the body, passes its result to `FTestReport::ReportResult`, and turns the report into doctest checks when the case ends. A case that ends without any verdict fails as a hollow pass <Source path="Engine/Source/Developer/MowoTestKit/Private/TestCase.cpp" />.
+</Step>
+<Step title="Name and tag it">
+The name is also the case's switch: `--vector-math-test` on the executable's command line selects it, unless you set another with `WithFlag`. Every case carries its area tag (`[core]`, `[runtime]`, `[net]`, `[programs]`, `[renderer]`, `[editor]`) and, where it applies, a subsystem tag such as `[loom]`, `[audio]` or `[physics]`. Add `[gpu]` for a case that needs a device.
+</Step>
+<Step title="Build and run it">
+
+```powershell
+.\mbt.cmd build -t CoreTests
+.\Engine\Binaries\Win64\CoreTests-Win64-Debug.exe -tc=vector-math-test
+.\mbt.cmd test --target CoreTests --filter vector-math --no-build
+```
+</Step>
+</Steps>
+
+## Run options
+
+`FTestCaseOptions` holds what the case needs from its run. The kit applies the switches before the body runs, so `<Exe> -tc=<case>` alone reproduces what `mbt test` ran; `mbt test` reads the rest to prepare the run <Source path="Engine/Source/Developer/MowoTestKit/Public/TestKit/MowoTest.h" />.
+
+| Option | Use it when |
+|---|---|
+| `WithDescription("…")` | Always: a short name `mbt test --filter` also matches |
+| `WithArgs("…")` | The host reads fixed switches (`--width=460`, `--cvar=…`). `{REPO}`, `{PROJECT}` and `{PROJECT_DIR}` expand to the checkout and the test project <Source path="Engine/Source/Developer/MowoTestKit/Private/TestProcess.cpp" /> |
+| `WithFlag("…")` | Several cases share one body that dispatches on the switch |
+| `OnDevice()` | The case needs a GPU device. `mbt test` adds `--gpu-validation` unless you pass `OnDevice(false)` |
+| `WithBackends({ "d3d12", "vulkan" })` | A GPU case should also run as `<case>-<backend>` on the other backends the host links |
+| `OnlyOn("Windows")` | The case needs something only one OS has. Elsewhere it skips, naming what is not covered |
+| `RequiringModule("…")` | The case loads a module no target links, such as a plugin. `mbt test` builds it first |
+| `WithMaterialShaders()` | The case renders the test project's materials, so their shaders are compiled first |
+| `InPackage()` / `FromTemplate("…")` | The case runs with a staged package of the test project, or of a template, as its working directory |
+| `WithTimeout(seconds)` | The case needs more than the default deadline, for example several editor starts |
+
+<Callout type="note">
+A case that needs a backend the host does not link stays registered with `OnlyOn` and skips there. Never compile it out: a missing case is invisible, a skipped case is counted.
+</Callout>
+
+## Report skips honestly
+
+When a case cannot run because something it does not own is missing, report a skip instead of a pass or a failure. Call `FTestReport::ReportSkipped` with what is therefore **not covered**, then return:
+
+```cpp title="Skipping a case" wrap
+#include <TestKit/MowoTest.h>
+
+Mowo::FTestReport::ReportSkipped("Segoe UI Emoji is not installed - color glyph rendering is uncovered");
+```
+
+The reason goes to stderr as `TEST SKIPPED: …` <Source path="Engine/Source/Developer/MowoTestKit/Private/TestReport.cpp" />. A failure outranks a skip, so a body that skips and also fails a check still fails.
+
+When only part of a passing case could not run, log a `[selftest-skip]` line instead. `mbt test` prints it under the PASS line:
+
+```cpp title="Marking skipped checks inside a passing case" wrap
+#include <Logging/Logger.h>
+
+MOWO_LOG_WARN("[selftest-skip] ImportTest: 8 checks NOT RUN - optional reference pack absent");
+```
+
+<Callout type="warning">
+Do not report a pass after logging "not supported, skipped". That produces a green case that never ran, which is exactly what the three-state model exists to prevent.
+</Callout>
+
+## GPU cases
+
+A case that needs a window, a device or the frame loop goes in `RendererTests` and registers with `MOWO_ENGINE_TEST(name, tags, options)` from the private `TestEngineFixture.h`. The fixture starts a fresh `MTestEngine` with its own window and device for the case's switch, and tears it down after <Source path="Engine/Source/Developer/RendererTests/Private/TestEngineFixture.h" />:
+
+```cpp title="EngineTestCases.cpp" nocompile
+MOWO_ENGINE_TEST("frame-cap-test", "[renderer][gpu]", ::Mowo::FTestCaseOptions().WithDescription("frame-rate-cap").WithArgs("--no-throttle").WithBackends({ "d3d12", "vulkan" }).OnDevice(true));
+```
+
+`MTestEngine::StartTests` dispatches on the switch. It returns `false` when the case ran to completion inside the call, and `true` when a tick-driven scene needs the frame loop <Source path="Engine/Source/Developer/RendererTests/Private/TestEngine.h" />. This sample includes a private header of `RendererTests`, so the site's sample checker cannot compile it outside that module.
+
+Two rules apply to GPU cases:
+
+- **Report every verdict you compute.** A body that reads pixels back and only logs the answer leaves the case to whatever reports next. Every early return on a failed pipeline or resource needs `ReportResult(false)`.
+- **Skip what the host lacks.** When the GPU has no ray query, or the case needs a backend this OS does not link, that is a skip with a reason.
+
+## Cases that start a process
+
+A case that has to watch a process, such as a crash, spawns its own executable as a child. `FTestProcess` <Source symbol="FTestProcess" /> has the helpers: spawn and stream a child, the repository root, the fixtures folder and the test project. `MOWO_TEST_CHILD_MODE(switch, fn)` registers a mode the executable runs instead of the doctest session when that switch is on its command line.
+
+## Build tool tests
+
+`MowoBuildTool.Tests` and the other C# test projects use xUnit. `mbt test` finds every test `.csproj` in the tree and runs `dotnet test` on it, so a new C# test project needs no registration <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TestCommand.cs" />.
+
+## Checklist
+
+- The body returns `true` only when every check passed, and logs each check by name.
+- A missing precondition is a `ReportSkipped` with a "not covered" reason.
+- The case has an area tag, and `[gpu]` with `OnDevice()` if it needs a device.
+- `.\mbt.cmd test --filter <name>` passes on your machine. CI does not run it; see [CI](/docs/testing/ci/).

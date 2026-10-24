@@ -1,0 +1,106 @@
+---
+title: Vehicles, cloth and ragdolls
+sidebarTitle: Vehicles, cloth, ragdolls
+description: Wheeled and tracked vehicles, cloth and soft bodies, ragdolls, physics assets and physical animation for hit reactions.
+order: 10
+sources:
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/VehicleComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/VehicleSystem.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/ClothComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/ClothSystem.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/RagdollComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/RagdollSystem.h
+  - Engine/Source/Runtime/Physics/Private/RagdollSystem.cpp
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/PhysicsAssetComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsAsset.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/PhysicalAnimationComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicalAnimationSystem.h
+verifiedAt: 08e26df3d
+---
+
+These features sit on top of the core [physics](/docs/gameplay/physics/) setup. Each is a reflected component you add from the Add Component picker and tune in the Details panel.
+
+## Vehicles
+
+A `Vehicle` component turns a dynamic rigid body into a Jolt wheeled vehicle. <Source symbol="VehicleComponent" />
+
+| Group | Fields |
+| --- | --- |
+| Engine | `maxEngineTorque`, `minRPM`, `maxRPM`, `torqueCurve` (RPM fraction to torque fraction; empty uses Jolt's curve) |
+| Transmission | `gearRatios`, first gear first; empty uses a default automatic box |
+| Steering and drive | `maxSteerDegrees`, `rearWheelDrive` |
+| Tires | `longitudinalFrictionCurve`, `lateralFrictionCurve` |
+| Wheels | `wheels`, one entry per wheel |
+
+Each wheel entry sets its chassis-local `position`, `radius` and `width`, whether it `steering`, is `driven` or takes the `handbrake`, its own `maxSteerDegrees`, suspension length, frequency and damping, brake torques and a friction scale. A six-wheel truck and a trike are the same component with a different table. When the table is empty, the four-wheel layout comes from `wheelRadius`, `axleOffset` and `trackHalfWidth`.
+
+Drive it by writing the runtime inputs `throttle`, `steer`, `brake` and `handbrake` each frame. `currentRPM` and `currentGear` are written back for engine audio and dashboards.
+
+Set `tracked` to make it a tank: `wheelsPerTrack` road wheels per side inside two driven tracks, and `steer` becomes skid steering, up to a pivot turn at full deflection.
+
+## Cloth and soft bodies
+
+A `Cloth` component builds a Jolt soft body. Its `source` picks what is simulated: <Source symbol="ClothComponent" />
+
+| Source | What it simulates |
+| --- | --- |
+| `Grid` | A flat `segmentsX` by `segmentsY` grid of `width` by `length` meters. `pinFirstEdge` holds the first row, for flags, capes and curtains. |
+| `Skinned Mesh` | One submesh (`submeshIndex`) of the entity's skinned mesh. Each vertex may drift up to `maxDistance` from its skinned position; 0 keeps it skinned. A mask painted in the Skeletal Mesh editor's **Cloth Paint** section, or the red vertex color with `maskFromVertexColor`, scales that distance per vertex. |
+| `Soft Body (Mesh)` | The entity's static mesh as a free soft body, such as a cushion or jelly. `pressure` keeps a closed mesh's volume; 0 lets it slump. |
+
+`stretchCompliance` and `bendCompliance` set the stiffness (0 is rigid), `iterations` the solver budget, plus `mass`, `linearDamping` and `gravityFactor`. Cloth collides with the world like any dynamic body.
+
+<Screenshot id="gameplay-cloth-paint" alt="Mowo Editor Skeletal Mesh editor with a character's cape submesh selected and the Cloth Paint section open; the cape's collar painted dark (held) and the hem painted bright (free) in the viewport" caption="Paint where a skinned cloth may move: dark stays on the skin, bright swings." />
+
+## Ragdolls
+
+A `Ragdoll` component simulates a skeleton with one rigid body per bone. The bodies come from a physics asset when the entity has a `PhysicsAsset` component, otherwise from an automatic rig built from the skeleton. <Source symbol="RagdollComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `mode` | `Ragdoll` (fully simulated), `Animated` or `Hybrid` |
+| `hybridWeight` | How much physics shows through in `Hybrid` mode |
+| `blendInTime`, `blendOutTime` | Seconds to blend from animation to physics and back |
+| `pelvisFollowsRoot` | Moves the entity with the simulated pelvis |
+| `massMultiplier` | Scales every body's mass |
+| `boneOverrides` | Per-bone mass, radius and joint limits |
+
+A physics asset (`.physasset`) stores the bodies and joints authored for one skeletal mesh in the physics asset editor. Set `simulateOnBegin` on the `PhysicsAsset` component to have the character fall as a ragdoll as soon as play begins. <Source symbol="PhysicsAssetComponent" />
+
+Ragdolls and physical animation also run in the editor's **Simulate** mode, so you can check a setup without entering play.
+
+## Physical animation
+
+A `PhysicalAnimation` component blends physics onto an animated skeleton over a chain of bones, for hit reactions that recover. Motors drive the chain's bodies toward the animated pose while the rest of the skeleton follows the animation. <Source symbol="PhysicalAnimationComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `boneChainRoot`, `includeChildren` | Which bones react; an empty root means the whole skeleton |
+| `strength`, `damping`, `maxTorque` | The motor profile; higher strength tracks the animation tighter |
+| `profileOverrides` | Per-bone profiles, applied in order, so a stiff spine and soft fingers can share a chain |
+| `blendWeight` | The maximum physics contribution |
+| `continuous` | Always physically driven, for a limp arm or loose gear |
+| `recoverTime` | Seconds for a hit to fade back to animation |
+
+Hit it from gameplay with `ApplyImpulse(boneIndex, impulse)` or `ApplyImpulseAtPoint(boneIndex, impulse, worldPoint)`; a bone index of -1 targets the chain root.
+
+```cpp title="HitReact.cpp" wrap
+#include "ECS/World.h"
+#include "Physics/Components/PhysicalAnimationComponent.h"
+
+Mowo::World* world = nullptr;
+Mowo::EntityID victim = 0;
+Mowo::Vec3 hitDirection(1.0f, 0.0f, 0.0f);
+Mowo::Vec3 hitPoint(0.0f, 1.4f, 0.0f);
+
+if (Mowo::PhysicalAnimationComponent* reaction = world->GetComponent<Mowo::PhysicalAnimationComponent>(victim)) {
+	reaction->ApplyImpulseAtPoint(-1, hitDirection * 3.0f, hitPoint);
+}
+```
+
+## Related
+
+- [Physics](/docs/gameplay/physics/)
+- [Animation](/docs/gameplay/animation/)
+- [Asset editors](/docs/editor/asset-editors/) for the physics asset editor
+- API: [Physics module](/docs/api/physics/)

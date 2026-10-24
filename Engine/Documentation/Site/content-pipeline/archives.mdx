@@ -1,0 +1,108 @@
+---
+title: Archives
+description: The .meaf archives and IoStore containers a cooked game reads, how a packaged game mounts them, and the MowoIoStore tool.
+order: 10
+sources:
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/MEAFFormat.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/MEAFFileSystem.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/MeafKeyRing.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/IoStoreFormat.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/IoStoreFileSystem.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/PackagePaks.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/VFS.h
+  - Engine/Source/Runtime/Filesystem/Private/VFS.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Programs/MowoIoStore/Private/MowoIoStore.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
+verifiedAt: 6caf55861
+---
+
+A cooked game reads its content from archives, never from loose files. The cook packs `.meaf` archives (Mowo Engine Archive Format); packaging can convert them into IoStore containers. Both mount into the same virtual file system, so nothing above it knows which form a pak has.
+
+## How the game finds content
+
+Assets are never addressed by absolute disk path. A level stores a project-relative path such as `Content/Props/Crate.mesh`, and the virtual file system resolves it against a stack of mounts <Source symbol="VFS" />. The highest-priority mount that holds the key wins; equal priorities answer in mount order.
+
+| Mount | Priority | Present in |
+|---|---|---|
+| DLC paks | 210 | A packaged game with DLC installed |
+| Patch paks | 205 | A packaged game with patches; a later patch wins a key |
+| Game content paks, at the root | 200 | A packaged or cooked game |
+| The project's `Content/` folder, at `Content` | 150 | The editor |
+| Engine content, at `Content` | 100 | Always: `EngineContent.meaf` or the engine pak |
+| Bundled derived data | 1 | A packaged game with baked reflection probes |
+| Loose files | lowest | A fallback for keys no archive holds |
+
+Game content mounts at the root because the cook prefixes every key with `Content/` (or `Plugins/<Name>/` for plugin content). An archive key reads exactly like the reference a level stores, so a shipped game needs no path rewriting.
+
+## Paks in a packaged game
+
+`mbt package` stages archives in the package's `Content/Paks` folder. Their file names are opaque hashes; each archive describes itself in a reserved `__pak.mdf` entry: its kind (`engine`, `shaders`, `content` or `patch`), its mount point, and its order within the kind, which is a content chunk's id or a patch's sequence <Source symbol="FPakDescriptor" />. At startup the game scans the folder and mounts each pak by its descriptor <Source symbol="FPackagePaks" />.
+
+## The .meaf archive
+
+A `.meaf` is a flat, hash-indexed archive, currently version 8 <Source symbol="MEAFHeader" />:
+
+- **Compression per entry.** zstd (the default) or LZ4. Entries of 256 KiB or more are block-compressed, so a range read decodes only the blocks it touches. An entry that does not shrink, such as an already compressed texture or video, is stored as is. Small text entries of one type can share a trained zstd dictionary.
+- **Encryption.** XChaCha20 over the table of contents and entry payloads, with the key looked up by the header's key id in `FMeafKeyRing` <Source symbol="FMeafKeyRing" />. The header stays plaintext.
+- **Signing.** EdDSA over BLAKE2b covers the header, the table of contents and every payload byte. A signed archive checks each data block the first time a read touches it, so mounting does not hash the whole pak.
+- **Open order.** Entries can be laid out in the order a play session first read them, from `Config/OpenOrder.txt`, so startup reads are contiguous. `mbt package --promote-open-order` copies a recording made with `MowoGame --record-open-order` over that file.
+
+`mbt package` encrypts and signs the content paks with the keys in `Config/DefaultCrypto.ini`; a Shipping package refuses to build without them unless you pass `--unprotected`. See [Shipping](/docs/shipping/) for keys and packaging, and [Cooking](/docs/content-pipeline/cooking/) for the cook's `--meaf-encrypt-key` and `--meaf-sign-key`.
+
+## IoStore containers
+
+An IoStore container splits an archive's content into two files <Source symbol="FIoStoreFormat" />:
+
+- **`<name>.mutoc`**, the table of contents: one row per chunk and per compression block. It is the only file read at mount.
+- **`<name>.mucas`**, the container: every chunk cut into fixed-size blocks (64 KiB by default), each compressed on its own and read on demand.
+
+| | `.meaf` archive | IoStore container |
+|---|---|---|
+| Partial reads | Block-compressed only for entries of 256 KiB or more | Every chunk is block-compressed |
+| Identical files | Stored twice | Share their blocks |
+| Rebuilds of unchanged content | Same bytes | Same bytes, block by block, so a content-addressed patcher such as Steam's depot chunker ships only what changed |
+| Patches | A patch pak of whole changed entries | A patch container of only the chunks whose content changed |
+
+A container takes the same encryption and signing as a `.meaf`. With a signing key registered, an unsigned container or one signed by another key does not mount.
+
+To package with containers, pass `--iostore`, or set `ioStore=true` under `[packaging]` in `Config/Packaging.ini`:
+
+```bash
+./mbt.cmd package -c Shipping --iostore
+```
+
+After the paks are staged, the packager converts each one into a container and deletes the archive. When both forms of one pak sit side by side, the container wins.
+
+### MowoIoStore
+
+`MowoIoStore` creates and inspects containers. Build it with `./mbt.cmd build -t MowoIoStore`.
+
+```bash
+MowoIoStore create --from Content.meaf --out Paks/Content
+MowoIoStore create --from NewContent.meaf --out Paks/Patch1 --patch-base Shipped/Content.mutoc
+MowoIoStore list Paks/Content.mutoc
+MowoIoStore info Paks/Content.mutoc
+MowoIoStore verify Paks/Content.mutoc
+MowoIoStore extract Paks/Content.mutoc -o Extracted/
+MowoIoStore diff Old/Content.mutoc New/Content.mutoc
+```
+
+| Option of `create` | Meaning |
+|---|---|
+| `--from <archive or folder>`, `--out <path>` | Source and output |
+| `--block-size <n>` | Compression block size in bytes (default 65536) |
+| `--compression zstd\|lz4\|none` | Block codec (default zstd); a block that does not shrink is stored |
+| `--encrypt-key <file>`, `--key-id <n>`, `--sign-key <file>` | Encrypt and sign |
+| `--order-file <file>` | Paths laid out first, one per line (default: the archive's open order) |
+| `--patch-base <file>` | Write only the chunks whose content differs from this container |
+
+`diff` reports the chunks added, changed, removed and unchanged, and how large a patch container would be.
+
+## Related
+
+- [Cooking](/docs/content-pipeline/cooking/) for how archives are built and split into chunks.
+- [Shipping](/docs/shipping/) for packaging, keys, patches and DLC.
+- API: [`VFS`](/docs/api/filesystem/vfs/), [`MEAFFileSystem`](/docs/api/filesystem/meaffilesystem/), [`FIoStoreFileSystem`](/docs/api/filesystem/fiostorefilesystem/), [`FMeafKeyRing`](/docs/api/filesystem/fmeafkeyring/).

@@ -1,0 +1,116 @@
+---
+title: Survival and economy
+description: The Survival plugin's base building with a placement ghost, validation, costs and demolish, and the currency economy with wallets, shops and restocking.
+order: 36
+sources:
+  - Engine/Plugins/Survival/Survival.mplugin
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/BuildableAsset.h
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/BuildingSystem.h
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/BuildingComponent.h
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/MBuildingStatics.h
+  - Engine/Plugins/Survival/Private/SurvivalPlugin.cpp
+  - Engine/Plugins/Survival/Private/BuildingSystem.cpp
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/EconomySystem.h
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/EconomyComponent.h
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/ShopAsset.h
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/ShopComponent.h
+  - Engine/Plugins/Survival/Public/SurvivalPlugin/MEconomyStatics.h
+verifiedAt: 08e26df3d
+---
+
+The **Survival & Economy** plugin adds player base building and a trade economy. It depends on the Combat plugin, which it uses for inventories, crafting stations, utility nodes and zones. Enable both in the Plugins window. <Source path="Engine/Plugins/Survival/Survival.mplugin" />
+
+## Buildables
+
+A `.buildable` asset describes something a player can place. <Source path="Engine/Plugins/Survival/Public/SurvivalPlugin/BuildableAsset.h" />
+
+```mdf title="Content/Building/WoodenWall.buildable"
+Buildable "wooden_wall" {
+    schema_version: 1
+    name_text: "Wooden Wall"
+    category: "structure"
+    actor_class: "AStaticMeshActor"
+    mesh_type: "cube"
+    footprint: Vec3(1, 1.5, 0.15)
+    cell_size: 2
+    snap_mode: "grid"
+    max_slope: 20
+
+    Surface "floor" {}
+    Cost "wood" {
+        count: 10
+    }
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `actor_class` | The reflected actor class spawned on placement |
+| `mesh_type`, `model_path` | The mesh for the ghost and the placed object |
+| `footprint` | Half extents; rotated with the preview |
+| `snap_mode`, `cell_size` | `grid`, `free` or `surface` snapping |
+| `max_slope` | How far the floor may tilt |
+| `Surface` | Allowed surfaces: `floor`, `wall`, `ceiling` or `any` |
+| `Cost` | Items consumed on placement and partly refunded on demolish |
+
+A buildable can also turn its placement into a utility node (`utility_node` and the `utility_*` keys), a crafting station (`station_tag`, `station_radius`, `station_requires_power`) or a zone (`zone_id`, `zone_half_extents`).
+
+## Build mode
+
+`FBuildingSystem` drives a placement ghost along the player's aim, validates it every frame, and commits it against the builder's inventory. <Source path="Engine/Plugins/Survival/Public/SurvivalPlugin/BuildingSystem.h" />
+
+| Function | Effect |
+| --- | --- |
+| `SetCatalog(ids)` | The buildables offered; without one, every `.buildable` in the project |
+| `EnterBuildMode(builder, id)`, `ExitBuildMode()` | Start and stop placing |
+| `RotatePreview(steps)`, `CycleBuildable(direction)` | Turn the ghost in 90° steps, or move to the next affordable buildable |
+| `CommitPlacement()` | Place; returns the new entity |
+| `EnterDemolishMode(builder)`, `CommitDemolish()` | Remove a placement, refunding `SetRefundFraction` of its cost (default half) |
+
+Placement fails with a reason: `aim` (nothing hit), `surface`, `slope`, `no_build` (inside a no-build zone), `overlap` or `cost`. `IsPreviewValid()` and `GetPreviewFailReason()` report it, and `OnBuildPreviewChanged` fires when it changes, so the ghost and HUD can react. Costs are consumed exactly once and rolled back in full if anything fails. Placed objects carry a `Building` component and a `PersistentState` component, so they are saved with the world.
+
+The template characters get build-mode input from the plugin through the actions `Build`, `BuildRotate`, `BuildCycle`, `BuildPlace` and `BuildCancel`. While a ghost is up, those inputs belong to build mode and firing is stood down. <Source path="Engine/Plugins/Survival/Private/SurvivalPlugin.cpp" />
+
+From Visual Scripting, `MBuildingStatics` offers `EnterBuildMode`, `ExitBuildMode`, `IsInBuildMode`, `GetActiveBuildable`, `IsPreviewValid` and `CountPlaced`.
+
+<Screenshot id="gameplay-build-mode" alt="A third-person character in build mode: a translucent green wooden-wall ghost snapped to the grid in front of them on flat ground, with the HUD showing the wall's wood cost" caption="The ghost turns valid or invalid as the player aims." />
+
+## Economy
+
+An `Economy` component is a wallet holding any number of currencies by id; `primaryCurrency` (default `credits`) is the one the HUD shows. <Source path="Engine/Plugins/Survival/Public/SurvivalPlugin/EconomyComponent.h" />
+
+`FEconomySystem` moves money: `Grant`, `Spend`, `Transfer`, `GetBalance`, `CanAfford`, `Buy` and `Sell`. Every operation is validated in full before anything changes, so a transfer never debits one wallet without crediting the other, and a purchase never takes money for goods that will not fit. A refusal returns an `EEconomyResult` reason, such as `InsufficientFunds`, `OutOfStock`, `NoInventorySpace` or `OutOfRange`. Accepted moves are kept in a short transaction log on the wallet. <Source path="Engine/Plugins/Survival/Public/SurvivalPlugin/EconomySystem.h" />
+
+### Shops
+
+A vendor is a `Shop` component naming a `.shop` asset. <Source path="Engine/Plugins/Survival/Public/SurvivalPlugin/ShopAsset.h" />
+
+```mdf title="Content/Shops/Outpost.shop"
+Shop "outpost" {
+    schema_version: 1
+    name_text: "Outpost Trader"
+    currency: "credits"
+    sell_back_fraction: 0.5
+    buys_from_player: true
+
+    Entry "lantern" {
+        stock: 2
+        price: 100
+        restock_seconds: 60
+        restock_amount: 1
+        max_stock: 2
+    }
+    Entry "rope" {
+        stock: -1
+    }
+}
+```
+
+A `stock` of -1 is unlimited. An entry with no price uses the item's `value`. The shop buys back at `sell_back_fraction` of the price when `buys_from_player` is on. In multiplayer, purchases go through the server.
+
+From Visual Scripting, `MEconomyStatics` offers `GetBalance`, `GetPrimaryBalance`, `CanAfford`, `Grant`, `Spend`, `GetShopStock`, `GetShopPrice`, `BuyFromNearestShop`, `SellToNearestShop` and `GetLastResult`. <Source path="Engine/Plugins/Survival/Public/SurvivalPlugin/MEconomyStatics.h" />
+
+## Related
+
+- [Interaction and inventory](/docs/gameplay/interaction-and-inventory/)
+- [Zones and utility grids](/docs/gameplay/zones-and-utility-grids/)

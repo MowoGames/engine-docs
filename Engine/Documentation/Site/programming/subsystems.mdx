@@ -1,0 +1,95 @@
+---
+title: Subsystems
+description: Engine- and world-scoped singletons that the engine creates on first use, initializes, and tears down in order.
+order: 8
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/MSubsystem.h
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.h
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+verifiedAt: 08e26df3d
+---
+
+A subsystem is a managed singleton tied to the engine or to one world. Instead of a hand-written global with fragile teardown, you declare a class; the engine creates it the first time someone asks for it, roots it so the garbage collector never frees it, initializes it, and destroys it with its scope. This is Unreal's subsystem model.
+
+| Base class | Scope | Reached through | Lives |
+| --- | --- | --- | --- |
+| `MEngineSubsystem` | The engine | `GEngine->GetSubsystem<T>()` | From first use until engine shutdown |
+| `MWorldSubsystem` | One world | `world->GetSubsystem<T>()` | From first use until the world is destroyed |
+
+<Source symbol="MEngineSubsystem" /> <Source symbol="MWorldSubsystem" />
+
+## An engine subsystem
+
+Derive from `MEngineSubsystem` and override `Initialize` and `Deinitialize`:
+
+```cpp title="ScoreSubsystem.h"
+#include "Core/MSubsystem.h"
+
+class MScoreSubsystem : public Mowo::MEngineSubsystem {
+public:
+	void Initialize() override {
+		m_HighScore = 0;
+	}
+
+	void Deinitialize() override {
+	}
+
+	void Record(int32_t score) {
+		if (score > m_HighScore) {
+			m_HighScore = score;
+		}
+	}
+
+	int32_t GetHighScore() const {
+		return m_HighScore;
+	}
+
+private:
+	int32_t m_HighScore = 0;
+};
+```
+
+Reach it from anywhere the engine is alive:
+
+```cpp nocompile
+MScoreSubsystem* scores = GEngine->GetSubsystem<MScoreSubsystem>();
+scores->Record(4200);
+```
+
+`GEngine` is null before `Engine::Initialize` and after `Engine::Shutdown`; guard code that can run outside a session. At shutdown every engine subsystem's `Deinitialize` runs in reverse order of creation. <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.h" />
+
+<Callout type="warning">
+The order in which subsystems initialize is not guaranteed. If one needs another, call `GEngine->GetSubsystem<X>()` from its `Initialize`; that creates `X` if it does not exist yet.
+</Callout>
+
+## A world subsystem
+
+Derive from `MWorldSubsystem`. `Initialize` receives the owning world:
+
+```cpp title="SpawnDirector.h"
+#include "Core/MSubsystem.h"
+
+class MSpawnDirector : public Mowo::MWorldSubsystem {
+public:
+	void Initialize(Mowo::MWorld* world) override {
+		m_World = world;
+	}
+
+	void Deinitialize() override {
+		m_World = nullptr;
+	}
+
+private:
+	Mowo::MWorld* m_World = nullptr;
+};
+```
+
+```cpp nocompile
+MSpawnDirector* director = world->GetSubsystem<MSpawnDirector>();
+```
+
+<Source symbol="MWorld::GetSubsystem" /> A world subsystem is the right home for per-level state: spawn budgets, level-scoped managers, streaming bookkeeping. An engine subsystem holds state that outlives any one world.
+
+## When to use one
+
+Use a subsystem for shared, long-lived state with a clear setup and teardown that many systems need. Keep per-actor state on the actor and per-frame work in ticks. Prefer a subsystem over a raw singleton (the engine owns the lifetime and the teardown order) and over passing a manager pointer through every call.

@@ -1,0 +1,284 @@
+---
+title: "How-to: a replicated actor"
+sidebarTitle: "How-to: replicated actor"
+description: Build a networked door step by step - replicated state, a Server RPC any player may call, authority on the host, and a multiplayer PIE test.
+order: 12
+sources:
+  - Engine/Source/Developer/MowoSandbox/Public/Sandbox/ANetShooterActor.h
+  - Engine/Source/Developer/MowoSandbox/Public/Sandbox/NetShooterComponent.h
+  - Engine/Source/Developer/MowoSandbox/Private/SandboxNetGame.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/NetworkObjectComponent.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/RpcDispatcher.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/FNetSession.h
+  - Engine/Source/Runtime/Networking/Private/NetSession.cpp
+  - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Math/Public/Math/FRotator.h
+  - Engine/Source/Editor/MowoEditor/Private/Pie/PieMultiplayerSession.cpp
+verifiedAt: 08e26df3d
+---
+
+This guide builds a door that works in a co-op session. Any player can open or close it, the host decides the result, and every machine sees the same state. It follows the pattern of the engine's own sandbox example, `ANetShooterActor`, which wires its networking in `BeginPlay` so no host code has to change <Source symbol="ANetShooterActor" />.
+
+You need a game module with C++ source and a scene you can run with [Play As Client](/docs/editor/play-in-editor/).
+
+## What you will build
+
+<Flow steps={["Player presses Use", "RequestToggle", "ServerToggle RPC", "Host flips open", "Reliable state update", "Every peer sees open"]} highlight={3} caption="Clients ask; only the host changes the state; replication delivers the result." />
+
+| Piece | Job |
+|---|---|
+| `DoorStateComponent` | Holds the replicated `open` flag and the `ServerToggle` RPC |
+| `NetworkObjectComponent` | Makes the door's entity a networked object |
+| `ANetDoor` | The actor. Adds both components, registers with replication, turns the door on the host. |
+
+<Steps>
+<Step title="Create the replicated component">
+
+The component carries the state and the request. `open` is a `bool`, a discrete type, so it replicates on the reliable stream: a dropped packet can never leave a client with the wrong answer.
+
+```cpp title="DoorStateComponent.h"
+#pragma once
+
+#include "Core/Platform.h"
+#include "ECS/Component.h"
+#include "Reflection/Reflect.h"
+
+namespace Mowo {
+
+struct MOWO_REFLECTED_NAMED("DoorState") MCATEGORY("Gameplay") DoorStateComponent {
+	MOWO_COMPONENT(DoorStateComponent)
+
+	MOWO_KEY("open") MOWO_DISPLAY("Open")
+	MREPLICATED bool open = false;
+
+	MFUNCTION(Server) void ServerToggle() {
+		open = !open;
+	}
+};
+
+}
+```
+
+`MFUNCTION(Server)` declares a client-to-host request. The body runs on the host.
+
+</Step>
+<Step title="Declare the actor">
+
+```cpp title="ANetDoor.h" nocompile
+#pragma once
+
+#include "Core/Platform.h"
+#include "Game/AActor.h"
+#include "Game/MSceneComponent.h"
+#include "Game/MStaticMeshComponent.h"
+
+namespace Mowo {
+
+MCLASS()
+class ANetDoor : public AActor {
+public:
+	MGENERATED_BODY()
+
+	ANetDoor() {
+		auto* root = CreateDefaultSubobject<MSceneComponent>("Root");
+		SetRootComponent(root);
+
+		auto* mesh = CreateDefaultSubobject<MStaticMeshComponent>("Mesh");
+		mesh->meshType = "cube";
+		mesh->AttachTo(root);
+	}
+
+	void BeginPlay() override;
+	void Tick(float deltaSeconds) override;
+	void EndPlay() override;
+
+	void RequestToggle();
+
+private:
+	bool m_netWired = false;
+	bool m_shownOpen = false;
+};
+
+}
+```
+
+Keep one reflected type per header, named after the file. The header tool generates reflection only for the type whose name matches the header.
+
+</Step>
+<Step title="Wire networking in BeginPlay">
+
+`BeginPlay` puts both components on the actor's backing entity, registers the actor with `ReplicationManager`, and sets the RPC policy.
+
+```cpp title="ANetDoor.cpp (part 1)" nocompile
+#include "ANetDoor.h"
+#include "DoorStateComponent.h"
+
+#include "Networking/Components/NetworkObjectComponent.h"
+#include "ECS/World.h"
+#include "Game/MWorld.h"
+#include "Math/FRotator.h"
+#include "Networking/Replication/ReplicationManager.h"
+#include "Networking/Replication/RpcDispatcher.h"
+#include "Networking/Session/FNetSession.h"
+#include "Reflection/ReflectionRegistry.h"
+#include "Reflection/TypeDescriptor.h"
+
+#include <cstdint>
+#include <vector>
+
+namespace Mowo {
+
+static World* DoorWorld(const AActor& actor) {
+	MWorld* world = actor.GetWorld();
+
+	return world ? world->GetECSWorld() : nullptr;
+}
+
+void ANetDoor::BeginPlay() {
+	AActor::BeginPlay();
+
+	World* ecs = DoorWorld(*this);
+	const EntityID entity = GetBackingEntity();
+	ReplicationManager* replication = ecs ? ecs->GetSystem<ReplicationManager>() : nullptr;
+
+	if (!replication || entity == INVALID_ENTITY) {
+		return;
+	}
+
+	if (!ecs->HasComponent<NetworkObjectComponent>(entity)) {
+		NetworkObjectComponent& netObject = ecs->AddComponent<NetworkObjectComponent>(entity);
+		netObject.replicateTransform = true;
+	}
+
+	if (!ecs->HasComponent<DoorStateComponent>(entity)) {
+		ecs->AddComponent<DoorStateComponent>(entity);
+	}
+
+	replication->RegisterReplicatedActor(this, entity);
+	replication->InstallAnnotatedRpcPolicies();
+
+	const TypeDescriptor* desc = ReflectionRegistry::Get().FindByDisplayName("DoorState");
+	const int index = desc ? FRpcDispatcher::FindFunctionIndex(*desc, "ServerToggle") : -1;
+
+	if (index >= 0) {
+		replication->AllowClientRpc(static_cast<uint16_t>(desc->componentId), static_cast<uint16_t>(index), ReplicationManager::ENetRpcAuthority::AnyClient);
+	}
+
+	m_netWired = true;
+}
+```
+
+Three things matter here:
+
+- **The guard.** `GetSystem<ReplicationManager>()` returns null in a scene with no replication system, so the same actor also works in single player. This is the sandbox's convention <Source path="Engine/Source/Developer/MowoSandbox/Private/SandboxNetGame.cpp" />.
+- **The owner.** `ownerPeerId` stays `0`, so the host owns the door.
+- **The policy.** `InstallAnnotatedRpcPolicies` would allow `ServerToggle` for the door's **owner only**, which is the host, so clients would be refused. The explicit `AllowClientRpc(..., AnyClient)` afterwards overrides that default for this one method <Source symbol="ReplicationManager::AllowClientRpc" />. Use `AnyClient` only for shared verbs like this, and keep the RPC body safe to call by anyone.
+
+</Step>
+<Step title="Send the request">
+
+On the host, call the method directly. On a client, marshal it and send it to the host.
+
+```cpp title="ANetDoor.cpp (part 2)" nocompile
+void ANetDoor::RequestToggle() {
+	World* ecs = DoorWorld(*this);
+	const EntityID entity = GetBackingEntity();
+	DoorStateComponent* state = ecs ? ecs->GetComponent<DoorStateComponent>(entity) : nullptr;
+
+	if (!state) {
+		return;
+	}
+
+	FNetSession& session = FNetSession::Get();
+
+	if (!session.IsClient()) {
+		state->ServerToggle();
+		return;
+	}
+
+	ReplicationManager* replication = ecs->GetSystem<ReplicationManager>();
+	NetworkObjectComponent* netObject = ecs->GetComponent<NetworkObjectComponent>(entity);
+	const TypeDescriptor* desc = ReflectionRegistry::Get().FindByDisplayName("DoorState");
+
+	if (!replication || !netObject || !desc) {
+		return;
+	}
+
+	const int index = FRpcDispatcher::FindFunctionIndex(*desc, "ServerToggle");
+	std::vector<uint8_t> payload;
+
+	if (index < 0 || !FRpcDispatcher::BuildArgsPayload(*desc, static_cast<uint16_t>(index), nullptr, payload)) {
+		return;
+	}
+
+	replication->SendRpcToServer(netObject->networkId, static_cast<uint16_t>(desc->componentId), static_cast<uint16_t>(index), payload.data(), payload.size());
+}
+```
+
+You do not install an RPC receiver. While a session runs, `FNetSession` resolves the entity and invokes `ServerToggle` on the host's copy of the component <Source path="Engine/Source/Runtime/Networking/Private/NetSession.cpp" />.
+
+</Step>
+<Step title="React to the state">
+
+Only the host moves the door. Its transform replicates, so clients see the door turn without doing anything. Every peer can still read `open`, for example to show "Open" or "Close" in an interaction prompt.
+
+```cpp title="ANetDoor.cpp (part 3)" nocompile
+void ANetDoor::Tick(float deltaSeconds) {
+	AActor::Tick(deltaSeconds);
+
+	World* ecs = DoorWorld(*this);
+	DoorStateComponent* state = ecs ? ecs->GetComponent<DoorStateComponent>(GetBackingEntity()) : nullptr;
+
+	if (!state || state->open == m_shownOpen || FNetSession::Get().IsClient()) {
+		return;
+	}
+
+	m_shownOpen = state->open;
+	SetRotation(FRotator(0.0f, m_shownOpen ? 90.0f : 0.0f, 0.0f).ToQuat());
+}
+
+void ANetDoor::EndPlay() {
+	World* ecs = DoorWorld(*this);
+	ReplicationManager* replication = ecs ? ecs->GetSystem<ReplicationManager>() : nullptr;
+
+	if (m_netWired && replication) {
+		replication->UnregisterReplicatedActor(this);
+	}
+
+	m_netWired = false;
+
+	AActor::EndPlay();
+}
+
+}
+```
+
+</Step>
+<Step title="Test it with two clients">
+
+Build the game module, place an `ANetDoor` in your scene and save the scene. In the Play dropdown, set **Multiplayer Clients** to 2, pick a **Net Mode**, and choose **Play As Client**. Call `RequestToggle` from your interaction code in one client window and watch the door turn in both.
+
+<Screenshot id="multiplayer-howto-door-two-clients" alt="Mowo Editor during Play As Client with 2 clients: the editor viewport and a second client window side by side, both showing the same ANetDoor rotated open, with the PIE Session tab visible below the viewport" caption="The door open on both clients." />
+
+</Step>
+</Steps>
+
+<Callout type="note">
+The door adds its `NetworkObjectComponent` at runtime, so it has no placed-object id stamped at save time. The client then matches the host's spawn to its own copy of the door by prefab path and nearest pose <Source symbol="NetworkObjectComponent" />. Identical doors that start in the same place can pair up the wrong way round.
+</Callout>
+
+## Checklist
+
+- The backing entity has a `NetworkObjectComponent`.
+- Synchronized state is in `MREPLICATED` fields on a reflected component, or in the replicated transform.
+- Requests are `MFUNCTION(Server)` methods, allowed for the right callers.
+- Only the host changes authoritative state.
+- `RegisterReplicatedActor` in `BeginPlay` and `UnregisterReplicatedActor` in `EndPlay`.
+- Every machine runs the same build. A changed replicated field changes the schema id, and mismatched peers refuse each other.
+
+## Related
+
+- [Replication](/docs/multiplayer/replication/) and [RPCs and events](/docs/multiplayer/rpcs/) for the mechanics used here.
+- [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/) to host and join outside the editor.
+- API: [`NetworkObjectComponent`](/docs/api/networking/networkobjectcomponent/), [`ReplicationManager`](/docs/api/networking/replicationmanager/), [`FRpcDispatcher`](/docs/api/networking/frpcdispatcher/), [`AActor`](/docs/api/game/aactor/).

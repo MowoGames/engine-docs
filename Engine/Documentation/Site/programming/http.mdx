@@ -1,0 +1,86 @@
+---
+title: HTTP
+description: Make HTTP requests and stream resumable downloads with the libcurl-backed HttpClient in the Http module.
+order: 14
+sources:
+  - Engine/Source/Runtime/Http/Http.Build.cs
+  - Engine/Source/Runtime/Http/Public/Http/HttpClient.h
+  - Engine/Source/Runtime/Http/Public/Http/HttpWebSocketConnection.h
+  - Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h
+  - Engine/Source/ThirdParty/curl/curl.Build.cs
+verifiedAt: 08e26df3d
+---
+
+The **Http** module wraps a vendored, statically linked libcurl. Every HTTP request the engine makes goes through it, from crash uploads to the games launcher and GameNet's WebSockets. Add `"Http"` to your module's dependencies to use it. <Source symbol="HttpClient" />
+
+TLS comes from the platform: Schannel on Windows, and the vendored mbedTLS on macOS and Linux. There is no OpenSSL dependency. <Source path="Engine/Source/ThirdParty/curl/curl.Build.cs" />
+
+## Requests
+
+`HttpClient` has only static functions. Each call uses its own curl handle, so calls from several threads at once are safe. Calls block, so run them on a job or a worker thread, never on the game thread.
+
+```cpp wrap
+#include "Http/HttpClient.h"
+
+#include <string>
+#include <vector>
+
+const std::vector<std::string> headers = { "Content-Type: application/json" };
+
+const Mowo::HttpResponse response = Mowo::HttpClient::Post("https://example.com/api/scores", "{\"score\":4200}", headers);
+if (!response.Ok()) {
+	const std::string reason = response.error.empty() ? response.body : response.error;
+}
+
+const Mowo::HttpResponse page = Mowo::HttpClient::Request("GET", "https://example.com/api/status");
+```
+
+| Function | Use |
+| --- | --- |
+| `Post(url, body, headers, timeoutSeconds)` | POST a string body |
+| `Request(method, url, body, headers, timeoutSeconds)` | Any verb; a `GET` with a body is refused |
+| `PostMultipart(url, fields, files, headers, timeoutSeconds)` | A `multipart/form-data` upload with form fields and files |
+| `Fetch(url, options)` | A GET into memory that can be cancelled, throttled and observed |
+| `Download(url, filePath, options, resume)` | Stream a body to a file, resuming a partial file |
+
+`HttpResponse` carries the status code (0 for a transport failure), the body, a curl error message, and `nameNotResolved`, set when the host name did not resolve: usually a wrong URL rather than a network outage.
+
+## Streaming downloads
+
+`Request` buffers the whole body, which is right for API calls and wrong for game content. `Fetch` and `Download` take `HttpTransferOptions`:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `headers` | none | Extra request headers |
+| `connectTimeoutSeconds` | 10 | Give up connecting after this long |
+| `stallTimeoutSeconds` | 30 | Fail when nothing arrives for this long, instead of hanging |
+| `maxBytesPerSecond` | 0 (no cap) | Bandwidth cap |
+| `cancel` | none | Pointer to an `std::atomic<bool>`; set it to abort |
+| `onProgress` | none | Called with bytes received and the total |
+
+```cpp wrap
+#include "Http/HttpClient.h"
+
+#include <atomic>
+#include <cstdint>
+
+std::atomic<bool> cancel = false;
+
+Mowo::HttpTransferOptions options;
+options.cancel = &cancel;
+options.maxBytesPerSecond = 4 * 1024 * 1024;
+options.onProgress = [](uint64_t received, uint64_t total) {
+};
+
+const Mowo::HttpDownloadResult result = Mowo::HttpClient::Download("https://cdn.example.com/dlc/pack1.meaf", "Saved/Downloads/pack1.meaf", options);
+```
+
+With `resume` true (the default) and a partial file present, `Download` asks for the rest with a `Range` request. A `206` response appends, a `200` from a server that ignores ranges rewrites the file, and a `416` on a file that is already complete counts as success. Progress counts the bytes already on disk, so a progress bar resumes where it stopped. Error bodies (4xx and 5xx) never reach the file; they come back in `HttpDownloadResult::errorBody`.
+
+## WebSockets
+
+`FHttpWebSocketConnection` is a raw WebSocket over the same libcurl: the upgrade, sending and receiving frames, nothing more. Reassembly, ping answers and message limits are the caller's job; the GameNet module builds its WebSocket client on it. <Source symbol="FHttpWebSocketConnection" />
+
+## Crash uploads
+
+`SentryCrashUploader` uploads crash dumps the crash handler queued. It is configured by the crash-reporting setup rather than called directly; see [Shipping](/docs/shipping/).

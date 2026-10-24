@@ -1,0 +1,235 @@
+---
+title: The .loom file format
+sidebarTitle: .loom file format
+description: The on-disk MDF schema of a visual class, its blocks and keys, how constants and object references are written, and the schema versioning rules.
+order: 12
+sources:
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomGraphSerializer.h
+  - Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomGraph.h
+  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/BP_Door.loom
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Documentation/ROADMAP.md
+verifiedAt: 08e26df3d
+---
+
+A visual class is saved as one `.loom` file. The file is text [MDF](/docs/api/mdf/), the engine's own data format, so it diffs and merges like source code. This page describes the schema so you can read a class in a code review, fix a merge conflict, or generate a class from a tool.
+
+## A real file
+
+This is `BP_Door.loom` from the engine's test project, trimmed to one of its three functions and the first four nodes of its event graph <Source path="Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/BP_Door.loom" />:
+
+```mdf title="Content/BP_Door.loom"
+Package "LoomClass" {
+    id: uuid("8DBFCACB-C269-F3DB")
+    format_version: 1
+}
+
+LoomClass {
+    schema: 4
+    class: "BP_Door"
+    parent: "AActor"
+
+    Variable {
+        name: "IsOpen"
+        vtype: "Bool"
+        val: false
+    }
+    Variable {
+        name: "OpenSpeed"
+        vtype: "Float"
+        val: 1.5
+    }
+    Variable {
+        name: "TriggerRadius"
+        vtype: "Float"
+        val: 250.0
+    }
+    Function {
+        name: "OpenDoor"
+        ret: "Void"
+        entry: 0
+
+        Param {
+            name: "Speed"
+            vtype: "Float"
+        }
+        Node {
+            kind: "Event"
+            name: "OpenDoor"
+            execNext: 2
+        }
+        Node {
+            kind: "Return"
+            execNext: -1
+        }
+        Node {
+            kind: "SetVar"
+            var: "IsOpen"
+            execNext: 1
+
+            Input {
+                link: -1
+                pin: 0
+                vtype: "Bool"
+                val: true
+            }
+        }
+    }
+    Graph {
+        event: "OnInteract"
+        entry: 0
+
+        Node {
+            kind: "Event"
+            name: "OnInteract"
+            execNext: 1
+            x: 40.0
+            y: 60.0
+        }
+        Node {
+            kind: "Branch"
+            execNext: 4
+            execElse: 6
+            x: 280.0
+            y: 60.0
+
+            Input {
+                link: 2
+                pin: 0
+            }
+        }
+        Node {
+            kind: "CallGraphFunction"
+            function: "IsPlayerInRange"
+            execNext: -1
+            x: 110.0
+            y: 240.0
+
+            Input {
+                link: 3
+                pin: 0
+            }
+        }
+        Node {
+            kind: "GetVar"
+            var: "TriggerRadius"
+            execNext: -1
+            x: 40.0
+            y: 400.0
+        }
+    }
+}
+```
+
+A file that has been through the asset package migration starts with a small `Package "LoomClass"` block carrying the asset id, as `BP_Door.loom` does; the loader skips it and the class follows. Files without it load the same way.
+
+Read the event graph like this: node 0 is the entry. Its `execNext: 1` runs the Branch. The Branch's condition input is linked to node 2's output, a pure call to `IsPlayerInRange`, whose argument is linked to node 3, a read of `TriggerRadius`. The Branch continues at node 4 when true and node 6 when false.
+
+## The class block
+
+The root node is `LoomClass`. The serializer writes its parts in a fixed order <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />:
+
+| Key or child | Meaning |
+| --- | --- |
+| `schema` | The schema version the file was written with. |
+| `class` | The class name. |
+| `parent` | The parent class, native or visual. |
+| `Variable` | A class variable: `name`, `vtype`, `val`, plus `replicated`, `repNotify`, `editable`, `exposeOnSpawn` when set. |
+| `Function` | `name`, `ret`, `pure`, `rpc` (RPC flag bits), then `Param` and `Local` children and the graph body. |
+| `Macro` | `name`, `In` and `Out` pin children (`name`, `exec`, `vtype`), then the graph body. |
+| `Dispatcher` | `name`, `Param` children, and `Handler` children with an `fn` function name. |
+| `Interface` | `name` of an implemented interface. |
+| `Component` | A slot: `name`, `type`, optional `loc`, `rot`, `scale`, `attach`, and `Default` children with `prop` plus a constant. |
+| `Graph` | An event graph: `event` plus the graph body. |
+
+A **graph body** is `entry`, the index of the entry node, followed by `Node` children. Functions and macros use the same body, written by the same helper.
+
+## Nodes
+
+Each `Node` writes its `kind` as a string and only the keys it uses <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />:
+
+| Key | Meaning |
+| --- | --- |
+| `kind` | The node kind, for example `Branch` or `CallFunction`. See [Flow control](/docs/visual-scripting/flow-control/). |
+| `name` | Event name, comment text, or another label. |
+| `function` | Called function, macro or async action name. |
+| `op` | The math operation of a `Pure` node, as an integer index into `LoomPureOp`. |
+| `var` | Variable, property, gate, dispatcher, pin or class name, depending on the kind. |
+| `ns`, `key`, `src` | Localization namespace, key and source text of a `MakeText` node. |
+| `execNext`, `execElse` | The next node on the first and second exec outputs. `-1` means none. |
+| `execNextPin`, `execElsePin` | Which exec input of the target node to enter, for macros with several exec inputs. |
+| `id` | The node's stable id. Diff and merge pair nodes by it, so deleting a node does not renumber the others. |
+| `bp` | `true` when the node has a breakpoint. |
+| `bpCond`, `bpLog` | The breakpoint's condition and logpoint message. |
+| `x`, `y`, `w`, `h` | Canvas position, and a comment's size. |
+
+Children of a node:
+
+- `Input`: one per input pin. `link` is the source node index, or `-1` for a constant. `pin` is the source output pin. A constant also writes a value.
+- `Exec`: one per list output, as on Sequence, Switch or Multi Gate, with `to` and an optional `pin`.
+- `Timeline`: `length`, `loop`, and `Track` children with `name`, `type` and `Key` children (`t`, `v`, `vec`, `interp`).
+
+## Constants
+
+A constant writes `vtype` and `val` <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />. Vectors use MDF's vector literal, as in `val: vec3(0.0, 1.0, -8.0)`.
+
+- **Object constants** never store a pointer. They write `objref` as `Self`, `Name` or `Tag`, and `ref` with the name or tag. The reference resolves against the world when the graph runs.
+- **Containers** add `ctype` (`Array`, `Map` or `Set`). Arrays and sets nest `Item` children. Maps add `ktype` and nest `Entry` children with a `Key` and a `Value`. Containers nest, so an array of arrays round-trips.
+
+```mdf title="An array constant on an input pin"
+Input {
+    link: -1
+    pin: 0
+    vtype: "Int"
+    ctype: "Array"
+
+    Item {
+        vtype: "Int"
+        val: 2
+    }
+    Item {
+        vtype: "Int"
+        val: 4
+    }
+}
+```
+
+<Callout type="note">
+
+The loader recognizes the type names `Bool`, `Int`, `UInt32`, `Int64`, `UInt64`, `Float`, `Double`, `Vec3`, `String` and `Object`. Other names, such as `Vec2`, `Vec4` and `Quat`, read back as `Void` <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />.
+
+</Callout>
+
+## Versioning
+
+The current schema is **9** <Source symbol="LoomGraph" />. A new field is only ever added, and only written when it differs from its default. So a file that uses no newer feature looks the same as it did before, and `BP_Door.loom` above still says `schema: 4`.
+
+| Version | Added |
+| --- | --- |
+| 1 | The original graph schema |
+| 2 | Object references, macros, multiple exec inputs |
+| 3 | Multi-track Timelines and async-action nodes |
+| 4 | Node canvas positions and comment sizes |
+| 5 | `HasAuthority` and `SwitchHasAuthority` |
+| 6 | Replicated variables, component slot placement, `ClassRef` |
+| 7 | Instance Editable and Expose on Spawn |
+| 8 | RepNotify |
+| 9 | `MakeText` and its `ns`, `key`, `src` properties |
+
+<Callout type="warning">
+
+A file written by a newer engine is **refused**, not loaded best-effort <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />. An older build would drop what it does not understand, and the editor saves a graph back over its file, so loading it anyway would erase those nodes. Older files always load: missing fields take their defaults.
+
+</Callout>
+
+## Tools and cooking
+
+`LoomGraphSerializer` saves and loads both forms: a bare graph (root `LoomGraph`) and a whole class (root `LoomClass`), to a string or a file <Source symbol="LoomGraphSerializer" />. Saving goes through a temporary file and a rename, so a crash mid-write cannot leave an empty `.loom`. A file that already carries a package block keeps it when saved again. Git treats `.loom` as text with its own `merge=loom` driver <Source path="Engine/Source/Runtime/Core/Private/FileTypes.cpp" />.
+
+When you cook, `.loom` files are packed into the archive as text, not converted to binary MDF, because their loader reads text <Source path="Engine/Documentation/ROADMAP.md" />.
+
+## Next
+
+- [Classes and inheritance](/docs/visual-scripting/classes-and-inheritance/): what the class block means at run time.
+- [Loom API](/docs/api/loom/)

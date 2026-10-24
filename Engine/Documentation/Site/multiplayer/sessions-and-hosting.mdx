@@ -1,0 +1,226 @@
+---
+title: Sessions and hosting
+description: Host and join a co-op session from code or the command line, run a lobby between runs, handle players, kicks, rejoin and map travel.
+order: 6
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/FNetSession.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
+  - Engine/Source/Runtime/Networking/Private/NetSession.cpp
+  - Engine/Source/Runtime/Networking/Private/NetSessionLobby.cpp
+  - Engine/Source/Runtime/Networking/Public/Networking/Subsystems/MNetSessionSubsystem.h
+  - Engine/Source/Runtime/Networking/Private/NetSimulation.cpp
+  - Engine/Source/Runtime/Game/Private/NetSessionPawnHost.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Runtime/Project/Public/Project/Project.h
+  - Engine/Source/Editor/MowoEditor/Private/Pie/PieMultiplayerSession.cpp
+verifiedAt: 08e26df3d
+---
+
+`FNetSession` is the object your game talks to. It owns the host, join and leave state machine, one player record per connection, a pawn per player, the lobby phase and the gameplay event channel. It is a process singleton (`FNetSession::Get()`), and `ReplicationManager` ticks it for you every frame <Source symbol="FNetSession" />.
+
+## Host a session
+
+Call `HostSession` with a world and settings. Pass an `MWorld*` for an actor-based game, or an ECS `World*` for a headless driver.
+
+```cpp title="StartCoop.cpp"
+#include "Core/Platform.h"
+#include "Networking/Session/FNetSession.h"
+#include "Networking/Session/NetSessionTypes.h"
+
+#include <string>
+
+static bool StartCoop(Mowo::MWorld* world, const char* playerName) {
+	Mowo::FNetSessionSettings settings;
+	settings.sessionName = "Scan Team";
+	settings.playerName = playerName;
+	settings.maxPlayers = 4;
+	settings.port = 7777;
+	settings.lateJoinPolicy = Mowo::ENetLateJoinPolicy::LobbyOnly;
+
+	return Mowo::FNetSession::Get().HostSession(world, settings);
+}
+
+static bool JoinCoop(Mowo::MWorld* world, const char* hostAddress, const std::string& joinKey, const char* playerName) {
+	Mowo::FNetSessionSettings settings;
+	settings.playerName = playerName;
+	settings.joinKey = joinKey;
+
+	return Mowo::FNetSession::Get().JoinSession(world, hostAddress, 7777, settings);
+}
+```
+
+The hosting player is admitted as player 1 on peer 0 and gets a pawn of its own unless `spawnHostPawn` is off. For each player, the host spawns a pawn in this order:
+
+1. If the world has an `AGameMode`, through `AGameMode::RestartPlayer`, possessed by a per-player controller (see [Gameplay](/docs/gameplay/)).
+2. Otherwise, the class set with `SetPlayerPawnClass`.
+3. Otherwise, a bare entity with a transform and a `NetworkObjectComponent`.
+
+The pawn is marked always relevant and owned by that player's peer. `playerPawnPrefab` names the prefab clients instantiate for the ghost.
+
+### Join keys
+
+A direct (ENet) session joined from another machine needs the host's **join key**. `GetJoinKey()` on the host returns `<address>:<port>#<key>`; show it in your lobby UI and pass the key in `FNetSessionSettings::joinKey` when joining <Source symbol="FNetSession::GetJoinKey" />. The key is empty on loopback, for Steam joins, and when the session authenticates through a configured `net.psk` instead. See [Transport and encryption](/docs/multiplayer/transport-and-encryption/).
+
+### Settings
+
+`FNetSessionSettings` <Source symbol="FNetSessionSettings" />:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `sessionName` | `"Mowo Session"` | Name shown in rich presence and lobbies |
+| `playerName` | `"Player"` | This player's display name |
+| `playerPawnPrefab` | empty | Prefab clients use for player ghosts |
+| `port` | `7777` | ENet port. Not used on the Steam P2P route. `0` picks a free port. |
+| `joinKey` | empty | The host's join key, when joining a direct session from another machine |
+| `maxPlayers` | `5` | Host included. Joins past this fail with `ServerFull`. |
+| `snapshotHz` | `20` | Snapshot rate |
+| `interpolationDelay` | `0.10` | Seconds remote objects are drawn behind |
+| `connectTimeoutSeconds` | `15` | Client connect deadline |
+| `travelAckTimeoutSeconds` | `60` | How long the host waits for clients after map travel |
+| `relevancyEnabled` | `true` | Per-client relevancy |
+| `spawnPlayerPawns`, `spawnHostPawn` | `true`, `true` | Whether the session spawns pawns, and whether the host gets one |
+| `createSteamLobby` | `false` | Create and advertise a Steam lobby |
+| `advertiseRichPresence` | `true` | Publish the session to platform presence |
+| `maxUpdatesPerTick`, `maxSnapshotBytes` | `64`, `1200` | Per-client snapshot caps |
+| `peerByteBudgetPerSecond` | `6000` | Outgoing bytes per second per client |
+| `hostUplinkBytesPerSecond` | `30000` | Host uplink shared by all clients. `0` means no host-wide cap. |
+| `peerInboundByteBudgetPerSecond` | `8192` | Incoming bytes per second per client |
+| `playerCullDistance`, `playerNetPriority` | `0`, `8.0` | Relevancy radius and send priority of player pawns |
+| `rejoinGraceSeconds` | `-1` | Seconds a dropped player's slot is held. Negative follows `net.rejoin_grace_seconds` (60). `0` disables. |
+| `lateJoinPolicy` | `Anytime` | `LobbyOnly` refuses new players while a run is in progress |
+| `autoRejoinAttempts`, `autoRejoinDelaySeconds` | `3`, `2` | How often and how far apart a dropped client retries on its own |
+
+## Session state
+
+`GetState()` returns an `ENetSessionState`: `Idle`, `Hosting`, `Connecting`, `Connected` or `Failed`. `SetOnStateChanged` observes every change. When a session fails, `GetFailure()` says why <Source symbol="ENetSessionFailure" />:
+
+| Failure | Meaning |
+|---|---|
+| `NoTransport`, `HostFailed`, `ConnectFailed` | The transport could not start or reach the host |
+| `Timeout` | No welcome within `connectTimeoutSeconds` |
+| `ServerFull` | `maxPlayers` reached |
+| `Disconnected` | The link dropped |
+| `ContentMismatch` | The client's content build or DLC set differs from the host's |
+| `Kicked`, `Banned` | The host removed this player |
+| `ProtocolMismatch` | The host runs a different replication protocol or component schema |
+| `HostEndedSession` | The host closed the session on purpose |
+| `HostLost` | The link to the host dropped and every automatic rejoin attempt failed |
+| `RunInProgress` | The host only takes new players in the lobby, and a run is under way |
+
+`GetLastJoinRefusalReason()` and `GetLastExitReason()` hold readable reasons for the UI. When a client's session ends for good (host left or lost, kicked, banned, build mismatch), the runtime returns it to the project's start scene through `SetOnReturnToMenu`. There is no host migration.
+
+<Callout type="note">
+Development builds report the content build id `dev` and always match, so editor and PIE sessions are never blocked. In Shipping builds that escape is compiled out, and a client that sends no build id is refused.
+</Callout>
+
+## Lobby and runs
+
+A hosted session is either in the **Lobby** (the hub between runs: ready up, swap gear, take new players) or **InRun** <Source symbol="ENetSessionPhase" />. The host moves it and every client follows.
+
+| Call | Side | What it does |
+|---|---|---|
+| `SetLocalReady(ready)` | Any | Sets this player's ready flag. The host echoes it to everyone. |
+| `IsPlayerReady(id)`, `AreAllPlayersReady()` | Any | Read the flags. |
+| `ServerStartRun(force)` | Host | Moves to `InRun`. Refuses while anyone is not ready, unless forced. |
+| `ServerReturnToLobby()` | Host | Moves back to `Lobby` and clears every ready flag. |
+| `SetOnPhaseChanged(fn)` | Any | Observes phase changes. |
+
+With `lateJoinPolicy = LobbyOnly`, a new player is refused with `RunInProgress` during a run, while a dropped crew member can still rejoin their held slot.
+
+From Loom or UI, `MNetSessionSubsystem` <Source symbol="MNetSessionSubsystem" /> wraps the lobby: `SetReady`, `IsLocalReady`, `AreAllPlayersReady`, `StartRun`, `ReturnToLobby`, `GetPhase`, the roster by index (`GetPlayerCount`, `GetPlayerIdAt`, `GetPlayerNameAt`, `IsPlayerReadyAt`, `IsPlayerHostAt`), `GetLastExitReason` and `LeaveSession`. Every call is a safe no-op outside a session.
+
+## Players
+
+Every connection has an `FNetPlayer` with a player id, peer id, platform id, pawn entity and network id, display name, ready flag and flags such as `isHost` and `isLocal`. Read the roster with `GetPlayers`, `FindPlayerById`, `FindPlayerByPeer` and `GetLocalPlayer`. `SetOnPlayerJoined` and `SetOnPlayerLeft` fire on every machine. For a scoreboard or name tags on clients, read the replicated [player state](/docs/multiplayer/player-state/) records instead of the roster.
+
+`SetLocalPlayerState` replicates a packed `FNetPlayerState` word for the local pawn: an animation state, a normalized speed, health, and flags such as crouched, sprinting, downed or dead.
+
+### Kick and ban
+
+On the host, `KickPlayer(playerId, reason)` removes a player immediately and tells them why. `BanPlayer` also refuses that player's platform id at the next join for the rest of the hosted session; `BanPlatformId`, `UnbanPlatformId` and `GetBannedPlatformIds` manage the list. A player with no platform id (LAN, no online service) can only be kicked. Keeping bans across sessions is the game's job.
+
+### Rejoin after a drop
+
+A dropped link does not end a player's run straight away. The host holds the slot, the pawn and its network ids for `net.rejoin_grace_seconds` (60 by default). Other clients see the player as reconnecting (`isInactive` on the player state) rather than gone.
+
+<Steps>
+<Step title="The host issues a token">On the first join, the host sends a 64-bit rejoin token in the welcome message.</Step>
+<Step title="The link drops">The host keeps the player record, pawn and ids. The slot still counts against `maxPlayers`.</Step>
+<Step title="The client rejoins">The client retries on its own `autoRejoinAttempts` times, `autoRejoinDelaySeconds` apart. With `autoRejoinAttempts = 0`, check `IsRejoinPending()` and call `RejoinSession(world)` yourself.</Step>
+<Step title="The host re-binds">The host gives the returning peer the same player id and pawn, moves ownership to the new peer, and resyncs the world. If the window runs out first, the player is released through the normal leave path.</Step>
+</Steps>
+
+If every attempt fails, the client gives the host up as lost (`HostLost`) and returns to the menu.
+
+## Map travel
+
+Map changes are **hard travel**: everyone reloads the new scene. `ServerBeginTravel(scenePath)` sends the travel message to every client and holds new joins. Each client reloads, rebinds with `CompleteWorldSwap` and acknowledges; the host then resyncs it and respawns its pawn. A client that never acknowledges is dropped after `travelAckTimeoutSeconds`.
+
+<Callout type="warning">
+Clients only accept a relative content path for travel. Absolute paths, drive letters, UNC paths and `..` segments are refused (`IsSafeTravelScenePath`), so a hostile host cannot point a client outside the content tree.
+</Callout>
+
+## Run a co-op session from the command line
+
+The standalone game reads session flags at startup <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />. The maximum player count comes from the project's `platform.defaultMaxPlayers` (4 by default), and a Steam lobby is created when `platform.steamEnabled` is on.
+
+| Flag | Effect |
+|---|---|
+| `--host-session` | Host a listen-server session |
+| `--connect <host>[:<port>][#<key>]` | Join an address through the session layer. Port defaults to 7777. |
+| `--join-key <key>` | The host's join key, when not given in `--connect` |
+| `--join-steam <SteamID64>` | Join a Steam host over Steam P2P |
+| `--player-name <name>` | Display name |
+| `--port <n>` | ENet port for hosting |
+
+<Tabs>
+<Tab label="LAN or direct IP">
+
+```powershell
+MowoGame.exe --project=MyGame.mproject --host-session --player-name=Alice
+MowoGame.exe --project=MyGame.mproject --connect=192.168.1.20:7777#KEY --player-name=Bob
+```
+
+Replace `KEY` with the key the host logs and shows in its lobby.
+
+</Tab>
+<Tab label="Steam">
+
+```powershell
+MowoGame.exe --project=MyGame.mproject --host-session --player-name=Alice
+MowoGame.exe --project=MyGame.mproject --join-steam=76561198000000001 --player-name=Bob
+```
+
+The runtime claims the platform invite handler at startup, so a friend can also join from the Steam overlay or friends list. See [Online platforms](/docs/multiplayer/online-platforms/).
+
+</Tab>
+</Tabs>
+
+## Test multiplayer in the editor
+
+**Play As Client** in the Play dropdown starts a real networked session on your machine, with a choice of client count, net mode (dedicated server or the viewport as listen server) and client windows. The **Network Debug** panel inspects it. Both are described in [Play in Editor](/docs/editor/play-in-editor/).
+
+### Simulate a bad network
+
+Loopback has no loss and almost no latency, so it never exercises interpolation, acknowledgements or reconciliation. Five cvars inject bad conditions on both ENet and Steam transports, and they take effect immediately <Source path="Engine/Source/Runtime/Networking/Private/NetSimulation.cpp" />:
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `net.sim.loss` | `0` | Percent of frames dropped |
+| `net.sim.latency` | `0` | Milliseconds of one-way delay |
+| `net.sim.jitter` | `0` | Milliseconds of random delay on top |
+| `net.sim.dup` | `0` | Percent of frames delivered twice |
+| `net.sim.reorder` | `0` | Percent of frames held back so a later frame overtakes them |
+
+```powershell
+MowoGame.exe --cvar=net.sim.latency=90 --cvar=net.sim.jitter=25 --cvar=net.sim.loss=2
+```
+
+The Bandwidth tab of the Network Debug panel has a slider for each value and live counters.
+
+## Related
+
+- [Dedicated server](/docs/multiplayer/dedicated-server/) to host without a player.
+- [Online platforms](/docs/multiplayer/online-platforms/) for Steam lobbies and invites.
+- [Transport and encryption](/docs/multiplayer/transport-and-encryption/) for which transport carries a session.
+- API: [`FNetSession`](/docs/api/networking/fnetsession/), [`FNetSessionSettings`](/docs/api/networking/fnetsessionsettings/), [`FNetPlayer`](/docs/api/networking/fnetplayer/), [`ENetSessionFailure`](/docs/api/networking/enetsessionfailure/).

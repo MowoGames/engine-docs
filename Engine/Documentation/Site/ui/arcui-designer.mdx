@@ -1,0 +1,174 @@
+---
+title: ArcUI Designer
+sidebarTitle: ArcUI Designer
+description: The Mowo Editor window for authoring .ui game screens. Covers the canvas, hierarchy, palette, details, bindings, animations and play-in-designer.
+order: 4
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.h
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
+  - Engine/Source/Runtime/ArcUI/Private/FArcUIAsset.cpp
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcWidgetFactory.h
+  - Engine/Source/Runtime/ArcUI/Private/FArcUIAnimPlayer.cpp
+verifiedAt: 08e26df3d
+---
+
+The ArcUI Designer is the Mowo Editor window for `.ui` assets, the Unreal UMG Designer's counterpart. It shows the live widget tree the runtime factory builds, so what you see on the canvas is what the game draws. This page is a tour of the window and a walkthrough for a first screen.
+
+<Screenshot id="ui-designer-overview" alt="The ArcUI Designer with the test project's Content/UI/MainMenu.ui open: palette and hierarchy on the left, the canvas in the middle showing the menu inside a Desktop 1920 x 1080 frame, the Details panel on the right with StartButton selected, and the animation strip along the bottom with MenuIn selected" caption="The designer with the sample main menu open." />
+
+## Layout
+
+| Region | What it holds |
+| --- | --- |
+| Toolbar | Save, Undo, Redo, the selection breadcrumb, and the **Designer**, **Play** and **Preview** modes |
+| Palette (left, top) | Search, **Favourites**, **Common**, **Panels**, **More** and **Project Widgets** |
+| Hierarchy (left, bottom) | The widget tree, with visibility and lock toggles per row |
+| Canvas (center) | The device frame, the live widget tree and the editing gizmos |
+| Animation strip (bottom) | Timelines, tracks and keys |
+| Details (right) | Widget, Slot, type properties, Bindings and Events for the selection |
+
+## Build your first screen
+
+<Steps>
+<Step title="Create the asset">
+In the Content Browser, right-click a folder and choose **More > Arc Widget**. The editor writes `NewWidget.ui` and starts a rename <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp" />. Double-click the asset to open the designer.
+</Step>
+<Step title="Add widgets">
+Click a palette row to add it to the selected container, or drag it onto the canvas to drop it inside the deepest container under the cursor. Right-click a palette row to add it to Favourites.
+</Step>
+<Step title="Place them">
+Drag to move and use the handles to resize. Moves snap to sibling edges and centers, the parent center, the safe area and an 8-pixel grid <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />. Hold <Kbd>Alt</Kbd> while dragging to turn snapping off.
+</Step>
+<Step title="Bind data and wire events">
+In Details, bind a property such as `text` to a source, and add an `On` entry for events such as `clicked`. See [Bindings](#bindings-and-sample-values).
+</Step>
+<Step title="Check it">
+Press **Play** to run bindings and animations on the canvas, switch device frames to test other resolutions, then save.
+</Step>
+</Steps>
+
+## The palette
+
+The palette opens with a search box and a **Favourites** section, then three widget sections <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />:
+
+| Section | Widgets |
+| --- | --- |
+| Common | Text, Image, Button, Progress Bar, Slider, Check Box |
+| Panels | Canvas Panel, Horizontal Box, Vertical Box, Grid Panel, Overlay, Scroll Box |
+| More | Video Player, Spinner, Spacer, Uniform Grid, Wrap Panel, List View, Widget Switcher, Toggle Switch, Combo Box, Editable Text, Key Capture, Rich Text, Rich Text Block, Hyperlink, Breadcrumb, Border, Size Box, Scale Box, Retainer Box, Clip Box |
+| Project Widgets | Every other `.ui` in the project, added as a `UserWidget` node |
+
+**More** starts closed; a search opens every section, so a match is never hidden.
+
+The asset you are editing is left out of Project Widgets, so a screen cannot embed itself. Favourites last only for the editor session <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />.
+
+## The canvas
+
+- **Click** selects the deepest widget under the cursor. <Kbd>Alt</Kbd>+click or <Kbd>Ctrl</Kbd>+click walks one level up.
+- **Shift+click** toggles a widget in the selection. Dragging on empty space draws a selection band.
+- **Drag** moves the whole selection. The live position and size appear in a badge while you drag.
+- **Middle or right drag** pans; the **wheel** zooms around the cursor.
+
+### Anchors
+
+When the parent is a Canvas Panel, the selection shows UMG's anchor medallion. Drag an arm to move that anchor corner; the widget stays where it is on screen while its anchors change. Click the center of the medallion for the presets. On a stretched axis, each edge gets a handle for its inset.
+
+### Device frames
+
+The canvas header has a device dropdown, an orientation toggle and a DPI scale. There are eleven presets <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />:
+
+| Class | Sizes | Safe area |
+| --- | --- | --- |
+| Design | The asset's own design size | 5% |
+| Phone | 1080 × 1920, 1170 × 2532, 1440 × 3120 | 5% |
+| Tablet | 1620 × 2160, 2048 × 2732 | 5% |
+| Desktop | 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160 | 5% |
+| TV | 1920 × 1080 | 10% |
+
+The DPI scale changes the frame's pixel size without touching the asset's design size, so badly anchored widgets move and you can spot them. None of these choices are saved in the asset.
+
+<Screenshot id="ui-designer-device-phone" alt="The ArcUI Designer canvas with the device dropdown open and Phone 1170 x 2532 selected, showing the phone bezel with a notch and the dashed safe-area box around the HUD.ui layout" caption="Previewing a screen on a phone frame." />
+
+## The hierarchy
+
+One row per node, indented by depth, with a type icon and the node name.
+
+| Control | Behavior |
+| --- | --- |
+| Arrow | Collapses or expands the subtree |
+| Eye | Hides the node in the designer only (`design_hidden`) |
+| Padlock | Locks the node against picking, moving and nudging (`design_locked`) |
+| Double-click or <Kbd>F2</Kbd> | Inline rename |
+| Drag | Reparents or reorders the whole selection |
+| Search | Filters by name and class and keeps each match's parents visible |
+
+Hidden and locked are saved in the asset, but the runtime ignores them. The factory honors them only in designer mode <Source symbol="FArcWidgetFactory" />.
+
+The row context menu has Rename, Duplicate, Copy, Paste, **Wrap With**, **Replace With**, **Group into Canvas Panel**, **Select All Children**, Expand Subtree, Collapse Subtree and Delete <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />. Wrap With puts a new container around the selection. Replace With changes a node's class and keeps its name, slot, bindings and the children the new class can hold.
+
+## Details
+
+Details has sections for the Widget (name, variable flag), its Slot, the type's own properties, Bindings and Events. A search box filters rows across all sections.
+
+- **Revert arrow.** A property that differs from its default shows an arrow. Clicking it removes the property from the node, so the node goes back to having no opinion <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />.
+- **Multi-select.** With several widgets selected, an edit goes to every selected node whose class has that property. Rows the whole selection does not share are marked.
+- **Slot.** Under a Canvas Panel you get anchors, position, size, far offsets, size-to-content and z-order. Under a box, overlay or grid you get padding, fill weight and horizontal and vertical alignment.
+- **Colors.** Color rows list the theme's tokens first and keep the raw picker one step further in.
+
+The root node's Details include a **Loom Class** picker that writes the screen's `loom_class`, the Visual Scripting controller class <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />.
+
+## Bindings and sample values
+
+The bind flyout lists sources in sections: **Properties**, **Loom Functions**, **Recent** and **Current** <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />:
+
+- **Properties**: reflection paths (`Entity.Component.Property`) from the scene. With no scene bound, you type the path by hand.
+- **Loom Functions**: `loom.Class.Function` entries for every pure function of the controller class that takes no parameters and returns a value <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />.
+- **Recent** and **Current** sources.
+
+Each bound source has a **sample value** you can edit under its chip. The canvas uses it in place of live game data. Sample values are editor state and are never saved.
+
+## Play and Preview
+
+| Mode | What runs | Leave with |
+| --- | --- | --- |
+| **Play** | Bindings resolve against sample values, `auto_play` animations start, looping ones loop. Events are reported in a strip at the bottom instead of being dispatched. | <Kbd>Escape</Kbd> or the Stop button |
+| **Preview** | The tree becomes interactive for focus and gamepad checks. Bindings and animations do not run. | <Kbd>Escape</Kbd> or Exit Preview |
+
+Only one mode is on at a time; **Designer** is the editing mode.
+
+## Animations
+
+The strip below the canvas edits the asset's timelines: one named animation per entry, one track per widget and property, and diamond keys on a ruler. You can add and remove animations, tracks and keys, set a key's time, value and easing, toggle **Auto play** and **Loop**, and scrub by clicking or dragging on the ruler. <Kbd>Space</Kbd> plays or pauses and <Kbd>Delete</Kbd> removes the selected key. The easing list comes from the runtime evaluator, so it only offers curves the game can play <Source path="Engine/Source/Runtime/ArcUI/Private/FArcUIAnimPlayer.cpp" />.
+
+<Screenshot id="ui-designer-animation-strip" alt="The ArcUI Designer animation strip with MainMenu.ui's MenuIn animation selected, showing an opacity track and a scale track on MenuPanel, with the key at 0.35 s selected and its easing set to cubic_out" caption="Editing a timeline in the animation strip." />
+
+## Keyboard shortcuts
+
+These work while the canvas or hierarchy has focus. They are bound to the designer's `editor.arcUiDesigner` focus scope <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />, so they do not leak into other panels. See [focus scopes](/docs/ui/arc-widgets-and-layout/#focus-scopes).
+
+| Key | Action |
+| --- | --- |
+| Arrows / <Kbd>Shift</Kbd>+arrows | Nudge by 1 / 10 design pixels |
+| <Kbd>Delete</Kbd> / <Kbd>Backspace</Kbd> | Delete the selection |
+| <Kbd>Ctrl+C</Kbd> / <Kbd>Ctrl+V</Kbd> / <Kbd>Ctrl+X</Kbd> | Copy / paste / cut |
+| <Kbd>Ctrl+D</Kbd> | Duplicate |
+| <Kbd>Ctrl+G</Kbd> | Group the selection into a new Canvas Panel |
+| <Kbd>F</Kbd> | Frame the selection |
+| <Kbd>F2</Kbd> | Rename |
+| <Kbd>Ctrl+Z</Kbd> / <Kbd>Ctrl+Y</Kbd> | Undo / redo |
+| <Kbd>Escape</Kbd> | Close a flyout, clear the selection, or leave Play/Preview |
+
+## Undo
+
+Each change is one undo step, and each gesture is one step: a drag records a single **Move Widget** or **Resize Widget** entry when you release <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ArcUiEditorPanel.cpp" />. Snapshots are the asset's MDF text, so structural edits undo as cleanly as numeric ones.
+
+## Known gaps
+
+Favourites do not persist between sessions, and device frames, DPI scale and sample values are editor state that is never saved in the asset.
+
+## Related
+
+- [ArcUI screens](/docs/ui/arcui-screens/) for what each field in the asset does at run time.
+- [Arc styling](/docs/ui/arc-styling/) for themes and tokens.
+- [The Visual Scripting editor](/docs/visual-scripting/editor/) for writing the controller class.

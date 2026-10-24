@@ -1,0 +1,147 @@
+---
+title: Your first build
+sidebarTitle: First build
+description: Compile your project's C++ game module, load it in the editor, and package the project into a folder you can run on another machine.
+order: 7
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewClassCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
+  - Templates/TP_FirstPerson/Source/TP_FirstPerson.Target.cs
+verifiedAt: 6caf55861
+---
+
+Your game's C++ code lives in a **game module**: a shared library the editor and the player load at run time. This page builds that module from the command line and from the editor, then packages the whole project into a folder you can hand to someone else.
+
+Run every `mbt` command on this page from the engine repository root, after you have built the engine once as described in [Installing](/docs/getting-started/installing/).
+
+## What is in the game module
+
+`mbt init` and every template except Blank give you a module with the same parts <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs" />:
+
+- `<Module>.Build.cs`, the module's rules: it depends on `EngineLoop` and runs the header tool over `Public/<Module>/`, so every `MCLASS` there gets a class descriptor at run time;
+- `Private/<Module>Module.cpp`, which exports `InitializeModule` and `ShutdownModule`;
+- `<Project>.Target.cs`, the game target: the engine's player host named after your project, with your module beside it;
+- for `mbt init`, one actor class, `A<Name>Actor`.
+
+This is the actor header `mbt init MyGame` writes:
+
+```cpp title="Source/Public/MyGame/AMyGameActor.h" nocompile
+#pragma once
+
+#include "Game/AActor.h"
+#include "Game/MSceneComponent.h"
+
+#include "AMyGameActor.generated.h"
+
+namespace Mowo {
+
+MCLASS()
+class AMyGameActor : public AActor {
+public:
+	MGENERATED_BODY()
+
+	AMyGameActor() {
+		MSceneComponent* root = CreateDefaultSubobject<MSceneComponent>("Root");
+		SetRootComponent(root);
+	}
+
+	void Tick(float deltaSeconds) override;
+};
+
+} // namespace Mowo
+```
+
+The last include of a reflected header is its `<Header>.generated.h`, which the header tool writes during the build. That is why this sample cannot compile on its own.
+
+## Build from the command line
+
+Pass your project's target to `-t` and its `Source/` folder to `--extra-source`, so `mbt` finds the `.Build.cs` and `.Target.cs` files outside the engine tree <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs" />:
+
+```powershell
+.\mbt.cmd build -t MyGame --extra-source D:\Projects\MyGame\Source
+```
+
+The target is named after your project, both for `mbt init` projects and for templates (the launcher renames a template's `TP_<Name>` module and targets after your project). `-t MyGame` builds the module and the game host `MyGame` into `Engine/Binaries/<Platform>/`. Use the same `-c` configuration as the editor you run.
+
+When the editor opens a project, it loads each game module it finds at `Source/<Module>/<Module>.Build.cs` whose binary exists. A module that is not built yet is skipped with a log line <Source path="Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp" />.
+
+<Callout type="warning">
+Close the editor before a plain `mbt build`. The running editor holds the engine libraries open, so relinking them fails. To build while the editor runs, use **Compile Game Module** below.
+</Callout>
+
+## Build and reload from the editor
+
+With the project open, choose **Build › Compile Game Module**. The editor runs this for you <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp" />:
+
+```text
+mbt build -t <Module> --hot-reload --frozen-engine --extra-source <Project>/Source
+```
+
+<Flow steps={["Compile Game Module", "mbt build --frozen-engine", "<Module>.v<N> library", "hot reload"]} highlight={2} caption="--frozen-engine leaves the loaded engine libraries alone; --hot-reload links a new versioned library the editor can swap in." />
+
+`--frozen-engine` treats every engine module as up to date and builds only project modules against the existing engine binaries. `--hot-reload` links the module to a versioned file, `<name>.v<N>.dll`, because the operating system locks the one already loaded. This is also how you load an `mbt init` module: its flat `Source/<Name>.Build.cs` layout is not in the start-up scan, so compile it once per session from the Build menu.
+
+### Add a class
+
+Use **Tools › New C++ Class…** in the editor, or the command line:
+
+```powershell
+.\mbt.cmd newclass ADoorActor --project D:\Projects\MyGame
+```
+
+`--parent` picks `actor` (the default), `component` or `none`. `--parent-class` with `--parent-include` subclasses any reflected class, for example `--parent-class ACharacter --parent-include Game/ACharacter.h`. The command scaffolds the module first if the project has none <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewClassCommand.cs" />.
+
+<Screenshot id="getting-started-editor-build-menu" alt="Mowo Editor with the Build menu open showing Compile Game Module, Package Project… and Cook Content…, over a project whose Source folder contains a game module." caption="The Build menu." />
+
+[Programming](/docs/programming/) covers game modules, Live Coding and hot reload in depth.
+
+## Package the project
+
+`mbt package` builds the engine and your module, compiles shaders, cooks content and lays out a runnable folder. Start with a Development package:
+
+```powershell
+.\mbt.cmd package --project D:\Projects\MyGame\MyGame.mproject -c Development
+```
+
+<Flow steps={["Build C++", "Compile shaders", "Validate and cook assets", "Stage runtime files", "Zip"]} highlight={2} caption="mbt package, in order." />
+
+| Default | Value |
+|---|---|
+| Configuration | Shipping, when you pass no `-c` |
+| Product name | `--name`, else `build.outputName` from the manifest, else the manifest's file name |
+| Output folder | `Config/Packaging.ini` if it sets one, else `Saved/Packaged/<Product>/` in the project <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" /> |
+| Zip | On: `<Product>-<version>-<config>.zip` |
+
+The package looks like this <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs" />:
+
+```text
+MyGame/
+  MyGame.exe              thin launcher; run this
+  Binaries/Win64/         the real host executable, its libraries and enabled plugins
+  Content/Paks/           packed content archives
+  Config/                 the project's shipped INI files
+  Engine/Config/          the engine's INI layer
+  Cache/PsoCache.mdfb
+```
+
+Double-click `MyGame.exe` to test it.
+
+<Callout type="note">
+A Shipping package encrypts and signs content with the keys in the project's `Config/DefaultCrypto.ini`, and refuses to package without them. Create keys with `mbt crypto generate --project <manifest>`, or pass `--unprotected` for a test build. Other configurations do not need keys. Shipping also links the engine statically and builds with link-time optimization, which is the slowest build. See [Shipping](/docs/shipping/).
+</Callout>
+
+When you only changed content, `--skip-build` and `--skip-shaders` reuse the binaries and shaders you already have. The same flow is in the editor under **Build › Package Project…**.
+
+<Screenshot id="getting-started-package-folder" alt="Windows File Explorer showing D:\Projects\MyGame\Saved\Packaged\MyGame after mbt package: MyGame.exe, Binaries, Cache, Config, Content and Engine folders, with the MyGame zip archive visible one level up in the Packaged folder." caption="A finished package." />
+
+## Next steps
+
+- [Core concepts](/docs/getting-started/core-concepts/) for how modules, actors and the ECS fit together.
+- [Programming](/docs/programming/) to write gameplay code.
+- [Shipping](/docs/shipping/) for signing, installers, Steam and servers.

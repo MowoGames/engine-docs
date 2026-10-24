@@ -1,0 +1,133 @@
+---
+title: AI
+description: AI controllers, blackboards, behavior trees and state trees, perception with sight, hearing and four more senses, and environment queries.
+order: 21
+sources:
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIController.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/Blackboard.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/BehaviorTree.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/BehaviorTreeAsset.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/BehaviorTreeComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/BehaviorTreeSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/StateTree.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/StateTreeAsset.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/StateTreeComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/MStateTreeStatics.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIPerceptionComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIPerceptionSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIStimulusBus.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AINoiseMap.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AITeamAttitude.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/EnvQuery.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/EnvQueryAsset.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/EnvQuerySystem.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/PerceivableComponent.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/AISignals.h
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+verifiedAt: 08e26df3d
+---
+
+The AI module gives non-player characters a brain. An `AIController` possesses a pawn and runs a behavior tree or a state tree over a blackboard; perception feeds what the agent senses into that blackboard; environment queries pick where to go. Movement is on [Navigation](/docs/gameplay/navigation/), and large populations on [AI crowds and director](/docs/gameplay/ai-crowds-and-director/).
+
+## AI controllers
+
+`AIController` is a controller that owns a blackboard and runs a behavior tree every tick. It possesses a pawn like any controller. <Source symbol="AIController" />
+
+```cpp title="SpawnGuard.cpp" nocompile
+AIController* ai = world->SpawnActor<AIController>().Get();
+ai->Possess(guardPawn);
+ai->GetBlackboard().SetObject(FName("Target"), player);
+ai->RunBehaviorTree(std::move(tree));
+```
+
+For a placed character you rarely write this: add a `BehaviorTree` component (`treePath`, `tickInterval`) or a `StateTree` component to the entity and the AI systems load and run the asset.
+
+## Blackboards
+
+A blackboard is a typed key-value store that is the agent's working memory. Keys are names; values are `Bool`, `Int`, `Float`, `Vector`, `Object`, `Name` or `Enum`. <Source symbol="Blackboard" />
+
+- Reading a key that is unset or holds another type returns a default, so reads never fail.
+- Object values are weak: when the actor is destroyed, the key reads null instead of a dangling pointer.
+- A tree's blackboard is cleared when the tree restarts, unless `preserveBlackboard` is set on the component.
+- `AddObserver(key, fn)` calls you when a key changes. Writing the same value again is not a change.
+- A key marked **Instance Synced** is shared by every agent running the same tree, so one guard spotting the player tells the whole squad.
+
+## Behavior trees
+
+A behavior tree (`.btree`) is a tree of composites, decorators and tasks, authored in the Behavior Tree editor. It is stateful: a task that returns `Running` resumes next tick instead of restarting, and a branch that stops being ticked is aborted cleanly. <Source symbol="BehaviorTree" />
+
+<Screenshot id="gameplay-behavior-tree-editor" alt="Mowo Editor Behavior Tree editor with Guard.btree open: a Selector root with a Chase sequence guarded by a Blackboard decorator on CanSeeTarget (Observer Aborts: Lower Priority) and a Patrol branch with Move To and Wait tasks; the Blackboard panel lists Target, CanSeeTarget and LastKnownPosition" caption="Decorators guard branches; observer aborts let a higher-priority branch take over." />
+
+| Kind | Nodes |
+| --- | --- |
+| Composites | `Selector`, `Sequence`, `Parallel` |
+| Decorators | Blackboard (set, unset, true, false, or compared to a value), Compare BB Entries, Distance, Is At Location, Cone Check, Cooldown, Time Limit, Loop, Force Success, Inverter |
+| Services | Update Target, Set BB Value, Run EQS Query, Update Distance |
+| Tasks | Move To, Wait, Wait Blackboard Time, Play Montage, Run EQS Query, Run Subtree, Run Loom Task (a Visual Scripting function), Native Task |
+
+Every condition decorator has **Observer Aborts**: when the key it watches changes, it can abort its own branch or retake control from a lower-priority sibling.
+
+**Run Subtree** runs a tree that code injects at runtime with `BehaviorTreeSystem::SetDynamicSubtree(component, tag, path)`, sharing the caller's blackboard. **Native Task** runs a task registered in C++ by id; the engine registers `FindCover`, `MoveToCover`, `InCover`, `LeaveCover`, `FindSmartObject`, `UseSmartObject` and `RunEQSQuery`. **Run Loom Task** runs a Visual Scripting function as a task; the node keeps its internal name.
+
+You can also build trees in C++ with the `BT::` builders, such as `BT::Selector`, `BT::Sequence`, `BT::BlackboardBool`, `BT::Wait`, `BT::MoveTo` and `BT::Func`.
+
+## State trees
+
+A state tree (`.statetree`) is a hierarchy of states. Where a behavior tree re-decides from the root every tick, a state tree stays in a state until a transition moves it, which suits a guard that idles, patrols, investigates a noise and returns. <Source symbol="StateTreeAsset" />
+
+- **Enter conditions** are blackboard queries that must hold for a state to be entered.
+- **Tasks** are any behavior-tree task, or **Run Behavior Tree** on a whole `.btree`. Every state on the active path runs its tasks; a state completes when one of its tasks completes.
+- **Transitions** fire `OnCompleted`, `OnSucceeded`, `OnFailed`, `OnEvent` or `OnTick`, and go to a named state, the next sibling, or end the tree.
+
+Create one from the Content Browser's **New › State Tree**. Drive it from gameplay with `MStateTreeStatics`: `SendStateTreeEvent(actor, event)`, `GetActiveStateName`, `IsInState` and `SetStateTreeBool`. <Source symbol="MStateTreeStatics" />
+
+## Perception
+
+Add an `AIPerception` component to an AI entity. Its outputs are written back to the component each frame (`targetEntity`, `canSeeTarget`, `lastKnownPosition`, `timeSinceSeen`, `lastStimulus`), so gameplay and trees just read it. <Source symbol="AIPerceptionComponent" />
+
+| Sense | Behavior |
+| --- | --- |
+| Sight | A cone with a lose-sight radius larger than the sight radius, and a line-of-sight trace on the `Visibility` channel |
+| Hearing | Noises heard within `hearingRadius` times their loudness, reduced by the walls and portals between |
+| Damage | A hit makes the attacker the target, whatever the eyes say |
+| Touch | An enemy within `touchRadius` is perceived with no cone and no sight line |
+| Team | A teammate nearby that gains a target shares it |
+| Prediction | When sight is lost, the last known position moves along the target's velocity for a short time |
+
+Targets are entities with a `Perceivable` component, or any character. Agents never perceive their own team. Line-of-sight traces are budgeted by `ai.PerceptionMaxRaysPerFrame` (default 64), nearest first.
+
+Gameplay reports noises through `FAISignals::ReportNoise`; footsteps report their own when `ai.FootstepNoise` is on. Noises also spread over a decaying noise map that the AI director reads (`ai.NoiseMap`). <Source symbol="FAISignals" />
+
+## Environment queries
+
+An environment query (`.eqs`) picks a point: cover, a flanking spot, a place to strafe to. It generates candidates, filters and scores them with tests, and picks a result. <Source symbol="EnvQueryAsset" />
+
+```mdf title="Content/AI/FlankSpot.eqs"
+EnvQuery "FlankSpot" {
+    generator = Ring
+    generator_context = Querier
+    radius = 6.0
+    count = 16
+    run_mode = Best
+    project_to_navmesh = true
+
+    Test "Distance" { type = Distance  purpose = Both  context = Target  min = 4.0  max = 100.0  prefer_high = true  weight = 1.0 }
+    Test "Trace" { type = Trace  purpose = Filter  context = Target  trace_height = 1.5 }
+    Test "Pathfind" { type = Pathfind  purpose = Score  context = Querier  prefer_high = false  weight = 0.5 }
+}
+```
+
+| Part | Options |
+| --- | --- |
+| Generators | `Grid`, `Ring`, `Donut`, `ActorsWithTag`, `NavReachable` |
+| Tests | `Distance`, `Dot`, `Trace`, `Pathfind`, `Random`; each filters, scores or both |
+| Run mode | `Best`, `RandomBest25`, `RandomBest5`, `AllMatching` |
+
+Run a query from a behavior tree with the **Run EQS Query** task or service, which writes the winner to a blackboard vector. Queries submitted through the world's query system are time-sliced: at most `eqs.ItemBudget` measurements a frame (default 512) across all queued queries. <Source symbol="EnvQuerySystem" />
+
+## Related
+
+- [Navigation](/docs/gameplay/navigation/)
+- [AI crowds and director](/docs/gameplay/ai-crowds-and-director/)
+- [Gameplay framework](/docs/gameplay/gameplay-framework/) for controllers and pawns
+- API: [AINavigation module](/docs/api/ainavigation/)

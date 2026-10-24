@@ -1,0 +1,198 @@
+---
+title: World building
+description: Place actors, sculpt and paint terrain, edit water and splines, paint foliage and props, bake navigation, and set up world partition streaming and data layers.
+order: 6
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ModesPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/LandscapePanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/NewLandscapeDialog.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/WaterPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/NavigationPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/WorldPartitionPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/DataLayersPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Viewport/LandscapeToolMode.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Viewport/WorldToolController.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Viewport/FoliageToolMode.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Viewport/WaterToolMode.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Viewport/SplineToolMode.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Viewport/PropsToolMode.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Spawn/PlaceablePalette.cpp
+  - Engine/Source/Runtime/Game/Private/Game/PlaceableActorRegistry.cpp
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+verifiedAt: f5ba7fec2
+---
+
+World building is the set of tools for shaping a level rather than editing single actors: placing actors from a palette, sculpting and painting terrain, drawing water and splines, scattering props and foliage, baking navigation, and splitting a large world into streamed cells. Each terrain or painting tool is a viewport **tool mode**: it takes over the mouse while active and gives it back to selection when you leave it.
+
+<Screenshot id="editor-world-building-landscape" alt="The editor with the Land rail mode active: the Landscape panel on the left showing the Sculpt tab with the tool grid (Sculpt, Smooth, Flatten, Ramp, Erosion, Hydro, Noise, Retop) and the Brush section, and the viewport showing a hilly terrain with the circular brush preview following the slope." />
+
+## The mode rail
+
+The rail on the far left switches the Modes panel beside it <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ModesPanel.cpp" />:
+
+| Rail | Panel |
+| --- | --- |
+| Select | **Place actors**: the placeable actor palette |
+| Land | The Landscape panel: Sculpt, Paint and Manage |
+| Foliage | The foliage tools, brush and palette |
+| Paint | Terrain layer and vertex colour painting with a target layer and brush |
+| Model | Level geometry modeling; see [Geometry tools](/docs/editor/geometry-tools/) |
+
+## Placing actors
+
+**Place actors** lists placeable classes by category, with **Basic** first: an empty actor, character, pawn, the lights, the basic shapes, player start, camera, common volumes, audio volume, sky atmosphere, height fog, decal and text render. The other categories are Lights, Shapes, Volumes, Cinematic, Visual FX, Audio, Gameplay and World <Source path="Engine/Source/Runtime/Game/Private/Game/PlaceableActorRegistry.cpp" />.
+
+<Steps>
+<Step title="Find the actor">
+Pick a category chip, or type in the search box to search every category.
+</Step>
+<Step title="Place it">
+Click a row to spawn the actor in front of the camera, or drag it into the viewport to drop it where you release.
+</Step>
+<Step title="Undo if needed">
+Every placement is one undo entry and selects the new actor.
+</Step>
+</Steps>
+
+The panel's menu (**···** in its header) offers **All classes**, **Recently placed**, **Show class names** and **Clear recently placed**. The same palette feeds the viewport's **Place Actor Here** menu and the Outliner's **Add Child Actor** <Source path="Engine/Source/Editor/MowoEditor/Private/Spawn/PlaceablePalette.cpp" />.
+
+The basic shapes (Cube, Sphere, Cylinder, Cone, Plane, Wedge, Stairs) are built-in primitives one metre across, so every project has them without an asset. **Mannequin (1.8 m)** is a scale reference figure. Without a material, shapes draw a grid so their size reads off the floor.
+
+## Terrain
+
+A terrain is an `ATerrainActor`; a level holds one. With no terrain in the level, Sculpt and Paint offer **New landscape…** instead of their tools.
+
+### Creating a landscape
+
+The **New landscape** dialog creates a flat terrain or imports a heightmap <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/NewLandscapeDialog.cpp" />. Set the material layers, the transform (the X/Y scale is the quad size), and the layout: section size, sections per component and component count, with the resulting resolution and area shown. **Fill world** picks the component count that spans every actor in the level. **Create** spawns and shapes the terrain as one undo entry.
+
+### Sculpting and painting
+
+The Landscape panel has three tabs <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/LandscapePanel.cpp" />:
+
+| Tab | Contents |
+| --- | --- |
+| Sculpt | Tools: Sculpt, Smooth, Flatten, Ramp, Erosion, Hydro (a hydraulic erosion pass over the whole terrain), Noise, Retop. The **Brush** section: brush type (circle, alpha mask, or the mask tiled as a pattern), falloff (Smooth, Linear, Tip), size, falloff, strength, and **Use slope flatten**, which flattens toward the slope under the brush instead of a level height |
+| Paint | The weight layers, each with its coverage, plus the visibility (hole) layer |
+| Manage | New, Select, Add (import a tile grid) and Import, plus edit layers, landscape splines, noise-stack generation, erosion, tile streaming and heightmap export |
+
+<Steps>
+<Step title="Pick a tool">
+Choose **Land** on the rail, open **Sculpt** and pick a tool.
+</Step>
+<Step title="Stroke">
+Drag in the viewport. Hold <Kbd>Shift</Kbd> to invert the tool. The brush ring follows the ground so you can see what it covers on slopes. A stroke over a selected actor sculpts rather than moving the actor.
+</Step>
+<Step title="Paint layers">
+Switch to **Paint**, choose a layer and stroke. Painting the visibility layer cuts holes in both the rendered surface and the collision.
+</Step>
+</Steps>
+
+Each stroke is one undo entry, whatever its length.
+
+### Where terrain edits are saved
+
+Sculpted heights and painted weights are written when you save the level: heights as a 16-bit `.r16` file and weights as `_Weights.png` images in `Content/Terrain/` <Source path="Engine/Source/Editor/MowoEditor/Private/Viewport/WorldToolController.cpp" />. The terrain component points at those files, so the level records them like any other asset reference.
+
+<Callout type="warning">
+The 16-bit height format is unsigned and square-only. Terrain sculpted below height zero is clamped to zero when saved, and a non-square heightfield refuses to save.
+</Callout>
+
+## Water
+
+**Water** mode (<Kbd>Shift+4</Kbd>) and **Window ▸ Water** edit water bodies <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/WaterPanel.cpp" />. The panel lists the level's bodies and creates oceans, lakes, rivers and custom bodies, and has a table of the selected body's spline points. In the viewport, <Kbd>Ctrl</Kbd>+click places a body, and dragging a point moves it on the body's own water plane, so a lake above the ground keeps its height <Source path="Engine/Source/Editor/MowoEditor/Private/Viewport/WaterToolMode.cpp" />. Panel edits and viewport drags make the same single undo entry. **Lake** and **River** in the palette spawn a water actor with a preset spline.
+
+## Splines
+
+**Spline** mode edits the points of the selected actor's Spline component <Source path="Engine/Source/Editor/MowoEditor/Private/Viewport/SplineToolMode.cpp" />:
+
+| Input | Action |
+| --- | --- |
+| Click a handle, drag | Select and move the point on the horizontal plane through it |
+| <Kbd>Alt</Kbd> + drag | Move the point up and down |
+| <Kbd>Shift</Kbd> + click the curve | Insert a point |
+| <Kbd>Delete</Kbd> | Remove the selected point |
+| <Kbd>Ctrl</Kbd> + click | Add a point after the last one, or place a new spline actor when none is selected |
+
+## Props
+
+**Props** mode (<Kbd>Shift+5</Kbd>) places, paints, erases and scatters Smart Props along the surface under the cursor <Source path="Engine/Source/Editor/MowoEditor/Private/Viewport/PropsToolMode.cpp" />. Props land on the meshes you can see and select. See [Data and gameplay editors](/docs/editor/data-editors/) for authoring Smart Props.
+
+## Foliage
+
+**Foliage** on the rail (or <Kbd>Shift+6</Kbd>) paints instanced meshes and grass across terrain and meshes <Source path="Engine/Source/Editor/MowoEditor/Private/Viewport/FoliageToolMode.cpp" />. Everything it places is stored in the level in one **Painted Foliage** container.
+
+<Steps>
+<Step title="Add a foliage type">
+Click **Add Type** and pick a mesh; leave the mesh empty for a grass clump.
+</Step>
+<Step title="Tune the type">
+The type's settings open as a tab beside Details: density, radius (minimum spacing between instances of the type), scale range and scaling mode (Uniform, Free, Lock XY), align to normal with a maximum angle, random yaw, slope and height limits, and cull distance.
+</Step>
+<Step title="Paint">
+Drag in the viewport. <Kbd>[</Kbd> and <Kbd>]</Kbd> or the wheel resize the brush, <Kbd>Delete</Kbd> erases under the cursor, and <Kbd>Esc</Kbd> cancels a stroke.
+</Step>
+</Steps>
+
+| Tool | What it does |
+| --- | --- |
+| Paint | Adds instances of every ticked type up to its density. Holding the brush still does not stack more |
+| Erase | Removes instances of ticked types under the brush |
+| Reapply | Re-rolls scale and rotation of existing instances against the current settings, without moving them |
+| Lasso | Selects instances inside a freehand loop; <Kbd>Delete</Kbd> removes them |
+| Single | Places one instance per click |
+| Fill | Fills the brush disc to full density |
+
+**Surface** chooses whether the brush lands on Terrain, Meshes or Both.
+
+<Callout type="tip">
+A grass type with no mesh, no cull distance of its own and no align-to-normal is drawn as a GPU batch: one draw for the whole row. Giving it a cull distance or aligning it to the surface moves it to the slower per-instance path.
+</Callout>
+
+## Navigation
+
+**Window ▸ Navigation** opens the Navigation tab beside Details <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/NavigationPanel.cpp" />. It lists the level's agent types (radius, height, step and slope); click a row to bake for that agent, click the selected row to edit it, and **+** to add one. **Generation** sets cell size, cell height, tile size, region merging and the runtime mode (static, dynamic modifiers or fully dynamic).
+
+**Build** bakes the navigation mesh in the background, with a progress card and **Cancel**, and writes it beside the level as `<level>.navmesh`, which the cook packs with the level. **Clear** removes it. **Auto rebuild** re-bakes when the terrain under the mesh changes. A **Nav Mesh Bounds Volume** limits the bake to the box it spans. The settings save with the level, so a re-bake elsewhere gives the same mesh. A successful bake turns on the **Navigation** debug layer in the viewport.
+
+## World partition
+
+World partition splits a large level into grid cells that stream in and out around the player. Open **Window ▸ World Partition** <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/WorldPartitionPanel.cpp" />.
+
+<Screenshot id="editor-world-partition-panel" alt="The World Partition document tab for a level with a sector manifest and the streaming preview running: the cell map with loaded cells highlighted around the camera position, one cell selected, and the cell detail showing Cell, Actors, Memory, Data layers, Load, Size, State and Always loaded rows." />
+
+<Flow steps={["Add Streamable component to actors", "Generate streaming", "<level>.sectors written", "Runtime streams cells by distance"]} highlight={1} caption="Setting up streaming for a level." />
+
+<Steps>
+<Step title="Mark what streams">
+Add a Streamable component to each top-level actor that should stream. The panel counts them.
+</Step>
+<Step title="Generate the manifest">
+Click **Generate streaming**. It buckets every streamable actor into grid cells and writes a `.sectors` manifest next to the level.
+</Step>
+<Step title="Preview">
+Start the streaming preview to drive the sector state machine from the editor camera. The preview only changes cell states; it does not spawn or unload anything in the editor. **Load cell** and **Unload** act on the selected cell.
+</Step>
+<Step title="Pin cells">
+Mark cells **Always loaded**, or group them into regions. Both persist to the manifest.
+</Step>
+</Steps>
+
+After you move streamable actors, use **Regenerate streaming**.
+
+### Data layers
+
+**Window ▸ Data Layers** lists the data layers of a level saved one file per actor, each with its actor count, its editor load state and its runtime initial state <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/DataLayersPanel.cpp" />.
+
+- The eye loads or unloads a layer's actors in the editor. Saving never deletes an unloaded layer's actor files.
+- The runtime state is what the game, a dedicated server and Play in editor start with; game code changes it later with Set Data Layer Active.
+- Buttons add a new layer and add or remove the selected actors from the layer under the cursor.
+- The level instance button places another level inside this one: its actors join at load, offset by the instance's position, and stay edited in their own level.
+
+Layers and membership are written to the level's own files, so they merge per actor under source control.
+
+## Related
+
+- [Viewport](/docs/editor/viewport/) for tool modes, snapping and the context menu.
+- [Settings](/docs/editor/project-settings/) for the terrain, foliage, water and streaming settings pages.
+- API: [Game](/docs/api/game/), [SceneTypes](/docs/api/scenetypes/).

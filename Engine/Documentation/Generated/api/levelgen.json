@@ -1,0 +1,1321 @@
+{
+	"name": "MowoEngine.LevelGen",
+	"displayName": "LevelGen",
+	"slug": "levelgen",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/LevelGen/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelGeneration.h",
+			"include": "LevelGen/LevelGeneration.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FLevelGeneration",
+					"namespace": "Mowo",
+					"doc": "One LevelGenerationComponent's play-time generation, as the scene system\nruns it: the grammar, the seed by role (the host decides and sends it, a\nclient waits for it, offline uses its own), the layout, the nine passes,\nthen prefabs and level-module Level Instances into the scene.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "static bool Run(Scene& scene, EntityID entity)",
+							"static": true,
+							"doc": "False while a client still waits for the host's seed; true once the\ncomponent generated (or refused an invalid layout).",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "LoadGrammar",
+							"signature": "static FLevelGrammar LoadGrammar(const std::string& path)",
+							"static": true,
+							"doc": "The grammar a component names, the built-in facility when it names none\nor the file does not load.",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "HashGrammar",
+							"signature": "static uint64_t HashGrammar(const FLevelGrammar& grammar)",
+							"static": true,
+							"doc": "FNV-1a over the grammar's text: equal grammars, equal hashes.",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "GeneratorKey",
+							"signature": "static std::string GeneratorKey(EntityID entity)",
+							"static": true,
+							"doc": "The replication key of a generator: its entity id, which the level file\ngives every machine alike.",
+							"line": 35
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelGenerationComponent.h",
+			"include": "LevelGen/LevelGenerationComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "LevelGenerationComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"doc": "Drop one in a scene to generate the level at play: the grammar (the\nbuilt-in AJAX facility when empty), the seed, and where the grid starts\n(the entity's position). The runtime half reports what came out.",
+					"line": 19,
+					"members": [
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "grammar",
+							"signature": "std::string grammar",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "int32_t seed = 1",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "randomSeed",
+							"signature": "bool randomSeed = false",
+							"doc": "A new seed each play (logged, so a run can be reproduced).",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "generateOnPlay",
+							"signature": "bool generateOnPlay = true",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "requireValid",
+							"signature": "bool requireValid = true",
+							"doc": "Refuse to spawn a layout that fails any of the nine validation passes.",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "replicateSeed",
+							"signature": "bool replicateSeed = true",
+							"doc": "In a session the host decides the seed (its own, or a random one) and\nsends it; clients build nothing until it arrives, then build the same\nlevel. Off, every machine uses its own Seed / Random Seed.",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "generated",
+							"signature": "bool generated = false",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "waitingForSeed",
+							"signature": "bool waitingForSeed = false",
+							"line": 57
+						},
+						{
+							"kind": "field",
+							"name": "levelModules",
+							"signature": "int32_t levelModules = 0",
+							"line": 58
+						},
+						{
+							"kind": "field",
+							"name": "valid",
+							"signature": "bool valid = false",
+							"line": 59
+						},
+						{
+							"kind": "field",
+							"name": "usedSeed",
+							"signature": "int32_t usedSeed = 0",
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "rooms",
+							"signature": "int32_t rooms = 0",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "spawnedPrefabs",
+							"signature": "int32_t spawnedPrefabs = 0",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "layoutHash",
+							"signature": "uint64_t layoutHash = 0",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "LevelGenerationComponent",
+							"signature": "LevelGenerationComponent() = default",
+							"line": 65
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelGenerator.h",
+			"include": "LevelGen/LevelGenerator.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FLevelRandom",
+					"namespace": "Mowo",
+					"doc": "A deterministic 32-bit PCG stream. Its own, not FRandomStream: the level a\nseed produces is pinned by golden hashes across builds, so the generator's\nrandomness must never change when something else's does.",
+					"line": 16,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FLevelRandom",
+							"signature": "explicit FLevelRandom(uint64_t seed)",
+							"line": 18
+						},
+						{
+							"kind": "method",
+							"name": "Next",
+							"signature": "uint32_t Next()",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "Below",
+							"signature": "uint32_t Below(uint32_t bound)",
+							"doc": "Uniform in [0, bound); bound 0 returns 0.",
+							"line": 22
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelNode",
+					"namespace": "Mowo",
+					"line": 29,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Type",
+							"signature": "std::string Type",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "Neighbours",
+							"signature": "std::vector<int32_t> Neighbours",
+							"line": 31
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelGraph",
+					"namespace": "Mowo",
+					"doc": "The room graph (audit G2: graph first). Always a tree: Insert and Attach\nkeep it one, Replace only retypes.",
+					"line": 36,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Nodes",
+							"signature": "std::vector<FLevelNode> Nodes",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "AddNode",
+							"signature": "int32_t AddNode(const std::string& type)",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "Connect",
+							"signature": "void Connect(int32_t a, int32_t b)",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "Disconnect",
+							"signature": "void Disconnect(int32_t a, int32_t b)",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "Count",
+							"signature": "int32_t Count(const std::string& type) const",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "int32_t Find(const std::string& type) const",
+							"line": 43
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelPlacement",
+					"namespace": "Mowo",
+					"doc": "Where one room's module landed: grid origin (the cell its rotated\nfootprint's minimum corner sits on) and quarter turns clockwise.",
+					"line": 48,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Module",
+							"signature": "int32_t Module = -1",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "OriginX",
+							"signature": "int32_t OriginX = 0",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "OriginY",
+							"signature": "int32_t OriginY = 0",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "Rotation",
+							"signature": "int32_t Rotation = 0",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "Width",
+							"signature": "int32_t Width = 1",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "Height",
+							"signature": "int32_t Height = 1",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "SocketLinks",
+							"signature": "std::vector<int32_t> SocketLinks",
+							"doc": "Per module socket (same order as the definition): the node it connects\nto, or -1 when it is open (and gets a cap).",
+							"line": 57
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelLayout",
+					"namespace": "Mowo",
+					"line": 60,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Seed",
+							"signature": "uint64_t Seed = 0",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "Success",
+							"signature": "bool Success = false",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "Attempts",
+							"signature": "int32_t Attempts = 0",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "Failure",
+							"signature": "std::string Failure",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "Graph",
+							"signature": "FLevelGraph Graph",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "Placements",
+							"signature": "std::vector<FLevelPlacement> Placements",
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "Hash",
+							"signature": "uint64_t Hash = 0",
+							"line": 67
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelWorldSocket",
+					"namespace": "Mowo",
+					"doc": "A socket after its module was rotated and placed: world cell and side.",
+					"line": 71,
+					"members": [
+						{
+							"kind": "field",
+							"name": "CellX",
+							"signature": "int32_t CellX = 0",
+							"line": 72
+						},
+						{
+							"kind": "field",
+							"name": "CellY",
+							"signature": "int32_t CellY = 0",
+							"line": 73
+						},
+						{
+							"kind": "field",
+							"name": "Side",
+							"signature": "ELevelSide Side = ELevelSide::North",
+							"line": 74
+						},
+						{
+							"kind": "field",
+							"name": "WidthMeters",
+							"signature": "float WidthMeters = 1.6f",
+							"line": 75
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FLevelGenerator",
+					"namespace": "Mowo",
+					"line": 78,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Generate",
+							"signature": "static FLevelLayout Generate(const FLevelGrammar& grammar, uint64_t seed)",
+							"static": true,
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "Rewrite",
+							"signature": "static bool Rewrite(const FLevelGrammar& grammar, FLevelRandom& random, FLevelGraph& outGraph, std::string& outFailure)",
+							"static": true,
+							"doc": "Rewrite the start chain with the grammar (no embedding). Exposed for\ntests and the designer preview; false when a type limit was missed.",
+							"line": 84
+						},
+						{
+							"kind": "method",
+							"name": "HashLayout",
+							"signature": "static uint64_t HashLayout(const FLevelLayout& layout)",
+							"static": true,
+							"doc": "FNV-1a over the graph and every placement, in node order: the value the\nG9 runner pins per seed.",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "MaxDegreeOf",
+							"signature": "static int32_t MaxDegreeOf(const FLevelGrammar& grammar, const std::string& type)",
+							"static": true,
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "WorldSocket",
+							"signature": "static FLevelWorldSocket WorldSocket(const FLevelModuleDef& module, const FLevelPlacement& placement, size_t socketIndex)",
+							"static": true,
+							"doc": "Grid geometry shared by the embedder, the validator and the spawner.",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "RotateCell",
+							"signature": "static void RotateCell(int32_t x, int32_t y, int32_t width, int32_t height, int32_t rotation, int32_t& outX, int32_t& outY)",
+							"static": true,
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "RotateSide",
+							"signature": "static ELevelSide RotateSide(ELevelSide side, int32_t rotation)",
+							"static": true,
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "Opposite",
+							"signature": "static ELevelSide Opposite(ELevelSide side)",
+							"static": true,
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "Step",
+							"signature": "static void Step(ELevelSide side, int32_t& x, int32_t& y)",
+							"static": true,
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "CellKey",
+							"signature": "static int64_t CellKey(int32_t x, int32_t y)",
+							"static": true,
+							"line": 98
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelGrammar.h",
+			"include": "LevelGen/LevelGrammar.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "ELevelSide",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Grid sides. +Y is north on the grid and -Z in the world (the engine's\nforward), +X is east in both.",
+					"line": 14,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "North",
+							"signature": "North = 0",
+							"line": 15
+						},
+						{
+							"kind": "enumerator",
+							"name": "East",
+							"signature": "East",
+							"line": 16
+						},
+						{
+							"kind": "enumerator",
+							"name": "South",
+							"signature": "South",
+							"line": 17
+						},
+						{
+							"kind": "enumerator",
+							"name": "West",
+							"signature": "West",
+							"line": 18
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelSocket",
+					"namespace": "Mowo",
+					"doc": "An opening on a module's edge: the cell it is on (module-local, before\nrotation), which side of that cell, and how wide the doorway is.",
+					"line": 23,
+					"members": [
+						{
+							"kind": "field",
+							"name": "X",
+							"signature": "int32_t X = 0",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "Y",
+							"signature": "int32_t Y = 0",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "Side",
+							"signature": "ELevelSide Side = ELevelSide::North",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "WidthMeters",
+							"signature": "float WidthMeters = 1.6f",
+							"line": 27
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelModuleDef",
+					"namespace": "Mowo",
+					"doc": "A chunk on the 4 m grid (audit G1): a footprint of whole cells, its\nsockets, the prefab that builds it, and the numbers the validator reads.",
+					"line": 32,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "RoomType",
+							"signature": "std::string RoomType",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "Width",
+							"signature": "int32_t Width = 1",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "Height",
+							"signature": "int32_t Height = 1",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "Sockets",
+							"signature": "std::vector<FLevelSocket> Sockets",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "Prefab",
+							"signature": "std::string Prefab",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "Level",
+							"signature": "std::string Level",
+							"doc": "A module authored as a level of its own (`.mmap`, edited like any\nlevel) and placed as a Level Instance. Wins over Prefab when both are set.",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "Weight",
+							"signature": "int32_t Weight = 1",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "ScanCost",
+							"signature": "int32_t ScanCost = 100",
+							"doc": "Estimated scan cost (rays' worth of surface) the validator budgets.",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "NoCarry",
+							"signature": "bool NoCarry = false",
+							"doc": "A room two people cannot carry a Heavy object through.",
+							"line": 46
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "ELevelRuleKind",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 49,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Replace",
+							"signature": "Replace = 0",
+							"doc": "Match -> Produce[0]: retype one room.",
+							"line": 51
+						},
+						{
+							"kind": "enumerator",
+							"name": "Attach",
+							"signature": "Attach",
+							"doc": "Match gets new neighbours, one per Produce entry.",
+							"line": 53
+						},
+						{
+							"kind": "enumerator",
+							"name": "Insert",
+							"signature": "Insert",
+							"doc": "Edge Match-MatchOther becomes Match-Produce...-MatchOther.",
+							"line": 55
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelRule",
+					"namespace": "Mowo",
+					"doc": "One rewrite rule of the grammar (audit G3). Rules are picked by weight\namong those that apply; MaxApplications < 0 is unlimited.",
+					"line": 60,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "Kind",
+							"signature": "ELevelRuleKind Kind = ELevelRuleKind::Attach",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "Match",
+							"signature": "std::string Match",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "MatchOther",
+							"signature": "std::string MatchOther",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "Produce",
+							"signature": "std::vector<std::string> Produce",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "Weight",
+							"signature": "int32_t Weight = 1",
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "MaxApplications",
+							"signature": "int32_t MaxApplications = -1",
+							"line": 67
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelTypeLimit",
+					"namespace": "Mowo",
+					"line": 70,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Type",
+							"signature": "std::string Type",
+							"line": 71
+						},
+						{
+							"kind": "field",
+							"name": "Min",
+							"signature": "int32_t Min = 0",
+							"line": 72
+						},
+						{
+							"kind": "field",
+							"name": "Max",
+							"signature": "int32_t Max = 1000",
+							"line": 73
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FLevelGrammar",
+					"namespace": "Mowo",
+					"doc": "The whole generator configuration, one `.levelgrammar` MDF asset: the\nstarting chain, the rules, the module catalogue and the validation budget.",
+					"line": 78,
+					"members": [
+						{
+							"kind": "field",
+							"name": "StartChain",
+							"signature": "std::vector<std::string> StartChain",
+							"line": 80
+						},
+						{
+							"kind": "field",
+							"name": "StartType",
+							"signature": "std::string StartType = \"Start\"",
+							"line": 81
+						},
+						{
+							"kind": "field",
+							"name": "GoalType",
+							"signature": "std::string GoalType = \"Goal\"",
+							"line": 82
+						},
+						{
+							"kind": "field",
+							"name": "Rules",
+							"signature": "std::vector<FLevelRule> Rules",
+							"line": 83
+						},
+						{
+							"kind": "field",
+							"name": "Modules",
+							"signature": "std::vector<FLevelModuleDef> Modules",
+							"line": 84
+						},
+						{
+							"kind": "field",
+							"name": "Limits",
+							"signature": "std::vector<FLevelTypeLimit> Limits",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "MaxRewriteSteps",
+							"signature": "int32_t MaxRewriteSteps = 48",
+							"line": 87
+						},
+						{
+							"kind": "field",
+							"name": "MaxNodes",
+							"signature": "int32_t MaxNodes = 32",
+							"line": 88
+						},
+						{
+							"kind": "field",
+							"name": "MaxAttempts",
+							"signature": "int32_t MaxAttempts = 24",
+							"line": 89
+						},
+						{
+							"kind": "field",
+							"name": "CellSize",
+							"signature": "float CellSize = 4.0f",
+							"line": 91
+						},
+						{
+							"kind": "field",
+							"name": "MinDoorWidth",
+							"signature": "float MinDoorWidth = 1.6f",
+							"line": 92
+						},
+						{
+							"kind": "field",
+							"name": "MinCriticalPath",
+							"signature": "int32_t MinCriticalPath = 4",
+							"line": 93
+						},
+						{
+							"kind": "field",
+							"name": "MaxCriticalPath",
+							"signature": "int32_t MaxCriticalPath = 16",
+							"line": 94
+						},
+						{
+							"kind": "field",
+							"name": "MaxPortalDepth",
+							"signature": "int32_t MaxPortalDepth = 3",
+							"line": 95
+						},
+						{
+							"kind": "field",
+							"name": "MaxScanCost",
+							"signature": "int32_t MaxScanCost = 40000",
+							"line": 96
+						},
+						{
+							"kind": "field",
+							"name": "MaxRoomScanCost",
+							"signature": "int32_t MaxRoomScanCost = 4000",
+							"line": 97
+						},
+						{
+							"kind": "field",
+							"name": "CapPrefab",
+							"signature": "std::string CapPrefab",
+							"doc": "Placed on every socket nothing connected to, and on every edge where\ntwo modules touch without a doorway (so the level never shows two\ncoplanar walls back to back).",
+							"line": 102
+						},
+						{
+							"kind": "field",
+							"name": "SharedWallPrefab",
+							"signature": "std::string SharedWallPrefab",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "FindModule",
+							"signature": "int32_t FindModule(const std::string& name) const",
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "SerializeToString",
+							"signature": "std::string SerializeToString() const",
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromString",
+							"signature": "bool LoadFromString(const std::string& text)",
+							"line": 108
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromFile",
+							"signature": "bool LoadFromFile(const std::string& path)",
+							"line": 109
+						},
+						{
+							"kind": "method",
+							"name": "SaveToFile",
+							"signature": "bool SaveToFile(const std::string& path) const",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "CreateDefault",
+							"signature": "static FLevelGrammar CreateDefault()",
+							"static": true,
+							"doc": "AJAX's facility: fifteen rules over entrance, corridors, hubs, labs,\nstorage, offices, maintenance, stairs, dead ends and the objective.",
+							"line": 114
+						},
+						{
+							"kind": "method",
+							"name": "SideName",
+							"signature": "static const char* SideName(ELevelSide side)",
+							"static": true,
+							"line": 116
+						},
+						{
+							"kind": "method",
+							"name": "SideFromName",
+							"signature": "static ELevelSide SideFromName(const std::string& name)",
+							"static": true,
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "RuleKindName",
+							"signature": "static const char* RuleKindName(ELevelRuleKind kind)",
+							"static": true,
+							"line": 118
+						},
+						{
+							"kind": "method",
+							"name": "RuleKindFromName",
+							"signature": "static ELevelRuleKind RuleKindFromName(const std::string& name)",
+							"static": true,
+							"line": 119
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelSeedReplication.h",
+			"include": "LevelGen/LevelSeedReplication.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "ELevelSeedRole",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Who decides the seed of a generated level.",
+					"line": 16,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Offline",
+							"signature": "Offline = 0",
+							"doc": "No session: generate from the component's own seed.",
+							"line": 18
+						},
+						{
+							"kind": "enumerator",
+							"name": "Host",
+							"signature": "Host",
+							"doc": "Hosting: decide the seed, generate, and send it to every client.",
+							"line": 20
+						},
+						{
+							"kind": "enumerator",
+							"name": "Client",
+							"signature": "Client",
+							"doc": "A client: generate nothing until the host's seed arrives.",
+							"line": 22
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelSeedRecord",
+					"namespace": "Mowo",
+					"doc": "What one generated level needs to be the same level on every machine: the\nseed — everything else is the grammar, which ships with the game. The\ngrammar's hash rides along so a client running different content says so\ninstead of quietly building another level.",
+					"line": 29,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Generator",
+							"signature": "std::string Generator",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "Seed",
+							"signature": "int32_t Seed = 0",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "GrammarHash",
+							"signature": "uint64_t GrammarHash = 0",
+							"line": 32
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FLevelSeedReplication",
+					"namespace": "Mowo",
+					"doc": "FLevelSeedReplication — the host's seeds, sent once per level instead of\nthe level. A module level becomes Level Instances whose actor ids derive\nfrom the seed and the room, so the clients that build from the same seed\nhold the same actors under the same ids, which is all replication needs to\naddress them. A client that joins late asks, and the host answers with every\nseed it has handed out this session.",
+					"line": 41,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kSeedEventId",
+							"signature": "static constexpr uint16_t kSeedEventId = 0xFE30",
+							"static": true,
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "kSeedRequestEventId",
+							"signature": "static constexpr uint16_t kSeedRequestEventId = 0xFE31",
+							"static": true,
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FLevelSeedReplication& Get()",
+							"static": true,
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "GetRole",
+							"signature": "ELevelSeedRole GetRole() const",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "SetRoleOverride",
+							"signature": "void SetRoleOverride(ELevelSeedRole role, bool enabled)",
+							"doc": "A dedicated driver that runs the session itself can say which side it is;\nOffline clears the override and the session decides again.",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "Publish",
+							"signature": "void Publish(const FLevelSeedRecord& record)",
+							"doc": "Host: remember the seed and send it to every client.",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "TryGet",
+							"signature": "bool TryGet(const std::string& generator, FLevelSeedRecord& outRecord) const",
+							"doc": "Client: the seed the host decided for this generator, once it arrived.",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "RequestFromHost",
+							"signature": "void RequestFromHost()",
+							"doc": "Client: ask the host for its seeds (once per session).",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "Receive",
+							"signature": "bool Receive(FNetEventReader& reader)",
+							"doc": "What the client handler does with an arrived seed; public so a driver\nthat moves bytes itself can hand them in.",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "Store",
+							"signature": "void Store(const FLevelSeedRecord& record)",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "EnsureHandlers",
+							"signature": "void EnsureHandlers()",
+							"doc": "Re-installs the session handlers after a session started (the session\ndrops game handlers on leave). Cheap when they are in place.",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "Write",
+							"signature": "static void Write(FNetEventWriter& writer, const FLevelSeedRecord& record)",
+							"static": true,
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "Read",
+							"signature": "static bool Read(FNetEventReader& reader, FLevelSeedRecord& outRecord)",
+							"static": true,
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "GetPublishCount",
+							"signature": "uint32_t GetPublishCount() const",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "GetReceiveCount",
+							"signature": "uint32_t GetReceiveCount() const",
+							"line": 80
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelSpawner.h",
+			"include": "LevelGen/LevelSpawner.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FLevelSpawnItem",
+					"namespace": "Mowo",
+					"doc": "One prefab the spawner would place: a room module, a cap on an open\ndoorway, or a shared wall between two rooms that touch without one.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Prefab",
+							"signature": "std::string Prefab",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "Level",
+							"signature": "std::string Level",
+							"doc": "A room module authored as a level: placed as a Level Instance.",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "Position",
+							"signature": "Vec3 Position = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "YawRadians",
+							"signature": "float YawRadians = 0.0f",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "Room",
+							"signature": "int32_t Room = -1",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "IsCap",
+							"signature": "bool IsCap = false",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "IsSharedWall",
+							"signature": "bool IsSharedWall = false",
+							"line": 28
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FLevelSpawner",
+					"namespace": "Mowo",
+					"doc": "Turns a layout into prefab placements and instantiates them. Grid +X is\nworld +X, grid +Y is world -Z (the engine's forward); a module prefab is\nauthored with its origin at the centre of its unrotated footprint and its\ndoorways on the edges the grammar lists.",
+					"line": 35,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Plan",
+							"signature": "static std::vector<FLevelSpawnItem> Plan(const FLevelGrammar& grammar, const FLevelLayout& layout, const Vec3& origin)",
+							"static": true,
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "Spawn",
+							"signature": "static int32_t Spawn(Scene& scene, const FLevelGrammar& grammar, const FLevelLayout& layout, const Vec3& origin)",
+							"static": true,
+							"doc": "Instantiates every planned prefab and places every level module;\nreturns how many landed.",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "Despawn",
+							"signature": "static int32_t Despawn(Scene& scene, const FLevelGrammar& grammar, const FLevelLayout& layout, const Vec3& origin)",
+							"static": true,
+							"doc": "Takes the level modules of a layout back out (a regenerate, or a new\nseed from the host). Returns how many actors left.",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "InstanceFor",
+							"signature": "static FLevelInstanceDesc InstanceFor(const FLevelLayout& layout, const FLevelSpawnItem& item)",
+							"static": true,
+							"doc": "The Level Instance a module room becomes. Named from the seed and the\nroom index only, so its actors get the same ids on every machine that\ngenerates the same seed — what lets the network address them.",
+							"line": 50
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelValidator.h",
+			"include": "LevelGen/LevelValidator.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FLevelValidationPass",
+					"namespace": "Mowo",
+					"line": 14,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 15
+						},
+						{
+							"kind": "field",
+							"name": "Passed",
+							"signature": "bool Passed = false",
+							"line": 16
+						},
+						{
+							"kind": "field",
+							"name": "Detail",
+							"signature": "std::string Detail",
+							"line": 17
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLevelValidationReport",
+					"namespace": "Mowo",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Passes",
+							"signature": "std::vector<FLevelValidationPass> Passes",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "SharedWallEdges",
+							"signature": "int32_t SharedWallEdges = 0",
+							"doc": "Grid edges where two rooms touch without a doorway: each gets one\nshared wall, never the two modules' own walls back to back.",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "OpenSockets",
+							"signature": "int32_t OpenSockets = 0",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "CriticalPathLength",
+							"signature": "int32_t CriticalPathLength = 0",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "TotalScanCost",
+							"signature": "int32_t TotalScanCost = 0",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "AllPassed",
+							"signature": "bool AllPassed() const",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "Summary",
+							"signature": "std::string Summary() const",
+							"line": 30
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FLevelValidator",
+					"namespace": "Mowo",
+					"doc": "The nine validation passes of audit G4, run over a generated layout:\n1 Embedded        every room of the graph has a module on the grid\n2 NoOverlap       no grid cell holds two modules\n3 SocketsMeet     every linked doorway meets its partner face to face\n4 SharedWalls     touching rooms without a doorway get a shared wall\n5 CapsPlaced      every open doorway is capped (never a hole into void)\n6 Reachable       every room is reachable from the start through doorways\n7 CarryClearance  the critical path is wide enough for a two-person carry\n8 ScanBudget      total and per-room scan cost within budget\n9 PathAndAcoustic critical path length in range, every room within the\nportal depth of the path (so it is heard from it)",
+					"line": 44,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Validate",
+							"signature": "static FLevelValidationReport Validate(const FLevelGrammar& grammar, const FLevelLayout& layout)",
+							"static": true,
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "CriticalPath",
+							"signature": "static std::vector<int32_t> CriticalPath(const FLevelGrammar& grammar, const FLevelLayout& layout)",
+							"static": true,
+							"doc": "Room indices from the start room to the goal, through the graph.",
+							"line": 49
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

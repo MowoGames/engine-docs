@@ -1,0 +1,70 @@
+---
+title: Destruction
+description: Break props into baked fracture pieces with partial damage and anchoring, and carve voxel solids whose loose pieces fall as physics debris.
+order: 11
+sources:
+  - Engine/Source/Runtime/Destruction/Public/Destruction/DestructibleComponent.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/DestructionSystem.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/FractureBake.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/FractureMethods.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/FractureConnectivity.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/DebrisPool.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/VoxelDestructibleComponent.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/VoxelDestruction.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/VoxelGrid.h
+  - Engine/Source/Runtime/Destruction/Public/Destruction/MVoxelDestructionStatics.h
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/DestructibleDetails.cpp
+verifiedAt: 08e26df3d
+---
+
+Mowo has two kinds of destructible. A **Destructible** prop breaks into pre-cut pieces, like Unreal's Chaos geometry collections. A **VoxelDestructible** solid is carved away a sphere at a time. Both are reflected components in the **Physics** category and need a collider and a rigid body on the entity.
+
+## Fractured props
+
+The `Destructible` component breaks its entity into pieces when hit hard enough. <Source symbol="DestructibleComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `pieceCount`, `seed` | How many pieces and which cut |
+| `breakOnImpact`, `impactThreshold` | Break on a collision harder than the threshold |
+| `scatterImpulse` | How hard the pieces fly apart |
+| `pieceLifetime` | Seconds before pieces are removed |
+| `cascadeLevels` | Pieces are themselves destructible, with half the pieces each level and a higher threshold |
+| `requestBreak` | Set it to break the prop from code |
+| `partialDamage`, `damageRadius` | A hit releases only the pieces near it; the rest stands as a remnant |
+| `anchor`, `anchorMargin` | Which side holds the prop up; remnant pieces cut off from it fall |
+| `replicateBreaks` | The server owns breaks and sends one small event; every client replays the same pieces from its own bake |
+
+### Bake the fracture
+
+Without a bake, the pieces are cut at break time on the game thread, which costs a frame hitch on a prop with many pieces. Click **Bake Fracture** in the component's Details section to store the cut as a `.fracture` asset, referenced by the **Fracture Bake** field. A bake also guarantees every networked peer gets the same pieces. <Source path="Engine/Source/Runtime/Destruction/Public/Destruction/FractureBake.h" />
+
+Fracture methods are `Uniform`, `Clustered`, `Radial`, `Planar`, `Slice` and `Brick`; brick walls can be laid in stretcher, stack, English, header or Flemish bond. <Source path="Engine/Source/Runtime/Destruction/Public/Destruction/FractureMethods.h" />
+
+<Screenshot id="gameplay-fracture-bake" alt="Mowo Editor Details panel for a crate with the Destructible component expanded: Piece Count 24, Partial Damage on, Anchor Bottom, and the Bake Fracture button; the viewport shows the crate's Voronoi pieces outlined" caption="Bake the fracture so breaks cost nothing at runtime." />
+
+### Break from code
+
+`DestructionSystem` applies damage directly: `ApplyPointDamage(entity, point, radius, impulse)` for one prop, `ApplyDamageField(center, radius, impulse)` for an explosion. <Source symbol="DestructionSystem" />
+
+## Voxel destruction
+
+The `VoxelDestructible` component turns its entity's box, sphere or mesh collider into voxels of `voxelSize` when play begins. Damage carves a sphere of voxels out; the carved voxels fall as rubble chunks, and any part no longer connected to the floor (with `anchorFloor`) drops as a dynamic rigid body. <Source symbol="VoxelDestructibleComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `voxelSize` | Resolution |
+| `anchorFloor` | Pieces touching the bottom layer stay put |
+| `rubbleChunk` | Voxels per rubble chunk |
+| `density` | Mass per voxel volume |
+| `maxDebris`, `debrisLifetime` | Debris budget |
+
+Apply damage with `MVoxelDestructionStatics::ApplyVoxelDamage(position, radius)` from Visual Scripting or C++. It takes effect on the next simulation tick. <Source symbol="MVoxelDestructionStatics" />
+
+## Related
+
+- [Physics](/docs/gameplay/physics/) for breakable physics interactables
+- [Weapons and melee](/docs/gameplay/weapons-and-melee/)
+- [Multiplayer](/docs/multiplayer/)
+- API: [Destruction module](/docs/api/destruction/)

@@ -1,0 +1,102 @@
+---
+title: Weapons and melee
+description: The Combat plugin's hitscan, projectile and beam weapons defined in .weapon assets, melee combos with block and parry, surface-aware impacts and pickups.
+order: 33
+sources:
+  - Engine/Plugins/Combat/Combat.mplugin
+  - Engine/Plugins/Combat/Public/CombatPlugin/WeaponDefinitionAsset.h
+  - Engine/Plugins/Combat/Private/WeaponDefinitionAsset.cpp
+  - Engine/Plugins/Combat/Public/CombatPlugin/WeaponComponent.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/WeaponSystem.h
+  - Engine/Plugins/Combat/Private/WeaponSystem.cpp
+  - Engine/Plugins/Combat/Public/CombatPlugin/MWeaponStatics.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/MeleeWeaponComponent.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/MeleeSystem.h
+  - Engine/Plugins/Combat/Private/MeleeAttackTask.cpp
+  - Engine/Plugins/Combat/Public/CombatPlugin/AWeaponActor.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/AMeleeWeaponActor.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/AAmmoPickupActor.h
+  - Engine/Plugins/Combat/Public/CombatPlugin/ATargetDummyActor.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/ImpactEffects.h
+  - Engine/Source/Runtime/Game/Public/Game/MImpactStatics.h
+verifiedAt: 08e26df3d
+---
+
+Weapons and melee come with the **Combat, Interaction & RPG** plugin. It is off by default; enable it for your project in the Plugins window. The plugin also provides interaction, inventory, crafting, zones, the utility grid and RPG progression; see [Interaction and inventory](/docs/gameplay/interaction-and-inventory/) and [Zones and utility grids](/docs/gameplay/zones-and-utility-grids/). The Shooter template is built on it. <Source path="Engine/Plugins/Combat/Combat.mplugin" />
+
+## Weapon assets
+
+Everything a gun is lives in a `.weapon` asset. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/WeaponDefinitionAsset.h" />
+
+| Block | Fields |
+| --- | --- |
+| Root | `fire_mode` (`Hitscan`, `Projectile`, `Beam`, `Custom`), `trigger_mode` (`Semi`, `Auto`, `Burst`), `burst_count`, `burst_interval`, `damage`, `damage_type`, `fire_rate`, `range`, `penetration`, `world_mesh` |
+| `Spread` | `base`, `bloom_per_shot`, `max`, `recovery` in degrees, and an optional fixed `Offset` pattern |
+| `Recoil` | `Kick` entries (pitch and yaw) and a `recovery` rate |
+| `Projectile` | `speed`, `gravity_scale`, `lifetime`, `radius`, `bounce_count`, `restitution`, `explode_on_impact` and explosion radii and minimum damage |
+| `Ammo` | `clip_size`, `reserve`, `reload_time`, optional `ammo_item` taken from the inventory |
+| `Effects` | Muzzle flash, tracer, `impact_table` and `impact_tag`, fire, reload and empty sounds, `reload_montage` |
+| `Noise` | `report` and `loudness` for AI hearing; `raise_situation` with radius and severity raises a Gunshot situation |
+| `Crosshair` | `base_size`, `spread_scale` for the HUD |
+
+`Beam` traces every tick while held and deals no damage unless you set `damage`; use it for scanners and lasers. `Custom` fires events and effects without a built-in trace.
+
+## Use a weapon
+
+A pawn carries a `Weapon` component. The weapon system runs an idle, firing, reloading and empty state machine. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/WeaponSystem.h" />
+
+| Function on `MWeaponStatics` | Effect |
+| --- | --- |
+| `EquipWeapon(path)`, `UnequipWeapon()` | Equip a `.weapon` |
+| `StartFire()`, `StopFire()` | Trigger press and release; semi fires once, auto repeats, burst queues |
+| `Reload()` | Refill from the reserve or from the inventory |
+| `GetClip()`, `GetReserve()`, `GetSpread()`, `IsWeaponEquipped()` | Read state |
+| `SetWeaponEnabled(bool)` | Disable firing |
+
+<Source path="Engine/Plugins/Combat/Public/CombatPlugin/MWeaponStatics.h" />
+
+- **Hitscan** traces through the spread cone, penetrates up to `penetration` bodies, and applies point damage through the [damage pipeline](/docs/gameplay/abilities-and-damage/) with the pawn as instigator.
+- **Projectile** spawns a swept projectile with gravity, bounces and lifetime, dealing point or radial damage on impact.
+- Recoil kicks the pawn's camera and recovers toward the original aim; spread blooms per shot and recovers while the trigger is up.
+- Firing reports a noise to AI hearing and can raise a Gunshot situation.
+
+In multiplayer, clients ask the server to fire; the server checks the fire rate (`weapon.ServerRateSlack`) and the clip, rewinds other players to where the shooter saw them for a hitscan, and plays the effects on every client. See [Multiplayer](/docs/multiplayer/).
+
+The HUD can bind to `weapon.equipped`, `weapon.clip`, `weapon.reserve`, `weapon.ammotext`, `weapon.spread`, `weapon.crosshair`, `weapon.state` and `weapon.reloading`. <Source path="Engine/Plugins/Combat/Private/WeaponSystem.cpp" />
+
+## Impacts
+
+An impact table (`.impact`) maps each surface type to a decal, a particle effect, a sound and optional camera shake, with a `Default` entry as fallback. `FImpactEffects::SpawnImpact(surface, position, normal, tag)` spawns one; the project's default table is `Content/Impacts/Default.impact`. From Visual Scripting use `MImpactStatics::SpawnImpactAtHit`. Runtime decals come from a fixed pool and expire on their own. <Source symbol="FImpactEffects" /> <Source symbol="MImpactStatics" />
+
+## Melee
+
+A `MeleeWeapon` component makes a pawn fight up close. Hits go through the same damage pipeline as guns. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/MeleeWeaponComponent.h" />
+
+| Field | Meaning |
+| --- | --- |
+| `damage`, `damageTypeTag`, `impactTag` | Base damage per swing, its damage type and impact effects |
+| `attackMontage` | Montage played per swing |
+| `comboLength`, `comboWindow`, `heavyMultiplier` | A chain of swings; the last does extra damage |
+| `swingArcDegrees`, `range`, `attackRate` | The sweep in front of the attacker and the swing rate |
+| `staminaCost` | Paid from the `Stamina` attribute when the pawn has one |
+| `knockbackImpulse` | Pushes physics bodies |
+| `blockDamageScale`, `parryWindow`, `staggerDuration` | Blocking takes reduced damage; a block raised just in time parries and staggers the attacker |
+
+Each swing has a windup, an active window and a recovery. During the active window the arc is swept every tick, and each target is hit at most once per swing. `FMeleeSystem::RequestAttack(pawn)` buffers the next combo step and `SetBlocking(pawn, bool)` raises a block. AI uses the `MeleeAttack` native behavior-tree task. <Source path="Engine/Plugins/Combat/Public/CombatPlugin/MeleeSystem.h" />
+
+## Pickups and targets
+
+| Actor | Does |
+| --- | --- |
+| `AWeaponActor` | Interact to equip its `.weapon` |
+| `AMeleeWeaponActor` | Interact to equip a melee weapon with the actor's stats |
+| `AAmmoPickupActor` | Interact for reserve ammo or ammo items |
+| `ATargetDummyActor` | A target with health that falls over and respawns |
+
+<Screenshot id="gameplay-shooter-range" alt="The Shooter template in play-in-editor: a first-person rifle aimed at a target dummy, bullet-hole decals and sparks on a metal wall behind it, and the HUD showing 24 / 96 ammo and a crosshair" caption="The Shooter template: hitscan rifle, impacts by surface and the weapon HUD." />
+
+## Related
+
+- [Abilities, health and damage](/docs/gameplay/abilities-and-damage/)
+- [Montages and notifies](/docs/gameplay/montages-and-notifies/)
+- [Destruction](/docs/gameplay/destruction/)

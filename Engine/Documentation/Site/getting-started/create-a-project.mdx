@@ -1,0 +1,114 @@
+---
+title: Create a project
+description: Start a game project from a template in the Mowo Project Launcher, or scaffold one on the command line with mbt init, and open it in the editor.
+order: 3
+sources:
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Core/MLauncherEngine.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherTemplates.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherProjectLibrary.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherEngineInstalls.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherSettings.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherNewsFeed.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/UI/LauncherUi.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/UI/LauncherWidgets.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Platform/LauncherLaunch.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectSerializer.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Runtime/AssetSystem/Public/Project/TemplateDefs.h
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/InitCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs
+  - Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp
+verifiedAt: 08e26df3d
+---
+
+A Mowo project is a folder with a `.mproject` manifest, a `Content/` tree for assets, a `Config/` tree for settings and, when it has gameplay code, a `Source/` tree with a C++ game module. You can create one in two ways:
+
+- **Mowo Project Launcher**, which copies one of the <Fact id="templates.length" /> templates and opens the editor on the result.
+- **`mbt init`**, a command that writes a minimal project with an optional C++ module and no level.
+
+Use the launcher for your first project. Every template except Blank is playable as soon as it opens.
+
+## The Project Launcher
+
+<Steps>
+<Step title="Start the launcher">
+Run `MowoProjectLauncher` from `Engine/Binaries/<Platform>/` (with the configuration suffix, such as `MowoProjectLauncher-Win64-Debug.exe`, outside Development). The **Projects** page lists the projects you or the editor opened before.
+</Step>
+<Step title="Open the wizard">
+Click **New project**. The wizard has two steps: **Template** and **Project settings**.
+</Step>
+<Step title="Pick a template">
+Each card shows the template's name and one-line subtitle. The preview column shows its image, description and tags; templates you can play without building code carry the **Playable** tag. Click **Next**. [Templates](/docs/getting-started/templates/) describes each one.
+</Step>
+<Step title="Fill in the settings">
+Enter a **Project name** and a **Location**. The location defaults to a `MowoProjects` folder in your home directory, and you can change the default under **Settings** <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Core/MLauncherEngine.cpp" />. Choose **Starter content**, the **Target platforms** and the **Rendering backend**. The **Summary** on the right follows every choice.
+</Step>
+<Step title="Create">
+Click **Create project**. The launcher writes `<Location>/<Name>/`, adds it to the recent list and opens it in the editor.
+</Step>
+</Steps>
+
+<Screenshot id="getting-started-launcher-projects" alt="Mowo Project Launcher on the Projects page: three project cards in the grid with thumbnails, engine version and last-opened time, the Search projects field and the Recent / All / Pinned filter above them, the New project button in the header, and the News & learning strip under the grid." caption="The launcher's project list." />
+
+<Screenshot id="getting-started-launcher-wizard-settings" alt="New project wizard on its Project settings step: Third Person template chosen, Project name field reading MyGame, Location showing the default MowoProjects folder, Starter content switched on with its size, Windows selected under Target platforms, D3D12 selected under Rendering backend, the Summary column on the right, and the Back and Create project buttons at the bottom." caption="The Project settings step of the wizard." />
+
+### Wizard settings
+
+| Setting | Effect |
+|---|---|
+| Project name | The folder and manifest name. A template with C++ code renames its module and targets after it, so the name must be a valid C++ identifier |
+| Location | The parent folder. The launcher refuses a target folder that already holds files, so it never overwrites a game <Source path="Engine/Source/Runtime/AssetSystem/Private/ProjectSerializer.cpp" /> |
+| Starter content | Copies the CC0 Starter Content pack (materials, props and HDRI skies) into the new project. If the pack is missing, the project is still created and the launcher logs a warning |
+| Target platforms | Windows, Linux, macOS, Android. Written to `Config/Packaging.ini`, which the editor's packaging window and `mbt package` read |
+| Rendering backend | The backends this machine can run. Written to the project's `Config/Engine.ini` as `rendering.graphics_api` <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherTemplates.cpp" /> |
+| Engine | The engine install the project is made for, in the wizard footer. Its version is stamped into the `.mproject`, and that install's editor opens the project |
+
+### The other launcher pages
+
+- **Projects**: **Recent**, **All** and **Pinned** filters and a search field. Double-click a card or press <Kbd>Enter</Kbd> to open the project in the engine install it was saved with. Right-click a card for **Open**, **Show in folder**, **Pin to top** and **Remove from list**. A project whose folder is gone shows **Folder not found**. Each card's thumbnail is the frame the editor saves to `Saved/AutoScreenshot.png` when you save a level.
+- **Engine installs**: this engine, installed builds found on the machine, and source trees you add with **Add source build**. A source build that needs compiling offers **Build editor**; **Set as default** picks the install new projects use <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherEngineInstalls.cpp" />.
+- **Learn** and **News & learning** read the mowoengine.com blog feed, cached so the last posts show offline <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherNewsFeed.cpp" />.
+- **Settings**: the theme (Dark, Light, High Contrast), the default projects folder and the default engine.
+
+## Create a project with mbt init
+
+`mbt init` needs no GUI. Run it from the engine repository root:
+
+```powershell
+.\mbt.cmd init MyGame -o D:\Projects\MyGame
+```
+
+| Argument or option | Meaning |
+|---|---|
+| `<name>` | Project name: letters, digits and underscores, starting with a letter |
+| `-o`, `--output <dir>` | Where to create the project. Default: `./<name>`. The folder must be missing or empty |
+| `--no-source` | Skip the C++ game module, for a content-only project |
+
+`mbt init` writes the folder tree (`Content/` with `Scenes`, `Materials`, `Textures`, `Models` and `Audio`, `Config/`, `Plugins/`, `Saved/`, `Intermediate/`), a `<name>.mproject` with default settings, a `.gitignore` and a `.gitattributes` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/InitCommand.cs" />. Unless you pass `--no-source`, it also writes a game module (`Source/<name>.Build.cs`), a game target (`Source/<name>.Target.cs`, the player host named after your project) and one actor class, `A<name>Actor` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs" />. It prints the editor command line and the build command when it finishes.
+
+### Launcher or mbt init?
+
+| | Project Launcher | `mbt init` |
+|---|---|---|
+| Start level | Yes, `Content/Scenes/Main.mmap` from the template | None; the editor opens an untitled level |
+| Game mode, input and HUD | Yes | No |
+| C++ module layout | `Source/<Name>/<Name>.Build.cs` beside `<Name>.Target.cs` and `<Name>Editor.Target.cs` | `Source/<name>.Build.cs`, flat |
+| Opens the editor | Yes | No |
+
+<Callout type="warning">
+When the editor opens a project, it loads each built game module it finds at `Source/<Module>/<Module>.Build.cs` <Source path="Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp" />. The flat layout `mbt init` writes is not in that scan. Load it for the session with **Build › Compile Game Module**, as described in [Your first build](/docs/getting-started/first-build/).
+</Callout>
+
+## Open a project from the command line
+
+Pass the manifest to the editor. `--no-splash` skips the splash screen <Source path="Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp" />.
+
+```powershell
+& .\Engine\Binaries\Win64\MowoEditor-Win64-Debug.exe --project D:\Projects\MyGame\MyGame.mproject
+```
+
+## Next steps
+
+- [Templates](/docs/getting-started/templates/) for what each template contains.
+- [Project layout](/docs/getting-started/project-layout/) for what each folder holds.
+- [Your first scene](/docs/getting-started/first-scene/) to place actors and press Play.

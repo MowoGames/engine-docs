@@ -1,0 +1,999 @@
+{
+	"name": "MowoEngine.PCG",
+	"displayName": "PCG",
+	"slug": "pcg",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/PCG/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/PCG/Public/PCG/MPcgStatics.h",
+			"include": "PCG/MPcgStatics.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MPcgStatics",
+					"namespace": "Mowo",
+					"bases": "public MObject",
+					"reflected": true,
+					"doc": "Loom's PCG controls: regenerate every volume (optionally on a new seed —\na fresh world each run), and read back what the volumes placed.",
+					"line": 17,
+					"members": [
+						{
+							"kind": "method",
+							"name": "RegenerateAll",
+							"signature": "void RegenerateAll()",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "RegenerateWithSeed",
+							"signature": "void RegenerateWithSeed(int32_t seed)",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "GetVolumeCount",
+							"signature": "int32_t GetVolumeCount() const",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "GetGeneratedFoliageCount",
+							"signature": "int32_t GetGeneratedFoliageCount() const",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "GetGeneratedMeshCount",
+							"signature": "int32_t GetGeneratedMeshCount() const",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "GetGeneratedLevelInstanceCount",
+							"signature": "int32_t GetGeneratedLevelInstanceCount() const",
+							"line": 32
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/PCG/Public/PCG/PcgComponent.h",
+			"include": "PCG/PcgComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "PcgComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"doc": "A PCG volume: runs a .pcg graph over the box around the entity (or the\nwhole landscape when the extents are zero) and places what its spawners\nmake — foliage on this entity, mesh actors and Level Instances in the scene.\nThe seed makes the result repeatable; changing the graph, the seed, the box\nor the terrain regenerates it in the editor.",
+					"line": 22,
+					"members": [
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "graph",
+							"signature": "std::string graph",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "int32_t seed = 1",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "extents",
+							"signature": "Vec3 extents = Vec3(32.0f, 32.0f, 32.0f)",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "landscape",
+							"signature": "std::string landscape",
+							"doc": "Empty = the first terrain in the scene.",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "generateInEditor",
+							"signature": "bool generateInEditor = true",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "generateAtRuntime",
+							"signature": "bool generateAtRuntime = true",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "maxPoints",
+							"signature": "int32_t maxPoints = 200000",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "maxMeshActors",
+							"signature": "int32_t maxMeshActors = 2000",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "generatedLevels",
+							"signature": "std::string generatedLevels",
+							"doc": "What the last run placed as Level Instances, one \"name|map\" per line, so\nthe next run (or a reload) can take them away first.",
+							"line": 70
+						},
+						{
+							"kind": "field",
+							"name": "builtFingerprint",
+							"signature": "std::string builtFingerprint",
+							"line": 74
+						},
+						{
+							"kind": "field",
+							"name": "lastPointCount",
+							"signature": "uint32_t lastPointCount = 0",
+							"line": 75
+						},
+						{
+							"kind": "field",
+							"name": "lastFoliageCount",
+							"signature": "uint32_t lastFoliageCount = 0",
+							"line": 76
+						},
+						{
+							"kind": "field",
+							"name": "lastMeshCount",
+							"signature": "uint32_t lastMeshCount = 0",
+							"line": 77
+						},
+						{
+							"kind": "field",
+							"name": "lastLevelCount",
+							"signature": "uint32_t lastLevelCount = 0",
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "lastHash",
+							"signature": "uint64_t lastHash = 0",
+							"line": 79
+						},
+						{
+							"kind": "field",
+							"name": "lastError",
+							"signature": "std::string lastError",
+							"line": 80
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/PCG/Public/PCG/PcgExecutor.h",
+			"include": "PCG/PcgExecutor.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FPcgPoint",
+					"namespace": "Mowo",
+					"line": 21,
+					"members": [
+						{
+							"kind": "field",
+							"name": "position",
+							"signature": "Vec3 position = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "normal",
+							"signature": "Vec3 normal = Vec3(0.0f, 1.0f, 0.0f)",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "density",
+							"signature": "float density = 1.0f",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "yaw",
+							"signature": "float yaw = 0.0f",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "scale",
+							"signature": "float scale = 1.0f",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "uint32_t seed = 0",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "attributes",
+							"signature": "float attributes[kPcgMaxAttributes] =",
+							"doc": "Slot i holds the attribute FPcgResult::attributeNames[i]; a bit in the\nmask says the point has a value there (unset reads as 0).",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "attributeMask",
+							"signature": "uint8_t attributeMask = 0",
+							"line": 31
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgSpline",
+					"namespace": "Mowo",
+					"doc": "A curve the graph can sample or measure against, as a dense world-space\npolyline (the generation step tessellates the scene's splines).",
+					"line": 36,
+					"members": [
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "std::string name",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "points",
+							"signature": "std::vector<Vec3> points",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "closed",
+							"signature": "bool closed = false",
+							"line": 39
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "IPcgLandscape",
+					"namespace": "Mowo",
+					"doc": "The ground a graph samples. The PCG system hands over the scene's terrain;\na test hands over any heightfield.",
+					"line": 44,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IPcgLandscape",
+							"signature": "virtual ~IPcgLandscape() = default",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "Sample",
+							"signature": "virtual bool Sample(float x, float z, float& outHeight, Vec3& outNormal) const = 0",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "Bounds",
+							"signature": "virtual void Bounds(Vec3& outMin, Vec3& outMax) const = 0",
+							"line": 49
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPcgHeightfieldLandscape",
+					"namespace": "Mowo",
+					"bases": "public IPcgLandscape",
+					"doc": "A terrain heightmap centred on `origin`, `worldSize` metres across.",
+					"line": 53,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FPcgHeightfieldLandscape",
+							"signature": "FPcgHeightfieldLandscape(const FHeightmap& heightmap, float worldSize, const Vec3& origin)",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Sample",
+							"signature": "bool Sample(float x, float z, float& outHeight, Vec3& outNormal) const override",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Bounds",
+							"signature": "void Bounds(Vec3& outMin, Vec3& outMax) const override",
+							"line": 58
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgContext",
+					"namespace": "Mowo",
+					"line": 66,
+					"members": [
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "int32_t seed = 0",
+							"doc": "The component's own seed, mixed with the graph's and each node's id.",
+							"line": 68
+						},
+						{
+							"kind": "field",
+							"name": "center",
+							"signature": "Vec3 center = Vec3(0.0f, 0.0f, 0.0f)",
+							"doc": "The volume the graph works in (world space); a zero extent means the\nwhole landscape.",
+							"line": 71
+						},
+						{
+							"kind": "field",
+							"name": "extents",
+							"signature": "Vec3 extents = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 72
+						},
+						{
+							"kind": "field",
+							"name": "landscape",
+							"signature": "const IPcgLandscape* landscape = nullptr",
+							"line": 73
+						},
+						{
+							"kind": "field",
+							"name": "maxPoints",
+							"signature": "uint32_t maxPoints = 200000",
+							"line": 74
+						},
+						{
+							"kind": "field",
+							"name": "splines",
+							"signature": "std::vector<FPcgSpline> splines",
+							"doc": "Curves for the spline sampler and distance filter.",
+							"line": 77
+						},
+						{
+							"kind": "field",
+							"name": "loadGraph",
+							"signature": "std::function<bool(const std::string& path, FPcgGraph& out)> loadGraph",
+							"doc": "Reads a .pcg for Subgraph nodes; without it a Subgraph node warns and\npasses its input through.",
+							"line": 81
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgSpawnOutput",
+					"namespace": "Mowo",
+					"line": 84,
+					"members": [
+						{
+							"kind": "field",
+							"name": "nodeId",
+							"signature": "std::string nodeId",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "kind",
+							"signature": "std::string kind",
+							"doc": "\"foliage\", \"mesh\", \"level\" or \"actor\" (asset = the actor class name).",
+							"line": 87
+						},
+						{
+							"kind": "field",
+							"name": "asset",
+							"signature": "std::string asset",
+							"doc": "The mesh or map it places; for \"mesh\" an empty asset with a primitive name in meshType.",
+							"line": 89
+						},
+						{
+							"kind": "field",
+							"name": "meshType",
+							"signature": "std::string meshType",
+							"line": 90
+						},
+						{
+							"kind": "field",
+							"name": "cullDistance",
+							"signature": "float cullDistance = 0.0f",
+							"line": 91
+						},
+						{
+							"kind": "field",
+							"name": "alignToNormal",
+							"signature": "float alignToNormal = 0.0f",
+							"line": 92
+						},
+						{
+							"kind": "field",
+							"name": "points",
+							"signature": "std::vector<FPcgPoint> points",
+							"line": 93
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgResult",
+					"namespace": "Mowo",
+					"line": 96,
+					"members": [
+						{
+							"kind": "field",
+							"name": "spawns",
+							"signature": "std::vector<FPcgSpawnOutput> spawns",
+							"line": 97
+						},
+						{
+							"kind": "field",
+							"name": "attributeNames",
+							"signature": "std::vector<std::string> attributeNames",
+							"doc": "Attribute name per point slot, in the order nodes first wrote them.",
+							"line": 99
+						},
+						{
+							"kind": "field",
+							"name": "nodePointCounts",
+							"signature": "std::map<std::string, uint32_t> nodePointCounts",
+							"line": 100
+						},
+						{
+							"kind": "field",
+							"name": "warnings",
+							"signature": "std::vector<std::string> warnings",
+							"line": 101
+						},
+						{
+							"kind": "field",
+							"name": "hash",
+							"signature": "uint64_t hash = 0",
+							"line": 102
+						},
+						{
+							"kind": "method",
+							"name": "CountKind",
+							"signature": "uint32_t CountKind(const std::string& kind) const",
+							"line": 104
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPcgExecutor",
+					"namespace": "Mowo",
+					"doc": "Runs a graph: nodes in dependency order, each reading its input point sets\nand producing one. Same graph, same context, same result — bit for bit on\none machine, and every random choice comes from integer hashing, so across\nmachines too.",
+					"line": 111,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Execute",
+							"signature": "static bool Execute(const FPcgGraph& graph, const FPcgContext& context, FPcgResult& outResult, std::string* error = nullptr)",
+							"static": true,
+							"line": 113
+						},
+						{
+							"kind": "method",
+							"name": "Noise",
+							"signature": "static float Noise(float x, float z, uint32_t seed, int32_t octaves)",
+							"static": true,
+							"doc": "Deterministic 2D value noise in [0, 1] (fBm over `octaves`).",
+							"line": 116
+						},
+						{
+							"kind": "method",
+							"name": "HashPoints",
+							"signature": "static uint64_t HashPoints(const std::vector<FPcgPoint>& points)",
+							"static": true,
+							"doc": "FNV-1a over the result's points: two runs agree exactly when it does.",
+							"line": 119
+						},
+						{
+							"kind": "method",
+							"name": "GetValue",
+							"signature": "static bool GetValue(const FPcgResult& result, const FPcgPoint& point, const std::string& name, float& out)",
+							"static": true,
+							"doc": "A named value of a point: the fixed fields under \"density\", \"scale\",\n\"yaw\", \"height\", \"x\", \"z\", \"slope\" (degrees, read-only) and \"seed\"\n(read-only), else the attribute of that name. False when unset.",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "SetValue",
+							"signature": "static bool SetValue(FPcgResult& result, FPcgPoint& point, const std::string& name, float value)",
+							"static": true,
+							"doc": "Writes a fixed field or the attribute (allocating its slot; false when\nall kPcgMaxAttributes slots are taken).",
+							"line": 127
+						},
+						{
+							"kind": "field",
+							"name": "kMaxSubgraphDepth",
+							"signature": "static constexpr int32_t kMaxSubgraphDepth = 8",
+							"static": true,
+							"doc": "Subgraphs nest at most this deep; deeper is reported, not recursed.",
+							"line": 130
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "field",
+					"name": "kPcgMaxAttributes",
+					"signature": "static constexpr uint32_t kPcgMaxAttributes = 8",
+					"static": true,
+					"doc": "Named per-point attributes a graph may carry beside the fixed fields.",
+					"line": 19
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/PCG/Public/PCG/PcgGeneratedComponent.h",
+			"include": "PCG/PcgGeneratedComponent.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "PcgGeneratedComponent",
+					"namespace": "Mowo",
+					"reflected": true,
+					"doc": "Marks an actor a PCG volume placed, by the volume entity's id, so the next\ngeneration (or a reload of a level saved with the output) removes exactly\nwhat the last one made.",
+					"line": 18,
+					"members": [
+						{
+							"kind": "field",
+							"name": "owner",
+							"signature": "std::string owner",
+							"line": 19
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/PCG/Public/PCG/PcgGeneration.h",
+			"include": "PCG/PcgGeneration.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FPcgGeneration",
+					"namespace": "Mowo",
+					"doc": "Runs a PCG volume against its scene and places the result: the previous\noutput goes first (tagged actors, recorded Level Instances), then foliage\nonto the volume's PaintedFoliage, mesh actors and Level Instances.",
+					"line": 21,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "static bool Run(Scene& scene, EntityID volume, std::string* error = nullptr)",
+							"static": true,
+							"doc": "False with `error` set when the graph cannot be read or run.",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "static void Clear(Scene& scene, EntityID volume)",
+							"static": true,
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "FindLandscape",
+							"signature": "static std::unique_ptr<IPcgLandscape> FindLandscape(World& world, Scene& scene, const std::string& name)",
+							"static": true,
+							"doc": "The ground the volume samples: its named terrain, else the first one.\nNull when the scene has none.",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "Fingerprint",
+							"signature": "static std::string Fingerprint(Scene& scene, EntityID volume)",
+							"static": true,
+							"doc": "What generation depends on; the system regenerates when it moves.",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "LoadGraph",
+							"signature": "static bool LoadGraph(const std::string& path, FPcgGraph& out)",
+							"static": true,
+							"doc": "Reads a .pcg through the VFS — what Subgraph nodes load with.",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "RequestRegenerateAll",
+							"signature": "static void RequestRegenerateAll()",
+							"static": true,
+							"doc": "Bumped by the graph editor's Generate button: every volume regenerates.",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "RegenerateRevision",
+							"signature": "static uint32_t RegenerateRevision()",
+							"static": true,
+							"line": 39
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/PCG/Public/PCG/PcgGraph.h",
+			"include": "PCG/PcgGraph.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EPcgParamKind",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 13,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Float",
+							"signature": "Float",
+							"line": 14
+						},
+						{
+							"kind": "enumerator",
+							"name": "Int",
+							"signature": "Int",
+							"line": 15
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bool",
+							"signature": "Bool",
+							"line": 16
+						},
+						{
+							"kind": "enumerator",
+							"name": "String",
+							"signature": "String",
+							"line": 17
+						},
+						{
+							"kind": "enumerator",
+							"name": "Asset",
+							"signature": "Asset",
+							"line": 18
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgParamDef",
+					"namespace": "Mowo",
+					"line": 21,
+					"members": [
+						{
+							"kind": "field",
+							"name": "id",
+							"signature": "std::string id",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "label",
+							"signature": "std::string label",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "kind",
+							"signature": "EPcgParamKind kind = EPcgParamKind::Float",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "defaultValue",
+							"signature": "std::string defaultValue",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "tooltip",
+							"signature": "std::string tooltip",
+							"line": 26
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgNodeDef",
+					"namespace": "Mowo",
+					"doc": "One node kind: what it is called, which point sets it reads (by pin id), and\nthe parameters it takes. Every node has one output, \"out\".",
+					"line": 31,
+					"members": [
+						{
+							"kind": "field",
+							"name": "type",
+							"signature": "std::string type",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "label",
+							"signature": "std::string label",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "category",
+							"signature": "std::string category",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "description",
+							"signature": "std::string description",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "inputs",
+							"signature": "std::vector<std::string> inputs",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "params",
+							"signature": "std::vector<FPcgParamDef> params",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "spawner",
+							"signature": "bool spawner = false",
+							"line": 38
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPcgNodeCatalog",
+					"namespace": "Mowo",
+					"line": 41,
+					"members": [
+						{
+							"kind": "method",
+							"name": "All",
+							"signature": "static const std::vector<FPcgNodeDef>& All()",
+							"static": true,
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "static const FPcgNodeDef* Find(const std::string& type)",
+							"static": true,
+							"line": 44
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgNode",
+					"namespace": "Mowo",
+					"line": 47,
+					"members": [
+						{
+							"kind": "field",
+							"name": "id",
+							"signature": "std::string id",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "type",
+							"signature": "std::string type",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "x",
+							"signature": "float x = 0.0f",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "y",
+							"signature": "float y = 0.0f",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "enabled",
+							"signature": "bool enabled = true",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "params",
+							"signature": "std::map<std::string, std::string> params",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "Param",
+							"signature": "std::string Param(const std::string& key) const",
+							"doc": "The parameter as authored, else the catalog default.",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "ParamFloat",
+							"signature": "float ParamFloat(const std::string& key) const",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "ParamInt",
+							"signature": "int32_t ParamInt(const std::string& key) const",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "ParamBool",
+							"signature": "bool ParamBool(const std::string& key) const",
+							"line": 59
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgEdge",
+					"namespace": "Mowo",
+					"line": 62,
+					"members": [
+						{
+							"kind": "field",
+							"name": "fromNode",
+							"signature": "std::string fromNode",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "toNode",
+							"signature": "std::string toNode",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "toPin",
+							"signature": "std::string toPin = \"in\"",
+							"line": 65
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPcgGraph",
+					"namespace": "Mowo",
+					"doc": "A .pcg document: nodes, the wires between them and the graph's own seed.\nText MDF, so a graph diffs and merges like every other asset.",
+					"line": 70,
+					"members": [
+						{
+							"kind": "field",
+							"name": "seed",
+							"signature": "int32_t seed = 1",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "Nodes",
+							"signature": "const std::vector<FPcgNode>& Nodes() const",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "Edges",
+							"signature": "const std::vector<FPcgEdge>& Edges() const",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "AddNode",
+							"signature": "std::string AddNode(const std::string& type, float x, float y)",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "FindNode",
+							"signature": "FPcgNode* FindNode(const std::string& id)",
+							"line": 82
+						},
+						{
+							"kind": "method",
+							"name": "FindNode",
+							"signature": "const FPcgNode* FindNode(const std::string& id) const",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "RemoveNode",
+							"signature": "bool RemoveNode(const std::string& id)",
+							"line": 84
+						},
+						{
+							"kind": "method",
+							"name": "Connect",
+							"signature": "bool Connect(const std::string& fromNode, const std::string& toNode, const std::string& toPin)",
+							"doc": "A pin takes one wire, except a Merge input; a second wire into a\nsingle pin replaces the first. Refuses a wire that would close a cycle.",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "Disconnect",
+							"signature": "bool Disconnect(const std::string& fromNode, const std::string& toNode, const std::string& toPin)",
+							"line": 89
+						},
+						{
+							"kind": "method",
+							"name": "SetParam",
+							"signature": "bool SetParam(const std::string& nodeId, const std::string& key, const std::string& value)",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "SerializeToString",
+							"signature": "std::string SerializeToString() const",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromString",
+							"signature": "bool LoadFromString(const std::string& text, std::string* error = nullptr)",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromFile",
+							"signature": "bool LoadFromFile(const std::string& path, std::string* error = nullptr)",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "SaveToFile",
+							"signature": "bool SaveToFile(const std::string& path) const",
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "MakeDefault",
+							"signature": "static FPcgGraph MakeDefault()",
+							"static": true,
+							"doc": "A starter graph: landscape surface, noise density, filters, transform\nand a foliage spawner.",
+							"line": 99
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

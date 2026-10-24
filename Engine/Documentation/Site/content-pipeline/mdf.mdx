@@ -1,0 +1,260 @@
+---
+title: MDF, the Mowo Data Format
+sidebarTitle: MDF
+description: The grammar of MDF, the engine's own data format, its text and binary encodings, how assets wrap it in packages, and the mbt mdf tools.
+order: 4
+sources:
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_parser.h
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_lexer.h
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_value.h
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_document.h
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_binary.h
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf.h
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf_package.h
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+  - Engine/Source/Runtime/Serialization/Public/Serialization/MdfCompat.h
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/MdfCooker.cs
+  - Engine/Source/Programs/MdfTool/Private/main.cpp
+  - Templates/TP_Shooter/Content/Materials/M_BulletHole.mat
+  - Templates/TP_FirstPerson/Content/Items/Crate.item
+  - Templates/TP_Coop/Content/Environment/DayCycle.environment
+  - Templates/TP_TopDown/Content/UI/HUD.ui
+  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/Scenes/LoomUiDemo.mmap
+verifiedAt: 08e26df3d
+---
+
+MDF is the engine's own document format for game data. Levels, materials, prefabs, sidecars, UI layouts, items, environment curves and Loom graphs are all MDF, and so are the summary and payload of every [asset package](/docs/content-pipeline/asset-formats/). One grammar covers every one of them, and the file extension only says what the document means. Project config is INI, not MDF; see [Config files](/docs/content-pipeline/config-files/).
+
+MDF has two encodings behind one API: readable text, which you author and diff, and a compact binary form that the cook produces. The reader detects which one it was given, so no loader has to care.
+
+## A first look
+
+This is a complete material from the Shooter template:
+
+```mdf title="Templates/TP_Shooter/Content/Materials/M_BulletHole.mat"
+Package "Material" {
+    id: uuid("AB9E11EF-A929-AEF7")
+    format_version: 1
+}
+
+Material "M_BulletHole" {
+    schema_version: 1
+
+    Properties {
+        base_color: vec4(0.06, 0.055, 0.05, 1.0)
+        metallic: 0.0
+        roughness: 0.95
+        ao: 1.0
+        opacity: 1.0
+    }
+}
+```
+
+`Material` is a node type and `"M_BulletHole"` is the node's optional name. `schema_version: 1` is a property. `Properties` is a child node. There are no commas or semicolons between properties: each `key: value` pair simply follows the previous one.
+
+The first root, `Package`, is the asset's package summary: its class, its id, and the other assets it references in an `Imports` block. Loaders step over it, so `MdfDocument::Root()` returns the `Material` node.
+
+## Grammar
+
+The parser documents its grammar in its header <Source symbol="MdfParser" />:
+
+```text
+document     = node* comment*
+node         = comment* IDENTIFIER [STRING] '{' node_body comment* '}'
+node_body    = (property | node)*
+property     = comment* IDENTIFIER ':' value [comment]
+value        = STRING | INTEGER | FLOAT | TRUE | FALSE | NULL
+             | constructor_call | asset_ref | array | enum_value
+constructor  = IDENTIFIER '(' arg_list ')'
+asset_ref    = '@' STRING
+array        = '[' [value (',' value)*] ']'
+enum_value   = IDENTIFIER
+```
+
+### Nodes
+
+A node is a type identifier, an optional quoted name, and a body in braces. The type says what the node is, such as `Scene`, `Entity` or `Mapping`. The name tells siblings apart. Several children may share the same type, and a file may hold more than one root node.
+
+Inside a body, the parser tells properties and child nodes apart by the token after the identifier. A colon starts a property. A brace or a quoted name starts a child node <Source symbol="MdfParser" />.
+
+Nesting is capped at 256 levels in both encodings, so a corrupt or hostile file fails with a diagnostic instead of overflowing the stack <Source symbol="MdfParser" />.
+
+### Properties and values
+
+| Value | Text form | Example |
+|---|---|---|
+| String | Double-quoted, with `\"`, `\\`, `\n`, `\r`, `\t`, `\0` and `\xHH` escapes | `name_text: "Crate"` |
+| Integer | 64-bit signed | `max_stack: 10` |
+| Float | Decimal or exponent notation | `mass: 2.0` |
+| Boolean | `true` or `false` | `visible: true` |
+| Null | `null` | `null` |
+| Vector | `vec2(x, y)`, `vec3(x, y, z)`, `vec4(x, y, z, w)` | `position: vec3(0.0, 3.0, 9.0)` |
+| Quaternion | `quat(x, y, z, w)` | `quat(0.0, 0.0, 0.0, 1.0)` |
+| Color | `rgb(r, g, b)`, `rgba(r, g, b, a)` or `hex(#RRGGBB)` / `hex(#RRGGBBAA)` | `rgb(1.0, 0.5, 0.2)`, `hex(#FF8040)` |
+| UUID | `uuid("…")` | `uuid: uuid("B7D31A00-0001-0001")` |
+| Asset reference | `@` followed by a string | `theme: @"Content/UI/Game.theme"` |
+| Enum | A bare identifier | `anchor: BottomCenter` |
+| Array | Square brackets, comma separated, trailing comma allowed | `keys: [0.0, 0.048, 4.0, 0.062]` |
+
+The value types are fixed by `MdfValueType` <Source symbol="MdfValueType" />. The constructors `vec2`, `vec3`, `vec4`, `quat`, `rgb`, `rgba`, `hex` and `uuid` are the only ones the parser knows. Any other name followed by `(` is an error <Source symbol="MdfParser" />. The colors `rgb`, `rgba` and `hex` all read back as a `vec4`, with alpha set to 1 when you leave it out. Hex digits are divided by 255.
+
+### Comments
+
+Text MDF supports `// line` and `/* block */` comments. The lexer keeps them as tokens, and the parser attaches each one to the node or property that follows it, or to the property on the same line <Source symbol="MdfTokenType" />. That is why an MDF file keeps its comments when the editor saves it or `mbt mdf fmt` rewrites it. A comment in a place nothing can own, such as inside an array, still parses but is dropped on rewrite.
+
+## Real examples
+
+An item definition from the FirstPerson template (package summary left out). It uses a string, an asset reference, an integer and a float:
+
+```mdf title="Templates/TP_FirstPerson/Content/Items/Crate.item (excerpt)"
+Item "crate" {
+	schema_version: 1
+	name_key: "item.crate.name"
+	name_text: "Crate"
+	desc_key: "item.crate.desc"
+	desc_text: "A small supply crate. Picking it up adds it to the inventory bar."
+	icon: @"Content/UI/T_PanelNineSlice.png"
+	max_stack: 10
+	mass: 2.0
+	category: "Item.Container"
+}
+```
+
+A day-cycle environment profile. It shows an enum value, an array and repeated child nodes of one type:
+
+```mdf title="Templates/TP_Coop/Content/Environment/DayCycle.environment (excerpt)"
+EnvironmentProfile "DayCycle" {
+    schema_version: 1
+    interp: Linear
+
+    Curve "fog_density" {
+        keys: [0.0, 0.048, 4.0, 0.062, 6.0, 0.078, 8.0, 0.038, 12.0, 0.012, 16.0, 0.018, 18.5, 0.044, 20.5, 0.058, 22.0, 0.052]
+    }
+
+    ColorCurve "fog_color" {
+        Key "0" {
+            hour: 0.0
+            color: vec3(0.06, 0.09, 0.18)
+        }
+        Key "1" {
+            hour: 5.5
+            color: vec3(0.42, 0.32, 0.38)
+        }
+    }
+}
+```
+
+A level entity with UUIDs and nested components:
+
+```mdf title="Content/Scenes/LoomUiDemo.mmap (excerpt)"
+Scene "LoomUiDemo" {
+    schema_version: 1
+
+    Entity "Camera" {
+        uuid: uuid("B7D31A00-0001-0001")
+        tag: "Untagged"
+        layer: 0
+
+        Transform {
+            position: vec3(0.0, 3.0, 9.0)
+            rotation: vec3(-0.18, 0.0, 0.0)
+        }
+        Camera {
+            far: 500.0
+            clear_color: vec3(0.06, 0.07, 0.09)
+            is_main: true
+        }
+    }
+}
+```
+
+## Text and binary
+
+The binary encoding, `mdfb`, carries the same document model. It starts with the four bytes `MDFB`, has a 56-byte header, stores every string once in a string table, and checks both the node stream and the string table with CRC32 <Source symbol="MdfbHeader" />. Binary MDF drops comments by design, because nobody edits it.
+
+`MdfDocument::ParseFromString` and `ParseFromFile` read the first four bytes. If they spell `MDFB`, the binary reader runs. Otherwise the text parser runs <Source symbol="MdfDocument" />. An empty file is an error, not an empty document, so a truncated asset cannot load as all defaults.
+
+A cooked file keeps its original extension. A cooked `Main.mmap` is binary MDF under the same name, so loaders never need a second path. Per-user files nobody edits by hand, such as editor layouts, are binary MDF under the `.mdfb` extension.
+
+<Callout type="engine">
+Both encodings are written through a temp file and a rename. A crash or a full disk during a save leaves the old file intact rather than a zero-length asset <Source symbol="MdfDocument" />.
+</Callout>
+
+## Extensions
+
+No file is named `.mdf`. Every text asset type has its own extension (`.mat`, `.prefab`, `.mmap`, `.actor`, `.ui`, `.item`, `.environment` and many more), and the extension says what the document means. The full list is in [File types](/docs/content-pipeline/file-types/). Older extensions such as `.mdfscene`, `.mdfmat`, `.mdfprefab` and `.mdf` are still read and are renamed when a project opens.
+
+## Command-line tools
+
+`mbt mdf` wraps the native `MdfTool`. Build the tool first with `mbt build -t MdfTool` if `mbt` reports it missing <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" />.
+
+```bash
+./mbt.cmd mdf validate Content/Maps/Main.mmap
+./mbt.cmd mdf validate --schema Content
+./mbt.cmd mdf convert --to-binary Content/Maps/Main.mmap -o Main.mdfb
+./mbt.cmd mdf convert --to-text Main.mdfb -o Main.mmap
+./mbt.cmd mdf fmt Content/Materials
+./mbt.cmd mdf fmt --check Content
+```
+
+| Command | What it does |
+|---|---|
+| `mdf validate <paths…>` | Parses each file, text or binary, and reports OK or `line:col` errors <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" /> |
+| `mdf validate --schema` | Also checks the root type, `schema_version` and known child nodes for scenes, prefabs and materials, keyed on the extension <Source path="Engine/Source/Programs/MdfTool/Private/main.cpp" /> |
+| `mdf convert --to-binary` / `--to-text` | Converts one file. Without `-o`, the output is the input with `.mdfb` or `.mdf` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" /> |
+| `mdf fmt <paths…>` | Rewrites text files in canonical form in place, keeping comments |
+| `mdf fmt --check` | Lists files that would change and exits non-zero without writing, for CI <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" /> |
+
+`validate` and `fmt` accept files, directories and `*` globs. A directory is searched recursively for the text asset, level and built-data extensions of the [file-type table](/docs/content-pipeline/file-types/). `fmt --force` is still accepted but ignored, because comments now survive a rewrite <Source path="Engine/Source/Programs/MdfTool/Private/main.cpp" />.
+
+<Callout type="note">
+`--schema` checks structure only. Checking component property types needs the engine's reflection tables, so that half runs inside the engine when the editor loads a file <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" />.
+</Callout>
+
+## Reading and writing MDF in C++
+
+The format is a header-only library in the `MDF` namespace, included as `<mdf/mdf.h>`. The engine re-exports the main types into `Mowo` through `Serialization/MdfCompat.h`, which also converts between MDF and engine math types <Source symbol="FMdfCompat" />.
+
+Read user data with the defaulted getters. `AsInt(def)` and its siblings return your fallback when a key is missing or has the wrong type, while the bare `AsInt()` throws.
+
+```cpp wrap title="Read an item"
+#include <mdf/mdf.h>
+#include <string>
+
+MDF::MdfDocument doc;
+std::string error;
+
+if (!MDF::MdfDocument::ParseFromFile("Content/Items/Crate.item", doc, &error)) {
+	return;
+}
+
+const MDF::MdfNode& item = doc.Root();
+const int64_t maxStack = item.GetProperty("max_stack").AsInt(1);
+const double mass = item.GetProperty("mass").AsFloat(0.0);
+const std::string icon = item.GetProperty("icon").AsAssetRef("");
+```
+
+Build a document, then write it as text or binary:
+
+```cpp wrap title="Write an item"
+#include <mdf/mdf.h>
+#include <string>
+#include <vector>
+
+MDF::MdfDocument doc;
+MDF::MdfNode& item = doc.CreateRoot("Item", "crate");
+item.SetProperty("schema_version", MDF::MdfValue(1));
+item.SetProperty("max_stack", MDF::MdfValue(10));
+item.SetProperty("icon", MDF::MdfValue::MakeAssetRef("Content/UI/T_PanelNineSlice.png"));
+
+const std::string text = doc.WriteToString();
+const std::vector<uint8_t> binary = MDF::MdfBinaryWriter::Write(doc);
+```
+
+`AddChild("Entity")` sets a child's type, not its name. Pass the name as the second argument when you need one. To read or write a whole package (summary, payload and bulk), use `MDF::MdfPackage`; see [Asset formats](/docs/content-pipeline/asset-formats/). The full API is in [MdfDocument](/docs/api/mdf/mdfdocument/), [MdfNode](/docs/api/mdf/mdfnode/), [MdfValue](/docs/api/mdf/mdfvalue/) and [MdfBinaryWriter](/docs/api/mdf/mdfbinarywriter/).
+
+## Next
+
+- [Sidecars and UUIDs](/docs/content-pipeline/sidecars-and-uuids/) shows the `AssetMeta` document every asset carries.
+- [Cooking](/docs/content-pipeline/cooking/) explains when text becomes binary.

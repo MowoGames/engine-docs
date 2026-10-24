@@ -1,0 +1,228 @@
+---
+title: The main window
+sidebarTitle: Main window
+description: The editor frame - title bar, menus, toolbar, mode rail, status bar - and how to dock, float, save and reset panel layouts.
+order: 1
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorShell.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorTitleBar.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorToolbar.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorStatusBar.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorStartPanels.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/CommandPalette.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/DockPanelInstances.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorLayoutState.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorLayoutsDialog.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorTearOff.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/EditorProgressCard.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/LiveCodingStatus.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Shell/McpIndicator.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/EditorPanelCommands.h
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferencesPage.cpp
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorLayoutMigration.h
+verifiedAt: f5ba7fec2
+---
+
+This page walks around the editor frame: what each strip of the window holds, how panels dock, and how to get a lost layout back. The individual panels have their own pages in this section.
+
+<Screenshot id="editor-overview-default-layout" alt="Mowo Editor main window at 1920x1080 with a template project open and the default layout: mode rail on the left, Place actors panel, the level viewport in the center, Content Browser and Output Log along the bottom, Outliner above Details on the right. Nothing selected." caption="The default layout." />
+
+## The frame
+
+From top to bottom the window has four strips <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorShell.cpp" />:
+
+| Strip | Contents |
+| --- | --- |
+| Title bar | The Mowo mark, the menus, the project name with the open level or asset, an unsaved dot, the **Search everywhere** field and the window buttons |
+| Toolbar | Save and Content Drawer; Undo and Redo; Select, Move, Rotate, Scale and the World/Local toggle; grid, angle and scale snaps; Live Coding; the Play controls; Build, Scalability, Platforms and Settings |
+| Dock | The mode rail, then every panel and document |
+| Status bar | Level, branch, cache, tasks and frame-time readouts (see below) |
+
+The window is borderless; the editor draws its own frame and title bar <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorTitleBar.cpp" />.
+
+### Menus
+
+The main menu reads **File, Edit, Window, Tools, Build, Help** <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp" />. With one menu open, pointing at another title switches to it; <Kbd>Left</Kbd> and <Kbd>Right</Kbd> walk the titles from the keyboard.
+
+| Menu | What it holds |
+| --- | --- |
+| File | New Scene, Open Scene, Recent Scenes, Save, Save Scene As, Save All, Exit |
+| Edit | Undo and Redo; Cut, Copy, Paste, Duplicate, Delete; Group, Ungroup, Lock and Unlock Group, Merge Actors, Snap to Floor; Select All and Deselect All; Project Settings and Editor Preferences |
+| Window | The panels, a **Debug** submenu with the diagnostic panels, a **Plugins** submenu with panels that plugins add, **New Viewport / Content Browser / Details / Outliner**, Content Drawer, Close All Documents, Layouts, Save Layout and Reset Layout |
+| Tools | New C++ Class, Open IDE, Live Coding, Source Code Editor; **Multi-User Editing** (Host, Join, Leave, Who Is Here); Command Palette; Viewport and High Resolution screenshots; Plugins; Crash Reporter; a **Debug** submenu with Widget Reflector, Arc Widget Gallery and Force Garbage Collection |
+| Build | Launch Standalone Game, Compile Game Module, Package Project, Cook Content, Map Check, Bake GI Fallback |
+| Help | Show Log Folder, About Mowo Engine |
+
+An asset editor that runs in its own window has a smaller menu bar of its own: File, Edit and **Asset**.
+
+### Toolbar
+
+The transform tools and snap buttons mirror the viewport's own controls ([Viewport](/docs/editor/viewport/)). A snap is a split button: click the body to toggle it and the chevron to pick the increment. Grid and rotation snapping start on and the gizmo starts in World space; the editor remembers your choice after that.
+
+**Play** is a split button too: the body starts a session in the current play mode, the chevron picks the mode (viewport, new window, simulate, standalone) and the multiplayer options. While a session runs the button shows the elapsed time and **Pause**, **Step** and **Stop** become active. See [Play in editor](/docs/editor/play-in-editor/).
+
+The right-hand group opens the Build menu, the scalability card (render quality presets for the editor viewport), the platform menu for packaging and cooking, and the settings windows.
+
+<Screenshot id="editor-main-toolbar" alt="The editor toolbar at full width: save and content drawer buttons, undo/redo, transform tool group with Move active and World selected, snap split buttons with grid snap on, the Play split button centered, Build and quality buttons on the right." />
+
+### Mode rail
+
+The column on the far left switches the viewport's tool mode: **Select** (Place actors), **Land**, **Foliage**, **Paint** and **Model**, with mode settings at the bottom. It is not a dock tab, so no layout change can lose it. The panel beside it takes the name of the active mode. Modes are covered on the [viewport](/docs/editor/viewport/), [world building](/docs/editor/world-building/) and [geometry tools](/docs/editor/geometry-tools/) pages.
+
+**Place actors** lists the placeable classes one category at a time, with `Basic` first. Click a row to place it in front of the camera or drag it into the viewport. A search lists matches from every category.
+
+### Status bar
+
+Left to right, the status bar shows <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorStatusBar.cpp" />:
+
+- the open level, with its saved state in the tooltip;
+- the git branch of the repository that holds the project, refreshed every few seconds;
+- the derived-data cache with a state dot and hit rate;
+- the running background task with a progress bar, or the imports still in flight;
+- **Live Coding**, when the project has a game module;
+- the **Multi-User** session and its participant count, when you are in one;
+- the Message Log tally.
+
+On the right sit `Game` (game-thread tick time), `Render` (the frame's draw on the CPU), `GPU` (GPU time of the last resolved frame), the frame rate, the **AI agents** item and the notification bell.
+
+When the editor holds its frame rate down on purpose, the frame-rate item names the cap instead of a measured rate: an idle cap shortly after your last input, an unfocused cap while another window is in front, or the battery saver. Input, focus, a realtime viewport or a playing preview lifts the cap.
+
+<Callout type="engine">
+When the editor is idle and nothing a level viewport shows has changed, the viewports keep their last image and stop rendering until something wakes the editor. `editor.IdleSceneSettleFrames` sets how many idle frames to keep rendering first so temporal effects settle, and `editor.IdleSkipSceneRender 0` turns the behaviour off <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp" />. Play sessions always render.
+</Callout>
+
+The **Live Coding** item follows the compile: ready, compiling with a file count, patched, failed with an error count, or restart required when a class layout changed. Click it for a popover with the shortcut, the files in flight, the last patch and an **Open log** link <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/LiveCodingStatus.cpp" />. See [Working with C++](/docs/editor/working-with-cpp/).
+
+The **AI agents** item appears while the [MCP server](/docs/editor/mcp-server/) runs. It reads *listening* or *connected* with a client count; its popover shows the endpoint, the masked token, each client and a **Stop** button <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/McpIndicator.cpp" />.
+
+### Progress cards and notifications
+
+Long tasks (imports, cooks, shader compiles, a hot reload, a GI or navigation bake) show a progress card in the bottom-right corner, above the status bar. A card shows the task, a live line, a progress bar and, when the task can stop, **Cancel**. When two or more tasks run, a **Background tasks** card lists all of them <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorProgressCard.cpp" />. Notifications stack in the same corner; the bell in the status bar keeps their history.
+
+## Documents and panels
+
+Every surface in the editor is a dock tab, and each tab has one of two roles:
+
+- **Documents** are the things you edit: a level, a material, a Visual Scripting graph, an animation. They open in the central document well. Switch between them with <Kbd>Ctrl+Tab</Kbd> and <Kbd>Ctrl+Shift+Tab</Kbd>. A document tab always shows its close button and an unsaved dot when it has changes.
+- **Panels** are tools that work on the active document: Outliner, Details, Content Browser, logs, profilers and debug views.
+
+The **Window** menu opens every panel <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp" />:
+
+| Group | Panels |
+| --- | --- |
+| World building | Modes, Landscape, Modeling, Water, UV Editor, World Settings, World Partition, Data Layers, Navigation |
+| Scene and selection | Outliner, Details, Property Matrix |
+| Assets | Content Browser, Reference Viewer, Size Map, Asset Audit, Asset Manager, Data Validation, Class Viewer, Preview, Preview Scene |
+| Logs and tools | Output Log, Message Log, Audio, PIE Session, Perf Trends, Localization Dashboard |
+| Window ▸ Debug | Profiler, Frame Timeline, Generate Motion, Render Debug, Network Debug, Undo History, World Journal, Source Control, Automation |
+
+Some tools, such as the Profiler, Asset Audit, Reference Viewer and Property Matrix, open as **tool documents**: a tab in the document well, with the Outliner and Details column kept beside it. Every panel also has an **Open &lt;panel&gt;** command in the command palette <Source path="Engine/Source/Editor/MowoEditor/Private/Core/EditorPanelCommands.h" />.
+
+### No level and the Welcome tab
+
+When no level and no asset is open, the document well shows a **No level** tab with **Open level…**, **New level** and your most recent levels <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorStartPanels.cpp" />. It closes as soon as a level or asset opens. You can close every level tab, including the last one.
+
+The **Welcome** tab opens the first time you launch each editor version on a project. It links the editor tour, placing your first actor, the Visual Scripting basics and the keyboard shortcuts page, and offers set-up rows to import a model, connect source control and pick a theme. Tick **Show this tab on startup**, or **Editor Preferences ▸ Show Welcome on startup**, to see it every launch.
+
+<Screenshot id="editor-main-welcome" alt="The Welcome tab in the document well of a freshly opened project: the greeting line, four Get started tiles (Editor tour, Place your first actor, Loom basics, Keyboard shortcuts), the Set up rows and the Show this tab on startup checkbox." />
+
+## Docking
+
+Tabs live in **wells**: a tab strip plus the body under it. Splitters arrange the wells. Drag a tab by its title to move it into another well, or out of the window to float it.
+
+Right-click a tab to see what it supports <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorShell.cpp" />:
+
+| Tab menu entry | What it does |
+| --- | --- |
+| Close, Close Others, Close Tabs to the Right | Closes tabs in the well |
+| Close All Documents | Closes every document tab |
+| Float | Tears the tab off into its own OS window |
+| Dock to Sidebar | Parks the tab on a window edge as a slide-out drawer |
+| Open Another | Opens a second instance of the same panel |
+| Lock | Stops an extra instance from following the rest of the editor |
+
+<Screenshot id="editor-overview-tab-menu" alt="Right-click context menu on the tab of a second Content Browser instance (opened with Window › New Content Browser), showing Open Another, Lock, Close, Close Others, Close Tabs to the Right, Float and Dock to Sidebar." />
+
+### Floating windows and sidebars
+
+A floated tab becomes its own OS window <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorTearOff.cpp" />. Drop it on one of the dock's drop zones to put it back. Menus opened inside a floating panel open in that window. When a layout restores a floating window whose monitor is gone, the window is moved onto the monitor it overlaps most.
+
+A tab parked on a sidebar shows as a tab on the window edge. Click it to slide the panel out as a drawer over the layout; <Kbd>Esc</Kbd> or a click outside closes it. The Content Browser has its own drawer shortcut, <Kbd>Ctrl+Space</Kbd>.
+
+### Multiple instances
+
+The Content Browser, Details, Outliner and Viewport can each run up to four instances <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/DockPanelInstances.cpp" />. Open one with **Window ▸ New Content Browser**, **New Details**, **New Outliner** or **New Viewport**, or with **Open Another** on a tab. A new instance docks next to where the first one is now, and is titled with its number (*Content Browser 2*).
+
+An extra instance has a **Lock** entry on its tab menu:
+
+- A locked Content Browser stays on its folder when another part of the editor reveals an asset.
+- A locked Details panel keeps showing the actor it was pinned to and ignores selection changes.
+
+Each instance remembers what it was showing across sessions. A Content Browser keeps its folder, search, filters, sort, view and lock; a Details panel keeps its lock but comes back empty; an extra viewport keeps its camera, layout, view mode, snaps, show flags and camera bookmarks. An extra viewport docks in the document well, beside the level viewport.
+
+## Layouts
+
+The editor saves the layout per project, a moment after each change, to `Saved/Config/Editor/EditorLayout.mdfb` <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorLayoutState.cpp" />.
+
+| Command | What it does |
+| --- | --- |
+| Window ▸ Save Layout | Stores the current arrangement as a named preset |
+| Window ▸ Layouts… | Lists your presets: apply, rename, delete, **Import…** and **Export…** <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/EditorLayoutsDialog.cpp" /> |
+| Window ▸ Reset Layout | Returns to the default layout |
+
+A layout saved by an older editor version is migrated rather than reset: wells keep their tabs and seams you moved keep their size <Source symbol="FEditorLayoutMigration" />.
+
+<Callout type="tip">
+If a panel seems to have disappeared, it is usually parked on a sidebar or floating behind the main window. **Window ▸ Reset Layout** is the quickest way back to a known state.
+</Callout>
+
+## The command palette
+
+Press <Kbd>Ctrl+K</Kbd>, click **Search everywhere** in the title bar, or press <Kbd>Shift</Kbd> twice to open the command palette <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/CommandPalette.cpp" />. Scope tabs narrow the search:
+
+| Scope | What it finds |
+| --- | --- |
+| All | Everything below, with recent scenes first |
+| Actors | Named actors in the open level; <Kbd>Enter</Kbd> selects the actor and frames it |
+| Assets | Assets in the project; <Kbd>Enter</Kbd> opens the asset in its editor |
+| Actions | Every registered editor command, with its shortcut |
+| Settings | Every row of Editor Preferences and Project Settings; <Kbd>Enter</Kbd> opens the window on that row |
+
+Start the search with `>` to search actions only. Every dockable panel has an **Open &lt;panel&gt;** action, so the palette reaches panels that have no shortcut. When nothing matches, the palette suggests a wider scope or a close spelling.
+
+<Screenshot id="editor-overview-command-palette" alt="The command palette open over the editor with 'out' typed in the search field and the All scope selected, showing the Actions group with Open Outliner and Focus Output Log, and matching asset rows below." />
+
+## Keyboard shortcuts
+
+These are the default bindings <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp" />. Rebind them in **Editor Preferences ▸ Keyboard Shortcuts** ([Settings](/docs/editor/project-settings/)).
+
+| Shortcut | Command |
+| --- | --- |
+| <Kbd>Ctrl+K</Kbd> | Command palette |
+| <Kbd>Ctrl+S</Kbd> / <Kbd>Ctrl+Shift+S</Kbd> / <Kbd>Ctrl+Shift+Alt+S</Kbd> | Save / Save Scene As / Save All |
+| <Kbd>Ctrl+Z</Kbd> / <Kbd>Ctrl+Y</Kbd> | Undo / Redo |
+| <Kbd>Ctrl+Tab</Kbd> / <Kbd>Ctrl+Shift+Tab</Kbd> | Next / previous document |
+| <Kbd>Ctrl+1</Kbd> | Focus the active document |
+| <Kbd>Ctrl+2</Kbd> … <Kbd>Ctrl+6</Kbd> | Focus Outliner, Details, Content Browser, Output Log, Message Log |
+| <Kbd>Ctrl+Space</Kbd> | Content Drawer |
+| <Kbd>F5</Kbd> / <Kbd>Alt+S</Kbd> | Play / Simulate |
+| <Kbd>F8</Kbd> / <Kbd>F10</Kbd> | Eject or possess / Frame step during play |
+| <Kbd>F11</Kbd> / <Kbd>F12</Kbd> | Immersive viewport / Viewport screenshot |
+| <Kbd>Ctrl+Alt+F11</Kbd> | Live Coding |
+| <Kbd>Ctrl+Shift+R</Kbd> | Widget Reflector |
+
+Actor and viewport shortcuts are listed on the [viewport page](/docs/editor/viewport/).
+
+## Editor language
+
+The editor, the Project Launcher and the crash reporter are English-only. This does not affect your game: game text localization works as before, and the [Localization Dashboard](/docs/editor/asset-tools/) manages it.
+
+## Startup
+
+With the splash screen on (any launch without `--no-splash`), the main window stays hidden until its first frames are on screen, and the splash shows each startup step, including pipeline compilation for the project's recorded pipeline cache. If the first frames never complete, the window appears after 30 seconds anyway. The log records the timeline as `[EditorStartup]` lines.
+
+<Callout type="note">
+Frames that run long log themselves: `[Hitch]` lines above `t.HitchLogMs` and `[Stall]` lines above `t.StallLogMs`, with the phase of the frame that took the time. See the [console variables reference](/docs/reference/console-variables/).
+</Callout>

@@ -1,0 +1,2030 @@
+{
+	"name": "MowoEngine.Project",
+	"displayName": "Project",
+	"slug": "project",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Project/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Project/Public/Project/EngineRegistry.h",
+			"include": "Project/EngineRegistry.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FRegisteredEngine",
+					"namespace": "Mowo",
+					"line": 13,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Identifier",
+							"signature": "std::string Identifier",
+							"doc": "A release version (\"0.3.0\") for an installed build, a GUID in braces for\na source tree — UE's EngineAssociation spelling, so a project names an\nengine without naming a path that differs per machine.",
+							"line": 17
+						},
+						{
+							"kind": "field",
+							"name": "Root",
+							"signature": "std::string Root",
+							"line": 18
+						},
+						{
+							"kind": "field",
+							"name": "Version",
+							"signature": "std::string Version",
+							"line": 19
+						},
+						{
+							"kind": "field",
+							"name": "Installed",
+							"signature": "bool Installed = false",
+							"line": 20
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FEngineRegistry",
+					"namespace": "Mowo",
+					"doc": "The per-user list of engines on this machine (<config>/InstalledEngines.ini,\n[Installations] Identifier=Root) and the `.mproject` field that picks one.\nMowoVersionSelector writes it; the project launcher and the shell verbs read\nit. A file rather than the Windows registry so every OS shares one format.",
+					"line": 27,
+					"members": [
+						{
+							"kind": "method",
+							"name": "RegistryPath",
+							"signature": "static std::filesystem::path RegistryPath()",
+							"static": true,
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "List",
+							"signature": "static std::vector<FRegisteredEngine> List()",
+							"static": true,
+							"doc": "Entries whose root no longer exists are left out (and kept on disk: an\nunplugged drive is not an uninstall).",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "static std::string Register(const std::filesystem::path& root)",
+							"static": true,
+							"doc": "Registers `root` and returns its identifier; a root already present keeps\nthe identifier it had, so projects that point at it stay valid.",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "Unregister",
+							"signature": "static bool Unregister(const std::string& identifier)",
+							"static": true,
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "RootForIdentifier",
+							"signature": "static std::string RootForIdentifier(const std::string& identifier)",
+							"static": true,
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "IdentifierForRoot",
+							"signature": "static std::string IdentifierForRoot(const std::filesystem::path& root)",
+							"static": true,
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "EngineVersionAt",
+							"signature": "static std::string EngineVersionAt(const std::filesystem::path& root)",
+							"static": true,
+							"doc": "InstalledBuild.txt's EngineVersion for an installed build, else\nEngine/EngineManifest.json's major.minor.patch.",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "IsInstalledBuild",
+							"signature": "static bool IsInstalledBuild(const std::filesystem::path& root)",
+							"static": true,
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "IsEngineRoot",
+							"signature": "static bool IsEngineRoot(const std::filesystem::path& root)",
+							"static": true,
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "ReadProjectAssociation",
+							"signature": "static std::string ReadProjectAssociation(const std::filesystem::path& projectFile)",
+							"static": true,
+							"doc": "`project.engineAssociation`, falling back to `project.engineVersion`.",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "WriteProjectAssociation",
+							"signature": "static bool WriteProjectAssociation(const std::filesystem::path& projectFile, const std::string& identifier)",
+							"static": true,
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "ResolveProjectEngineRoot",
+							"signature": "static std::string ResolveProjectEngineRoot(const std::filesystem::path& projectFile)",
+							"static": true,
+							"doc": "The registered engine the project names: by identifier, then by matching\nversion. Empty when none fits.",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "FindProgram",
+							"signature": "static std::filesystem::path FindProgram(const std::filesystem::path& root, const std::vector<std::string>& baseNames)",
+							"static": true,
+							"doc": "The newest build of the named program under `root`, whatever layout made\nit (Engine/Binaries/<Platform>, an installed build's Binaries/<Platform>,\nor the older build/bin/<Config>). Empty when there is none.",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "FindEditor",
+							"signature": "static std::filesystem::path FindEditor(const std::filesystem::path& root)",
+							"static": true,
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "FindGame",
+							"signature": "static std::filesystem::path FindGame(const std::filesystem::path& root)",
+							"static": true,
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "FindBuildTool",
+							"signature": "static std::filesystem::path FindBuildTool(const std::filesystem::path& root)",
+							"static": true,
+							"doc": "mbt.cmd / mbt.sh at the root of a source tree; empty for an installed build.",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "skSection",
+							"signature": "static constexpr const char* skSection = \"Installations\"",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "field",
+							"name": "skAssociationKey",
+							"signature": "static constexpr const char* skAssociationKey = \"project.engineAssociation\"",
+							"static": true,
+							"line": 68
+						},
+						{
+							"kind": "field",
+							"name": "skVersionKey",
+							"signature": "static constexpr const char* skVersionKey = \"project.engineVersion\"",
+							"static": true,
+							"line": 69
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Project/Public/Project/LayerRegistry.h",
+			"include": "Project/LayerRegistry.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FLayerRegistry",
+					"namespace": "Mowo",
+					"doc": "Named layers, the single source of truth for every 32-bit layer mask in\nthe engine — camera culling masks, decal visibility, physics raycast\nfilters, audio occlusion. Layer 0..kBuiltinCount-1 ship with the engine\nand cannot be renamed; the rest are project-defined and edited in\nProject Settings > Layers.\n\nThe registry holds only the names. The masks themselves stay plain\nuint32_t on the components, so runtime code never has to consult this.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kMaxLayers",
+							"signature": "static constexpr int32_t kMaxLayers = 32",
+							"static": true,
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "kBuiltinCount",
+							"signature": "static constexpr int32_t kBuiltinCount = 5",
+							"static": true,
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FLayerRegistry& Get()",
+							"static": true,
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "GetNames",
+							"signature": "const std::vector<std::string>& GetNames() const",
+							"doc": "Always kMaxLayers entries; empty string = undefined slot.",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "std::string GetName(int32_t index) const",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "GetDisplayName",
+							"signature": "std::string GetDisplayName(int32_t index) const",
+							"doc": "Name if the slot is defined, \"Layer <n>\" otherwise. Never empty, so\nthe UI always has something to draw.",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "FindIndex",
+							"signature": "int32_t FindIndex(const std::string& name) const",
+							"doc": "-1 when no slot carries the name. Case-sensitive.",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "IsBuiltin",
+							"signature": "static bool IsBuiltin(int32_t index)",
+							"static": true,
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "IsDefined",
+							"signature": "bool IsDefined(int32_t index) const",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "SetName",
+							"signature": "bool SetName(int32_t index, const std::string& name)",
+							"doc": "Rejects built-in slots, out-of-range indices and duplicates.",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "Apply",
+							"signature": "void Apply(const std::vector<std::string>& names)",
+							"doc": "Replaces every user slot at once. Entries beyond kMaxLayers are\ndropped, built-in slots are restored regardless of what came in.",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "ResetToDefaults",
+							"signature": "void ResetToDefaults()",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "BitFor",
+							"signature": "static uint32_t BitFor(int32_t index)",
+							"static": true,
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "MaskContains",
+							"signature": "static bool MaskContains(uint32_t mask, int32_t index)",
+							"static": true,
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "CountBits",
+							"signature": "static int32_t CountBits(uint32_t mask)",
+							"static": true,
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "Summarize",
+							"signature": "std::string Summarize(uint32_t mask) const",
+							"doc": "\"All\", \"None\", \"Default\", \"Default, Water\", \"3 Layers\" — the closed\nstate of the inspector's layer-mask dropdown. Bits pointing at\nundefined slots still count, so a mask never silently reads as None.",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "BuiltinName",
+							"signature": "static const char* BuiltinName(int32_t index)",
+							"static": true,
+							"line": 71
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Project/Public/Project/PackagingSettings.h",
+			"include": "Project/PackagingSettings.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FPackagingSettings",
+					"namespace": "Mowo",
+					"line": 27,
+					"members": [
+						{
+							"kind": "field",
+							"name": "ConfigIndex",
+							"signature": "int32_t ConfigIndex = 3",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "CompressionIndex",
+							"signature": "int32_t CompressionIndex = 2",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "MdfText",
+							"signature": "bool MdfText = false",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "Monolithic",
+							"signature": "bool Monolithic = true",
+							"doc": "On by default, as `mbt package` is for Shipping: a modular Shipping\npackage ships ~45 first-party DLLs that ThinLTO cannot optimise across.",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "UsedContentOnly",
+							"signature": "bool UsedContentOnly = false",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "TargetPlatforms",
+							"signature": "std::string TargetPlatforms",
+							"doc": "The platforms the project targets, comma separated in the packaged\nlayouts' folder names (\"Win64,Linux\"). The launcher's new-project\nwizard writes them, the Packaging window shows and edits them, and\n`mbt package` warns when it packages for a platform not listed. Empty\nmeans this host.",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "PackageOutputDir",
+							"signature": "std::string PackageOutputDir",
+							"doc": "Stored form — see ToStoredPath. Empty means \"the default\".",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "CookOutputDir",
+							"signature": "std::string CookOutputDir",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "FilePath",
+							"signature": "static std::filesystem::path FilePath(const Project& project)",
+							"static": true,
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "DefaultPackageOutputDir",
+							"signature": "static std::string DefaultPackageOutputDir(const Project& project)",
+							"static": true,
+							"doc": "\"Saved/Packaged/<Product>\" and \"Saved/Cooked\" — nothing a fresh\nproject writes names a machine.",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "DefaultCookOutputDir",
+							"signature": "static std::string DefaultCookOutputDir()",
+							"static": true,
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "Load",
+							"signature": "bool Load(const Project& project)",
+							"doc": "False when there is no file yet; the struct then holds the defaults.\nA legacy absolute value inside the project comes back relativised.",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Save",
+							"signature": "bool Save(const Project& project) const",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "ResolvePackageOutputDir",
+							"signature": "std::string ResolvePackageOutputDir(const Project& project) const",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "ResolveCookOutputDir",
+							"signature": "std::string ResolveCookOutputDir(const Project& project) const",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "ToStoredPath",
+							"signature": "static std::string ToStoredPath(const Project& project, const std::string& path)",
+							"static": true,
+							"doc": "Absolute inside the project → project-relative, forward slashes. A\nrelative path is normalised. Absolute outside the project → unchanged\n(generic form) plus a one-time warning.",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "ToAbsolutePath",
+							"signature": "static std::string ToAbsolutePath(const Project& project, const std::string& stored)",
+							"static": true,
+							"doc": "The inverse: a stored value → the directory on this machine.",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "CanonicalPlatformName",
+							"signature": "static std::string CanonicalPlatformName(const std::string& platform)",
+							"static": true,
+							"doc": "\"windows\", \"win64\" → \"Win64\"; \"mac\", \"macos\" → \"Mac\"; anything else\nkeeps its spelling with the first letter upper-cased (\"linux\" →\n\"Linux\"), so a hand-edited file and the wizard name a platform alike.",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "TargetPlatformList",
+							"signature": "std::vector<std::string> TargetPlatformList(const std::string& host) const",
+							"doc": "The list as written, canonical, without duplicates; {host} when empty.",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "TargetsPlatform",
+							"signature": "bool TargetsPlatform(const std::string& platform, const std::string& host) const",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "SetTargetsPlatform",
+							"signature": "void SetTargetsPlatform(const std::string& platform, bool targeted, const std::string& host)",
+							"doc": "Adds or removes one platform and keeps the others as they were. The\nlast one is never removed: an empty list means \"this host\", which\nwould quietly re-target the platform the user just turned off.",
+							"line": 82
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Project/Public/Project/PluginManager.h",
+			"include": "Project/PluginManager.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FPluginModuleDescriptor",
+					"namespace": "Mowo",
+					"line": 16,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 17
+						},
+						{
+							"kind": "field",
+							"name": "Type",
+							"signature": "std::string Type = \"Runtime\"",
+							"line": 18
+						},
+						{
+							"kind": "field",
+							"name": "LoadingPhase",
+							"signature": "std::string LoadingPhase = \"Default\"",
+							"line": 19
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPluginDescriptor",
+					"namespace": "Mowo",
+					"line": 22,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "FriendlyName",
+							"signature": "std::string FriendlyName",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "Version",
+							"signature": "std::string Version = \"1.0.0\"",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "Description",
+							"signature": "std::string Description",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "Author",
+							"signature": "std::string Author",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "Category",
+							"signature": "std::string Category",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "Icon",
+							"signature": "std::string Icon",
+							"doc": "Lucide icon name (\"scan\", \"gamepad\", ...) shown by the plugin\nmanager; empty falls back to a category glyph.",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "Dependencies",
+							"signature": "std::vector<std::string> Dependencies",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "Modules",
+							"signature": "std::vector<FPluginModuleDescriptor> Modules",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "bEnabledByDefault",
+							"signature": "bool bEnabledByDefault = true",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "bHasContent",
+							"signature": "bool bHasContent = false",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "bHasModules",
+							"signature": "bool bHasModules = false",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "EngineVersion",
+							"signature": "std::string EngineVersion",
+							"doc": "\"major.minor\" of the engine the plugin was made for. Empty = unstated,\nwhich loads as before; a stated version that differs blocks the plugin\ninstead of letting it register structs of a layout this engine does\nnot have.",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "bRequiresOnline",
+							"signature": "bool bRequiresOnline = false",
+							"doc": "Read by the build side (monolithic NoOnline link, server staging, DLC\npackaging). Carried here so a manifest saved back through\nSaveDescriptor keeps them — the writer used to drop all three.",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "bServer",
+							"signature": "bool bServer = true",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "bDlc",
+							"signature": "bool bDlc = false",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "bBeta",
+							"signature": "bool bBeta = false",
+							"doc": "UE's IsBetaVersion: the Plugins window marks it \"beta\".",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "MarketplaceUrl",
+							"signature": "std::string MarketplaceUrl",
+							"doc": "Where a plugin installed from a store came from (UE's MarketplaceURL);\nempty for a plugin that ships with the engine or the project. The\nPlugins window's Marketplace filter lists the ones that have it.",
+							"line": 57
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPluginInfo",
+					"namespace": "Mowo",
+					"line": 60,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Descriptor",
+							"signature": "FPluginDescriptor Descriptor",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "RootDir",
+							"signature": "std::filesystem::path RootDir",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "bEngine",
+							"signature": "bool bEngine = false",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "bEnabled",
+							"signature": "bool bEnabled = false",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "bMountedEnabled",
+							"signature": "bool bMountedEnabled = false",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "bModulesLoaded",
+							"signature": "bool bModulesLoaded = false",
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "BlockedReason",
+							"signature": "std::string BlockedReason",
+							"doc": "Why an ENABLED plugin still does not load: a dependency that is not\ninstalled, is disabled, cannot load itself, or closes a cycle. Empty\nwhen nothing stands in the way. A blocked plugin mounts no content and\nloads no modules — it would come up half-wired otherwise.",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "IsLive",
+							"signature": "bool IsLive() const",
+							"line": 74
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPluginContentMount",
+					"namespace": "Mowo",
+					"doc": "One live content mount. MountPoint is the VFS prefix (\"Plugins/<Name>\")\nthat asset references serialize as; ContentDir is the canonical disk\ndirectory it resolves to.",
+					"line": 82,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 83
+						},
+						{
+							"kind": "field",
+							"name": "MountPoint",
+							"signature": "std::string MountPoint",
+							"line": 84
+						},
+						{
+							"kind": "field",
+							"name": "ContentDir",
+							"signature": "std::filesystem::path ContentDir",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "bEngine",
+							"signature": "bool bEngine = false",
+							"line": 86
+						},
+						{
+							"kind": "field",
+							"name": "bReadOnly",
+							"signature": "bool bReadOnly = false",
+							"line": 87
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPluginManager",
+					"namespace": "Mowo",
+					"line": 90,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FPluginManager& Get()",
+							"static": true,
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "FPluginManager",
+							"signature": "FPluginManager(const FPluginManager&) = delete",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FPluginManager& operator=(const FPluginManager&) = delete",
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "ManifestExtension",
+							"signature": "static const char* ManifestExtension()",
+							"static": true,
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "MountPrefix",
+							"signature": "static const char* MountPrefix()",
+							"static": true,
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "LoadDescriptor",
+							"signature": "static bool LoadDescriptor(const std::filesystem::path& manifestPath, FPluginDescriptor& outDescriptor, std::string* outError = nullptr)",
+							"static": true,
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "SaveDescriptor",
+							"signature": "static bool SaveDescriptor(const std::filesystem::path& manifestPath, const FPluginDescriptor& descriptor)",
+							"static": true,
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "EnginePluginsDir",
+							"signature": "static std::filesystem::path EnginePluginsDir()",
+							"static": true,
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "SetEnginePluginsDirOverride",
+							"signature": "static void SetEnginePluginsDirOverride(const std::filesystem::path& dir)",
+							"static": true,
+							"doc": "Points engine-plugin discovery at another tree; empty restores Engine/Plugins.\nTests use it to exercise the engine tier against a fixture plugin, since the\nplugins the engine ships are free to change what they carry.",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "SetLoadsEditorModules",
+							"signature": "static void SetLoadsEditorModules(bool loads)",
+							"static": true,
+							"doc": "Whether this host loads plugin modules declared `\"type\": \"Editor\"`. Only\nthe editor turns it on, before engine init: such a module links the\neditor framework, which a player or a server does not ship, and the type\nfield was parsed and ignored until this existed.",
+							"line": 116
+						},
+						{
+							"kind": "method",
+							"name": "LoadsEditorModules",
+							"signature": "static bool LoadsEditorModules()",
+							"static": true,
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "IsEditorModuleType",
+							"signature": "static bool IsEditorModuleType(const std::string& type)",
+							"static": true,
+							"line": 118
+						},
+						{
+							"kind": "method",
+							"name": "LoadEnginePlugins",
+							"signature": "void LoadEnginePlugins()",
+							"doc": "Discover, mount and load the engine-tier plugins under Engine/Plugins.\nRuns once at engine init, independent of any project — idempotent.",
+							"line": 122
+						},
+						{
+							"kind": "method",
+							"name": "LoadPackagedPlugins",
+							"signature": "void LoadPackagedPlugins(const std::string& manifestJson)",
+							"doc": "A packaged game has no plugin folders: its plugin DLLs sit beside the host\nexe and the enabled plugins' manifests travel as one JSON array in the\nengine pak (Plugins.json). Registers each as an enabled engine plugin and\nloads its modules in dependency order; content is already in the paks.",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "ScanAndMount",
+							"signature": "void ScanAndMount(const std::filesystem::path& projectRoot)",
+							"line": 130
+						},
+						{
+							"kind": "method",
+							"name": "Unmount",
+							"signature": "void Unmount()",
+							"doc": "Tears down project plugins only; engine plugins stay live across\nproject open/close.",
+							"line": 134
+						},
+						{
+							"kind": "method",
+							"name": "UnmountAll",
+							"signature": "void UnmountAll()",
+							"doc": "Full teardown including engine plugins — for engine shutdown.",
+							"line": 137
+						},
+						{
+							"kind": "method",
+							"name": "HasLoadedEnginePlugins",
+							"signature": "bool HasLoadedEnginePlugins() const",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "HasScanned",
+							"signature": "bool HasScanned() const",
+							"line": 143
+						},
+						{
+							"kind": "method",
+							"name": "GetPlugins",
+							"signature": "const std::vector<FPluginInfo>& GetPlugins() const",
+							"line": 146
+						},
+						{
+							"kind": "method",
+							"name": "FindPlugin",
+							"signature": "const FPluginInfo* FindPlugin(const std::string& name) const",
+							"line": 149
+						},
+						{
+							"kind": "method",
+							"name": "IsEnabled",
+							"signature": "bool IsEnabled(const std::string& name) const",
+							"line": 150
+						},
+						{
+							"kind": "method",
+							"name": "SetEnabled",
+							"signature": "bool SetEnabled(const std::string& name, bool enabled)",
+							"line": 151
+						},
+						{
+							"kind": "method",
+							"name": "RestartPendingCount",
+							"signature": "int32_t RestartPendingCount() const",
+							"line": 152
+						},
+						{
+							"kind": "method",
+							"name": "DisabledDependenciesOf",
+							"signature": "std::vector<std::string> DisabledDependenciesOf(const std::string& name) const",
+							"doc": "Installed plugins `name` needs, directly or through another dependency,\nthat are disabled right now — what enabling it has to enable too.",
+							"line": 156
+						},
+						{
+							"kind": "method",
+							"name": "EnabledDependentsOf",
+							"signature": "std::vector<std::string> EnabledDependentsOf(const std::string& name) const",
+							"doc": "Enabled plugins that stop loading if `name` is disabled.",
+							"line": 159
+						},
+						{
+							"kind": "method",
+							"name": "ResolveDependencies",
+							"signature": "static void ResolveDependencies(std::vector<FPluginInfo>& plugins)",
+							"static": true,
+							"doc": "Recomputes every plugin's BlockedReason. Pure over the plugin list, so\ncallers that only change state run it and then apply mounts.",
+							"line": 163
+						},
+						{
+							"kind": "method",
+							"name": "EngineVersionString",
+							"signature": "static std::string EngineVersionString()",
+							"static": true,
+							"doc": "\"major.minor\" of this engine, the form a manifest's engineVersion takes.",
+							"line": 166
+						},
+						{
+							"kind": "method",
+							"name": "EngineVersionMismatch",
+							"signature": "static std::string EngineVersionMismatch(const std::string& stated)",
+							"static": true,
+							"doc": "Empty when a manifest's stated engine version is compatible (or not\nstated); otherwise the reason, in BlockedReason's phrasing. Patch\nreleases do not break plugins, so only major.minor is compared.",
+							"line": 171
+						},
+						{
+							"kind": "method",
+							"name": "GetContentMounts",
+							"signature": "std::vector<FPluginContentMount> GetContentMounts() const",
+							"doc": "Snapshot of the live content mounts. Copied out because callers read\nit from worker threads while the main thread may mount or unmount.",
+							"line": 175
+						},
+						{
+							"kind": "method",
+							"name": "ContentRevision",
+							"signature": "uint32_t ContentRevision() const",
+							"doc": "Bumped on every mount/unmount. Anything that caches a view of plugin\ncontent (asset registry, content browser) polls this instead of\nsubscribing to a delegate.",
+							"line": 180
+						},
+						{
+							"kind": "method",
+							"name": "ToPluginVfsPath",
+							"signature": "static bool ToPluginVfsPath(const std::string& absolutePath, std::string& outVfsPath)",
+							"static": true,
+							"doc": "Absolute disk path → \"Plugins/<Name>/...\" when the path sits under a\nmounted plugin's Content directory.",
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "ResolvePluginVfsPath",
+							"signature": "static std::string ResolvePluginVfsPath(const std::string& vfsPath)",
+							"static": true,
+							"doc": "\"Plugins/<Name>/...\" → absolute disk path. Empty when the plugin is\nnot mounted or the path is not a plugin path.",
+							"line": 190
+						},
+						{
+							"kind": "method",
+							"name": "IsPluginVfsPath",
+							"signature": "static bool IsPluginVfsPath(const std::string& path)",
+							"static": true,
+							"line": 192
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Project/Public/Project/Project.h",
+			"include": "Project/Project.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "ProjectBuildSettings",
+					"namespace": "Mowo",
+					"line": 15,
+					"members": [
+						{
+							"kind": "field",
+							"name": "outputName",
+							"signature": "std::string outputName",
+							"line": 16
+						},
+						{
+							"kind": "field",
+							"name": "packAssets",
+							"signature": "bool packAssets = true",
+							"line": 17
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "ProjectScriptingSettings",
+					"namespace": "Mowo",
+					"doc": "Dead C# residue — the managed scripting layer was removed. Still\nserialized for manifest compatibility; do not add fields.",
+					"line": 22,
+					"members": [
+						{
+							"kind": "field",
+							"name": "mainScript",
+							"signature": "std::string mainScript",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "autoReload",
+							"signature": "bool autoReload = true",
+							"line": 24
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "ProjectLobbyType",
+					"namespace": "Mowo",
+					"doc": "Default visibility for platform lobbies. Mirrors\nNetworking's EPlatformLobbyType (Project sits below Networking's\nconsumers and must not include its headers).",
+					"line": 30,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Private",
+							"signature": "Private = 0",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "FriendsOnly",
+							"signature": "FriendsOnly = 1",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "Public",
+							"signature": "Public = 2",
+							"line": 33
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "ProjectPlatformSettings",
+					"namespace": "Mowo",
+					"doc": "Platform/social integration (Steam + Discord). Steam and Discord\nonly initialize when explicitly enabled here with a non-zero id.",
+					"line": 38,
+					"members": [
+						{
+							"kind": "field",
+							"name": "steamEnabled",
+							"signature": "bool steamEnabled = false",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "steamAppId",
+							"signature": "uint32_t steamAppId = 0",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "discordEnabled",
+							"signature": "bool discordEnabled = false",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "discordApplicationId",
+							"signature": "uint64_t discordApplicationId = 0",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "mowoOnlineEnabled",
+							"signature": "bool mowoOnlineEnabled = false",
+							"doc": "Mowo Online Services (MowoOnlinePlatform plugin): the Mowo ID product\nid the Mowo Games Launcher knows the game by, and whether a start\noutside the launcher re-launches through it (MOS_RestartAppIfNecessary).",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "mowoProductId",
+							"signature": "std::string mowoProductId",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "mowoRestartThroughLauncher",
+							"signature": "bool mowoRestartThroughLauncher = false",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "presenceDetailsFormat",
+							"signature": "std::string presenceDetailsFormat",
+							"doc": "Rich-presence format strings with {details} / {state} tokens.",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "presenceStateFormat",
+							"signature": "std::string presenceStateFormat",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "defaultLargeImageKey",
+							"signature": "std::string defaultLargeImageKey",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "defaultLobbyType",
+							"signature": "ProjectLobbyType defaultLobbyType = ProjectLobbyType::FriendsOnly",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "defaultMaxPlayers",
+							"signature": "int defaultMaxPlayers = 4",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "requireTicketAuth",
+							"signature": "bool requireTicketAuth = false",
+							"line": 55
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "ProjectGraphicsSettings",
+					"namespace": "Mowo",
+					"line": 58,
+					"members": [
+						{
+							"kind": "field",
+							"name": "defaultWidth",
+							"signature": "int defaultWidth = 1920",
+							"line": 59
+						},
+						{
+							"kind": "field",
+							"name": "defaultHeight",
+							"signature": "int defaultHeight = 1080",
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "defaultFullscreen",
+							"signature": "bool defaultFullscreen = false",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "defaultVSync",
+							"signature": "bool defaultVSync = true",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "resizable",
+							"signature": "bool resizable = true",
+							"line": 63
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "ProjectPlayerSettings",
+					"namespace": "Mowo",
+					"doc": "Embedded into the built executable.",
+					"line": 67,
+					"members": [
+						{
+							"kind": "field",
+							"name": "productName",
+							"signature": "std::string productName",
+							"line": 68
+						},
+						{
+							"kind": "field",
+							"name": "companyName",
+							"signature": "std::string companyName",
+							"line": 69
+						},
+						{
+							"kind": "field",
+							"name": "description",
+							"signature": "std::string description",
+							"line": 70
+						},
+						{
+							"kind": "field",
+							"name": "copyright",
+							"signature": "std::string copyright",
+							"line": 71
+						},
+						{
+							"kind": "field",
+							"name": "iconPath",
+							"signature": "std::string iconPath",
+							"doc": "Absolute path to .ico/.png file",
+							"line": 72
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "ProjectLayerSettings",
+					"namespace": "Mowo",
+					"doc": "User-defined layer names, index-aligned with FLayerRegistry (slot 0..4 are\nthe engine's built-ins and are re-imposed on load, whatever the manifest\nsays). Stored on the settings so the manifest round-trip stays in one place.",
+					"line": 78,
+					"members": [
+						{
+							"kind": "field",
+							"name": "names",
+							"signature": "std::vector<std::string> names",
+							"line": 79
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FEditorUserState",
+					"namespace": "Mowo",
+					"doc": "Per-project editor state persisted to Saved/Config/Editor/UserPreferences.json\n(user-local, gitignored). Not part of the committed .mproject manifest — it\ncarries the last viewport camera and the set of open asset-editor documents\nso a reopen lands the user where they left off. Robust to missing/stale entries.",
+					"line": 86,
+					"members": [
+						{
+							"kind": "field",
+							"name": "hasCamera",
+							"signature": "bool hasCamera = false",
+							"line": 87
+						},
+						{
+							"kind": "field",
+							"name": "cameraPosX",
+							"signature": "float cameraPosX = 0.0f",
+							"line": 88
+						},
+						{
+							"kind": "field",
+							"name": "cameraPosY",
+							"signature": "float cameraPosY = 0.0f",
+							"line": 89
+						},
+						{
+							"kind": "field",
+							"name": "cameraPosZ",
+							"signature": "float cameraPosZ = 0.0f",
+							"line": 90
+						},
+						{
+							"kind": "field",
+							"name": "cameraForwardX",
+							"signature": "float cameraForwardX = 0.0f",
+							"line": 91
+						},
+						{
+							"kind": "field",
+							"name": "cameraForwardY",
+							"signature": "float cameraForwardY = 0.0f",
+							"line": 92
+						},
+						{
+							"kind": "field",
+							"name": "cameraForwardZ",
+							"signature": "float cameraForwardZ = 1.0f",
+							"line": 93
+						},
+						{
+							"kind": "field",
+							"name": "openDocuments",
+							"signature": "std::vector<std::string> openDocuments",
+							"doc": "Each entry is \"editorType|path\" for an open asset-editor document.",
+							"line": 96
+						},
+						{
+							"kind": "field",
+							"name": "favoriteAssets",
+							"signature": "std::vector<std::string> favoriteAssets",
+							"doc": "Content-browser favorites — asset paths the user starred.",
+							"line": 99
+						},
+						{
+							"kind": "field",
+							"name": "favoriteFolders",
+							"signature": "std::vector<std::string> favoriteFolders",
+							"doc": "Content-browser favourite folders, listed under FAVOURITES in the\nSources panel.",
+							"line": 103
+						},
+						{
+							"kind": "field",
+							"name": "folderColors",
+							"signature": "std::vector<std::string> folderColors",
+							"doc": "Content-browser folder tints, \"path|#RRGGBB\" per entry (UE5 folder\ncolors). Absent = the default untinted folder.",
+							"line": 107
+						},
+						{
+							"kind": "field",
+							"name": "savedColors",
+							"signature": "std::vector<std::string> savedColors",
+							"doc": "Colour-picker saved swatches, \"#RRGGBBAA\" per entry — the palette is\nprocess-wide in Arc, this is its per-project persistence.",
+							"line": 111
+						},
+						{
+							"kind": "field",
+							"name": "panelInstances",
+							"signature": "std::vector<std::string> panelInstances",
+							"doc": "Extra dock-panel instances (a second Content Browser, a third Details),\n\"<tabId>|<panel state>\" per entry. The layout file already restores the\nTABS by id; this is what makes a restored instance come back looking at\nwhat it was looking at instead of at defaults. The state half is opaque\nhere — each panel owns its own encoding.",
+							"line": 118
+						},
+						{
+							"kind": "field",
+							"name": "recentScenes",
+							"signature": "std::vector<std::string> recentScenes",
+							"doc": "Recently opened scenes, most recent first, \"<pin>|<path>\" per entry where\n<pin> is 0 or 1. Pinned entries survive eviction, which is the whole\nreason the flag is stored next to the path instead of in a second list.",
+							"line": 123
+						},
+						{
+							"kind": "field",
+							"name": "previewSceneSettings",
+							"signature": "std::vector<std::string> previewSceneSettings",
+							"doc": "Preview Scene Settings per asset-editor kind, \"<kind>|<encoded rig>\" per\nentry — the lighting, floor, grid and post an artist set for the static\nmesh editor, the skeletal mesh editor and so on. Keyed by KIND and not by\nasset on purpose: it is a editor preference, and re-making the same\nthree-point rig for every mesh is the thing it exists to stop. The value\nhalf is opaque here; FPreviewSceneSettingsDrawer owns its encoding.",
+							"line": 131
+						},
+						{
+							"kind": "field",
+							"name": "editorPreferences",
+							"signature": "std::vector<std::string> editorPreferences",
+							"doc": "Editor Preferences, \"<key>=<value>\" per entry. Per user and per project\nlike UE's EditorPerProjectUserSettings; the editor owns the keys, and an\nentry it no longer knows is dropped on the next save.",
+							"line": 136
+						},
+						{
+							"kind": "field",
+							"name": "kMaxRecentScenes",
+							"signature": "static constexpr size_t kMaxRecentScenes = 10",
+							"static": true,
+							"doc": "Ten unpinned rows is roughly a File menu's worth; pins ride above the cap\nso a pinned set larger than this cannot silently lose its last member.",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "IsRecentScenePinned",
+							"signature": "static bool IsRecentScenePinned(const std::string& entry)",
+							"static": true,
+							"line": 142
+						},
+						{
+							"kind": "method",
+							"name": "RecentScenePath",
+							"signature": "static std::string RecentScenePath(const std::string& entry)",
+							"static": true,
+							"line": 146
+						},
+						{
+							"kind": "method",
+							"name": "MakeRecentScene",
+							"signature": "static std::string MakeRecentScene(const std::string& path, bool pinned)",
+							"static": true,
+							"line": 152
+						},
+						{
+							"kind": "method",
+							"name": "PushRecentScene",
+							"signature": "static void PushRecentScene(std::vector<std::string>& entries, const std::string& path)",
+							"static": true,
+							"line": 156
+						},
+						{
+							"kind": "method",
+							"name": "RemoveRecentScene",
+							"signature": "static void RemoveRecentScene(std::vector<std::string>& entries, const std::string& path)",
+							"static": true,
+							"line": 191
+						},
+						{
+							"kind": "method",
+							"name": "ToggleRecentScenePin",
+							"signature": "static void ToggleRecentScenePin(std::vector<std::string>& entries, const std::string& path)",
+							"static": true,
+							"line": 200
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "ProjectSettings",
+					"namespace": "Mowo",
+					"line": 212,
+					"members": [
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "std::string name",
+							"line": 213
+						},
+						{
+							"kind": "field",
+							"name": "version",
+							"signature": "std::string version = \"1.0.0\"",
+							"line": 214
+						},
+						{
+							"kind": "field",
+							"name": "engineVersion",
+							"signature": "std::string engineVersion",
+							"line": 215
+						},
+						{
+							"kind": "field",
+							"name": "uuid",
+							"signature": "UUID uuid",
+							"line": 216
+						},
+						{
+							"kind": "field",
+							"name": "startScene",
+							"signature": "std::string startScene",
+							"line": 217
+						},
+						{
+							"kind": "field",
+							"name": "gameModeClass",
+							"signature": "std::string gameModeClass",
+							"doc": "MCLASS name of the game mode to spawn when the start scene\nbegins play (\"AGameMode\" or a game subclass). Empty = no game\nframework (legacy/sandbox projects).",
+							"line": 221
+						},
+						{
+							"kind": "field",
+							"name": "created",
+							"signature": "std::string created",
+							"doc": "ISO 8601 timestamp",
+							"line": 222
+						},
+						{
+							"kind": "field",
+							"name": "modified",
+							"signature": "std::string modified",
+							"doc": "ISO 8601 timestamp",
+							"line": 223
+						},
+						{
+							"kind": "field",
+							"name": "assetFormat",
+							"signature": "int32_t assetFormat = 1",
+							"doc": "1 = text assets without a package summary; 2 = packages (each type\nunder its own extension, .mmap levels with .actor files), kept migrated\non every open. See FAssetPackageMigration.",
+							"line": 227
+						},
+						{
+							"kind": "field",
+							"name": "modGame",
+							"signature": "std::string modGame",
+							"doc": "A mod project names the game it modifies (its .mproject, relative to\nthe mod root or absolute). Empty for a game.",
+							"line": 231
+						},
+						{
+							"kind": "field",
+							"name": "build",
+							"signature": "ProjectBuildSettings build",
+							"line": 233
+						},
+						{
+							"kind": "field",
+							"name": "scripting",
+							"signature": "ProjectScriptingSettings scripting",
+							"line": 234
+						},
+						{
+							"kind": "field",
+							"name": "graphics",
+							"signature": "ProjectGraphicsSettings graphics",
+							"line": 235
+						},
+						{
+							"kind": "field",
+							"name": "player",
+							"signature": "ProjectPlayerSettings player",
+							"line": 236
+						},
+						{
+							"kind": "field",
+							"name": "platform",
+							"signature": "ProjectPlatformSettings platform",
+							"line": 237
+						},
+						{
+							"kind": "field",
+							"name": "layers",
+							"signature": "ProjectLayerSettings layers",
+							"line": 238
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "Project",
+					"namespace": "Mowo",
+					"line": 241,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Project",
+							"signature": "Project() = default",
+							"line": 243
+						},
+						{
+							"kind": "method",
+							"name": "~Project",
+							"signature": "~Project() = default",
+							"line": 244
+						},
+						{
+							"kind": "method",
+							"name": "Project",
+							"signature": "Project(const Project&) = delete",
+							"line": 246
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "Project& operator=(const Project&) = delete",
+							"line": 247
+						},
+						{
+							"kind": "method",
+							"name": "Project",
+							"signature": "Project(Project&&) = default",
+							"line": 249
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "Project& operator=(Project&&) = default",
+							"line": 250
+						},
+						{
+							"kind": "method",
+							"name": "GetSettings",
+							"signature": "const ProjectSettings& GetSettings() const",
+							"line": 252
+						},
+						{
+							"kind": "method",
+							"name": "GetSettings",
+							"signature": "ProjectSettings& GetSettings()",
+							"line": 255
+						},
+						{
+							"kind": "method",
+							"name": "GetUserState",
+							"signature": "const FEditorUserState& GetUserState() const",
+							"line": 259
+						},
+						{
+							"kind": "method",
+							"name": "GetUserState",
+							"signature": "FEditorUserState& GetUserState()",
+							"line": 262
+						},
+						{
+							"kind": "method",
+							"name": "GetRootPath",
+							"signature": "const std::filesystem::path& GetRootPath() const",
+							"line": 266
+						},
+						{
+							"kind": "method",
+							"name": "GetContentPath",
+							"signature": "const std::filesystem::path& GetContentPath() const",
+							"line": 269
+						},
+						{
+							"kind": "method",
+							"name": "GetConfigPath",
+							"signature": "const std::filesystem::path& GetConfigPath() const",
+							"line": 272
+						},
+						{
+							"kind": "method",
+							"name": "GetEditorConfigPath",
+							"signature": "const std::filesystem::path& GetEditorConfigPath() const",
+							"line": 275
+						},
+						{
+							"kind": "method",
+							"name": "SetEditorConfigPath",
+							"signature": "void SetEditorConfigPath(const std::filesystem::path& path)",
+							"doc": "Points the per-user editor state somewhere other than Saved/Config/Editor\n— the host's scratch directory while user config is ignored.",
+							"line": 281
+						},
+						{
+							"kind": "method",
+							"name": "GetSourcePath",
+							"signature": "const std::filesystem::path& GetSourcePath() const",
+							"line": 284
+						},
+						{
+							"kind": "method",
+							"name": "GetPluginsPath",
+							"signature": "const std::filesystem::path& GetPluginsPath() const",
+							"line": 287
+						},
+						{
+							"kind": "method",
+							"name": "GetIntermediatePath",
+							"signature": "const std::filesystem::path& GetIntermediatePath() const",
+							"line": 290
+						},
+						{
+							"kind": "method",
+							"name": "GetDerivedDataPath",
+							"signature": "const std::filesystem::path& GetDerivedDataPath() const",
+							"line": 293
+						},
+						{
+							"kind": "method",
+							"name": "GetThumbCachePath",
+							"signature": "const std::filesystem::path& GetThumbCachePath() const",
+							"line": 296
+						},
+						{
+							"kind": "method",
+							"name": "GetSavedPath",
+							"signature": "const std::filesystem::path& GetSavedPath() const",
+							"line": 299
+						},
+						{
+							"kind": "method",
+							"name": "GetLogsPath",
+							"signature": "const std::filesystem::path& GetLogsPath() const",
+							"line": 302
+						},
+						{
+							"kind": "method",
+							"name": "GetCrashesPath",
+							"signature": "const std::filesystem::path& GetCrashesPath() const",
+							"line": 305
+						},
+						{
+							"kind": "method",
+							"name": "GetAutosavesPath",
+							"signature": "const std::filesystem::path& GetAutosavesPath() const",
+							"line": 308
+						},
+						{
+							"kind": "method",
+							"name": "GetSaveGamesPath",
+							"signature": "const std::filesystem::path& GetSaveGamesPath() const",
+							"line": 311
+						},
+						{
+							"kind": "method",
+							"name": "GetScreenshotsPath",
+							"signature": "const std::filesystem::path& GetScreenshotsPath() const",
+							"line": 314
+						},
+						{
+							"kind": "method",
+							"name": "GetProjectFilePath",
+							"signature": "const std::filesystem::path& GetProjectFilePath() const",
+							"line": 317
+						},
+						{
+							"kind": "method",
+							"name": "EnsureDerivedDirectories",
+							"signature": "void EnsureDerivedDirectories() const",
+							"doc": "Create the disposable trees (Intermediate/*, Saved/*) if missing.\nIdempotent — runs on every project open.",
+							"line": 323
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "const std::string& GetName() const",
+							"line": 325
+						},
+						{
+							"kind": "method",
+							"name": "GetUUID",
+							"signature": "const UUID& GetUUID() const",
+							"line": 328
+						},
+						{
+							"kind": "method",
+							"name": "SetRootPath",
+							"signature": "void SetRootPath(const std::filesystem::path& path)",
+							"line": 332
+						},
+						{
+							"kind": "method",
+							"name": "SetProjectFilePath",
+							"signature": "void SetProjectFilePath(const std::filesystem::path& path)",
+							"line": 333
+						},
+						{
+							"kind": "method",
+							"name": "IsValid",
+							"signature": "bool IsValid() const",
+							"line": 335
+						},
+						{
+							"kind": "method",
+							"name": "ToProjectRelativePath",
+							"signature": "std::string ToProjectRelativePath(const std::string& absolutePath) const",
+							"doc": "Absolute filesystem path → project-relative, e.g. \"Content/Models/char.fbx\".\nIdempotent for a path that is already project-relative. A path that\nclimbs out of the working directory (\"../../Samples/SampleProject/Content/x\")\nis anchored against the CWD first — it is relative to the shell, not to\nthe project, and storing it verbatim made it unresolvable from anywhere\nelse.",
+							"line": 343
+						},
+						{
+							"kind": "method",
+							"name": "ToAbsolutePath",
+							"signature": "std::string ToAbsolutePath(const std::string& relativePath) const",
+							"line": 345
+						},
+						{
+							"kind": "method",
+							"name": "IsRelativePath",
+							"signature": "static bool IsRelativePath(const std::string& path)",
+							"static": true,
+							"line": 347
+						},
+						{
+							"kind": "method",
+							"name": "StartsWithParentSegment",
+							"signature": "static bool StartsWithParentSegment(const std::string& path)",
+							"static": true,
+							"doc": "True for a path whose FIRST segment is \"..\". Such a path is relative to\nthe working directory and can never be project-relative, so it is the\none relative form that still has to be anchored before use.",
+							"line": 352
+						},
+						{
+							"kind": "method",
+							"name": "SetBaseGameRoot",
+							"signature": "void SetBaseGameRoot(const std::filesystem::path& gameRoot)",
+							"doc": "A mod project sees the game's own tree beneath its own: a project-\nrelative path resolves to the mod's file when the mod has one and to\nthe game's otherwise, and an absolute path inside the game maps back to\nthe same \"Content/...\" key. The game's files are never written —\nToWritableAbsolutePath always names the mod's copy.",
+							"line": 359
+						},
+						{
+							"kind": "method",
+							"name": "GetBaseGameRoot",
+							"signature": "const std::filesystem::path& GetBaseGameRoot() const",
+							"line": 360
+						},
+						{
+							"kind": "method",
+							"name": "IsModProject",
+							"signature": "bool IsModProject() const",
+							"line": 363
+						},
+						{
+							"kind": "method",
+							"name": "GetBaseContentPath",
+							"signature": "std::filesystem::path GetBaseContentPath() const",
+							"line": 366
+						},
+						{
+							"kind": "method",
+							"name": "IsInBaseGame",
+							"signature": "bool IsInBaseGame(const std::string& absolutePath) const",
+							"line": 369
+						},
+						{
+							"kind": "method",
+							"name": "ToWritableAbsolutePath",
+							"signature": "std::string ToWritableAbsolutePath(const std::string& relativePath) const",
+							"line": 370
+						},
+						{
+							"kind": "method",
+							"name": "MarkModified",
+							"signature": "void MarkModified()",
+							"line": 372
+						},
+						{
+							"kind": "method",
+							"name": "GetCurrentTimestamp",
+							"signature": "static std::string GetCurrentTimestamp()",
+							"static": true,
+							"line": 374
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Project/Public/Project/ProjectMigration.h",
+			"include": "Project/ProjectMigration.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FProjectMigrationResult",
+					"namespace": "Mowo",
+					"line": 42,
+					"members": [
+						{
+							"kind": "field",
+							"name": "ok",
+							"signature": "bool ok = false",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "migrated",
+							"signature": "bool migrated = false",
+							"doc": "false + ok = nothing to do",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "filesRewritten",
+							"signature": "uint32_t filesRewritten = 0",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "referencesRewritten",
+							"signature": "uint32_t referencesRewritten = 0",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "error",
+							"signature": "std::string error",
+							"line": 47
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FProjectMigration",
+					"namespace": "Mowo",
+					"line": 50,
+					"members": [
+						{
+							"kind": "method",
+							"name": "NeedsMigration",
+							"signature": "static bool NeedsMigration(const std::filesystem::path& projectRoot)",
+							"static": true,
+							"doc": "True when either upgrade below has work to do.",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "NeedsLayoutMigration",
+							"signature": "static bool NeedsLayoutMigration(const std::filesystem::path& projectRoot)",
+							"static": true,
+							"doc": "True when the project root carries the old layout: an Assets/ dir\nand no Content/ dir. A root with both is treated as already\nmigrated (Content/ wins) and left alone.",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "NeedsUserStateMigration",
+							"signature": "static bool NeedsUserStateMigration(const std::filesystem::path& projectRoot)",
+							"static": true,
+							"doc": "True while the retired .mowo/ directory is still there.",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "NeedsReferenceRewrite",
+							"signature": "static bool NeedsReferenceRewrite(const std::filesystem::path& projectRoot)",
+							"static": true,
+							"doc": "True while a layout migration has moved Assets/ but not yet rewritten\nevery reference to it — the state an interrupted or failed rewrite\nleaves, which nothing else on disk records once Content/ exists.",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "Migrate",
+							"signature": "static FProjectMigrationResult Migrate(const std::filesystem::path& projectRoot)",
+							"static": true,
+							"doc": "Migrate in place. Idempotent: a no-op (ok, !migrated) on a project\nthat is already in the new layout.",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "RewriteAssetReferences",
+							"signature": "static uint32_t RewriteAssetReferences(const std::filesystem::path& file)",
+							"static": true,
+							"doc": "Rewrite \"Assets/...\" → \"Content/...\" inside one text file. Public\nfor the self-test; Migrate walks the tree and calls this. Returns the\nreferences rewritten, 0 when there were none or the file could not be\nread or replaced.",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "TryRewriteAssetReferences",
+							"signature": "static bool TryRewriteAssetReferences(const std::filesystem::path& file, uint32_t& outRewritten)",
+							"static": true,
+							"doc": "Same, telling \"nothing to rewrite\" apart from \"could not rewrite\". The\nfile is replaced through a temp file, never truncated in place.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "IsRewritableFile",
+							"signature": "static bool IsRewritableFile(const std::filesystem::path& file)",
+							"static": true,
+							"doc": "True for the text formats that can carry asset references: every text\nasset, level and sidecar type of the file-type table, canonical or\nlegacy (.mat/.mdfmat, .mmap/.mdfscene, .mdfmeta, .mdf, .mproject, ...).",
+							"line": 85
+						},
+						{
+							"kind": "method",
+							"name": "RefreshGitAttributes",
+							"signature": "static bool RefreshGitAttributes(const std::filesystem::path& projectRoot)",
+							"static": true,
+							"doc": "Brings the file-type block of <project>/.gitattributes up to date with\nthe table (FFileTypes::GitAttributesBlock). Only a file that already\ncarries the block's markers is touched — the block is the engine's, the\nrest of the file and a file without markers are the team's. True when\nthe file was rewritten. Cheap enough to run on every open.",
+							"line": 92
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Project/Public/Project/RecentProjects.h",
+			"include": "Project/RecentProjects.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "RecentProjectEntry",
+					"namespace": "Mowo",
+					"line": 11,
+					"members": [
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "std::string name",
+							"line": 12
+						},
+						{
+							"kind": "field",
+							"name": "projectFilePath",
+							"signature": "std::filesystem::path projectFilePath",
+							"line": 13
+						},
+						{
+							"kind": "field",
+							"name": "lastOpened",
+							"signature": "std::string lastOpened",
+							"doc": "ISO 8601 timestamp",
+							"line": 14
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "RecentProjects",
+					"namespace": "Mowo",
+					"doc": "Stored in the platform-specific user data directory.",
+					"line": 18,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static RecentProjects& Get()",
+							"static": true,
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "Load",
+							"signature": "bool Load()",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "Save",
+							"signature": "bool Save()",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "AddProject",
+							"signature": "void AddProject(const std::string& name, const std::filesystem::path& projectFilePath)",
+							"doc": "Moves the project to the front if it is already present.",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "RemoveProject",
+							"signature": "void RemoveProject(const std::filesystem::path& projectFilePath)",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "GetProjects",
+							"signature": "const std::vector<RecentProjectEntry>& GetProjects() const",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "GetMostRecent",
+							"signature": "const RecentProjectEntry* GetMostRecent() const",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "MAX_RECENT_PROJECTS",
+							"signature": "static constexpr size_t MAX_RECENT_PROJECTS = 10",
+							"static": true,
+							"doc": "Maximum number of recent projects to store",
+							"line": 39
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

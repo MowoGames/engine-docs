@@ -1,0 +1,131 @@
+---
+title: Commands
+sidebarTitle: Commands
+description: What each mbt command is for, grouped by task, with the common invocations. Every option is listed in the generated mbt command reference.
+order: 1
+sources:
+  - Engine/Documentation/Generated/cli.json
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/RootCommandFactory.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/GenerateCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/OpenCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/InitCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewClassCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CleanCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DoctorCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TestCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DocsCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/FormatCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/LintCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/ThirdPartyCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MigrateRulesCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DdcCommand.cs
+verifiedAt: d5bc95c12
+---
+
+`mbt` has one command per job. This page groups them by task and shows the common invocations. The [mbt command reference](/docs/reference/mbt-cli/) is generated from the tool itself and lists every command and option with its default; `mbt <command> --help` prints the same.
+
+Run every command through the wrapper at the engine root, `./mbt.cmd` on Windows or `./mbt.sh` on Linux and macOS.
+
+## Check the machine
+
+| Command | Use |
+|---|---|
+| `mbt doctor` | Checks the toolchain against `Engine/Config/Toolchains.ini`, the Windows SDK and Visual C++ libraries, DXC and the other optional tools. Exits 1 when a required one is missing. |
+| `mbt info` | Lists the modules and targets the build sees. |
+
+## Build
+
+```powershell
+./mbt.cmd build                                  # every module, Debug
+./mbt.cmd build -t MowoEditor -c Development     # one target and what it needs
+./mbt.cmd build -t MowoGame -c Shipping          # the player, Shipping code generation
+./mbt.cmd build -p linux                         # cross-compile (see Toolchains and platforms)
+./mbt.cmd build -t MowoGame -o MOWO_ENABLE_STEAM=false
+```
+
+`-t` names a target first and a module second; `-c` defaults to Debug. `-o KEY=VALUE` passes a build option to the rules (see [Modules and targets](/docs/build-tool/modules-and-targets/#build-options)). `--asan`, `--ubsan`, `--tsan` and `--analyze` build an instrumented or analyzed variant into its own folder <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs" />. `--shared-cache` shares objects across a team; see [Build tool](/docs/build-tool/).
+
+`mbt clean` removes build output; `--all` also removes the intermediate caches.
+
+For game code, `--extra-source <Project>/Source` adds a project's modules, `--frozen-engine` builds only the `-t` module against the existing engine binaries, `--hot-reload` links it to a versioned library for a running editor, and `mbt livecoding` patches changed functions into a running editor or game. The [programming section](/docs/programming/) covers that workflow.
+
+## Shaders and content
+
+| Command | Use |
+|---|---|
+| `mbt shaders` | Compiles the engine's HLSL for the host's graphics APIs into `Shaders.meaf`. `--watch` recompiles on save. See [Shaders and cook](/docs/build-tool/shaders-and-cook/). |
+| `mbt cook` | Cooks a project's `Content/` into a `.meaf` archive. See [Content pipeline](/docs/content-pipeline/). |
+| `mbt ddc info\|prune\|purge\|serve` | Inspects, trims, empties or serves a project's derived data cache. |
+| `mbt asset diff\|dump\|merge\|migrate\|primary` | Inspects and merges asset packages, migrates text assets, lists primary assets. |
+| `mbt mdf validate\|convert\|fmt\|retype-refs` | Validates, converts and formats MDF documents. |
+| `mbt localize extract\|export\|import` | Extracts localizable strings and exchanges them with translators as PO or XLIFF. |
+
+## Projects, classes and IDE files
+
+```powershell
+./mbt.cmd init MyGame -o D:/Projects/MyGame
+./mbt.cmd newclass ADoorActor --project D:/Projects/MyGame
+./mbt.cmd generate vs
+./mbt.cmd open
+```
+
+| Command | Use |
+|---|---|
+| `mbt init <name>` | Creates a project from a template, with its `Source/<Name>.Build.cs` and `.Target.cs` files. `--no-source` makes a content-only project. |
+| `mbt newclass <name>` | Adds a C++ class to a project's game module (an actor, a component, or a subclass of a reflected class), scaffolding the module the first time. |
+| `mbt new-program <name>` | Scaffolds a standalone program. See [Programs](/docs/build-tool/programs/). |
+| `mbt generate vs` | A Visual Studio solution, `.slnx` by default (`--format sln` for the older format). `--project <p>.mproject` writes a solution inside the project that builds its game modules against the prebuilt engine. |
+| `mbt generate vscode` | `compile_commands.json` and `tasks.json` for VS Code. |
+| `mbt generate xcode` | An Xcode project whose build runs `mbt`, with an LLDB run scheme. |
+| `mbt generate compile-commands` | `compile_commands.json` only, for clangd and other tools. |
+| `mbt open` | Generates the solution if needed and opens it; `--ide vs\|rider` picks the IDE. |
+| `mbt migrate-rules [paths]` | Converts legacy `.mbt.cs` module files into `.Build.cs` and `.Target.cs`. `--check` lists what it would convert without writing. |
+
+## Package and ship
+
+| Command | Use |
+|---|---|
+| `mbt package` | Builds, cooks and stages a game or dedicated server package. |
+| `mbt crypto generate\|show\|import-signing-key\|migrate` | Manages a project's content keys. |
+| `mbt patch` | Builds or applies a binary patch between two packages. |
+| `mbt symbols` | Uploads debug symbols to the crash server. |
+| `mbt steam-upload` | Uploads a package to Steamworks. |
+| `mbt package-editor` | Packages an installed editor build. |
+| `mbt package-launcher` | Packages the Mowo Games Launcher. |
+| `mbt mod new\|edit`, `mbt package-mod`, `mbt workshop-upload` | Makes, packages and publishes mods. |
+| `mbt liveops sign\|report` | Signs remote config and renders the telemetry dashboard. |
+| `mbt package-android` | Builds an Android Gradle project. Experimental; Android is not a supported product platform. |
+
+The [Packaging and shipping](/docs/shipping/) section covers each of these.
+
+## Test
+
+```powershell
+./mbt.cmd test
+./mbt.cmd test --filter gc-selftest --no-build
+./mbt.cmd test --cpu-only --tag runtime
+```
+
+`mbt test` builds the Test targets, runs every test case in a process of its own, writes JUnit results, then runs the build tool's own unit tests. It exits 2 when any case was skipped, unless you pass `--allow-skips` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TestCommand.cs" />. See [Testing](/docs/testing/).
+
+## Engine maintenance
+
+These commands are for work on the engine itself:
+
+| Command | Use |
+|---|---|
+| `mbt format [--check] [--changed]` | Formats the engine's own C and C++ with clang-format. |
+| `mbt lint [--fix] [--changed]` | Checks the copyright line, designated initializers and clang-tidy rules. |
+| `mbt lint-ui` | Checks UI code for raw color literals and off-grid spacing against a baseline. |
+| `mbt docs [--check\|--lint]` | Regenerates the reference data this site renders, or checks the guides. |
+| `mbt thirdparty [--libs …] [-p …]` | Builds third-party libraries from source into `Engine/Source/ThirdParty/<Lib>/Lib/<Platform>/`. `sbom` writes a CycloneDX SBOM; `provenance` a build record. |
+| `mbt tokens`, `mbt components` | Regenerate the UI style set and component table from the design export. |
+| `mbt perf report` | Judges recorded performance series against their thresholds. |
+
+`mbt shader-compile-worker` is started by the shader worker pool; you do not run it yourself.
+
+## Related
+
+- [mbt command reference](/docs/reference/mbt-cli/)
+- [Exit codes](/docs/build-tool/exit-codes/)

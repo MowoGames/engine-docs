@@ -1,0 +1,56 @@
+---
+title: Platforms and graphics APIs
+sidebarTitle: Platforms
+description: The operating systems and CPU architectures the engine targets, the graphics API each one uses, and what is still in development.
+order: 5
+sources:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/TargetPlatform.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/CrossToolchain.cs
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/D3D12RHI/D3D12RHI.Build.cs
+  - Engine/Source/Runtime/RHI/Private/Renderer.cpp
+  - Engine/Source/Runtime/Platform/Private/Windows/WindowsLiveCoding.cpp
+  - Engine/Source/Runtime/Platform/Private/Posix/PosixLiveCoding.cpp
+  - Engine/Source/Runtime/Core/Core.Build.cs
+  - Engine/Source/ThirdParty/SDL3/SDL3.Build.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderTargetRules.cs
+verifiedAt: 1a346c1c5
+---
+
+The engine runs on Windows and macOS today. Linux is wired through the build and the platform layer but does not link yet. Each platform has one default graphics backend; the engine ships <Fact id="rhiBackends" />.
+
+## Platforms
+
+| Platform | Architecture | Graphics backends | Status |
+| --- | --- | --- | --- |
+| Windows | x64 | Direct3D 12 (default), Vulkan, Direct3D 11 (automatic fallback) | Supported: editor, game, server |
+| macOS | arm64 (Apple silicon) | Metal | Supported; builds natively on a Mac. Minimum macOS 11.0 |
+| Linux | x64 | Vulkan | <Status /> The toolchain and platform layer exist, but no Linux third-party binaries are committed, so the engine does not link |
+| Android, iOS | arm64 | | Experimental cross-compile targets of the build tool, monolithic only; not product targets |
+
+<Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/TargetPlatform.cs" />
+
+Backends that do not exist on a platform compile as stubs that log a fatal error if selected, so one source tree builds everywhere. <Source path="Engine/Source/Runtime/D3D12RHI/D3D12RHI.Build.cs" />
+
+## Choosing a backend
+
+The engine picks a backend in this order:
+
+1. A shorthand switch: `-d3d12`, `-dx12`, `-d3d11`, `-dx11`, `-vulkan`, `-metal`.
+2. `--rhi=<name>`.
+3. The saved `rendering.graphics_api` setting: the user's global config first, then the project's `Config/Engine.ini` (with `DefaultEngine.ini` over it). A saved backend this platform cannot run is ignored with a warning.
+4. The platform default.
+
+A switch naming a backend that is not compiled into the build logs a warning and keeps the current one. If the chosen backend cannot start, the engine falls back to the next one available on the platform; on Windows, D3D11 exists for a machine whose D3D12 device will not come up. The log then says `Requested backend X unavailable — running on Y instead`; if nothing starts, the engine stops with a fatal error. <Source path="Engine/Source/Runtime/RHI/Private/Renderer.cpp" />
+
+What each backend supports (ray tracing, mesh shaders, upscalers, frame generation) is covered in [Rendering](/docs/rendering/).
+
+## Features that depend on the platform
+
+| Feature | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| [Live coding](/docs/programming/live-coding/) | Yes | No | No |
+| Tracy profiler client | Yes | Yes | No |
+| Shader formats compiled | DXIL, DXBC, SPIR-V | MSL, SPIR-V | SPIR-V |
+
+Cross-compiling, toolchains and per-platform packaging are covered in [Build tool](/docs/build-tool/) and [Shipping](/docs/shipping/).

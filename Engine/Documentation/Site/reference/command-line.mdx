@@ -1,0 +1,143 @@
+---
+title: Command-line switches
+description: The command-line switches the editor, the game and the dedicated server read, and which ones a Shipping game keeps.
+order: 3
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/FCommandLine.h
+  - Engine/Source/Runtime/Core/Private/FCommandLine.cpp
+  - Engine/Source/Runtime/Core/Private/IConsoleManager.cpp
+  - Engine/Source/Runtime/Core/Private/FTime.cpp
+  - Engine/Source/Runtime/Core/Private/FRandomStream.cpp
+  - Engine/Source/Runtime/Core/Private/FCrashHandler.cpp
+  - Engine/Source/Runtime/Logging/Private/Logger.cpp
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Runtime/MowoGame/Private/MowoGame.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
+  - Engine/Source/Runtime/MowoServer/Private/MowoServer.cpp
+  - Engine/Source/Runtime/RHI/Private/PipelineBindingValidation.cpp
+  - Engine/Source/Runtime/D3D12RHI/Private/D3D12RHI/D3D12Dred.cpp
+  - Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferences.cpp
+verifiedAt: f5ba7fec2
+---
+
+Every host parses its command line into `FCommandLine`, and engine code reads switches from there. A switch may start with one dash or two, and a value follows either `=` or a space: `--project=MyGame.mproject`, `-project MyGame.mproject`. When a switch appears twice, the last one wins. <Source symbol="FCommandLine" />
+
+## What a Shipping game keeps
+
+A Shipping game's command line is whatever a shortcut or a store's launch options put there, so the player drops every switch that is not player-facing before anything reads it, and logs what it dropped. What survives: <Source path="Engine/Source/Runtime/Core/Private/FCommandLine.cpp" />
+
+| Switches | Purpose |
+| --- | --- |
+| `-d3d12`, `-dx12`, `-d3d11`, `-dx11`, `-vulkan`, `-metal` | Force a graphics backend |
+| `-fullscreen`, `-windowed`, `-borderless`, `-width=`, `-height=`, `-resx=`, `-resy=` | Window mode and size |
+| `-vsync`, `-novsync`, `-no-vsync`, `-hdr`, `-nohdr` | Presentation |
+| `-no-splash` | Skip the start-up splash |
+| `-nosound`, `-audiodevice=<name>` | Mute, or pick the output device for this run |
+| `-lang=<tag>`, `-culture=<tag>` | Language for this run |
+| `-connect=`, `-port=`, `-player-name=`, `-join-steam=`, `-players=`, `-load-slot=` | Multiplayer and save slot |
+| `-no-crash-reporter`, `-silent` | Suppress the crash reporter's window |
+| `-log`, `-loglevel=<level>` | Turn on the log file; lower its threshold |
+
+A game module can widen the list for its own switches with `FCommandLine::RestrictToPlayerArguments`. Development, Debug and Test builds keep the whole command line.
+
+## Every host
+
+| Switch | Effect |
+| --- | --- |
+| `--project=<file>.mproject` | The project to open |
+| `--rhi=<d3d12\|vulkan\|d3d11\|metal>` | The graphics backend; the shorthands above win over it. See [Rendering](/docs/rendering/) |
+| `--cvar=<name>=<value>` | Set a console variable; wins over every config file. Repeat for several |
+| `--no-user-config` | Ignore the per-user config and editor preferences, for reproducible runs |
+| `--seed=<n>` | Pin the gameplay random seed; every run logs the seed it used |
+| `--fixed-dt=<seconds>`, `--fps=<n>` | Run at a fixed timestep |
+| `--max-delta=<seconds>` | The cap on a single frame's delta time |
+| `--log`, `--loglevel=<level>` | Logging; see [Logging](/docs/programming/logging/) |
+| `--no-crash-reporter`, `--silent` | Do not show the crash reporter window |
+| `--no-migrate` | Refuse to open a project that needs migrating instead of migrating it |
+| `--loom-dap[=<port>]` | Start the Visual Scripting debug adapter for an external IDE |
+| `--trace=<file>.mtrace` | Record a whole-run trace; see [Profiling](/docs/programming/profiling/) |
+| `--csvprofile=<file>` | Write a per-frame, per-zone CSV |
+| `--metrics=<file>` | Write a run record (frame-time distribution, build, backend, seed) at shutdown |
+| `--gpu-validation`, `--sync-validation` | Turn on the graphics API's validation layer |
+| `--gpu-crash-debugging` | On D3D12, record GPU breadcrumbs for device-lost reports |
+| `--no-async-io` | Read files synchronously instead of with the platform's asynchronous I/O |
+
+<Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" />
+
+## Game
+
+`MowoGame` and a project's game executable (`MyGame.exe`):
+
+| Switch | Effect |
+| --- | --- |
+| `--scene=<Content path>` | Open this level instead of the project's start scene |
+| `--connect=<host>[:<port>][#<key>]` | Join a session; the port defaults to 7777 |
+| `--join-key=<key>` | The key a remote host requires, when not given in `--connect` |
+| `--host-session` | Host a session |
+| `--join-steam=<steam id>` | Join a Steam host |
+| `--player-name=<name>` | The local player's name |
+| `--players=<n>` | Local split-screen players |
+| `--load-slot=<n>` | Restore a save slot's world state on start |
+| `--upscaler=<none\|taa\|spatial\|fsr\|dlss\|tsr>` | The upscaler |
+| `--upscaler-quality=<native\|quality\|balanced\|performance\|ultra>` | The upscaler's quality mode |
+| `--render-scale=<factor>` | Internal resolution scale |
+| `--no-render-thread`, `-onethread`, `--no-rhi-thread`, `--no-overlap` | Threading of the frame; see [The engine loop](/docs/programming/engine-loop/#render-and-rhi-threads) |
+| `--no-throttle` | Do not cap the frame rate when the window loses focus |
+| `--record-open-order[=<file>]` | Record the order content is first read, for the archive layout |
+
+<Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />
+
+### Offline tools
+
+The game executable also runs these tasks and exits. Packaging and the editor use them; they are available in Shipping because packaging runs the Shipping binary.
+
+| Switch | Task |
+| --- | --- |
+| `--migrate-project=<file>.mproject` | Migrate an old project layout |
+| `--migrate-assets=<file>.mproject [--source-art] [--dry-run]` | Migrate assets to the current package format |
+| `--retype-asset-refs=<dir or file>[;…] [--dry-run]` | Rewrite plain-string asset paths as typed references |
+| `--validate-assets=<file>.mproject [--strict-validate]` | Validate assets; exits non-zero on errors (or warnings with `--strict-validate`) |
+| `--convert-scene=<file>.mmap` | Convert a level file on disk |
+| `--primary-assets=<file>.mproject [--write-chunks] [--cook-rules-out=<file>]` | Resolve primary assets and chunk assignments |
+| `--cook-packages=<dir> [--astc] [--audio-codec=…] [--cook-platform=…]` | Cook asset packages |
+| `--gather-pso --project=<file>.mproject` | Gather the pipeline-state cache before staging |
+
+<Source path="Engine/Source/Runtime/MowoGame/Private/MowoGame.cpp" />
+
+## Dedicated server
+
+`MowoServer`:
+
+| Switch | Default | Effect |
+| --- | --- | --- |
+| `--project=<file>.mproject` | | The project |
+| `--map=<Content path>` | | The level to serve |
+| `--port=<n>` | 7777 | The port to listen on |
+| `--tickrate=<hz>` | 60 | Server ticks per second |
+| `--maxclients=<n>` | 4 | Player limit |
+| `--gamemode=<class>` | | Override the game mode class |
+| `--travel-after=<seconds>`, `--travel-to=<Content path>` | | Travel to another level after a delay |
+| `--appid=<steam app id>` | 0 | Require Steam session tickets for this app |
+| `--ticket-key=<hex>`, `--ticket-key-file=<file>` | | The key that verifies encrypted Steam tickets |
+
+<Source path="Engine/Source/Runtime/MowoServer/Private/MowoServer.cpp" /> See [Multiplayer](/docs/multiplayer/).
+
+## Editor
+
+`MowoEditor`:
+
+| Switch | Effect |
+| --- | --- |
+| `--project <file>.mproject` | The project to open |
+| `--scene=<Content path>` | Open this level instead of the last one |
+| `--no-splash` | Skip the splash |
+| `--window-size=<w>x<h>` | The main window's size |
+| `--theme=<name>` | The editor theme for this run, without changing the preference |
+| `--mcp-stdio`, `--mcp-port=<n>`, `--mcp-access=<read\|edit\|full>` | Start the editor's MCP server for an AI assistant |
+| `--multiuser-host[=<port>]`, `--multiuser-join=<host>:<port>`, `--multiuser-name=`, `--multiuser-secret=`, `--multiuser-lan` | Host or join a multi-user editing session |
+| `--no-render-thread`, `-onethread`, `--no-rhi-thread`, `--no-overlap` | Threading of the frame |
+
+<Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp" /> See [Editor](/docs/editor/).

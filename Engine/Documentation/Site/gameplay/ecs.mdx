@@ -1,0 +1,261 @@
+---
+title: Entity-component system
+sidebarTitle: ECS
+description: Entities, archetype storage, queries and systems in Mowo's ECS, and how to add your own system from a game module.
+order: 5
+sources:
+  - Engine/Source/Runtime/ECS/Public/ECS/World.h
+  - Engine/Source/Runtime/ECS/Public/ECS/Entity.h
+  - Engine/Source/Runtime/ECS/Public/ECS/Types.h
+  - Engine/Source/Runtime/ECS/Public/ECS/System.h
+  - Engine/Source/Runtime/ECS/Public/ECS/Query.h
+  - Engine/Source/Runtime/ECS/Public/ECS/Component.h
+  - Engine/Source/Runtime/ECS/Public/ECS/SceneSystemRegistry.h
+  - Engine/Source/Runtime/Game/Private/Scene.cpp
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+  - Engine/Source/Runtime/Components/Public/Components/TransformComponent.h
+  - Engine/Plugins/SmartProps/Private/SmartPropsPlugin.cpp
+  - Engine/Source/Runtime/ECS/Public/ECS/EntityCommandBuffer.h
+verifiedAt: 08e26df3d
+---
+
+Underneath actors, Mowo stores scene data in an entity-component system. An entity is an ID, a component is a plain struct, and a system is a class whose `Update` walks every entity with a given set of components. The renderer, physics, animation and most engine subsystems work at this level. You drop down to it when you have data on many entities that you want to process in a tight loop.
+
+## The pieces
+
+| Piece | What it is |
+| --- | --- |
+| `World` | Owns every entity, component and system of one scene <Source symbol="World" /> |
+| `EntityID` | A 64-bit random ID that survives save and load; 0 is invalid <Source path="Engine/Source/Runtime/ECS/Public/ECS/Types.h" /> |
+| `Entity` | A lightweight handle (ID plus world) with convenience methods <Source symbol="Entity" /> |
+| Component | Any struct with `MOWO_COMPONENT(Type)`, which gives it a stable ID |
+| `System` | A class with `Update(float)`, a phase and optional access masks |
+| `Query<Ts...>` | A cached, reusable iteration over entities that have all of `Ts` |
+
+An actor's ECS world is reachable through `MWorld::GetECSWorld()`, and `MWorld::FindActorByEntity` goes the other way. <Source symbol="MWorld" />
+
+## Archetype storage
+
+Entities with exactly the same set of components share an **archetype**. Inside an archetype each component type is stored in its own contiguous array, so iterating one component type walks packed memory. Adding or removing a component moves the entity to a different archetype.
+
+<Flow steps={["Entity gains a component", "New signature", "Find or create archetype", "Move component rows", "Old row swap-removed"]} highlight={3} caption="A structural change moves the entity's data between archetypes. That is why structural changes are forbidden during iteration." />
+
+Component IDs are handed out by a registry in the ECS module, so a component type has one ID across every DLL. The ID space holds 512 component types (`MAX_COMPONENTS`). <Source path="Engine/Source/Runtime/ECS/Public/ECS/Types.h" />
+
+Iteration order is defined: archetypes in creation order, then rows in order. Entity IDs themselves are random, so never let the order of a hash map keyed by `EntityID` decide behavior.
+
+## Working with entities
+
+| Task | API |
+| --- | --- |
+| Create or destroy | `CreateEntity()`, `DestroyEntity(id)`, `IsEntityValid(id)` |
+| Components | `AddComponent<T>(id, args...)`, `RemoveComponent<T>(id)`, `GetComponent<T>(id)`, `HasComponent<T>(id)` |
+| Several at once | `GetComponents(id, a, b, ...)` with one lookup |
+| Iterate | `ForEach<T>(fn)`, `ForEachWith<Ts...>(fn)`, `ForEachEntity(fn)`, `MakeQuery<Ts...>()` |
+| Systems | `AddSystem<T>()`, `GetSystem<T>()`, `RemoveSystem<T>()` |
+| Deferred changes | `SubmitDeferred(fn)` |
+
+`AddComponent` on an entity that already has the component returns the existing instance instead of adding a second one.
+
+<Callout type="danger">
+Never add or remove components, or create or destroy entities, inside a `ForEach` or `ForEachWith` callback. The world checks this and aborts, because the change would move the very row the loop is reading. Queue the change with `SubmitDeferred` instead; queued work runs at the end of `World::Update`, after every system. <Source symbol="World" />
+</Callout>
+
+### Command buffers
+
+For many structural changes at once, record them into an `FEntityCommandBuffer` instead of submitting one callable each. Consecutive records of the same kind and component type collapse into one typed batch, and playback applies them in recording order with the same rules as `World::AddComponent` and `RemoveComponent`. <Source symbol="FEntityCommandBuffer" />
+
+```cpp title="Ignite.cpp"
+#include "ECS/Component.h"
+#include "ECS/EntityCommandBuffer.h"
+#include "ECS/World.h"
+
+struct BurningComponent {
+	MOWO_COMPONENT(BurningComponent)
+
+	float secondsLeft = 3.0f;
+};
+
+static void Ignite(Mowo::World& world, Mowo::EntityID target, Mowo::EntityID dead) {
+	Mowo::FEntityCommandBuffer cmd;
+	cmd.AddComponent<BurningComponent>(target);
+	cmd.DestroyEntity(dead);
+	cmd.SubmitTo(world);
+}
+```
+
+`SubmitTo` queues the buffer to play back with the world's other deferred work at the end of `World::Update`. `Playback(world)` applies it immediately; call it only on the main thread and outside any `ForEach`. Use one buffer per recording thread.
+
+## Write a system
+
+This system spins every entity that has both a `TransformComponent` and a small runtime component.
+
+```cpp title="SpinSystem.cpp"
+#include "Core/Platform.h"
+#include "ECS/Component.h"
+#include "Components/TransformComponent.h"
+#include "ECS/Entity.h"
+#include "ECS/System.h"
+#include "ECS/World.h"
+
+namespace Mowo {
+
+struct SpinComponent {
+	MOWO_COMPONENT(SpinComponent)
+
+	float radiansPerSecond = 1.0f;
+};
+
+class SpinSystem : public System {
+public:
+	SystemPhase GetPhase() const override {
+		return SystemPhase::PrePhysics;
+	}
+
+	bool DeclaresComponentAccess() const override {
+		return true;
+	}
+
+	ComponentMask GetReadMask() const override {
+		return MakeComponentMask<SpinComponent>();
+	}
+
+	ComponentMask GetWriteMask() const override {
+		return MakeComponentMask<TransformComponent>();
+	}
+
+	const char* GetDebugName() const override {
+		return "SpinSystem";
+	}
+
+	void Update(float deltaTime) override {
+		m_world->ForEachWith<TransformComponent, SpinComponent>([deltaTime](Entity entity, TransformComponent& transform, SpinComponent& spin) {
+			transform.rotation.y += spin.radiansPerSecond * deltaTime;
+		});
+	}
+};
+
+}
+```
+
+Notes:
+
+- Write transform fields directly. `TransformComponent` has no dirty flag; the transform system detects changes by comparing against the last values it saw. Rotation is in radians. <Source symbol="TransformComponent" />
+- `GetDebugName` names the profiler scope the world wraps around your `Update`. It must return a string that outlives the frame, so return a literal. <Source symbol="System" />
+- A plain struct is enough for runtime-only data. Reflect the component, as shown on the [Components](/docs/gameplay/components/) page, when you want it saved with the scene and editable in the Details panel.
+
+### Phases
+
+`World::Update` runs systems phase by phase, in registration order within a phase. <Source symbol="System" />
+
+| Phase | Use for |
+| --- | --- |
+| `PrePhysics` (default) | Input, transforms, gameplay that feeds physics |
+| `Physics` | The physics step |
+| `PostPhysics` | Logic that reads settled poses |
+| `PostUpdate` | Cameras, audio listeners, anything last |
+
+### Parallel batches
+
+A system that declares its read and write masks can run at the same time as other declared systems it does not conflict with. Two systems conflict when either one declares nothing, when both write the same component, or when one writes what the other reads. Undeclared systems always run serially in registration order, so declaring access is purely opt-in. <Source symbol="System" />
+
+<Callout type="warning">
+Declare access only when `Update` does no structural work inline and touches no shared state outside the ECS. The masks cannot see physics-world writes, debug drawing or another system's members.
+</Callout>
+
+## Queries
+
+A `Query` caches the archetypes that match its component list and only rebuilds when a new archetype appears, so it is cheap to keep across frames. Its callback receives the `EntityID` followed by one reference per component. <Source symbol="Query" />
+
+```cpp title="CountSpinners.cpp" wrap
+#include "Core/Platform.h"
+#include "Components/TransformComponent.h"
+#include "ECS/Query.h"
+#include "ECS/World.h"
+
+Mowo::World* world = nullptr;
+auto query = world->MakeQuery<Mowo::TransformComponent>();
+size_t moving = 0;
+
+query.Each([&moving](Mowo::EntityID id, Mowo::TransformComponent& transform) {
+	if (transform.mobility == Mowo::EMobility::Movable) {
+		moving++;
+	}
+});
+```
+
+## Register a system with the scene
+
+Scenes create and tick their systems from a registration table. In play mode everything ticks through `World::Update`; the editor and simulate mode tick systems in an explicit order instead. <Source path="Engine/Source/Runtime/Game/Private/Scene.cpp" /> Modules add rows to that table through `FSceneSystemRegistry`, the same way the engine's plugins do. <Source path="Engine/Plugins/SmartProps/Private/SmartPropsPlugin.cpp" />
+
+<Steps>
+<Step title="Write ensure, update and remove hooks">
+Plain functions that add, tick and remove your system on a `World`. They must be plain function pointers, because the descriptor crosses a DLL boundary.
+</Step>
+<Step title="Fill an FModularSceneSystem">
+Give it a unique `Name` and choose where it exists: `Base` (edit mode), `Simulation` and `Runtime`. `EditorTick` and `SimulationTick` are explicit tick positions, or -1 to skip. <Source path="Engine/Source/Runtime/ECS/Public/ECS/SceneSystemRegistry.h" />
+</Step>
+<Step title="Register it when the module loads">
+Call `FSceneSystemRegistry::Get().RegisterSceneSystem(...)` from your module's startup code.
+</Step>
+</Steps>
+
+```cpp title="RegisterSpin.cpp"
+#include "Core/Platform.h"
+#include "ECS/SceneSystemRegistry.h"
+#include "ECS/System.h"
+#include "ECS/World.h"
+
+namespace Mowo {
+
+class SpinSystem : public System {
+public:
+	void Update(float deltaTime) override {
+	}
+};
+
+static void EnsureSpinSystem(World& world) {
+	if (!world.GetSystem<SpinSystem>()) {
+		world.AddSystem<SpinSystem>();
+	}
+}
+
+static void UpdateSpinSystem(World& world, float deltaTime) {
+	if (SpinSystem* system = world.GetSystem<SpinSystem>()) {
+		system->Update(deltaTime);
+	}
+}
+
+static void RemoveSpinSystem(World& world) {
+	if (world.GetSystem<SpinSystem>()) {
+		world.RemoveSystem<SpinSystem>();
+	}
+}
+
+void RegisterSpinSystem() {
+	FModularSceneSystem system;
+	system.Name = "SpinSystem";
+	system.Runtime = true;
+	system.Ensure = &EnsureSpinSystem;
+	system.Update = &UpdateSpinSystem;
+	system.Remove = &RemoveSpinSystem;
+
+	FSceneSystemRegistry::Get().RegisterSceneSystem(system);
+}
+
+}
+```
+
+When a module unloads, the registry drops every system whose hooks live in that module, so hot reload does not leave calls into freed code. <Source path="Engine/Source/Runtime/ECS/Public/ECS/SceneSystemRegistry.h" />
+
+## When to use ECS instead of actors
+
+- **Use actors** for objects with identity and behavior: a door, a player, a pickup.
+- **Use ECS** when many entities share simple data and one loop can process them all: projectiles, ambient props, crowd agents.
+- Mixing is normal. An actor's backing entity can carry extra ECS components that your systems process.
+
+## Related
+
+- [Components](/docs/gameplay/components/)
+- [Actors and the world](/docs/gameplay/actors-and-world/)
+- API: [`World`](/docs/api/ecs/), [`Entity`](/docs/api/ecs/), [`System`](/docs/api/ecs/), [`SystemPhase`](/docs/api/ecs/), [`Query`](/docs/api/ecs/), [`Archetype`](/docs/api/ecs/), [`FModularSceneSystem`](/docs/api/ecs/), [`FSceneSystemRegistry`](/docs/api/ecs/), [`TransformComponent`](/docs/api/components/)

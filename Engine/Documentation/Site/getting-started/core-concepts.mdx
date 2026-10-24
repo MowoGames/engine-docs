@@ -1,0 +1,122 @@
+---
+title: Core concepts
+description: "The mental model behind Mowo: modules and targets, the object model, reflection, actors over an ECS, data files, Visual Scripting and Arc UI."
+order: 8
+sources:
+  - Engine/Source/MowoEditor.Target.cs
+  - Engine/Source/MowoGame.Target.cs
+  - Engine/Source/MowoServer.Target.cs
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Core/Public/Core/TObjectPtr.h
+  - Engine/Source/Runtime/Core/Public/Core/FMObjectArray.h
+  - Engine/Source/Runtime/Core/Public/Core/FileTypes.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h
+  - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+  - Engine/Source/Runtime/ECS/Public/ECS/World.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomGraph.h
+  - Templates/TP_FirstPerson/Source/TP_FirstPerson/Public/TP_FirstPerson/AFirstPersonPlayer.h
+  - Templates/TP_FirstPerson/Config/Plugins.ini
+verifiedAt: 1a346c1c5
+---
+
+Mowo borrows its shape from Unreal Engine 5, so most UE knowledge carries over. This page gives you the handful of ideas the rest of the documentation builds on. Each section is short and points to where the topic goes deeper.
+
+## Modules and targets
+
+The engine is a set of **modules**, each a folder under `Engine/Source/<Group>/<Module>/` with a `<Module>.Build.cs` file that tells `mbt` how to compile it. The group folder says where a module may go: `Runtime` modules can ship, `Editor` modules never reach a game, and `Developer` modules (the tests among them) never reach a Shipping build. Most runtime modules are shared libraries with their own export macro, and a lower module never includes a higher module's headers. The engine has <Fact id="modules.length" /> modules.
+
+A **target** (`<Name>.Target.cs`) is a program you can launch: the editor `MowoEditor`, the player `MowoGame`, the dedicated server `MowoServer`, the Project Launcher and the test executables. Each host is a subclass of the engine class that overrides the per-frame tick and draw.
+
+Your game is one more module: a shared library in your project's `Source/` folder, plus a target named after your project. Optional features games opt into, such as Steam or the Combat kit, are **plugins** under `Engine/Plugins/`, enabled per project in `Config/Plugins.ini`. The engine ships <Fact id="plugins.length" /> plugins.
+
+Read more in [Build tool](/docs/build-tool/) and [Programming](/docs/programming/).
+
+## MObject and garbage collection
+
+`MObject` <Source symbol="MObject" /> is the root of the managed object model, Mowo's `UObject`. An object has a name, an outer (its owner) and an `MClass` <Source symbol="MClass" /> descriptor, and it registers in a process-wide object array when it is created. A mark-and-sweep collector starts from a set of roots and keeps every object reachable through the outer chain and through reflected `MPROPERTY` pointers. Everything else is reclaimed. The collector can run incrementally, spread across frames <Source path="Engine/Source/Runtime/Core/Public/Core/FMObjectArray.h" />.
+
+Hold object references with the smart pointers in `Core/TObjectPtr.h`: `TObjectPtr<T>` <Source symbol="TObjectPtr" /> for reflected properties, `TWeakObjectPtr<T>` <Source symbol="TWeakObjectPtr" /> for references that must not keep the target alive.
+
+<Callout type="warning">
+Never store a raw `T*` to an `MObject` in an `MPROPERTY`. The incremental collector sees stores through `TObjectPtr`'s write barrier; a raw pointer written while it is marking can hide a live object from it <Source path="Engine/Source/Runtime/Core/Public/Core/TObjectPtr.h" />.
+</Callout>
+
+## Reflection
+
+A few macros in your headers drive serialization, the Details panel, garbage collection and Visual Scripting at once. During the build, the header tool reads annotated headers and writes the class descriptors and GC trace functions into your module <Source path="Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h" />. This is a player class from the First Person template:
+
+```cpp title="Public/TP_FirstPerson/AFirstPersonPlayer.h" nocompile
+#pragma once
+
+#include "Game/AFirstPersonCharacter.h"
+
+#include "AFirstPersonPlayer.generated.h"
+
+namespace Mowo {
+
+MCLASS()
+class AFirstPersonPlayer : public AFirstPersonCharacter {
+public:
+	MGENERATED_BODY()
+
+	AFirstPersonPlayer() = default;
+
+	void Tick(float deltaSeconds) override;
+
+	MPROPERTY(EditAnywhere)
+	MCATEGORY("Locomotion")
+	float standEyeHeight = 1.65f;
+
+	MPROPERTY(EditAnywhere)
+	MCATEGORY("Locomotion")
+	float crouchEyeHeight = 1.0f;
+};
+
+} // namespace Mowo
+```
+
+Add a field like `crouchEyeHeight` and it is saved with the level and editable in the Details panel, with no editor code. The last include, `AFirstPersonPlayer.generated.h`, is written by the header tool during the build.
+
+## Actors over an ECS
+
+Gameplay code works with **actors** and **components**. `AActor` <Source symbol="AActor" /> is a placeable object that owns a tree of components; `MWorld` <Source symbol="MWorld" /> holds and ticks the actors. The lifecycle follows UE: `OnConstruct`, `BeginPlay`, `Tick` and `EndPlay`. Components are created in the constructor with `CreateDefaultSubobject<T>()`.
+
+Underneath, every actor has a backing entity in a data-oriented **entity-component system**, and its components mirror onto ECS components. Engine systems such as rendering and the transform update iterate those components in bulk through the ECS `World` <Source symbol="World" />.
+
+<Flow steps={["Main.mmap", "Load", "Actors + components", "ECS entities", "Systems (render, physics)"]} highlight={2} caption="Loading a level: the file becomes actors; actors mirror onto ECS entities that the engine's systems iterate." />
+
+The rule of thumb: write gameplay against `AActor` and components, and let the engine's performance-critical systems work on the ECS. You rarely touch the ECS directly.
+
+Read more in [Gameplay](/docs/gameplay/).
+
+## Data files and config
+
+Game data is stored in **MDF**, the Mowo Data Format, with one API over two encodings: text you can read and diff, and a compact binary form the cooker writes for shipping. Every asset type has its own extension, listed in one table, `FFileTypes` <Source symbol="FFileTypes" />: levels are `.mmap`, materials `.mat`, prefabs `.prefab`, Visual Scripting graphs `.loom`, UI screens `.ui`, and binary bulk data such as meshes and textures has its own extensions too.
+
+Settings are INI files in the Unreal dialect (`Config/Engine.ini`, `Config/Input.ini`), and the project manifest `.mproject` is JSON. See [Reference](/docs/reference/) for every file type and [Content pipeline](/docs/content-pipeline/) for importing and cooking.
+
+## Visual Scripting
+
+**Visual Scripting** is Mowo's Blueprint: node graphs saved as `.loom` files, in the `MowoEngine.Loom` module <Source path="Engine/Source/Runtime/Loom/Public/Loom/LoomGraph.h" />. Graphs can be classes that subclass actors, with functions, macros and event dispatchers, hot reload and a debugger. Every `MFUNCTION` in C++ appears as a node without registration. The First Person template's sliding door is a Visual Scripting class with no C++ behind it.
+
+Read more in [Visual Scripting](/docs/visual-scripting/).
+
+## Arc, the UI framework
+
+**Arc** is a retained-mode UI framework in the spirit of Slate, and the only UI framework in the engine: the editor, the launcher and game UI all use it. **ArcUI** is the game-UI layer on top, the way UMG sits on Slate, with `.ui` screens, themes, bindings and world-space widgets.
+
+Read more in [UI](/docs/ui/).
+
+## How it fits together
+
+When you press Play, the editor copies the level and runs the copy. The level's actors are `MObject`s described by reflection; the collector traces them through their `MPROPERTY` fields; their components mirror onto ECS entities that rendering and physics iterate; and every one of those systems lives in its own module, built by `mbt`.
+
+## Where to go next
+
+<CardGrid>
+<Card title="Programming" href="/docs/programming/" icon="Braces">Game modules, reflection, objects and GC.</Card>
+<Card title="Gameplay" href="/docs/gameplay/" icon="Gamepad2">Gameplay systems built on actors and components.</Card>
+<Card title="Rendering" href="/docs/rendering/" icon="Sun">The renderer and its backends.</Card>
+<Card title="UI" href="/docs/ui/" icon="PanelsTopLeft">Arc and ArcUI in depth.</Card>
+</CardGrid>

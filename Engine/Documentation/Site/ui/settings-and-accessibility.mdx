@@ -1,0 +1,177 @@
+---
+title: Settings and accessibility
+sidebarTitle: Settings and accessibility
+description: The player settings and rebinding screens that ship with ArcUI, the model behind them, and every Accessibility option with its console variable.
+order: 5
+sources:
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Settings/FGameUserSettings.h
+  - Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUISettingsScreen.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUIRebindScreen.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Settings/FArcRebindModel.h
+  - Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp
+  - Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp
+  - Engine/Source/Runtime/Camera/Private/CameraSystem.cpp
+  - Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp
+  - Engine/Source/Runtime/Input/Private/InputManager.cpp
+  - Engine/Source/Runtime/Input/Private/InputActionSystem.cpp
+  - Engine/Source/Runtime/Narrative/Private/SubtitleSystem.cpp
+  - Engine/Source/Runtime/Arc/Public/Arc/Accessibility/CArcAccessibility.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Statics/MRebindStatics.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUILobbyScreen.h
+  - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+  - Engine/Source/Runtime/Arc/Private/Animation/CArcAnimationManager.cpp
+  - Engine/Source/Runtime/Arc/Private/Mowo/CArcMowoTheme.cpp
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+verifiedAt: 1a346c1c5
+---
+
+ArcUI ships a complete player settings screen and a key-rebinding screen. You do not build these from scratch: drop them into a `.ui` or create them in C++, and they read and write the same console variables the editor's Project Settings pages use. This page explains how the screens work and lists every Accessibility option.
+
+<Screenshot id="ui-settings-accessibility" alt="A running game with the SettingsScreen open on the Accessibility category: the category rail on the left with Accessibility highlighted, rows for Colour Vision (set to Deuteranopia), Colour Vision Strength, Gamma, Field Of View, Camera Shake, Controller Vibration, Hold To Toggle, High Contrast UI and Reduced Motion, and the Apply / Revert / Reset buttons along the bottom" caption="The shipped settings screen, Accessibility category." />
+
+## How the settings system is built
+
+<Flow steps={["FGameUserSettings (model)", "AArcUISettingsScreen (view)", "Apply", "Cvars / GlobalConfig / Host", "GameUserSettings.ini"]} highlight={0} caption="The model holds all behavior. The screen is layout over it." />
+
+- **`FGameUserSettings`** is the model, the counterpart of Unreal's GameUserSettings. It owns every row, pending edits, Apply/Revert/Reset, the display confirmation countdown and the save file <Source symbol="FGameUserSettings" />. A game with its own UI can use the model alone.
+- **`AArcUISettingsScreen`** is the screen: a category rail, the rows of the selected category, and Apply / Revert / Reset. Rows the device cannot use are greyed with the reason shown, not hidden <Source symbol="AArcUISettingsScreen" />.
+
+Each row has a backend <Source symbol="FGameUserSettings" />:
+
+| Backend | Used for |
+| --- | --- |
+| `Cvar` | Most rows. Written through the console manager. |
+| `GlobalConfig` | The five audio bus volumes (`audio.master_volume`, `audio.music_volume`, `audio.sfx_volume`, `audio.voice_volume`, `audio.ambient_volume`), which the audio engine reads from config. |
+| `Host` | Window mode, monitor, resolution and refresh rate. The runtime host applies these through `SetHostApplier`. |
+
+## Add the screens to your game
+
+<Steps>
+<Step title="Place the screen in a .ui">
+Add a node with `class: "SettingsScreen"`. It fires `closed` when the player closes it and `rebind` when they ask for key bindings. A `RebindScreen` node fires `closed` <Source path="Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp" />.
+</Step>
+<Step title="Wire the events">
+Handle `closed` and `rebind` like any other ArcUI event: a `PlayAnim:` verb, a `Loom:Class.Event` action, or a C++ action handler. See [ArcUI screens](/docs/ui/arcui-screens/#events).
+</Step>
+<Step title="Push it">
+Push the asset as a modal screen so gameplay stops receiving input while it is open.
+</Step>
+</Steps>
+
+In C++, build them with `ArcNew(Arcf::AArcUISettingsScreen)` and `ArcNew(Arcf::AArcUIRebindScreen)`.
+
+The packaged runtime prepares the model at startup: it builds the rows against the probed device, loads the save file, and pushes the stored values to their backends <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />. You can also drive the model directly:
+
+```cpp title="QuickAccessibility.cpp" wrap
+#include <ArcUI/Settings/FGameUserSettings.h>
+
+Mowo::FGameUserSettings& settings = Mowo::FGameUserSettings::Get();
+
+if (!settings.IsBuilt()) {
+	settings.BuildModel(Mowo::FArcDeviceProfile::Probe());
+	settings.Load();
+}
+
+settings.SetPending("cam.ShakeScale", "0");
+settings.SetPending("r.ColorBlind.Mode", "2");
+settings.Apply();
+```
+
+`SetPending` is refused for a row the device cannot drive <Source symbol="FGameUserSettings" />. `Apply` pushes every staged value and writes the file. It returns `false` only when the file could not be written; the values are live either way.
+
+## Apply, revert and confirmation
+
+- Edits stage as pending values. `Apply()` commits them, `Revert()` drops them, and `ResetToDefaults()` stages the shipped defaults for one category or all.
+- The four display rows (Window Mode, Monitor, Resolution, Refresh Rate) need confirmation. After Apply, a countdown runs; if the player does not confirm, the previous values come back. The default window is 15 seconds <Source symbol="FGameUserSettings" />. The screen stack advances the countdown every tick <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
+- Rows marked `NeedsRestart`, such as UI Scale Override and Global Illumination, take effect on the next launch.
+- If a cvar row has no registered variable (for example, a disabled plugin owns it), Apply logs a warning naming the row <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />.
+
+### Device gating
+
+`FArcDeviceProfile::Probe()` reads what the graphics API and GPU support. A control the API can never do is greyed with the backend's name; one the GPU lacks is greyed with "unavailable on this RHI/GPU" <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />. A saved value for a greyed row is dropped on load, because the save file can outlive the GPU it was written on.
+
+### Where settings are saved
+
+`<project>/Saved/Config/GameUserSettings.ini`, or the per-user folder when no project is open. An older `GameUserSettings.mdf` is converted on first read <Source path="Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h" /> <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />. Never the project's committed `Config/` folder. A value at its default is not written, so a later engine that changes a default carries the player along.
+
+## Categories
+
+There are six categories: Display, Graphics, Audio, Controls, Gameplay and Accessibility <Source symbol="FGameUserSettings" />.
+
+| Category | Examples |
+| --- | --- |
+| Display | Window mode, monitor, resolution, refresh rate, vertical sync, frame-rate cap, HDR output, UI scale override |
+| Graphics | Quality preset (`r.Quality`), anti-aliasing and upscaler (`r.Upscaler`), frame generation, shadows, GI, reflections, view distance and more |
+| Audio | Bus volumes, subtitles and captions, voice chat |
+| Controls | Mouse sensitivity and invert, stick and trigger deadzones (global and per player 1–4), input debug overlay |
+| Gameplay | Language (`i18n.Locale`), autosave interval, autosave on travel |
+| Accessibility | See below |
+
+## Accessibility options
+
+Every Accessibility row writes a console variable that an engine system reads, so a game gets these options without extra wiring <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />. | Setting | Cvar | Range (default) | What reads it |
+| --- | --- | --- | --- |
+| Colour Vision | `r.ColorBlind.Mode` | Off, Protanopia, Deuteranopia, Tritanopia (Off) | Post-tonemap color correction on the scene <Source path="Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp" /> |
+| Colour Vision Strength | `r.ColorBlind.Strength` | 0–1 (1) | Same pass <Source path="Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp" /> |
+| Gamma | `r.DisplayGamma` | 1.8–2.6 (2.2) | Re-encodes the SDR image for the panel's gamma <Source path="Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp" /> |
+| Field Of View | `cam.FOV` | 0–120° (0) | Gameplay camera's vertical FOV. 0 keeps each camera's own value; Sequencer cut cameras always keep theirs <Source path="Engine/Source/Runtime/Camera/Private/CameraSystem.cpp" /> |
+| Camera Shake | `cam.ShakeScale` | 0–1× (1) | Scales every camera shake <Source path="Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp" /> |
+| Controller Vibration | `i.RumbleScale` | 0–1× (1) | Scales every rumble and trigger-haptic request; 0 is off <Source path="Engine/Source/Runtime/Input/Private/InputManager.cpp" /> |
+| Subtitle Other Players | `audio.AutoSubtitles` | on/off (off) | Transcribes what other players say in voice chat on this machine and shows it as subtitles |
+| Hold To Toggle | `i.HoldToToggle` | on/off (off) | Hold actions marked toggleable latch on one press and release on the next <Source path="Engine/Source/Runtime/Input/Private/InputActionSystem.cpp" /> |
+| High Contrast UI | `ui.HighContrast` | on/off (off) | Arc accessibility manager flag |
+| Reduced Motion | `ui.ReducedMotion` | on/off (off) | Arc accessibility manager flag |
+
+The color-vision correction applies to the rendered scene only. The UI has its own high-contrast mode.
+
+Apply pushes `ui.HighContrast` and `ui.ReducedMotion` into `CArcAccessibilityManager`. With High Contrast UI on, Arc draws with its high-contrast colours <Source path="Engine/Source/Runtime/Arc/Private/Mowo/CArcMowoTheme.cpp" />. With Reduced Motion on, decorative transitions jump to their end and popups open without sliding <Source path="Engine/Source/Runtime/Arc/Private/Animation/CArcAnimationManager.cpp" />.
+
+`Hold To Toggle` only affects actions the game marks as toggleable (the row's own examples are crouch, sprint and aim).
+
+The Accessibility category also has four `r.PointCloud.*` rows: Scan Palette (including red-green safe, blue-yellow safe and monochrome-with-shapes palettes), Scan Point Size, Scan Density and Streamer Mode <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />. They serve the engine's LiDAR point-cloud renderer and matter only for games that use it.
+
+### Subtitles and captions
+
+Subtitle options live in the **Audio** category. The Narrative module's subtitle system registers the cvars <Source path="Engine/Source/Runtime/Narrative/Private/SubtitleSystem.cpp" />.
+
+| Setting | Cvar | Range (default) |
+| --- | --- | --- |
+| Show Subtitles | `audio.Subtitles` | on/off (on) |
+| Closed Captions | `audio.ClosedCaptions` | on/off (off); also describes non-speech sounds |
+| Show Speaker Names | `audio.SubtitleSpeakerNames` | on/off (on) |
+| Subtitle Size | `audio.SubtitleScale` | 0.5–3× (1) |
+| Background Opacity | `audio.SubtitleBackgroundOpacity` | 0–1 (0.6) |
+| Max Subtitle Lines | `audio.SubtitleMaxLines` | 1–6 (3) |
+
+These rows are defined in the settings table <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />.
+
+## Rebinding keys
+
+`FArcRebindModel` lists every action of every registered input context, with one column per device family. `AArcUIRebindScreen::Model()` returns it <Source symbol="AArcUIRebindScreen" />.
+
+| Call | Does |
+| --- | --- |
+| `BeginCapture(context, action, device)` / `CancelCapture()` | Start or stop listening for a new input |
+| `CaptureKey`, `CaptureMouseButton`, `CaptureGamepadButton`, `CaptureGamepadAxis` | Commit the pressed input as the new binding |
+| `ResetAction`, `ResetContext`, `ResetAll` | Drop overrides |
+| `Save()` | Write the player's bindings |
+
+While `IsCapturing()` is true, the host routes raw input to the model instead of the game <Source symbol="FArcRebindModel" />. Rebinding the keyboard column keeps the gamepad binding and the other way round. Actions and contexts are the project's `.inputaction` and `.inputcontext` assets <Source path="Engine/Source/Runtime/Core/Private/FileTypes.cpp" />. Conflicts are reported on the row (`KeyboardConflicts`, `GamepadConflicts`) but not refused, since some overlaps are intentional.
+
+<Screenshot id="ui-rebind-capture" alt="The RebindScreen in a running game with one keyboard cell in the capturing state (KeyCap showing its listening style) and another row flagged with a conflict marker" caption="Capturing a new key on the rebind screen." />
+
+### A custom controls screen
+
+A game that builds its own controls screen in a graph or an ArcUI layout, instead of using `RebindScreen`, uses the **Rebind Library** (`MRebindStatics`): list the actions with their bindings, start a capture, poll it, read conflicts, reset and save <Source symbol="MRebindStatics" />.
+
+## Lobby screen
+
+A `LobbyScreen` node shows a multiplayer lobby and fires `closed` when the player leaves it. Its data comes from a lobby source the host installs <Source symbol="AArcUILobbyScreen" />.
+
+## Related
+
+- [ArcUI screens](/docs/ui/arcui-screens/) for events and modal screens.
+- API: [ArcUI reference](/docs/api/arcui/), including `FGameUserSettings`, `AArcUISettingsScreen`, `AArcUIRebindScreen`, `FArcRebindModel`, [CArcAccessibilityManager](/docs/api/arc/carcaccessibilitymanager/).

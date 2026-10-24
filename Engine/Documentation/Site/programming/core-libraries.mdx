@@ -1,0 +1,176 @@
+---
+title: Core libraries
+description: The foundation modules every engine and game module uses - names, containers, math, time, jobs, events, memory, the virtual filesystem and JSON.
+order: 11
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/FName.h
+  - Engine/Source/Runtime/Core/Public/Core/TContainers.h
+  - Engine/Source/Runtime/Core/Public/Core/Delegate.h
+  - Engine/Source/Runtime/Core/Public/Core/FTime.h
+  - Engine/Source/Runtime/Core/Public/Core/FTimerManager.h
+  - Engine/Source/Runtime/Core/Public/Core/FMemory.h
+  - Engine/Source/Runtime/Core/Public/Core/FMemoryTracker.h
+  - Engine/Source/Runtime/Core/Public/Core/Constants.h
+  - Engine/Source/Runtime/Math/Public/Math/Vec3.h
+  - Engine/Source/Runtime/Math/Public/Math/Quat.h
+  - Engine/Source/Runtime/Threading/Public/Threading/JobSystem.h
+  - Engine/Source/Runtime/Events/Public/Events/EventBus.h
+  - Engine/Source/Runtime/Events/Public/Events/Event.h
+  - Engine/Source/Runtime/Events/Public/Events/GameEvents.h
+  - Engine/Source/Runtime/Memory/Public/Memory/MemoryManager.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/VFS.h
+  - Engine/Source/Runtime/Serialization/Public/Serialization/JsonDocument.h
+  - Engine/Source/Runtime/Core/Private/FTime.cpp
+verifiedAt: 08e26df3d
+---
+
+The foundation modules sit just above Platform and below everything else. This page shows what each one is for and how to use it; every type is listed in full on its [API page](/docs/api/).
+
+## Core
+
+Core holds the object model (see [Objects and garbage collection](/docs/programming/objects-and-gc/)) and the plain building blocks around it.
+
+- **`FName`** is an interned string: comparing or hashing two names compares an index. `FName("Light", 3)` builds the numbered form, and `FName::None` is the empty name. <Source symbol="FName" />
+- **`TArray<T>`, `TMap<K, V>` and `TSet<T>`** are aliases for `std::vector`, `std::unordered_map` and `std::unordered_set`, with Unreal-style helper functions in `Core/TContainers.h`.
+- **`Delegate<R(Args...)>`** and **`MulticastDelegate<Args...>`** are callback holders; `FCoreDelegates` exposes engine-wide events such as the garbage-collection callbacks.
+- **`Ref<T>`**, **`WeakRef<T>`** and **`Scope<T>`** are the non-garbage-collected owning pointers.
+- **`FPaths`**, **`FParse`**, **`FStringUtils`** and **`AppDataPath`** handle paths, parsing, strings and the per-user data folders.
+- **`IConsoleManager`** registers console variables and commands; see the [console variable reference](/docs/reference/console-variables/).
+- **`FTimerManager`** runs timers that the engine ticks once per frame.
+
+## Math
+
+Math is header-only and depends on nothing. `Vec2`, `Vec3`, `Vec4`, `Quat`, `Mat4`, `FTransform`, `FRotator` and `FBox` live in the `Mowo` namespace.
+
+```cpp wrap
+#include "Math/Vec3.h"
+
+const Mowo::Vec3 origin(0.0f, 0.0f, 0.0f);
+const Mowo::Vec3 target(10.0f, 0.0f, 5.0f);
+const Mowo::Vec3 up(0.0f, 1.0f, 0.0f);
+
+const Mowo::Vec3 forward = (target - origin).Normalized();
+const Mowo::Vec3 right = Mowo::Vec3::Cross(forward, up);
+const float facing = Mowo::Vec3::Dot(forward, up);
+```
+
+<Callout type="note">
+Matrices are row-major. Euler angles use one convention everywhere, `R = Rx(x) * Ry(y) * Rz(z)`, so converting a rotation to Euler angles and back reproduces it.
+</Callout>
+
+## Time
+
+`FTime` is the frame clock, readable from any module without going through the engine. <Source symbol="FTime" />
+
+| Call | Returns |
+| --- | --- |
+| `GetDeltaSeconds()` | The last frame's duration, clamped (0.25 s by default) so a debugger break does not explode physics |
+| `GetUnclampedDeltaSeconds()` | The measured duration |
+| `GetRealTimeSeconds()` | Time since start; never pauses or stretches |
+| `GetGameTimeSeconds()`, `GetScaledDeltaSeconds()` | Game time, scaled by time dilation and frozen while paused |
+| `SetTimeDilation(f)`, `SetPaused(b)` | Slow motion and pause |
+| `TimeSince(gameTime)` | Game seconds since a stamp |
+| `GetFrameNumber()` | Frames since start |
+
+Stamp game time, not real time, for intervals that should survive a pause. Use the frame number as a deadline (`frame - last >= n`), not as a phase (`frame % n == 0`).
+
+The command-line switches `--fixed-dt=<seconds>` and `--fps=<n>` force a fixed timestep, and `--max-delta=<seconds>` changes the clamp. <Source path="Engine/Source/Runtime/Core/Private/FTime.cpp" />
+
+## Jobs
+
+`JobSystem` is a work-stealing thread pool. <Source symbol="JobSystem" />
+
+```cpp wrap
+#include "Core/Platform.h"
+#include "Threading/JobSystem.h"
+
+#include <cstdint>
+
+Mowo::JobSystem& jobs = Mowo::JobSystem::Get();
+
+Mowo::JobCounterPtr counter = Mowo::JobSystem::CreateJobCounter();
+jobs.Submit([] {
+}, counter);
+
+Mowo::JobCounterPtr batches = jobs.ParallelFor(4096, [](uint32_t begin, uint32_t end) {
+});
+
+jobs.WaitForCounter(counter);
+jobs.WaitForCounter(batches);
+```
+
+- `Submit(job, priority)` is fire-and-forget; `Submit(job, counter)` tracks completion; `SubmitWithDependency` runs a job after another counter completes.
+- `ParallelFor(count, func)` splits a range into batches and returns a counter. Pass a batch size as the second argument to choose it yourself.
+- `WaitForCounter` helps: the waiting thread runs that counter's queued jobs instead of sleeping.
+- `SubmitToMainThread(job)` queues work the engine runs on the game thread once per frame.
+
+<Callout type="warning">
+The pool's queues are unbounded and `Submit` never blocks. A producer that can outrun the workers must throttle itself, and only a thread that is not a worker (`JobSystem::IsWorkerThread()` is false) may block waiting for the pool to drain; a worker waiting on its own pool can deadlock it.
+</Callout>
+
+## Events
+
+`EventBus` is a process-wide publish and subscribe bus keyed by event type. <Source symbol="EventBus" />
+
+```cpp wrap
+#include "Events/EventBus.h"
+#include "Events/GameEvents.h"
+
+Mowo::EventBus& bus = Mowo::EventBus::Get();
+
+Mowo::FEventSubscription subscription = bus.Subscribe<Mowo::LevelLoadedEvent>([](Mowo::LevelLoadedEvent& event) {
+});
+
+bus.Post<Mowo::LevelLoadedEvent>("Main");
+
+bus.Unsubscribe(subscription);
+```
+
+`Post` queues an event; the engine dispatches the queue once per frame. `DispatchImmediate` runs the handlers before returning. Unsubscribe before anything your callback captures is destroyed: the bus outlives every subscriber.
+
+To declare an event, derive from `Event`, add `MOWO_EVENT(Name, EventCategory::Game)`, and mark the class with your module's export macro (never `MOWO_API`). At least one `.cpp` in the owning module must include the header so its exported members are emitted.
+
+## Memory
+
+- **The engine heap.** Global `new` and `delete` in every engine image, plugin and game module go to one mimalloc heap in Core, so memory allocated in one DLL can be freed in another. `FMemory` exposes it directly. `mbt build --no-mimalloc` keeps the C runtime heap instead.
+- **The frame allocator.** `MemoryManager::FrameAlloc`, `MOWO_FRAME_NEW` and `FrameVector<T>` hand out scratch memory from a 16 MB arena that resets at the end of every frame. When the arena runs out, allocations fall back to the heap and a warning is logged; nothing fails. <Source symbol="MemoryManager::FrameAlloc" />
+- **Allocation tags.** `MOWO_LLM_SCOPE(tag)` attributes allocations to a category, which `stat memory` shows. Tracking is compiled out unless you build with `mbt build --memtrack`. See [Profiling](/docs/programming/profiling/).
+
+<Callout type="warning">
+Never keep a frame allocation past the frame, and never use the frame allocator from code the render thread runs: the game thread resets the arena while the render thread may still be reading the previous frame.
+</Callout>
+
+## Files
+
+The `VFS` mounts several backends (folders on disk, `.meaf` archives, content embedded in a binary) under one path namespace with priorities. Engine and game code reads assets by their virtual path, so the same `Content/...` path works in the editor and in a packaged game. <Source symbol="VFS" />
+
+```cpp wrap
+#include "Filesystem/VFS.h"
+
+#include <string>
+
+Mowo::VFS& vfs = Mowo::VFS::Get();
+
+if (vfs.Exists("Content/Data/Waves.ini")) {
+	const std::string text = vfs.ReadTextFile("Content/Data/Waves.ini");
+}
+```
+
+The `vfs.DumpMounts` console command logs the mount table. Mount points and content archives are covered in [Content pipeline](/docs/content-pipeline/).
+
+## JSON
+
+`JsonDocument` wraps nlohmann/json for manifests and tool files; game data uses MDF instead. Getters take a dotted path and a default. <Source symbol="JsonDocument" />
+
+```cpp wrap
+#include "Serialization/JsonDocument.h"
+
+#include <string>
+
+Mowo::JsonDocument doc;
+std::string error;
+
+if (Mowo::JsonDocument::LoadFromFile("MyGame.mproject", doc, &error)) {
+	const std::string startScene = doc.GetString("project.startScene", "");
+}
+```

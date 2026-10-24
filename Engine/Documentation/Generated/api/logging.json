@@ -1,0 +1,678 @@
+{
+	"name": "MowoEngine.Logging",
+	"displayName": "Logging",
+	"slug": "logging",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Logging/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Logging/Public/Logging/AsyncLogger.h",
+			"include": "Logging/AsyncLogger.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "LogRingBuffer",
+					"namespace": "Mowo",
+					"template": "template<size_t Capacity>",
+					"doc": "Ring buffer retained for post-crash log recovery. Producers are every\nthread in the process, so the slot write and the index advance have to be\none atomic step — a mutex, not a pair of atomics.",
+					"line": 17,
+					"members": [
+						{
+							"kind": "method",
+							"name": "LogRingBuffer",
+							"signature": "LogRingBuffer() = default",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "Push",
+							"signature": "bool Push(const LogMessage& msg)",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "Pop",
+							"signature": "bool Pop(LogMessage& msg)",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "GetAll",
+							"signature": "std::vector<LogMessage> GetAll() const",
+							"doc": "Best-effort snapshot. The crash handler runs on the faulting thread,\nwhich may itself hold m_mutex, so a failed lock reads on anyway rather\nthan deadlocking and losing the dump entirely.",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "IsEmpty",
+							"signature": "bool IsEmpty() const",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "size_t Size() const",
+							"line": 74
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Logging/Public/Logging/FOutputDevice.h",
+			"include": "Logging/FOutputDevice.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "LogRecord",
+					"namespace": "Mowo",
+					"doc": "One line of log output, pre-formatted and ready for a sink.\nThe redirector holds a mutex during fan-out, so a single\nSerialize() call never interleaves lines across sinks.",
+					"line": 26,
+					"members": [
+						{
+							"kind": "field",
+							"name": "level",
+							"signature": "LogLevel level",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "category",
+							"signature": "std::string category",
+							"doc": "free-form category name (\"Render\", \"Audio\", ...)",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "message",
+							"signature": "std::string message",
+							"doc": "already formatted (printf result)",
+							"line": 29
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FOutputDevice",
+					"namespace": "Mowo",
+					"line": 32,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~FOutputDevice",
+							"signature": "virtual ~FOutputDevice() = default",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "Serialize",
+							"signature": "virtual void Serialize(const LogRecord& record) = 0",
+							"doc": "Called from the Logger for every MOWO_LOG_* call that survives\nits category's verbosity gate. Implementations are free to\nre-filter (a noisy sink might raise its own threshold).",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "virtual void Flush()",
+							"doc": "Optional: flush buffered output. Called by the redirector on\nshutdown and from FOutputDeviceRedirector::Flush().",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "virtual std::string GetName() const",
+							"doc": "Human-readable name for diagnostics.",
+							"line": 47
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FOutputDeviceRedirector",
+					"namespace": "Mowo",
+					"line": 52,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FOutputDeviceRedirector& Get()",
+							"static": true,
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "AddOutputDevice",
+							"signature": "void AddOutputDevice(FOutputDevice* device)",
+							"doc": "Register a sink. Caller retains ownership — the redirector never\ndeletes the device; cleanup after RemoveOutputDevice() is the\ncaller's job.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "RemoveOutputDevice",
+							"signature": "void RemoveOutputDevice(FOutputDevice* device)",
+							"doc": "Detach a previously-added sink. Safe to call from inside\nSerialize() — the broadcast iterates a snapshot of the list.",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "Serialize",
+							"signature": "void Serialize(const LogRecord& record)",
+							"doc": "Fan out one record to every registered sink. Thread-safe;\nsinks themselves are responsible for internal locking.",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "void Flush()",
+							"doc": "Flush every registered sink (before shutdown, before a crash dump upload).",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "SetMinLevel",
+							"signature": "void SetMinLevel(LogLevel level)",
+							"doc": "Sinks see records at or above this level only. Default Trace.",
+							"line": 73
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Logging/Public/Logging/Logger.h",
+			"include": "Logging/Logger.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "LogLevel",
+					"namespace": "Mowo",
+					"line": 31,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Trace",
+							"signature": "Trace = 0",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "Debug",
+							"signature": "Debug = 1",
+							"line": 33
+						},
+						{
+							"kind": "enumerator",
+							"name": "Info",
+							"signature": "Info = 2",
+							"line": 34
+						},
+						{
+							"kind": "enumerator",
+							"name": "Warning",
+							"signature": "Warning = 3",
+							"line": 35
+						},
+						{
+							"kind": "enumerator",
+							"name": "Error",
+							"signature": "Error = 4",
+							"line": 36
+						},
+						{
+							"kind": "enumerator",
+							"name": "Fatal",
+							"signature": "Fatal = 5",
+							"line": 37
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FLogLevel",
+					"namespace": "Mowo",
+					"line": 40,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "static const char* ToString(LogLevel level)",
+							"static": true,
+							"line": 42
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "LogMessage",
+					"namespace": "Mowo",
+					"line": 62,
+					"members": [
+						{
+							"kind": "field",
+							"name": "level",
+							"signature": "LogLevel level",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "message",
+							"signature": "std::string message",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "category",
+							"signature": "std::string category",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "file",
+							"signature": "std::string file",
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "line",
+							"signature": "int line",
+							"line": 67
+						},
+						{
+							"kind": "field",
+							"name": "timestamp",
+							"signature": "std::chrono::system_clock::time_point timestamp",
+							"line": 68
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FLogCategory",
+					"namespace": "Mowo",
+					"doc": "A named log category with its own runtime threshold, the UE5 model. Messages\nbelow the threshold cost one relaxed atomic load and are dropped before the\narguments are formatted.\n\nStorage discipline matters: declare with the owning module's export macro in\na header and define in exactly ONE .cpp. An inline static would hand every\nDLL its own copy, and `log <category> <level>` would then reach whichever one\nthe console happened to resolve — the same trap that duplicated event type\nids across modules.",
+					"line": 80,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FLogCategory",
+							"signature": "FLogCategory(const char* name, LogLevel defaultLevel)",
+							"line": 82
+						},
+						{
+							"kind": "method",
+							"name": "~FLogCategory",
+							"signature": "~FLogCategory()",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "FLogCategory",
+							"signature": "FLogCategory(const FLogCategory&) = delete",
+							"line": 85
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FLogCategory& operator=(const FLogCategory&) = delete",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "const char* GetName() const",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "GetLevel",
+							"signature": "LogLevel GetLevel() const",
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "SetLevel",
+							"signature": "void SetLevel(LogLevel level)",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "GetDefaultLevel",
+							"signature": "LogLevel GetDefaultLevel() const",
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "IsActive",
+							"signature": "bool IsActive(LogLevel level) const",
+							"line": 101
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FLogCategoryRegistry",
+					"namespace": "Mowo",
+					"line": 111,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "static FLogCategory* Find(std::string_view name)",
+							"static": true,
+							"line": 113
+						},
+						{
+							"kind": "method",
+							"name": "ForEach",
+							"signature": "static void ForEach(const std::function<void(FLogCategory&)>& visitor)",
+							"static": true,
+							"line": 114
+						},
+						{
+							"kind": "method",
+							"name": "ParseLevel",
+							"signature": "static bool ParseLevel(std::string_view text, LogLevel& out)",
+							"static": true,
+							"doc": "Parses \"trace\"/\"debug\"/\"info\"/\"warning\"/\"error\"/\"fatal\" (case-insensitive,\n\"warn\" accepted). False leaves `out` untouched.",
+							"line": 118
+						},
+						{
+							"kind": "method",
+							"name": "RegisterConsoleCommand",
+							"signature": "static void RegisterConsoleCommand()",
+							"static": true,
+							"doc": "Registers the `log` console command: `log` lists every category and its\nlevel, `log <category> <level>` sets one, `log <category> reset` restores\nthe level it was declared with. Called once during engine init.",
+							"line": 123
+						},
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "static void Register(FLogCategory* category)",
+							"static": true,
+							"line": 125
+						},
+						{
+							"kind": "method",
+							"name": "Unregister",
+							"signature": "static void Unregister(FLogCategory* category)",
+							"static": true,
+							"line": 126
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "LogSink",
+					"namespace": "Mowo",
+					"bases": "public RefCounted",
+					"line": 129,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~LogSink",
+							"signature": "virtual ~LogSink() = default",
+							"line": 131
+						},
+						{
+							"kind": "method",
+							"name": "Write",
+							"signature": "virtual void Write(const LogMessage& msg) = 0",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "virtual void Flush()",
+							"line": 133
+						},
+						{
+							"kind": "method",
+							"name": "CrashFlush",
+							"signature": "virtual void CrashFlush()",
+							"doc": "The crash path's flush: the process may already be broken and another\nthread may hold this sink's lock forever, so it must never block on\nit and never allocate. Defaults to Flush for sinks that hold nothing.",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "SetMinLevel",
+							"signature": "void SetMinLevel(LogLevel level)",
+							"line": 143
+						},
+						{
+							"kind": "method",
+							"name": "GetMinLevel",
+							"signature": "LogLevel GetMinLevel() const",
+							"line": 146
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "ConsoleSink",
+					"namespace": "Mowo",
+					"bases": "public LogSink",
+					"line": 213,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ConsoleSink",
+							"signature": "ConsoleSink(bool useColors = true, bool showLocation = true, bool allToStderr = false) : m_useColors(useColors && !allToStderr), m_showLocation(showLocation), m_allToStderr(allToStderr)",
+							"doc": "`allToStderr` keeps stdout for a protocol: the editor's --mcp-stdio\nspeaks JSON-RPC on it, one message per line, and a log line or a colour\nescape in between is a corrupt message to the client.",
+							"line": 218
+						},
+						{
+							"kind": "method",
+							"name": "Write",
+							"signature": "void Write(const LogMessage& msg) override",
+							"line": 222
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "void Flush() override",
+							"line": 246
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FileSink",
+					"namespace": "Mowo",
+					"bases": "public LogSink",
+					"doc": "Lines land in a memory buffer and reach the disk from a flusher thread\nevery 200 ms, when the buffer fills, on any Error/Fatal line, on Flush,\nand from the crash handler's pre-report hook — never with a syscall per\nline. The old sink wrote std::endl per message, one flush each, which\nwas a measurable share of a Debug frame under the render-init spam. The\nfile is opened shared-read so the crash reporter's tail copy and a tail\ntool still see it mid-session.\n\nNo thread that logs ever waits on the disk. The flusher opens the file,\nswaps the buffer out under the lock and writes it with the lock released;\nan Error line only wakes it. The lock used to be held across fwrite and\nfflush, and on a disk taking seconds per write (a project on a busy HDD)\nevery logging thread — the render thread included — froze behind it: the\nowner's 14 s and 19 s \"submit\" stalls were the render thread waiting to\nappend one line. A disk that takes nothing for long enough costs lines,\ncounted in the file, never a frame.",
+					"line": 306,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FileSink",
+							"signature": "explicit FileSink(const std::string& filepath, bool append = false, std::function<void()> afterOpen = {})",
+							"line": 308
+						},
+						{
+							"kind": "method",
+							"name": "~FileSink",
+							"signature": "~FileSink() override",
+							"line": 309
+						},
+						{
+							"kind": "method",
+							"name": "Write",
+							"signature": "void Write(const LogMessage& msg) override",
+							"line": 311
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "void Flush() override",
+							"line": 312
+						},
+						{
+							"kind": "method",
+							"name": "CrashFlush",
+							"signature": "void CrashFlush() override",
+							"line": 313
+						},
+						{
+							"kind": "method",
+							"name": "IsOpen",
+							"signature": "bool IsOpen()",
+							"doc": "Waits for the flusher's open attempt.",
+							"line": 316
+						},
+						{
+							"kind": "method",
+							"name": "GetFilepath",
+							"signature": "const std::string& GetFilepath() const",
+							"line": 317
+						},
+						{
+							"kind": "method",
+							"name": "SetWriteStallForTest",
+							"signature": "static void SetWriteStallForTest(int32_t milliseconds)",
+							"static": true,
+							"doc": "Holds every disk write of every FileSink this long — a test's stand-in\nfor a disk that takes seconds per write.",
+							"line": 323
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "Logger",
+					"namespace": "Mowo",
+					"line": 354,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static Logger& Get()",
+							"static": true,
+							"line": 356
+						},
+						{
+							"kind": "method",
+							"name": "Logger",
+							"signature": "Logger(const Logger&) = delete",
+							"line": 358
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "Logger& operator=(const Logger&) = delete",
+							"line": 359
+						},
+						{
+							"kind": "method",
+							"name": "AddSink",
+							"signature": "void AddSink(Ref<LogSink> sink)",
+							"line": 361
+						},
+						{
+							"kind": "method",
+							"name": "RemoveSink",
+							"signature": "void RemoveSink(const Ref<LogSink>& sink)",
+							"line": 366
+						},
+						{
+							"kind": "method",
+							"name": "ClearSinks",
+							"signature": "void ClearSinks()",
+							"line": 371
+						},
+						{
+							"kind": "method",
+							"name": "SetMinLevel",
+							"signature": "void SetMinLevel(LogLevel level)",
+							"line": 376
+						},
+						{
+							"kind": "method",
+							"name": "GetMinLevel",
+							"signature": "LogLevel GetMinLevel() const",
+							"line": 381
+						},
+						{
+							"kind": "method",
+							"name": "Log",
+							"signature": "void Log(LogLevel level, const std::string& category, const std::string& message, const char* file = nullptr, int line = 0)",
+							"line": 385
+						},
+						{
+							"kind": "method",
+							"name": "LogFormat",
+							"signature": "void LogFormat(LogLevel level, const std::string& category, const char* file, int line, const char* fmt, ...)",
+							"line": 427
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "void Flush()",
+							"line": 442
+						},
+						{
+							"kind": "method",
+							"name": "CrashFlush",
+							"signature": "void CrashFlush()",
+							"doc": "What the crash handler runs before it copies the log tail: best\neffort, no allocation, and never a wait on a lock the crashing thread\nitself may hold.",
+							"line": 452
+						},
+						{
+							"kind": "method",
+							"name": "CrashFlushHook",
+							"signature": "static void CrashFlushHook()",
+							"static": true,
+							"line": 463
+						},
+						{
+							"kind": "method",
+							"name": "ResolveLogsDir",
+							"signature": "static std::filesystem::path ResolveLogsDir()",
+							"static": true,
+							"doc": "Where the file sink writes: <project>/Saved/Logs when a project is\nopen, else <state root>/<Product>/Saved/Logs (Launcher, headless\nself-tests, packaged games with no writable project).",
+							"line": 472
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "void Initialize()",
+							"doc": "Opens the console + file sinks and rotates old Mowo_*.log files out.\nShipping builds keep both sinks OFF and the threshold at Warning\nunless -log is on the command line or the game's Config sets\nlogging.enabled=true (the bUseLoggingInShipping model).",
+							"line": 485
+						},
+						{
+							"kind": "method",
+							"name": "PruneOldLogs",
+							"signature": "static void PruneOldLogs(const std::filesystem::path& logsDir, size_t keep)",
+							"static": true,
+							"doc": "Deletes the oldest Mowo_*.log / mowo_*.log files beyond `keep`.",
+							"line": 488
+						},
+						{
+							"kind": "method",
+							"name": "GetLogFilePath",
+							"signature": "const std::string& GetLogFilePath() const",
+							"doc": "Absolute path of the file sink Initialize opened; empty without one.",
+							"line": 491
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown()",
+							"line": 495
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

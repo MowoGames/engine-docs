@@ -1,0 +1,92 @@
+---
+title: Output Log, console and Message Log
+sidebarTitle: Logs and console
+description: Read and filter every log line, jump to the source that printed it, run console commands, and work through the Message Log's actionable issues and Map Check.
+order: 20
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/Panels/OutputLogPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/EditorLogSink.h
+  - Engine/Source/Editor/MowoEditor/Private/Panels/MessageLog.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/MessageLogPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MapCheck.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Scripting/IdeLauncher.cpp
+verifiedAt: 08e26df3d
+---
+
+The editor has two logs. The **Output Log** is everything the engine printed, in order, with the console at the bottom. The **Message Log** is the curated list of problems you need to act on, each with a link to the asset, actor or source it is about.
+
+## The Output Log
+
+Open it with **Window ▸ Output Log**, <Kbd>Ctrl+5</Kbd>, or the error and warning chip in the status bar <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/OutputLogPanel.cpp" />. Its tab shows a count of errors (or warnings) since you last looked.
+
+<Screenshot id="editor-output-log" alt="The Output Log docked at the bottom right: the toolbar with Filter log, the Categories menu, the Info, Warnings and Errors chips with counts and the eraser, rows with time, category and message including one warning row and one error row with a source link at the right, and the console row with its Cmd chip at the bottom." />
+
+Each row shows the time, the category and the message. The category is the module's log category, or a leading `[Tag]` in the message.
+
+- **Source links.** Warnings and errors end with the engine file and line that printed them, such as `D3D12Pipeline.cpp:214`. Click it, or use **Open Source** on the row menu, to open your IDE at that line. **Source link on every row** shows links on all lines.
+- **Collapse repeats** folds identical consecutive lines into one row with a `×N` count.
+
+### Filtering
+
+| Control | What it does |
+| --- | --- |
+| Filter log | Case-insensitive search over message and category |
+| Categories · N | A checklist of every category seen this session, with counts, plus the options below |
+| Info, Warnings, Errors | Show or hide each severity; the counts are live |
+| Eraser | Clears the view |
+
+The options menu also holds **Pause on error** (freeze the view on the first error), **Clear on Play** and the verbosity threshold. Your choices and hidden categories are saved per project.
+
+### The console
+
+The line at the bottom of the Output Log runs console commands and variables. Typing shows matching variables in a popup: <Kbd>Up</Kbd>/<Kbd>Down</Kbd> move, <Kbd>Tab</Kbd> completes, <Kbd>Enter</Kbd> runs, <Kbd>Esc</Kbd> closes the popup. With the popup closed, <Kbd>Up</Kbd>/<Kbd>Down</Kbd> recall history.
+
+`name` prints a variable's value; `name value` or `name=value` sets it. The command and its result are echoed into the log under `[Cmd]`. Variables marked as cheats are refused when cheats are off, and read-only variables are refused everywhere. Every variable and command is listed in the [console variables](/docs/reference/console-variables/) and [console commands](/docs/reference/console-commands/) references.
+
+## The Message Log
+
+Open it with **Window ▸ Message Log**, <Kbd>Ctrl+6</Kbd>, or the message badge in the status bar <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/MessageLogPanel.cpp" />. It can also come forward as a tool document beside the level.
+
+<Screenshot id="editor-message-log" alt="The Message Log on the Map Check page: the page row with Asset Check, Map Check, Loom compiler, Lighting, Packaging and Source control buttons and their counts, the Errors, Warnings and Info toggles, Clear page and the Re-run map check button, and the table with Message, Source and Action columns showing a missing mesh error with an Open link and a duplicate UUID warning with a Select actors link." />
+
+One **page** is in front at a time. Each page is one producer's report:
+
+| Page | What reports there |
+| --- | --- |
+| Asset Check | Validation issues after a save, and the Content Browser's **Validate** |
+| Map Check | **Build ▸ Map Check** |
+| Loom compiler | Visual Scripting compile diagnostics, one row each |
+| Lighting | Reserved for lighting builds |
+| Packaging | Cook and package warnings and errors |
+| Source control | Git errors and refused saves |
+| Load errors | Levels or assets that failed to load, open or save, and failed imports (shown only while it has messages) |
+| Play in editor | Multiplayer launch failures, server exits and travel failures (shown only while it has messages) |
+
+The filter row toggles **Errors**, **Warnings** and **Info** for the page, **Clear page** empties it, and a page that can re-run its check (such as **Re-run map check**) has that button. The Play in editor page clears when Play starts, Packaging when a cook starts, and Map Check is replaced by each run.
+
+### Acting on a message
+
+The table's columns are **Message**, **Source** and **Action**. The action does the one thing the row is about:
+
+| The row is about | Action | What it does |
+| --- | --- | --- |
+| An asset | Open | Reveals it in the Content Browser and opens its editor |
+| An actor | Focus | Selects the actor and frames it in the viewport |
+| A group of actors | Select actors | Selects all of them |
+| A source file | Open source | Opens the file in your IDE at the line <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/IdeLauncher.cpp" /> |
+| A command | (the command's name) | Runs the editor command |
+
+<Kbd>Enter</Kbd> or a double-click runs the selected row's action; <Kbd>Ctrl+C</Kbd> copies the row. The row menu also has Copy page, **Dismiss** (hides the row in the view only) and Clear page.
+
+**Open on new error** (`editor.MessageLog.OpenOnNewError`, on by default, also in Editor Preferences) brings the log forward on a new error's page. Turned off, a new error raises a notification with an **Open Message Log** button instead.
+
+### Map Check
+
+**Build ▸ Map Check** checks the open level as a save would write it, and reports to the Map Check page <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MapCheck.cpp" />:
+
+- meshes or prefabs the level references that no longer exist;
+- actors sharing a UUID, for example after a hand merge;
+- children whose parent is gone;
+- transforms that are not valid numbers.
+
+Each run ends with a summary line, so you can tell the page is current.

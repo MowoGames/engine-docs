@@ -1,0 +1,1329 @@
+{
+	"name": "MowoEngine.Threading",
+	"displayName": "Threading",
+	"slug": "threading",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Threading/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/DeferredDeleteQueue.h",
+			"include": "Threading/DeferredDeleteQueue.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "DeferredDeleteQueue",
+					"namespace": "Mowo",
+					"doc": "GPU resources submitted here are held for N frames, so nothing is freed while\nan in-flight command buffer may still read it. Flush once per frame from the\nmain loop with the current frame index.",
+					"line": 16,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static DeferredDeleteQueue& Get()",
+							"static": true,
+							"line": 18
+						},
+						{
+							"kind": "method",
+							"name": "SetFrameDelay",
+							"signature": "void SetFrameDelay(uint32_t frames)",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameDelay",
+							"signature": "uint32_t GetFrameDelay() const",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "Submit",
+							"signature": "void Submit(std::function<void()> destructor, const void* owner = FModuleAnchor::Here())",
+							"doc": "The destructor lambda runs m_frameDelay frames later. `owner` names\nthe submitting module (FModuleAnchor): a module that unloads with\nreleases still queued has them run while its code is still mapped,\nsince both the lambda and the std::function managing it are that\nmodule's code and nothing could call either afterwards.",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "RunAllInModule",
+							"signature": "size_t RunAllInModule(void* moduleHandle)",
+							"doc": "Runs and drops every queued release a module submitted — the unload\nsweep. Returns how many ran.",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "void Flush(uint64_t currentFrame)",
+							"doc": "Runs every destructor whose deadline has passed.",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "FlushAll",
+							"signature": "void FlushAll()",
+							"doc": "Immediate — only safe when the GPU is known idle, e.g. at shutdown.",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "GetPendingCount",
+							"signature": "size_t GetPendingCount() const",
+							"line": 47
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/ENamedThreads.h",
+			"include": "Threading/ENamedThreads.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "ENamedThreads",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 17,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "AnyThread",
+							"signature": "AnyThread = 0",
+							"doc": "Pool workers — pick any free worker.",
+							"line": 19
+						},
+						{
+							"kind": "enumerator",
+							"name": "AnyHiPriThread",
+							"signature": "AnyHiPriThread = 1",
+							"doc": "Pool worker, prefer one that's idle right now.",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "AnyBackground",
+							"signature": "AnyBackground = 2",
+							"doc": "Pool worker, only when nothing else is in the queue.",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "GameThread",
+							"signature": "GameThread = 3",
+							"doc": "Dedicated thread (one OS thread per slot).",
+							"line": 26
+						},
+						{
+							"kind": "enumerator",
+							"name": "RenderThread",
+							"signature": "RenderThread = 4",
+							"doc": "SceneRenderer record",
+							"line": 27
+						},
+						{
+							"kind": "enumerator",
+							"name": "RHIThread",
+							"signature": "RHIThread = 5",
+							"doc": "Vulkan submit only",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "AudioThread",
+							"signature": "AudioThread = 6",
+							"doc": "miniaudio mix + AudioSystem updates",
+							"line": 29
+						},
+						{
+							"kind": "enumerator",
+							"name": "Count",
+							"signature": "Count",
+							"line": 31
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FNamedThreads",
+					"namespace": "Mowo",
+					"line": 34,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ToString",
+							"signature": "static constexpr const char* ToString(ENamedThreads t)",
+							"static": true,
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "IsDedicatedThread",
+							"signature": "static constexpr bool IsDedicatedThread(ENamedThreads t)",
+							"static": true,
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "IsAnyWorker",
+							"signature": "static constexpr bool IsAnyWorker(ENamedThreads t)",
+							"static": true,
+							"line": 61
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/FAsyncTask.h",
+			"include": "Threading/FAsyncTask.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FAsyncTask",
+					"namespace": "Mowo",
+					"template": "template<typename Derived>",
+					"line": 23,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FAsyncTask",
+							"signature": "FAsyncTask() = default",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "~FAsyncTask",
+							"signature": "virtual ~FAsyncTask() = default",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "FAsyncTask",
+							"signature": "FAsyncTask(const FAsyncTask&) = delete",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FAsyncTask& operator=(const FAsyncTask&) = delete",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "Start",
+							"signature": "void Start(ENamedThreads thread = ENamedThreads::AnyThread)",
+							"doc": "Override the thread for dedicated-thread tasks (rendering, audio).",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "IsDone",
+							"signature": "bool IsDone() const noexcept",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "Wait",
+							"signature": "void Wait()",
+							"doc": "Blocks until DoWork returns. Calling it from inside DoWork deadlocks,\nsame as raw AddTask.",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Cancel",
+							"signature": "void Cancel()",
+							"doc": "Best-effort: if DoWork is already running this only waits for it.\nReal cooperative cancel needs Derived::DoWork to poll its own flag.",
+							"line": 55
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/FRHIThread.h",
+			"include": "Threading/FRHIThread.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FRHIThread",
+					"namespace": "Mowo",
+					"line": 10,
+					"members": [
+						{
+							"kind": "method",
+							"name": "IsEnabled",
+							"signature": "static bool IsEnabled()",
+							"static": true,
+							"line": 12
+						},
+						{
+							"kind": "method",
+							"name": "SetEnabled",
+							"signature": "static void SetEnabled(bool enabled)",
+							"static": true,
+							"line": 13
+						},
+						{
+							"kind": "method",
+							"name": "Enqueue",
+							"signature": "static void Enqueue(std::function<void()> command)",
+							"static": true,
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "ExecuteSync",
+							"signature": "static void ExecuteSync(std::function<void()> command)",
+							"static": true,
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "static void Flush()",
+							"static": true,
+							"line": 17
+						},
+						{
+							"kind": "method",
+							"name": "IsInRHIThread",
+							"signature": "static bool IsInRHIThread()",
+							"static": true,
+							"line": 19
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/FRenderingThread.h",
+			"include": "Threading/FRenderingThread.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FRenderingThread",
+					"namespace": "Mowo",
+					"line": 8,
+					"members": [
+						{
+							"kind": "method",
+							"name": "IsEnabled",
+							"signature": "static bool IsEnabled()",
+							"static": true,
+							"line": 10
+						},
+						{
+							"kind": "method",
+							"name": "SetEnabled",
+							"signature": "static void SetEnabled(bool enabled)",
+							"static": true,
+							"line": 11
+						},
+						{
+							"kind": "method",
+							"name": "Enqueue",
+							"signature": "static void Enqueue(std::function<void()> command)",
+							"static": true,
+							"line": 13
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "static void Flush()",
+							"static": true,
+							"line": 14
+						},
+						{
+							"kind": "method",
+							"name": "IsInRenderingThread",
+							"signature": "static bool IsInRenderingThread()",
+							"static": true,
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "IsIdle",
+							"signature": "static bool IsIdle()",
+							"static": true,
+							"doc": "True when nothing enqueued is still pending or running: the caller (the\nonly thread that enqueues) is then the only one that can record until it\nenqueues again. Always true while the thread is disabled.",
+							"line": 21
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/FRunnable.h",
+			"include": "Threading/FRunnable.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EThreadPriority",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 30,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "BelowNormal",
+							"signature": "BelowNormal = 0",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "Normal",
+							"signature": "Normal = 1",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "AboveNormal",
+							"signature": "AboveNormal = 2",
+							"line": 33
+						},
+						{
+							"kind": "enumerator",
+							"name": "High",
+							"signature": "High = 3",
+							"line": 34
+						},
+						{
+							"kind": "enumerator",
+							"name": "TimeCritical",
+							"signature": "TimeCritical = 4",
+							"line": 35
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FRunnable",
+					"namespace": "Mowo",
+					"line": 38,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~FRunnable",
+							"signature": "virtual ~FRunnable() = default",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "Init",
+							"signature": "virtual bool Init()",
+							"doc": "Runs on the runnable's thread before Run(). Returning false aborts: the\nthread exits and Exit() does NOT run.",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "virtual uint32_t Run() = 0",
+							"doc": "The thread body; the return value is the OS thread's exit code, 0 for\nsuccess. Long-running loops must poll a stop flag the implementation owns.",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Stop",
+							"signature": "virtual void Stop()",
+							"doc": "Called from another thread. Override to set the flag Run() polls.",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "Exit",
+							"signature": "virtual void Exit()",
+							"doc": "Runs on the runnable's thread after Run() returns, always, unless Init()\nreturned false.",
+							"line": 58
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FRunnableThread",
+					"namespace": "Mowo",
+					"line": 62,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Create",
+							"signature": "static FRunnableThread* Create(FRunnable* runnable, std::string name, EThreadPriority priority = EThreadPriority::Normal)",
+							"static": true,
+							"doc": "Takes ownership of `runnable` and deletes it after Exit() returns.",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "Stop",
+							"signature": "uint32_t Stop()",
+							"doc": "Polite shutdown: call runnable->Stop() then join. Idempotent.\nReturns whatever Run() returned (or 0 if it hadn't started).",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "WaitForCompletion",
+							"signature": "uint32_t WaitForCompletion()",
+							"doc": "Joins without calling Stop() first — only safe when the runnable is known\nto be self-terminating. Idempotent.",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "const std::string& GetName() const noexcept",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "GetPriority",
+							"signature": "EThreadPriority GetPriority() const noexcept",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "GetThreadId",
+							"signature": "std::thread::id GetThreadId() const noexcept",
+							"line": 82
+						},
+						{
+							"kind": "method",
+							"name": "~FRunnableThread",
+							"signature": "~FRunnableThread()",
+							"doc": "Destructor calls Stop() if still running.",
+							"line": 87
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/FTaskGraph.h",
+			"include": "Threading/FTaskGraph.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FGraphEvent",
+					"namespace": "Mowo",
+					"bases": "public std::enable_shared_from_this<FGraphEvent>",
+					"doc": "Handle to a scheduled task. The graph owns one ref per pending subsequent,\nplus one per outstanding caller handle.",
+					"line": 25,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FGraphEvent",
+							"signature": "FGraphEvent() = default",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "Wait",
+							"signature": "void Wait()",
+							"doc": "Blocks until the task and every transitive prerequisite completes. NOT\nre-entrant: calling Wait() from inside a task on the same graph deadlocks.",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "WaitFor",
+							"signature": "bool WaitFor(uint32_t milliseconds)",
+							"doc": "Waits at most `milliseconds`; true once the task has completed.",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "IsComplete",
+							"signature": "bool IsComplete() const noexcept",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "Then",
+							"signature": "std::shared_ptr<FGraphEvent> Then(std::function<void()> body, ENamedThreads thread = ENamedThreads::AnyThread)",
+							"doc": "Runs `body` once this event completes; returns the new event so chains\ncompose: a->Then(b, RenderThread)->Then(c);",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "SignalComplete",
+							"signature": "void SignalComplete()",
+							"doc": "Internal — the TaskGraph signals here when the task finishes.",
+							"line": 46
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FTaskGraph",
+					"namespace": "Mowo",
+					"line": 58,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FTaskGraph& Get()",
+							"static": true,
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "AddTask",
+							"signature": "FGraphEventRef AddTask(FTaskBody body, ENamedThreads thread = ENamedThreads::AnyThread, FGraphEventArray prerequisites = {})",
+							"doc": "Returns the event handle: wait on it, or pass it as a prerequisite.\n\nauto loadEvt = FTaskGraph::Get().AddTask(\n[]{ LoadAsset(); }, ENamedThreads::AnyThread);\nauto useEvt = FTaskGraph::Get().AddTask(\n[]{ Render(); }, ENamedThreads::RenderThread, {loadEvt});\nuseEvt->Wait();",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "WaitAll",
+							"signature": "void WaitAll(const FGraphEventArray& events)",
+							"doc": "Blocks until EVERY event completes.",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "WaitAny",
+							"signature": "void WaitAny(const FGraphEventArray& events)",
+							"doc": "Blocks until ANY ONE event completes.",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "ParallelFor",
+							"signature": "void ParallelFor(uint32_t count, std::function<void(uint32_t)> body)",
+							"doc": "Runs [0, count) in chunks across pool workers and blocks until every\niteration has run. Ordered or thread-pinned work wants AddTask instead.",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "SpinUpDedicatedThread",
+							"signature": "void SpinUpDedicatedThread(ENamedThreads thread)",
+							"doc": "Idempotent. Auto-fires on the first AddTask targeting the slot, but call\nit during engine init so thread priority and name are set from frame\nzero. Once spun up, AddTask(thread) queues instead of running inline.",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown()",
+							"doc": "Flushes queued tasks — they all run on their own threads first — then\njoins every dedicated thread. Idempotent; called from Engine::Shutdown\nvia FCoreDelegates::OnPreEngineShutdown.",
+							"line": 91
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "alias",
+					"name": "FGraphEventRef",
+					"signature": "using FGraphEventRef = std::shared_ptr<FGraphEvent>",
+					"line": 52
+				},
+				{
+					"kind": "alias",
+					"name": "FGraphEventArray",
+					"signature": "using FGraphEventArray = std::vector<FGraphEventRef>",
+					"line": 53
+				},
+				{
+					"kind": "alias",
+					"name": "FTaskBody",
+					"signature": "using FTaskBody = std::function<void()>",
+					"doc": "Invoked on the chosen thread once every prerequisite has signalled.",
+					"line": 56
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/FThreadPhase.h",
+			"include": "Threading/FThreadPhase.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EPhaseThread",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 21,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Game",
+							"signature": "Game = 0",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "Render",
+							"signature": "Render",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "Rhi",
+							"signature": "Rhi",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "Count",
+							"signature": "Count",
+							"line": 25
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FThreadPhase",
+					"namespace": "Mowo",
+					"line": 28,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Set",
+							"signature": "static void Set(EPhaseThread thread, const char* phase)",
+							"static": true,
+							"doc": "`phase` must outlive the process (a string literal).",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static const char* Get(EPhaseThread thread)",
+							"static": true,
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "MsInPhase",
+							"signature": "static double MsInPhase(EPhaseThread thread)",
+							"static": true,
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "Current",
+							"signature": "static EPhaseThread Current()",
+							"static": true,
+							"doc": "The frame thread this thread last published a phase as; Count when it\nnever did (a worker, or the main thread before its loop starts), which\nSet ignores so no other thread writes the game thread's marks.",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "DescribeOthers",
+							"signature": "static std::string DescribeOthers(EPhaseThread self)",
+							"static": true,
+							"doc": "\"render thread 'RT.BeginFrame: GPU frame fence' 812 ms, RHI thread 'Present' 3 ms\"",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "BeginGameFrame",
+							"signature": "static void BeginGameFrame()",
+							"static": true,
+							"doc": "Game thread only: forget the previous frame's marks.",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "DescribeGameFrame",
+							"signature": "static std::string DescribeGameFrame()",
+							"static": true,
+							"doc": "Game thread only: \"produce 3 ms, paint 11 ms, wait render thread 14002 ms\"\nover the marks Set(Game, …) left since BeginGameFrame, the last one\nrunning until now.",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "WaitLogged",
+							"signature": "static void WaitLogged(EPhaseThread self, const char* what, const std::function<bool(uint32_t sliceMs)>& waitSlice)",
+							"static": true,
+							"doc": "Waits in slices until `waitSlice(sliceMs)` returns true. From one second\non it logs once a second what it is waiting for, for how long, and the\nphase every other frame thread is in — the wait itself never gives up.",
+							"line": 54
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FScopedThreadPhase",
+					"namespace": "Mowo",
+					"line": 57,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FScopedThreadPhase",
+							"signature": "FScopedThreadPhase(EPhaseThread thread, const char* phase) : m_thread(thread), m_previous(FThreadPhase::Get(thread))",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "~FScopedThreadPhase",
+							"signature": "~FScopedThreadPhase()",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "FScopedThreadPhase",
+							"signature": "FScopedThreadPhase(const FScopedThreadPhase&) = delete",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FScopedThreadPhase& operator=(const FScopedThreadPhase&) = delete",
+							"line": 68
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/JobSystem.h",
+			"include": "Threading/JobSystem.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "JobPriority",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 24,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "High",
+							"signature": "High = 0",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "Normal",
+							"signature": "Normal = 1",
+							"line": 26
+						},
+						{
+							"kind": "enumerator",
+							"name": "Low",
+							"signature": "Low = 2",
+							"line": 27
+						},
+						{
+							"kind": "enumerator",
+							"name": "Count",
+							"signature": "Count = 3",
+							"line": 28
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "JobCounter",
+					"namespace": "Mowo",
+					"doc": "Tracks job completion: a job submitted against a counter won't run until it\nreaches 0. The counter also carries a priority floor — the most aggressive\npriority any dependent has asked for. SubmitWithDependency raises it and the\nJobSystem promotes in-flight jobs signalling the counter to match, so a High\ndependent never stalls behind Low signal jobs.",
+					"line": 36,
+					"members": [
+						{
+							"kind": "method",
+							"name": "JobCounter",
+							"signature": "JobCounter() : m_count(0), m_priorityFloor(static_cast<int>(JobPriority::Low))",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "Increment",
+							"signature": "void Increment(int32_t n = 1)",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "Decrement",
+							"signature": "void Decrement()",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "GetCount",
+							"signature": "int32_t GetCount() const",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "IsComplete",
+							"signature": "bool IsComplete() const",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "SetException",
+							"signature": "void SetException(std::exception_ptr exception)",
+							"doc": "The first exception a job under this counter threw. The job still counts\nas done — a throw that skipped the decrement hung every waiter forever —\nand JobSystem::WaitForCounter rethrows it on the waiting thread, the way\nstd::future does, so a fatal error still reaches that thread's handler.",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "TakeException",
+							"signature": "std::exception_ptr TakeException()",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "Wait",
+							"signature": "void Wait()",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "WaitFor",
+							"signature": "bool WaitFor(std::chrono::milliseconds timeout)",
+							"doc": "False on timeout with the counter still outstanding. WaitForCounter uses\nit to turn a silent forever-block into a diagnosable stall.",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "BoostPriorityTo",
+							"signature": "bool BoostPriorityTo(JobPriority p)",
+							"doc": "Priority inheritance. Lower numeric value = higher priority (High=0,\nNormal=1, Low=2), so boosting is an atomic min. Returns true only when\nthe floor actually moved — callers use that to decide whether to scan\nthe queues and promote jobs.",
+							"line": 101
+						},
+						{
+							"kind": "method",
+							"name": "GetPriorityFloor",
+							"signature": "JobPriority GetPriorityFloor() const",
+							"line": 113
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FInlineJob",
+					"namespace": "Mowo",
+					"doc": "Type-erased callable with a fixed inline buffer. Every engine call site fits\ninline — the largest is FTaskGraph's wrapped task at ~112 bytes. Callables\nthat exceed the buffer, need stronger alignment, or have a throwing move\nconstructor fall back to one heap allocation.",
+					"line": 132,
+					"members": [
+						{
+							"kind": "field",
+							"name": "InlineCapacity",
+							"signature": "static constexpr size_t InlineCapacity = 128",
+							"static": true,
+							"line": 134
+						},
+						{
+							"kind": "method",
+							"name": "FInlineJob",
+							"signature": "FInlineJob() = default",
+							"line": 136
+						},
+						{
+							"kind": "method",
+							"name": "FInlineJob",
+							"signature": "FInlineJob(FInlineJob&& other) noexcept",
+							"line": 138
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FInlineJob& operator=(FInlineJob&& other) noexcept",
+							"line": 142
+						},
+						{
+							"kind": "method",
+							"name": "FInlineJob",
+							"signature": "FInlineJob(const FInlineJob&) = delete",
+							"line": 150
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FInlineJob& operator=(const FInlineJob&) = delete",
+							"line": 151
+						},
+						{
+							"kind": "method",
+							"name": "~FInlineJob",
+							"signature": "~FInlineJob()",
+							"line": 153
+						},
+						{
+							"kind": "method",
+							"name": "Bind",
+							"signature": "template<typename F> void Bind(F&& job)",
+							"line": 157
+						},
+						{
+							"kind": "method",
+							"name": "Invoke",
+							"signature": "void Invoke()",
+							"line": 173
+						},
+						{
+							"kind": "method",
+							"name": "IsBound",
+							"signature": "bool IsBound() const",
+							"line": 177
+						},
+						{
+							"kind": "method",
+							"name": "IsInline",
+							"signature": "bool IsInline() const",
+							"line": 181
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset()",
+							"line": 185
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "JobSystem",
+					"namespace": "Mowo",
+					"line": 250,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static JobSystem& Get()",
+							"static": true,
+							"line": 252
+						},
+						{
+							"kind": "method",
+							"name": "CreateJobCounter",
+							"signature": "static JobCounterPtr CreateJobCounter()",
+							"static": true,
+							"doc": "numWorkers = 0 means hardware_concurrency - 2, min 1.",
+							"line": 255
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "void Initialize(uint32_t numWorkers = 0)",
+							"line": 259
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown()",
+							"line": 260
+						},
+						{
+							"kind": "method",
+							"name": "Submit",
+							"signature": "template<typename F> void Submit(F&& job, JobPriority priority = JobPriority::Normal)",
+							"line": 262
+						},
+						{
+							"kind": "method",
+							"name": "Submit",
+							"signature": "template<typename F> void Submit(F&& job, const JobCounterPtr& counter, JobPriority priority = JobPriority::Normal)",
+							"doc": "Signals `counter` on completion.",
+							"line": 271
+						},
+						{
+							"kind": "method",
+							"name": "SubmitWithDependency",
+							"signature": "template<typename F> void SubmitWithDependency(F&& job, const JobCounterPtr& dependency, const JobCounterPtr& completionCounter = nullptr, JobPriority priority = JobPriority::Normal)",
+							"doc": "Runs only once `dependency` reaches zero.",
+							"line": 285
+						},
+						{
+							"kind": "method",
+							"name": "SubmitToMainThread",
+							"signature": "void SubmitToMainThread(JobFunc job)",
+							"doc": "Work that must run on the main thread — GPU ops, UI.",
+							"line": 300
+						},
+						{
+							"kind": "method",
+							"name": "ProcessMainThreadJobs",
+							"signature": "void ProcessMainThreadJobs()",
+							"doc": "Call from the main thread at the start of each frame.",
+							"line": 303
+						},
+						{
+							"kind": "method",
+							"name": "ParallelFor",
+							"signature": "JobCounterPtr ParallelFor(uint32_t count, uint32_t batchSize, const std::function<void(uint32_t begin, uint32_t end)>& func, JobPriority priority = JobPriority::Normal)",
+							"doc": "Splits [0, count) into batches and returns a counter to wait on.",
+							"line": 306
+						},
+						{
+							"kind": "method",
+							"name": "ParallelFor",
+							"signature": "JobCounterPtr ParallelFor(uint32_t count, const std::function<void(uint32_t begin, uint32_t end)>& func, JobPriority priority = JobPriority::Normal)",
+							"doc": "Picks batchSize so each worker gets ~4 batches, trading granularity\nagainst per-batch overhead. Use the explicit overload to control it.",
+							"line": 310
+						},
+						{
+							"kind": "method",
+							"name": "WaitForCounter",
+							"signature": "void WaitForCounter(const JobCounterPtr& counter)",
+							"doc": "Runs the counter's own still-queued jobs on the calling thread while it\nwaits, and sleeps only when the rest are already running on workers. A\nwaiter used to sleep through the whole batch — the game thread idled\nfor every parallel section, a 1/(workers+1) share of it lost on a\nfour-core handheld — and a worker waiting on its own pool could only\nhope another worker got there.",
+							"line": 318
+						},
+						{
+							"kind": "method",
+							"name": "IsWorkerThread",
+							"signature": "static bool IsWorkerThread()",
+							"static": true,
+							"doc": "True when the calling thread is one of this pool's workers. Callers that\nwant to apply backpressure (block until the pool drains) MUST check this\nfirst: a worker blocking on the pool's own progress deadlocks it.",
+							"line": 323
+						},
+						{
+							"kind": "method",
+							"name": "IsInitialized",
+							"signature": "bool IsInitialized() const",
+							"line": 325
+						},
+						{
+							"kind": "method",
+							"name": "GetWorkerCount",
+							"signature": "uint32_t GetWorkerCount() const",
+							"line": 328
+						},
+						{
+							"kind": "method",
+							"name": "GetJobsExecuted",
+							"signature": "uint64_t GetJobsExecuted() const",
+							"line": 331
+						},
+						{
+							"kind": "method",
+							"name": "GetQueueSize",
+							"signature": "uint32_t GetQueueSize() const",
+							"line": 334
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "alias",
+					"name": "JobFunc",
+					"signature": "using JobFunc = std::function<void()>",
+					"line": 22
+				},
+				{
+					"kind": "alias",
+					"name": "JobCounterPtr",
+					"signature": "using JobCounterPtr = std::shared_ptr<JobCounter>",
+					"line": 126
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/Thread.h",
+			"include": "Threading/Thread.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "Thread",
+					"namespace": "Mowo",
+					"line": 13,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Thread",
+							"signature": "Thread() = default",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "~Thread",
+							"signature": "~Thread()",
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "Thread",
+							"signature": "Thread(const Thread&) = delete",
+							"line": 18
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "Thread& operator=(const Thread&) = delete",
+							"line": 19
+						},
+						{
+							"kind": "method",
+							"name": "Thread",
+							"signature": "Thread(Thread&&) noexcept",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "Thread& operator=(Thread&&) noexcept",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "Dispatch",
+							"signature": "template<typename Fn, typename... Args> void Dispatch(Fn&& func, Args&&... args)",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "SetName",
+							"signature": "void SetName(const std::string& name)",
+							"doc": "Visible in the debugger and profiler.",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "SetAffinity",
+							"signature": "void SetAffinity(uint64_t mask)",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "SetCurrentThreadName",
+							"signature": "static void SetCurrentThreadName(const std::string& name)",
+							"static": true,
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "Join",
+							"signature": "void Join()",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "Joinable",
+							"signature": "bool Joinable() const",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "GetID",
+							"signature": "std::thread::id GetID() const",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "SetMainThreadID",
+							"signature": "static void SetMainThreadID()",
+							"static": true,
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "SetRenderThreadID",
+							"signature": "static void SetRenderThreadID()",
+							"static": true,
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "GetMainThreadID",
+							"signature": "static std::thread::id GetMainThreadID()",
+							"static": true,
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "GetRenderThreadID",
+							"signature": "static std::thread::id GetRenderThreadID()",
+							"static": true,
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "IsMainThread",
+							"signature": "static bool IsMainThread()",
+							"static": true,
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "IsRenderThread",
+							"signature": "static bool IsRenderThread()",
+							"static": true,
+							"line": 58
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Threading/Public/Threading/ThreadSignal.h",
+			"include": "Threading/ThreadSignal.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "ThreadSignal",
+					"namespace": "Mowo",
+					"doc": "Auto-reset event. Windows backs it with a native Event, which beats a\ncondition variable for plain signal/wait; elsewhere it is a mutex plus\ncondition variable. The handle is owned by the platform layer.",
+					"line": 12,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ThreadSignal",
+							"signature": "ThreadSignal()",
+							"line": 14
+						},
+						{
+							"kind": "method",
+							"name": "~ThreadSignal",
+							"signature": "~ThreadSignal()",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "ThreadSignal",
+							"signature": "ThreadSignal(const ThreadSignal&) = delete",
+							"line": 17
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "ThreadSignal& operator=(const ThreadSignal&) = delete",
+							"line": 18
+						},
+						{
+							"kind": "method",
+							"name": "Wait",
+							"signature": "void Wait()",
+							"doc": "Block until signaled. Resets automatically after wake.",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "WaitFor",
+							"signature": "bool WaitFor(uint32_t timeoutMs)",
+							"doc": "True if signaled, false on timeout.",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Signal",
+							"signature": "void Signal()",
+							"doc": "Wakes one waiting thread.",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset()",
+							"line": 29
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

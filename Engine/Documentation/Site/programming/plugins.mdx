@@ -1,0 +1,233 @@
+---
+title: Writing a plugin
+description: Write a plugin with a .mplugin manifest, runtime and editor C++ modules, content and shaders, enable it per project, and register through the engine's seams.
+order: 7
+sources:
+  - Engine/Source/Runtime/Project/Public/Project/PluginManager.h
+  - Engine/Source/Runtime/Project/Private/PluginManager.cpp
+  - Engine/Source/Runtime/Core/Public/Core/FModuleManager.h
+  - Engine/Source/Runtime/Game/Public/Game/EngineModularRegistry.h
+  - Engine/Source/Runtime/ECS/Public/ECS/SceneSystemRegistry.h
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorPanelRegistry.h
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorExtensionRegistry.h
+  - Engine/Source/Developer/MowoEditorPluginProbe/Private/EditorPluginProbe.cpp
+  - Engine/Source/Developer/MowoEditorPluginProbe/MowoEditorPluginProbe.Build.cs
+  - Engine/Plugins/Combat/Combat.mplugin
+  - Engine/Plugins/Combat/Combat.Build.cs
+  - Samples/SampleProject/Config/Plugins.ini
+  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp
+verifiedAt: 08e26df3d
+---
+
+A plugin is a folder with a `.mplugin` manifest and, usually, C++ modules and a `Content/` folder. When a project enables it, its content mounts into the virtual filesystem, its modules load and register their types, and its editor module (if it has one) extends the editor. The engine ships <Fact id="plugins.length" /> plugins in `Engine/Plugins/`, all off by default.
+
+## Layout
+
+```text
+MyPlugin/
+  MyPlugin.mplugin            JSON manifest
+  MyPlugin.Build.cs           the runtime module's rules
+  Public/MyPlugin/            reflected headers
+  Private/                    sources
+  Content/                    assets, mounted at Plugins/MyPlugin
+  Shaders/                    HLSL, optional
+```
+
+A plugin lives either in `Engine/Plugins/<Name>/` (shared by every project on the machine, loaded at engine start-up, read-only in the editor) or in `<Project>/Plugins/<Name>/` (committed with the project, loaded when the project opens).
+
+## The manifest
+
+```json title="MyPlugin.mplugin"
+{
+  "name": "MyPlugin",
+  "friendlyName": "My Plugin",
+  "version": "1.0.0",
+  "description": "What the plugin adds, in one or two sentences.",
+  "author": "Studio",
+  "category": "Gameplay",
+  "icon": "swords",
+  "enabledByDefault": false,
+  "content": true,
+  "engineVersion": "0.3",
+  "dependencies": [],
+  "modules": [
+    { "name": "MyPlugin", "type": "Runtime", "loadingPhase": "Default" },
+    { "name": "MyPluginEditor", "type": "Editor" }
+  ]
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `name` | The plugin's identity; one plugin per name |
+| `content` | `true` mounts the plugin's `Content/` folder |
+| `enabledByDefault` | Used when the project's `Config/Plugins.ini` says nothing |
+| `engineVersion` | The engine major.minor the plugin targets; another version blocks the plugin |
+| `dependencies` | Names of plugins that must be enabled and loadable first |
+| `modules` | The C++ modules to load: a name, or an object with `name`, `type` and `loadingPhase` |
+| `requiresOnline`, `server`, `dlc`, `beta`, `marketplaceUrl` | Flags the Plugins window and packaging read |
+
+A module's `type` decides which hosts load it. `"Runtime"` (the default) loads everywhere; `"Editor"` loads only in the editor, and the game, the server and packaging skip it. <Source path="Engine/Source/Runtime/Project/Private/PluginManager.cpp" />
+
+## Enabling a plugin
+
+Each project decides in `Config/Plugins.ini`:
+
+```ini title="Config/Plugins.ini"
+[enabled]
+Combat=True
+ScanHierarchy=True
+```
+
+The file wins over `enabledByDefault`. The editor's Plugins window writes it; see [Editor](/docs/editor/). Content mounts and unmounts immediately. Enabling a code plugin loads its modules at once; disabling one that is already loaded takes effect after a restart, because unloading it would remove classes that live objects use.
+
+Cooking, packaging and the monolithic link read the same file, so a disabled plugin ships neither its content nor its binaries.
+
+### Dependencies and versions
+
+An enabled plugin does not load (no content, no modules) when a dependency is missing, disabled or blocked itself, when the dependencies form a cycle, or when its `engineVersion` names another engine major.minor. The plugin stays enabled, and its blocked reason appears in the log and the Plugins window:
+
+```text
+Plugin 'Survival' does not load: it requires plugin 'Combat', which is disabled
+```
+
+Modules load in dependency order: a plugin's modules load only after those of every plugin it depends on.
+
+## Runtime modules
+
+A plugin module is an ordinary module with its own `.Build.cs`, built by `mbt` like a game module:
+
+```csharp title="MyPlugin.Build.cs"
+public class MyPlugin : ModuleRules
+{
+	public MyPlugin(ReadOnlyTargetRules Target) : base(Target)
+	{
+		PublicDependencyModuleNames.Add("EngineLoop");
+
+		PrivateIncludePaths.Add(EngineLoopPrivateDirectory);
+		CompilerFlags.Add("/FIstdafx.h");
+
+		bUseHeaderTool = true;
+		HeaderToolDirectories.Add("Public/MyPlugin");
+	}
+}
+```
+
+The loader looks for the module binary in the engine's binaries folder first, then in the plugin's own `Binaries/<Platform>/` and `Binaries/` folders, so a plugin can ship prebuilt. A module whose binary has not been built is skipped with a log line, and the project still opens.
+
+Build plugins in the same configuration as the engine that loads them: the loader refuses a module built against another C++ runtime (a Debug plugin in a Release editor, for example).
+
+### Extending the engine
+
+Reflected types (`MCLASS`, `MOWO_REFLECTED` components) register themselves when the module loads; nothing else is needed for them to save, appear in the editor and show up in Visual Scripting.
+
+Everything else goes through `FEngineModularRegistry` from the module's `InitializeModule`: <Source symbol="FEngineModularRegistry" />
+
+| Call | What it adds |
+| --- | --- |
+| `RegisterSceneSystem(FModularSceneSystem)` | An ECS scene system with its tick order and the play modes it runs in |
+| `RegisterAssetSerializer(factory)` | An asset type; each host applies the registered serializers after its built-in ones |
+| `RegisterStateFragment(...)` | World state a plugin system owns that save games and level travel carry |
+| `RegisterCharacterExtension(...)` | Input bindings and an aim feed for a plugin-owned character mode |
+
+These add to the engine's built-in tables and never replace them. Descriptors cross the DLL boundary as plain function pointers, never `std::function`.
+
+Online platform plugins register an `IOnlineService` the same way; see [Multiplayer](/docs/multiplayer/).
+
+## Editor modules
+
+The editor is an executable with no public headers, so a plugin cannot link into it. It links **`EditorFramework`** instead, the library that holds the editor's extension points. A module of type `"Editor"` that depends on it:
+
+```csharp title="MyPluginEditor.Build.cs"
+public class MyPluginEditor : ModuleRules
+{
+	public MyPluginEditor(ReadOnlyTargetRules Target) : base(Target)
+	{
+		PrivateDependencyModuleNames.Add("Core");
+		PrivateDependencyModuleNames.Add("Arc");
+		PrivateDependencyModuleNames.Add("EditorFramework");
+	}
+}
+```
+
+Two registries are available:
+
+- **`FEditorDockPanelRegistry`** registers dock panels. A panel appears under **Window > Plugins** and restores with the layout like a built-in one. <Source symbol="FEditorDockPanelRegistry" />
+- **`FEditorExtensionRegistry`** adds menu entries (File, Edit, Tools, Window, Build, Help), toolbar buttons beside the play controls, Details customizations keyed by component type, and viewport modes. <Source symbol="FEditorExtensionRegistry" />
+
+```cpp title="MyPluginEditor.cpp"
+#include <Arc/Framework/ArcDeclarativeSyntax.h>
+#include <Arc/Widgets/ATextBlock.h>
+#include <Core/FModuleManager.h>
+#include <EditorFramework/EditorExtensionRegistry.h>
+#include <EditorFramework/EditorPanelRegistry.h>
+
+#include <utility>
+
+MOWO_IMPLEMENT_MODULE_API_VERSION()
+
+extern "C" MOWO_MODULE_EXPORT void InitializeModule() {
+	Mowo::FEditorDockPanelDesc panel;
+	panel.Kind = "MyTool";
+	panel.Title = "My Tool";
+	panel.Create = [](int32_t) {
+		Mowo::FEditorDockPanelInstance instance;
+		instance.Surface = ArcNew(Arcf::ATextBlock).Text(Arcf::CText::FromString("Hello from MyPlugin"));
+
+		return instance;
+	};
+	Mowo::FEditorDockPanelRegistry::Get().Register(std::move(panel));
+
+	Mowo::FEditorMenuExtension entry;
+	entry.Id = "MyPlugin.Run";
+	entry.Menu = Mowo::EEditorMenu::Tools;
+	entry.Label = "Run My Tool";
+	entry.Execute = []() {
+	};
+	Mowo::FEditorExtensionRegistry::Get().AddMenuEntry(std::move(entry));
+}
+
+extern "C" MOWO_MODULE_EXPORT void ShutdownModule() {
+	Mowo::FEditorExtensionRegistry::Get().RemoveMenuEntry("MyPlugin.Run");
+	Mowo::FEditorDockPanelRegistry::Get().Unregister("MyTool");
+}
+```
+
+<Callout type="warning">
+Remove in `ShutdownModule` everything you added in `InitializeModule`. A panel factory, a menu callback and every widget they built are code inside your DLL; an entry left behind is called or destroyed after that code is gone.
+</Callout>
+
+`Engine/Source/Developer/MowoEditorPluginProbe` is a complete editor module that registers one of each extension kind. <Source path="Engine/Source/Developer/MowoEditorPluginProbe/Private/EditorPluginProbe.cpp" />
+
+## The module ABI check
+
+Every module binary exports its ABI version with `MOWO_IMPLEMENT_MODULE_API_VERSION()` from `Core/FModuleManager.h`. Right after loading a library, `FModuleManager` compares it with the engine's `MOWO_MODULE_API_VERSION` and the C++ runtime the module was built against. A binary that exports another number, or none, is refused: the log names the module and says to rebuild it against this engine, its static registrations are removed, and the library is freed. <Source symbol="FModuleManager::LoadModule" />
+
+The check exists because descriptors such as `FModularSceneSystem` are copied with the engine's layout; a plugin built against an older layout would hand over a shorter struct. When you change such a boundary type in the engine, bump `MOWO_MODULE_API_VERSION`.
+
+## Unloading
+
+When a project closes, its plugin modules unload. The world is torn down first, then each module's reflected classes are unregistered, a garbage collection frees objects whose code lives in the module, `ShutdownModule` runs, and the library is freed.
+
+Before the library is freed, the engine sweeps every registry that might still point into it: scene systems, reflection, the modular registry, console commands, property-type handlers, `EventBus` subscriptions, timers and others. Most registrations record the module they came from automatically, so plugin code needs no extra step. `FModuleManager::AddUnloadHandler` lets your own registries join the sweep.
+
+## Shaders
+
+A plugin keeps HLSL in `Shaders/` and maps it to a virtual root in its `.Build.cs`:
+
+```csharp
+AddShaderSourceDirectoryMapping("/Plugin/MyPlugin", "Shaders");
+ShaderDirectories.Add("Shaders/Private");
+ShaderArchive = "MyPluginShaders.meaf";
+```
+
+Its shaders include engine headers as `/Engine/Public/…` and their own as `/Plugin/MyPlugin/…`, and their compiled keys carry the `Plugin/MyPlugin/` prefix, so a plugin cannot replace an engine shader. See [Rendering](/docs/rendering/).
+
+## Content and packaging
+
+An enabled plugin's `Content/` mounts at `Plugins/<Name>`, so its assets are referenced as `Plugins/MyPlugin/Materials/M_Plastic.mat`. Cooking and packaging put every enabled plugin's content into the game's content archive under the same prefix, so references resolve unchanged in a packaged game. See [Shipping](/docs/shipping/).
+
+## Engine plugins and feature modules
+
+Engine systems such as AI and navigation, the Sequencer and destruction are feature modules, not plugins: they always ship and the engine loads them by name. What stays a plugin is what a game opts into: platform SDKs (SteamPlatform, DiscordPlatform, MowoOnlinePlatform), gameplay kits (Combat, Survival), SmartProps and ScanHierarchy. No engine module depends on a plugin. See [Architecture](/docs/programming/architecture/#feature-modules).

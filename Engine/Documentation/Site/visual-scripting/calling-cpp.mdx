@@ -1,0 +1,199 @@
+---
+title: Calling C++ from Visual Scripting and back
+sidebarTitle: Calling C++
+description: Expose C++ functions as nodes with MFUNCTION, learn how the VM resolves and marshals a call, and spawn and drive visual classes from C++.
+order: 7
+sources:
+  - Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h
+  - Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Core/Public/Core/MClassRegistry.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomNodeCatalog.h
+  - Engine/Source/Runtime/Loom/Public/Loom/LoomValue.h
+  - Engine/Source/Runtime/Loom/Private/LoomVM.cpp
+  - Engine/Source/Runtime/Loom/Private/LoomRpc.cpp
+  - Engine/Source/Programs/MowoHeaderTool/Emit/ReflSourceEmitter.cs
+  - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Game/Public/Game/ALoomActor.h
+  - Engine/Source/Runtime/Game/Public/Game/LoomRuntime.h
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+  - Engine/Source/Runtime/Game/Public/Game/MGameplayStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/MTimerStatics.h
+  - Templates/TP_FirstPerson/Source/TP_FirstPerson/TP_FirstPerson.Build.cs
+verifiedAt: 1a346c1c5
+---
+
+Visual Scripting and C++ meet through reflection. Mark a C++ function with `MFUNCTION` and it becomes a node; nothing else is needed. In the other direction, C++ can spawn a visual class by name, call its functions, fire its input pins and read its variables.
+
+## How a C++ function becomes a node
+
+<Flow steps={["MCLASS + MFUNCTION in a header", "MowoHeaderTool generates the thunks", "MClass with FMFunctionInfo", "Node catalogue lists it", "VM calls the thunk"]} highlight={2} caption="From annotation to callable node" />
+
+1. You annotate a class with `MCLASS()` and its methods with `MFUNCTION()`.
+2. During the build, MowoHeaderTool (MHT) reads the header and generates a descriptor with a thunk per function. The [Reflection](/docs/programming/) guide covers the macros, specifiers and header rules.
+3. The descriptor lists each function's name, parameter names and types, return type, flags and an invoke pointer <Source symbol="FMFunctionInfo" />.
+4. The node catalogue walks every registered class and flattens its functions <Source symbol="LoomNodeCatalog" />.
+5. At run time the VM resolves the node's function name, converts each argument to the parameter type, and calls the thunk.
+
+## Expose a function
+
+<Steps>
+<Step title="Turn on the header tool in the module">
+
+Your game module's `.Build.cs` sets `bUseHeaderTool = true` and lists its reflected header folder in `HeaderToolDirectories`. The project templates already do <Source path="Templates/TP_FirstPerson/Source/TP_FirstPerson/TP_FirstPerson.Build.cs" />.
+
+</Step>
+<Step title="Mark it up">
+
+Add `MCLASS()` before the class, `MGENERATED_BODY()` inside it, and `MFUNCTION()` before each method a graph should see. End the header's includes with its generated header. An optional `Tooltip` specifier becomes the node's description.
+
+</Step>
+<Step title="Build and use it">
+
+Build the module and open the Visual Scripting editor. A function on your actor class can be called on a target of that class with **Call On Target**. A class whose name ends in `Statics` gets its own palette category: `MScoreStatics` shows up as **Score Library**.
+
+</Step>
+</Steps>
+
+```cpp nocompile title="Source/MyGame/Public/MyGame/AScoreBoard.h"
+#pragma once
+
+#include "Game/AActor.h"
+
+#include <cstdint>
+#include <string>
+
+#include "AScoreBoard.generated.h"
+
+namespace Mowo {
+
+MCLASS()
+class AScoreBoard : public AActor {
+	MGENERATED_BODY()
+
+public:
+	MFUNCTION(Tooltip="Adds points to the running score.")
+	void AddScore(int32_t points) { m_Score += points; }
+
+	MFUNCTION(Tooltip="The current score. Const, so it is a pure node.")
+	int32_t GetScore() const { return m_Score; }
+
+	MFUNCTION()
+	bool HasReached(int32_t target, int32_t& outMissing) const;
+
+	MFUNCTION(Server, Reliable)
+	void RequestReset() { m_Score = 0; }
+
+private:
+	int32_t m_Score = 0;
+};
+
+} // namespace Mowo
+```
+
+What a graph sees for this class:
+
+| Function | Node shape |
+| --- | --- |
+| `AddScore` | Exec node with an Int input labeled `points` |
+| `GetScore` | Pure node, because it is `const` |
+| `HasReached` | Pure node with a Bool return on pin 0 and the out-parameter `outMissing` on pin 1 |
+| `RequestReset` | Exec node that routes to the server as a reliable RPC |
+
+## How the VM resolves a call
+
+A **Call Function** node stores a function name. The VM resolves it like this <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />:
+
+1. **Qualified name.** If the name has the form `Class::Function`, the VM finds that class and calls the function on its default object, or with no instance if the function is static. This is how the **Library** nodes such as `MGameplayStatics::SpawnActorByClass` work from any graph.
+2. **The running class.** Otherwise it walks the running instance's native class chain and takes the first match. `AActor` exposes functions such as `GetActorLocation`, `SetActorLocation`, `GetActorName` and `GetComponentByClass` this way <Source symbol="AActor" />. A Character class reaches `ACharacter`'s functions the same way.
+3. **Call On Target.** A **Call On Target** node resolves on the target object's class instead. If the target has no reflected function of that name but is a visual class, the VM runs the target's visual function in the target's own context, with the target's variables. A reflected method always wins over a visual function of the same name.
+
+A non-static function with no instance to call on logs "without a target instance" and does nothing. Answers are cached per thread and dropped whenever a class registers, unregisters or a module unloads.
+
+### What marshals
+
+| C++ parameter or return | Pin |
+| --- | --- |
+| `bool` | Bool |
+| `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, narrow integers, enums | Int family |
+| `float`, `double` | Float family |
+| `Vec2`, `Vec3`, `Vec4`, `Quat` | Vector pins |
+| `std::string`, `FName`, gameplay tags | String |
+| `FRotator` | Vec3 of pitch, yaw and roll in degrees |
+| `TSoftObjectPtr<T>` | String asset path |
+| `MClass*` | String class name |
+| `MObject*` and subclasses, such as `AActor*` | Object |
+| A registered `MSTRUCT`, `FTransform` | Struct (`Custom`) |
+| An unregistered struct, any container | Refused: the call is skipped with an error |
+
+A non-const reference parameter, such as `Vec3& outLocation`, is an **out-parameter**. The node shows it as an output pin: pin 0 is the return value and pin *k* is the *k*-th out-parameter, in declaration order. A type that marshals through another pin (an enum, `FName`, `FRotator` and so on) cannot be an out-parameter; the header tool fails the build on one.
+
+The VM checks the argument count strictly: a node that supplies the wrong number of inputs is refused. Spawn functions are the exception, because [Expose on Spawn](/docs/visual-scripting/variables-and-types/#expose-on-spawn) pins follow the declared parameters.
+
+### RPC specifiers
+
+`MFUNCTION(Server)`, `MFUNCTION(Client)` and `MFUNCTION(Multicast)`, optionally with `Reliable`, declare a network RPC <Source path="Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs" />. A call to one routes over the session instead of running locally. An RPC must be a non-static, non-const method that returns `void`; the VM refuses anything else at the call, and the editor flags it as a compile error. The receiving side re-checks the direction against where the packet came from <Source path="Engine/Source/Runtime/Loom/Private/LoomRpc.cpp" />, so a peer cannot run a non-RPC or wrong-direction function by naming it.
+
+## Call a visual class from C++
+
+Every backing class implements `ILoomHost`, and its `FLoomRuntime` is the visual side of the object. Through `ALoomActor` (or `FLoomRuntime::Of` for any backing class), C++ can <Source symbol="ALoomActor" />:
+
+- spawn a class by name, with `MWorld::SpawnActorByClass` or `MGameplayStatics::SpawnActorByClass`;
+- run one of the class's functions with `CallLoomFunction`;
+- run any event graph as an input pin with `ReceivePin`, passing a payload that lands in `PinPayload`;
+- read and write the instance's variables with `FindVar` and `SetVar`.
+
+```cpp title="Source/MyGame/Private/DoorControl.cpp"
+#include "Core/MClassRegistry.h"
+#include "Game/ALoomActor.h"
+#include "Game/MWorld.h"
+#include "Loom/LoomValue.h"
+
+#include <vector>
+
+static bool OpenDoorFromCpp(Mowo::MWorld* world)
+{
+	Mowo::MClass* doorClass = Mowo::MClassRegistry::Get().FindByName(Mowo::FName("BP_Door"));
+	if (!world || !doorClass) {
+		return false;
+	}
+
+	auto* door = dynamic_cast<Mowo::ALoomActor*>(world->SpawnActorByClass(doorClass));
+	if (!door) {
+		return false;
+	}
+
+	std::vector<Mowo::LoomValue> args = { Mowo::LoomValue::MakeFloat(2.0f) };
+	door->CallLoomFunction("OpenDoor", args, nullptr);
+
+	door->ReceivePin("OnInteract", Mowo::LoomValue::FromObject(door));
+
+	const Mowo::LoomValue* isOpen = door->FindVar("IsOpen");
+
+	return isOpen && isOpen->AsBoolean();
+}
+```
+
+`BP_Door`, `OpenDoor`, `OnInteract` and `IsOpen` come from the sample class shown on [The .loom file format](/docs/visual-scripting/loom-file-format/).
+
+### Timers and level wiring
+
+`MTimerStatics::SetTimerByPin` schedules an instance's input pin on the world's timer manager and returns an int handle. Unlike **Delay**, the graph keeps running, the timer can repeat, and it can be paused or cleared <Source symbol="MTimerStatics" />.
+
+`MWorld` also keeps a table of pin wires: firing an output pin on one actor runs a named input pin on another <Source symbol="MWorld::AddPinWire" />. A graph fires one with the **FirePin** node. C++ adds wires with `AddPinWire` and fires them with `MWorld::FirePin`.
+
+## Choose where logic lives
+
+| Put it in a visual class when | Put it in C++ when |
+| --- | --- |
+| It is per-actor behavior: a door, a pickup, a trap. | It is a reusable system other code calls. |
+| Designers need to tune and rewire it. | It runs on a hot path. |
+| It wires existing functions together. | It needs containers across the call boundary. |
+
+Expose the heavy lifting from C++ as `MFUNCTION`s, then compose it in a graph.
+
+## Next
+
+- [Node libraries](/docs/visual-scripting/node-libraries/): the shipped `Statics` classes.
+- [Debugging](/docs/visual-scripting/debugging/): watch these calls fire.
+- [Programming](/docs/programming/) and the [Game API](/docs/api/game/).

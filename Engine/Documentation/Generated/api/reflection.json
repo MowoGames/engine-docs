@@ -1,0 +1,2737 @@
+{
+	"name": "MowoEngine.Reflection",
+	"displayName": "Reflection",
+	"slug": "reflection",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/Reflection/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/AssetRefPolicy.h",
+			"include": "Reflection/AssetRefPolicy.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FAssetRefPolicy",
+					"namespace": "Mowo",
+					"doc": "What an asset reference is written as (UE's rule that an object path lies\nunder a mount point). A native absolute path resolves only on the machine\nthat wrote it — the VFS falls back to the native file when its mounts miss —\nso a reference like \"C:/Users/<someone>/.../hud.ui\" loads for its author,\nships nowhere and names a user in git. The host that knows the mount points\n(the open project) installs a normalizer that turns a path under them into\nthe mount-relative form; what it cannot place stays as it was and is\nreported, once per path, when it is written and when a cook resolves it.",
+					"line": 19,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "FNormalizer",
+							"signature": "using FNormalizer = std::function<std::string(const std::string& reference)>",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "SetNormalizer",
+							"signature": "static void SetNormalizer(FNormalizer normalizer)",
+							"static": true,
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "IsNativeAbsolute",
+							"signature": "static bool IsNativeAbsolute(const std::string& reference)",
+							"static": true,
+							"doc": "\"C:/...\", \"C:\\\\...\", \"/home/...\", \"\\\\\\\\server\\\\share\" — not a VFS key.",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "ForWrite",
+							"signature": "static std::string ForWrite(const std::string& reference, const char* where)",
+							"static": true,
+							"doc": "The form `reference` is serialized in: unchanged unless it is native\nabsolute, then mount-relative where the normalizer can make it so.\n`where` names the field for the warning.",
+							"line": 31
+						},
+						{
+							"kind": "alias",
+							"name": "FKnownAsset",
+							"signature": "using FKnownAsset = std::function<bool(const std::string& reference)>",
+							"doc": "Whether a plain string names an asset the open project knows — for the\nwriters whose slot is a free string (a script's string literal) rather\nthan a declared reference. The host that owns the asset registry\ninstalls the predicate; without one nothing is known, and the writer\nkeeps the string plain rather than guess from its shape.",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "SetKnownAssetPredicate",
+							"signature": "static void SetKnownAssetPredicate(FKnownAsset predicate)",
+							"static": true,
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "IsKnownAsset",
+							"signature": "static bool IsKnownAsset(const std::string& reference)",
+							"static": true,
+							"line": 41
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/AssetRefSchema.h",
+			"include": "Reflection/AssetRefSchema.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FAssetRefSchema",
+					"namespace": "Mowo",
+					"doc": "Which keys of an MDF node hold asset references, answered from reflection\ntables only. A plain string that looks like a path is never one: the shape\nguess made labels and tags into cook dependencies and still missed every\nreference spelled without a slash. FAssetRefScan (the dependency walk) and\nFAssetRefRetype (the migration) both read through here, so what the cook\nfollows and what the migration types cannot drift apart.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "method",
+							"name": "CollectReflectedRefs",
+							"signature": "static void CollectReflectedRefs(const TypeDescriptor& desc, const MdfNode& node, std::vector<std::string>& outPaths)",
+							"static": true,
+							"doc": "The keys `desc` declares asset references — PropertyType::AssetRef\n(MOWO_ASSET_REF, FSoftObjectPath), arrays of them and the same inside\nnested reflected structs — read whatever their stored type, so a value\nsaved before the writer typed it still counts.",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "CollectObjectRefs",
+							"signature": "static void CollectObjectRefs(const MdfNode& objectNode, std::vector<std::string>& outPaths)",
+							"static": true,
+							"doc": "An `Actor` node and its `Component` children: every field the class\nchain flags FMPropertyFlags::AssetRef (MPROPERTY(AssetRef) and every\nFSoftObjectPath field) under each `Properties` node. A class this host\ndid not load contributes nothing here; its fields are written typed.",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "RegisterNodeSchema",
+							"signature": "static bool RegisterNodeSchema(const std::string& nodePath, const TypeDescriptor* desc)",
+							"static": true,
+							"doc": "The reflection table of a document-level node that is not a component,\nkeyed by its path under the document root (\"Environment\",\n\"Environment/PostProcess\") so a same-named block in another kind of\ndocument is not read against it. The layer that owns the block\nregisters it at static init.",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "FindNodeSchema",
+							"signature": "static const TypeDescriptor* FindNodeSchema(const std::string& nodePath)",
+							"static": true,
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "CollectSchemaRefs",
+							"signature": "static void CollectSchemaRefs(const MdfNode& node, const std::string& nodePath, std::vector<std::string>& outPaths)",
+							"static": true,
+							"doc": "`node` (at `nodePath`) and everything under it, against the registered\nnode schemas.",
+							"line": 44
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/EditConditions.h",
+			"include": "Reflection/EditConditions.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FEditConditions",
+					"namespace": "Mowo",
+					"line": 16,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Evaluate",
+							"signature": "static bool Evaluate(const TypeDescriptor& desc, const void* component, const char* condition)",
+							"static": true,
+							"doc": "True when `condition` (\"name\" / \"!name\", matching a sibling\nproperty's serialized key or display name) evaluates truthy against\nthe live component. Bools read their value; integral types read\nnon-zero. A condition naming nothing resolvable is TRUE — a typo\nmust not brick editing of the row it guards.",
+							"line": 23
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/EnumDescriptor.h",
+			"include": "Reflection/EnumDescriptor.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "EnumEntry",
+					"namespace": "Mowo",
+					"doc": "Maps enum values to and from display / serialized names.",
+					"line": 11,
+					"members": [
+						{
+							"kind": "field",
+							"name": "value",
+							"signature": "int value",
+							"line": 12
+						},
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "const char* name",
+							"doc": "Enumerator identifier — the MDF enum string",
+							"line": 13
+						},
+						{
+							"kind": "field",
+							"name": "displayName",
+							"signature": "const char* displayName = nullptr",
+							"doc": "Optional human label for the inspector dropdown. Null means the UI\nde-camel-cases `name`; the serialized form never uses this.",
+							"line": 16
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "EnumDescriptor",
+					"namespace": "Mowo",
+					"line": 19,
+					"members": [
+						{
+							"kind": "field",
+							"name": "typeName",
+							"signature": "const char* typeName",
+							"doc": "\"LightType\"",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "entries",
+							"signature": "const EnumEntry* entries",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "entryCount",
+							"signature": "uint32_t entryCount",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "DisplayNameFor",
+							"signature": "const char* DisplayNameFor(uint32_t index) const",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "FindByValue",
+							"signature": "const EnumEntry* FindByValue(int value) const",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "FindByName",
+							"signature": "const EnumEntry* FindByName(const char* name) const",
+							"line": 41
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/EnumRegistry.h",
+			"include": "Reflection/EnumRegistry.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FEnumRegistry",
+					"namespace": "Mowo",
+					"doc": "Every enum descriptor MowoHeaderTool generated, by type name. Reflected components reach theirs\nthrough generated code; an actor MPROPERTY carries only its C++ type\nspelling, and without a lookup the actor serializer wrote enums as raw\nintegers — inserting an enumerator in the middle then silently changed what\nevery saved actor meant.",
+					"line": 17,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "static bool Register(const EnumDescriptor* desc)",
+							"static": true,
+							"doc": "Called from the generated descriptors' static initializers. Always true, so it can\nseed an inline variable.",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "static const EnumDescriptor* Find(std::string_view cxxTypeName)",
+							"static": true,
+							"doc": "Accepts the type as C++ spells it: \"EMode\", \"Mowo::EMode\" or\n\"enum Mowo::EMode\". Null when no descriptor is registered for it.",
+							"line": 25
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/FieldRedirects.h",
+			"include": "Reflection/FieldRedirects.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FFieldRedirects",
+					"namespace": "Mowo",
+					"doc": "Renames that data on disk still uses — UE's FCoreRedirects, scoped to what\nMDF actually needs.\n\nWithout this, renaming a reflected field is silent data loss: the stored key\nmatches no property, so the loader drops the value and logs at DEBUG (once\nper key, forever). Renaming a component type is worse — the whole node is\nskipped with a warning. A redirect tells the loader where the value went, so\na rename stops costing the user their data.\n\nEntries come from two places: `Register*` at startup (engine renames, which\nbelong next to the rename that caused them) and a project's\n`Config/Redirects.ini`, so a game can declare its own renames without code —\nUE's [CoreRedirects] spelling, which the asset registry's renamed asset\npaths share:\n\n[CoreRedirects]\n+PropertyRedirects=(OldName=\"LightComponent.colour\",NewName=\"LightComponent.color\")\n+ClassRedirects=(OldName=\"PointLight\",NewName=\"LightComponent\")\n+StructRedirects=(OldName=\"FOldStats\",NewName=\"FStats\")\n+EnumRedirects=(OldName=\"LightType\",ValueChanges=((\"Omni\",\"Point\"),(\"Sun\",\"Directional\")))\n+PackageRedirects=(OldName=\"Content/Old.tex\",NewName=\"Content/New.tex\")\n\nAn EnumRedirects line that also renames the enum (OldName != NewName) keys\nits ValueChanges under the new name, which is what the loader asks with.\n\nThe MDF Redirects.mdf it replaces still reads, and converts on first touch\nthrough ConvertLegacy:\n\nRedirects {\nProperty { type: \"LightComponent\" from: \"colour\" to: \"color\" }\nType { from: \"PointLight\" to: \"LightComponent\" }\nEnumValue { enum: \"LightType\" from: \"Omni\" to: \"Point\" }\n\nBoth serialization paths read them: reflected components and structs, and\nactors (an actor's class is a Class redirect, its MPROPERTY a Property\nredirect under the class name, an enum value an Enum redirect under the\nenum's reflected name).",
+					"line": 56,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Section",
+							"signature": "static constexpr const char* Section = \"CoreRedirects\"",
+							"static": true,
+							"line": 58
+						},
+						{
+							"kind": "field",
+							"name": "PropertyRedirectsKey",
+							"signature": "static constexpr const char* PropertyRedirectsKey = \"PropertyRedirects\"",
+							"static": true,
+							"line": 59
+						},
+						{
+							"kind": "field",
+							"name": "ClassRedirectsKey",
+							"signature": "static constexpr const char* ClassRedirectsKey = \"ClassRedirects\"",
+							"static": true,
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "StructRedirectsKey",
+							"signature": "static constexpr const char* StructRedirectsKey = \"StructRedirects\"",
+							"static": true,
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "EnumRedirectsKey",
+							"signature": "static constexpr const char* EnumRedirectsKey = \"EnumRedirects\"",
+							"static": true,
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "PackageRedirectsKey",
+							"signature": "static constexpr const char* PackageRedirectsKey = \"PackageRedirects\"",
+							"static": true,
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "RegisterProperty",
+							"signature": "static void RegisterProperty(const std::string& typeName, const std::string& oldKey, const std::string& newKey)",
+							"static": true,
+							"doc": "A property that used to be called `oldKey` on `typeName` now serializes\nas `newKey`. Chains are followed on lookup, so a field renamed twice\nstill resolves.",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "RegisterType",
+							"signature": "static void RegisterType(const std::string& oldTypeName, const std::string& newTypeName)",
+							"static": true,
+							"doc": "A whole reflected type was renamed.",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "FindOldPropertyKey",
+							"signature": "static std::string FindOldPropertyKey(const std::string& typeName, const std::string& newKey)",
+							"static": true,
+							"doc": "The key `typeName.newKey` used to be stored under — empty when nothing\nredirects to it. This is a REVERSE lookup: the loader knows the property\nit wants and asks what old spelling might hold its value.",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "ResolvePropertyKey",
+							"signature": "static std::string ResolvePropertyKey(const std::string& typeName, const std::string& storedKey)",
+							"static": true,
+							"doc": "The FORWARD lookup, for a reader that walks the keys it finds: the key\n`storedKey` on `typeName` is stored under now, or `storedKey` itself.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "ResolveTypeName",
+							"signature": "static std::string ResolveTypeName(const std::string& oldTypeName)",
+							"static": true,
+							"doc": "The current name for a stored type name, or `oldTypeName` itself.",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "RegisterEnumValue",
+							"signature": "static void RegisterEnumValue(const std::string& enumName, const std::string& oldValue, const std::string& newValue)",
+							"static": true,
+							"doc": "An enumerator renamed in `enumName` (the reflected enum's name): a file\nstill spelling it `oldValue` loads as `newValue` instead of falling back\nto the default.",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "ResolveEnumValue",
+							"signature": "static std::string ResolveEnumValue(const std::string& enumName, const std::string& storedValue)",
+							"static": true,
+							"line": 89
+						},
+						{
+							"kind": "method",
+							"name": "HasAnyEnumValueRedirects",
+							"signature": "static bool HasAnyEnumValueRedirects()",
+							"static": true,
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "HasAnyTypeRedirects",
+							"signature": "static bool HasAnyTypeRedirects()",
+							"static": true,
+							"doc": "True when anything redirects to this type name (used to keep the\nper-node lookup off the hot path when a project declares no renames).",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "HasAnyPropertyRedirects",
+							"signature": "static bool HasAnyPropertyRedirects()",
+							"static": true,
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromFile",
+							"signature": "static uint32_t LoadFromFile(const std::string& path)",
+							"static": true,
+							"doc": "Load a `Redirects.ini` (or a legacy `Redirects.mdf`, told apart by\ncontent). Returns the number of entries added; a missing file is not an\nerror (most projects have none).",
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "ConvertLegacy",
+							"signature": "static bool ConvertLegacy(const MDF::MdfDocument& legacy, FConfigIniFile& out)",
+							"static": true,
+							"doc": "The legacy document — Property, Type and the registry's Asset nodes —\nas the [CoreRedirects] section above.",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "FormatRedirect",
+							"signature": "static std::string FormatRedirect(const std::string& oldName, const std::string& newName)",
+							"static": true,
+							"doc": "One redirect as the struct value a +...Redirects= line holds, and back.",
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "ParseRedirect",
+							"signature": "static bool ParseRedirect(const std::string& value, std::string& oldName, std::string& newName)",
+							"static": true,
+							"line": 108
+						},
+						{
+							"kind": "method",
+							"name": "FormatEnumRedirect",
+							"signature": "static std::string FormatEnumRedirect(const std::string& enumName, const std::string& oldValue, const std::string& newValue)",
+							"static": true,
+							"doc": "One +EnumRedirects= value: (OldName=\"E\",ValueChanges=((\"old\",\"new\"))),\nand back — `enumName` is NewName when the line has one, else OldName.",
+							"line": 112
+						},
+						{
+							"kind": "method",
+							"name": "ParseEnumRedirect",
+							"signature": "static bool ParseEnumRedirect(const std::string& value, std::string& enumName, std::vector<std::pair<std::string, std::string>>& changes)",
+							"static": true,
+							"line": 113
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "static void Clear()",
+							"static": true,
+							"line": 115
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/FunctionInfo.h",
+			"include": "Reflection/FunctionInfo.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "FunctionValueType",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Tag for a parameter or return type. Anything not covered is `Object` (a\npointer passed through opaquely) or `Custom` (resolved out-of-band). The\nthunk does the real static_cast, so an imperfect tag never breaks the\ncall — it only guides arg marshalling.",
+					"line": 27,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Void",
+							"signature": "Void",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bool",
+							"signature": "Bool",
+							"line": 29
+						},
+						{
+							"kind": "enumerator",
+							"name": "Int",
+							"signature": "Int",
+							"doc": "int32_t",
+							"line": 30
+						},
+						{
+							"kind": "enumerator",
+							"name": "UInt32",
+							"signature": "UInt32",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "Int64",
+							"signature": "Int64",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "UInt64",
+							"signature": "UInt64",
+							"line": 33
+						},
+						{
+							"kind": "enumerator",
+							"name": "Float",
+							"signature": "Float",
+							"line": 34
+						},
+						{
+							"kind": "enumerator",
+							"name": "Double",
+							"signature": "Double",
+							"line": 35
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec2",
+							"signature": "Vec2",
+							"line": 36
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec3",
+							"signature": "Vec3",
+							"line": 37
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec4",
+							"signature": "Vec4",
+							"line": 38
+						},
+						{
+							"kind": "enumerator",
+							"name": "Quat",
+							"signature": "Quat",
+							"line": 39
+						},
+						{
+							"kind": "enumerator",
+							"name": "String",
+							"signature": "String",
+							"doc": "std::string",
+							"line": 40
+						},
+						{
+							"kind": "enumerator",
+							"name": "Object",
+							"signature": "Object",
+							"doc": "MObject* / any pointer, passed by value (the pointer itself)",
+							"line": 41
+						},
+						{
+							"kind": "enumerator",
+							"name": "Custom",
+							"signature": "Custom",
+							"line": 42
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FunctionParam",
+					"namespace": "Mowo",
+					"line": 45,
+					"members": [
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "const char* name",
+							"doc": "\"amount\" (may be empty)",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "type",
+							"signature": "FunctionValueType type",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "flags",
+							"signature": "uint16_t flags = 0",
+							"doc": "FMParamFlags",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "typeName",
+							"signature": "const char* typeName = nullptr",
+							"line": 49
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FunctionFlags",
+					"namespace": "Mowo",
+					"line": 54,
+					"members": [
+						{
+							"kind": "field",
+							"name": "None",
+							"signature": "static constexpr uint16_t None = 0",
+							"static": true,
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "Static",
+							"signature": "static constexpr uint16_t Static = 1 << 0",
+							"static": true,
+							"doc": "no `instance`",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "Const",
+							"signature": "static constexpr uint16_t Const = 1 << 1",
+							"static": true,
+							"doc": "const method",
+							"line": 57
+						},
+						{
+							"kind": "field",
+							"name": "Server",
+							"signature": "static constexpr uint16_t Server = 1 << 2",
+							"static": true,
+							"doc": "RPC direction annotations (MFUNCTION(Server) / (Client) / (Multicast)).\nServer = client → server (the owning client may invoke it on the\nauthority); Client = server → the owning client; Multicast = server →\nevery client. A call in the wrong direction is refused at the send\nsite. Reliable requests the reliable channel.",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "Client",
+							"signature": "static constexpr uint16_t Client = 1 << 3",
+							"static": true,
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "Multicast",
+							"signature": "static constexpr uint16_t Multicast = 1 << 4",
+							"static": true,
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "Reliable",
+							"signature": "static constexpr uint16_t Reliable = 1 << 5",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "field",
+							"name": "RpcMask",
+							"signature": "static constexpr uint16_t RpcMask = Server | Client | Multicast",
+							"static": true,
+							"doc": "Any RPC-direction flag is set — the method is a network RPC.",
+							"line": 70
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FunctionInfo",
+					"namespace": "Mowo",
+					"line": 73,
+					"members": [
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "const char* name",
+							"doc": "\"AddHealth\"",
+							"line": 74
+						},
+						{
+							"kind": "field",
+							"name": "returnType",
+							"signature": "FunctionValueType returnType",
+							"line": 75
+						},
+						{
+							"kind": "field",
+							"name": "params",
+							"signature": "const FunctionParam* params",
+							"doc": "nullptr when paramCount == 0",
+							"line": 76
+						},
+						{
+							"kind": "field",
+							"name": "paramCount",
+							"signature": "uint32_t paramCount",
+							"line": 77
+						},
+						{
+							"kind": "field",
+							"name": "flags",
+							"signature": "uint16_t flags",
+							"doc": "FunctionFlags bitmask",
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "invoke",
+							"signature": "FunctionThunk invoke",
+							"doc": "never null for a reflected function",
+							"line": 79
+						},
+						{
+							"kind": "field",
+							"name": "description",
+							"signature": "const char* description = nullptr",
+							"doc": "One-line prose from a MOWO_TOOLTIP written before MFUNCTION, or nullptr.\nNull and \"\" are not the same answer: a caller shows the authored line\nwhen there is one and falls back to the signature when there is not, so\nan undescribed function must stay null rather than default to empty.",
+							"line": 84
+						},
+						{
+							"kind": "field",
+							"name": "returnTypeName",
+							"signature": "const char* returnTypeName = nullptr",
+							"line": 85
+						},
+						{
+							"kind": "method",
+							"name": "Invoke",
+							"signature": "void Invoke(void* instance, void** args, void* ret) const",
+							"doc": "`args` must hold `paramCount` pointers; `ret` must point to storage for\n`returnType`, or be nullptr when Void.",
+							"line": 89
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "alias",
+					"name": "FunctionThunk",
+					"signature": "using FunctionThunk = void (*)(void* instance, void** args, void* ret)",
+					"line": 52
+				}
+			]
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/MdfValidator.h",
+			"include": "Reflection/MdfValidator.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EMdfDiagSeverity",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 15,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Warning",
+							"signature": "Warning",
+							"line": 16
+						},
+						{
+							"kind": "enumerator",
+							"name": "Error",
+							"signature": "Error",
+							"line": 17
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMdfDiagnostic",
+					"namespace": "Mowo",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Severity",
+							"signature": "EMdfDiagSeverity Severity = EMdfDiagSeverity::Warning",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "Path",
+							"signature": "std::string Path",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "Message",
+							"signature": "std::string Message",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "Line",
+							"signature": "uint32_t Line = 0",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "Column",
+							"signature": "uint32_t Column = 0",
+							"line": 25
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMdfRootSchema",
+					"namespace": "Mowo",
+					"line": 28,
+					"members": [
+						{
+							"kind": "field",
+							"name": "RootType",
+							"signature": "const char* RootType = nullptr",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "MaxSchemaVersion",
+							"signature": "uint32_t MaxSchemaVersion = 1",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "ExpectSchemaVersion",
+							"signature": "bool ExpectSchemaVersion = true",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "KnownChildTypes",
+							"signature": "std::vector<std::string> KnownChildTypes",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "ComponentContainerType",
+							"signature": "const char* ComponentContainerType = nullptr",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "NonComponentChildTypes",
+							"signature": "std::vector<std::string> NonComponentChildTypes",
+							"line": 34
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMdfValidator",
+					"namespace": "Mowo",
+					"doc": "Document-level MDF validation. Runs AFTER parse, BEFORE\nmigration/deserialize, and only REPORTS — a diagnosed file still loads\nexactly as before (lenient, defaults where safe). Root shape and\nschema_version range come from the caller's FMdfRootSchema; component\nproperty type checks ride the reflected TypeDescriptor tables, so a\nwrong-typed value the deserializer would silently skip (or a throwing\nAs<T> would turn into a lost entity) surfaces as a diagnostic with node\npath and, for text files, line:column.\n\nEditor engines call SetDefaultEnabled(true); runtime and cooked loads stay\noff unless forced via the `mdf.Validate` cvar (-1 = follow the app\ndefault, 0 = force off, 1 = force on).",
+					"line": 49,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ValidateDocument",
+							"signature": "static bool ValidateDocument(const MDF::MdfDocument& doc, const FMdfRootSchema& schema, std::vector<FMdfDiagnostic>& outDiags)",
+							"static": true,
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "ValidateComponentNode",
+							"signature": "static void ValidateComponentNode(const MDF::MdfNode& node, const TypeDescriptor& desc, const std::string& path, std::vector<FMdfDiagnostic>& outDiags)",
+							"static": true,
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "LogDiagnostics",
+							"signature": "static uint32_t LogDiagnostics(const char* label, const std::vector<FMdfDiagnostic>& diags)",
+							"static": true,
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "ShouldValidate",
+							"signature": "static bool ShouldValidate()",
+							"static": true,
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "SetDefaultEnabled",
+							"signature": "static void SetDefaultEnabled(bool enabled)",
+							"static": true,
+							"line": 55
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/NetBitStream.h",
+			"include": "Reflection/NetBitStream.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FNetBitWriter",
+					"namespace": "Mowo",
+					"line": 14,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FNetBitWriter",
+							"signature": "explicit FNetBitWriter(std::vector<uint8_t>& out) : m_Out(out), m_Start(out.size())",
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "WriteBits",
+							"signature": "void WriteBits(uint64_t value, uint32_t count)",
+							"line": 19
+						},
+						{
+							"kind": "method",
+							"name": "WriteBool",
+							"signature": "void WriteBool(bool value)",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "WritePackedUInt",
+							"signature": "void WritePackedUInt(uint32_t value)",
+							"doc": "Two-bit width class, then the value in 4, 8, 16 or 32 bits. Small counts\nand ids — the common case for a replicated integer — cost 6 bits.",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "WritePackedInt",
+							"signature": "void WritePackedInt(int32_t value)",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "WriteFloatRaw",
+							"signature": "void WriteFloatRaw(float value)",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "WriteBitsFrom",
+							"signature": "void WriteBitsFrom(const uint8_t* data, uint64_t count)",
+							"doc": "Append `count` bits taken LSB-first from `data` — how a field encoded on\nits own (for change detection) is spliced into the delta unchanged.",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "GetBitCount",
+							"signature": "uint64_t GetBitCount() const",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "ZigZag",
+							"signature": "static uint32_t ZigZag(int32_t value)",
+							"static": true,
+							"line": 78
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FNetBitReader",
+					"namespace": "Mowo",
+					"doc": "Every read is bounds-checked: running past the end latches the error flag\nand yields zeros, so a hostile or truncated packet stops the decoder instead\nof reading foreign memory. Callers check IsOverflowed() before committing.",
+					"line": 91,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FNetBitReader",
+							"signature": "FNetBitReader(const uint8_t* data, size_t len) : m_Data(data), m_BitLen(static_cast<uint64_t>(len) * 8u)",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "ReadBits",
+							"signature": "uint64_t ReadBits(uint32_t count)",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "ReadBool",
+							"signature": "bool ReadBool()",
+							"line": 115
+						},
+						{
+							"kind": "method",
+							"name": "ReadPackedUInt",
+							"signature": "uint32_t ReadPackedUInt()",
+							"line": 119
+						},
+						{
+							"kind": "method",
+							"name": "ReadPackedInt",
+							"signature": "int32_t ReadPackedInt()",
+							"line": 126
+						},
+						{
+							"kind": "method",
+							"name": "ReadFloatRaw",
+							"signature": "float ReadFloatRaw()",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "IsOverflowed",
+							"signature": "bool IsOverflowed() const",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "GetBitsLeft",
+							"signature": "uint64_t GetBitsLeft() const",
+							"line": 144
+						},
+						{
+							"kind": "method",
+							"name": "GetBitPos",
+							"signature": "uint64_t GetBitPos() const",
+							"line": 148
+						},
+						{
+							"kind": "method",
+							"name": "SkipBits",
+							"signature": "void SkipBits(uint64_t count)",
+							"line": 152
+						},
+						{
+							"kind": "method",
+							"name": "CopyRange",
+							"signature": "void CopyRange(uint64_t from, uint64_t count, FNetBitWriter& w) const",
+							"doc": "Copy the bit range [from, from + count) into `w` without moving this\nreader — the incoming encoding of one field, compared against the\nreceiver's own encoding before anything is written.",
+							"line": 164
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/PropertyInfo.h",
+			"include": "Reflection/PropertyInfo.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "PropertyType",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 16,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Bool",
+							"signature": "Bool",
+							"line": 17
+						},
+						{
+							"kind": "enumerator",
+							"name": "Int",
+							"signature": "Int",
+							"doc": "int32_t",
+							"line": 18
+						},
+						{
+							"kind": "enumerator",
+							"name": "UInt8",
+							"signature": "UInt8",
+							"doc": "uint8_t",
+							"line": 19
+						},
+						{
+							"kind": "enumerator",
+							"name": "UInt32",
+							"signature": "UInt32",
+							"doc": "uint32_t",
+							"line": 20
+						},
+						{
+							"kind": "enumerator",
+							"name": "Float",
+							"signature": "Float",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "String",
+							"signature": "String",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec2",
+							"signature": "Vec2",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec3",
+							"signature": "Vec3",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "Vec4",
+							"signature": "Vec4",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "Quat",
+							"signature": "Quat",
+							"line": 26
+						},
+						{
+							"kind": "enumerator",
+							"name": "UUID",
+							"signature": "UUID",
+							"doc": "uint64_t entity ID or asset UUID",
+							"line": 27
+						},
+						{
+							"kind": "enumerator",
+							"name": "Enum",
+							"signature": "Enum",
+							"doc": "int backed by EnumDescriptor",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "AssetRef",
+							"signature": "AssetRef",
+							"doc": "std::string path, serialized with @\"...\"",
+							"line": 29
+						},
+						{
+							"kind": "enumerator",
+							"name": "Custom",
+							"signature": "Custom",
+							"doc": "routes to PropertyTypeRegistry via PropertyInfo::customTypeKey",
+							"line": 30
+						},
+						{
+							"kind": "enumerator",
+							"name": "Array",
+							"signature": "Array",
+							"doc": "std::vector<Elem> — elementType + arrayOps describe the element",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "Struct",
+							"signature": "Struct",
+							"doc": "nested MSTRUCT value — structDesc holds its property table",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "Map",
+							"signature": "Map",
+							"doc": "std::map / std::unordered_map — keyType + mapOps, value in elementType",
+							"line": 33
+						},
+						{
+							"kind": "enumerator",
+							"name": "Set",
+							"signature": "Set",
+							"doc": "std::set / std::unordered_set — elementType + setOps",
+							"line": 34
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "ArrayOps",
+					"namespace": "Mowo",
+					"doc": "Type-erased std::vector access for PropertyType::Array fields. The\ngenerated .refl.cpp knows the element type and points the property at\nTArrayOpsFor<Elem>::Get(); serializer/inspector walk elements through\nthese without compile-time knowledge of Elem.",
+					"line": 41,
+					"members": [
+						{
+							"kind": "method",
+							"name": "size_t",
+							"signature": "size_t (*size)(const void* arr)",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*resize)(void* arr, size_t n)",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*removeAt)(void* arr, size_t index)",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "size_t",
+							"signature": "size_t (*elemSize)()",
+							"doc": "sizeof(Elem). PropertyInfo carries the ELEMENT TYPE but no element\nsize, and the type does not pin one (an enum's width follows its\nunderlying type), so the replicator reads the stride from here rather\nthan guessing it. Null on a hand-written ops table that predates this.",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*insertAt)(void* arr, size_t index)",
+							"doc": "The structural edits an inspector performs on a list. resize + at is\nnot enough to build them: shifting elements to open a hole, or copying\none, would have to move raw bytes, and a vector element is not\nrelocatable that way the moment it owns storage — std::string and a\nnested std::vector both self-destruct under a memcpy relocation, and\nboth are shipped element types. Null on a hand-written ops table that\npredates this, so a caller must check before offering the control.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*duplicateAt)(void* arr, size_t index)",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*swapAt)(void* arr, size_t a, size_t b)",
+							"line": 61
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "TArrayOpsFor",
+					"namespace": "Mowo",
+					"template": "template<typename T>",
+					"line": 64,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "static size_t Size(const void* arr)",
+							"static": true,
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "Resize",
+							"signature": "static void Resize(void* arr, size_t n)",
+							"static": true,
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "At",
+							"signature": "static void* At(void* arr, size_t index)",
+							"static": true,
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "AtConst",
+							"signature": "static const void* AtConst(const void* arr, size_t index)",
+							"static": true,
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "RemoveAt",
+							"signature": "static void RemoveAt(void* arr, size_t index)",
+							"static": true,
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "ElemSize",
+							"signature": "static size_t ElemSize()",
+							"static": true,
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "InsertAt",
+							"signature": "static void InsertAt(void* arr, size_t index)",
+							"static": true,
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "DuplicateAt",
+							"signature": "static void DuplicateAt(void* arr, size_t index)",
+							"static": true,
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "SwapAt",
+							"signature": "static void SwapAt(void* arr, size_t a, size_t b)",
+							"static": true,
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static const ArrayOps* Get()",
+							"static": true,
+							"line": 112
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MapOps",
+					"namespace": "Mowo",
+					"doc": "Type-erased access for PropertyType::Map fields. Entries are visited in\nascending key order whatever the container, so an unordered map serializes\nand lists the same way every time. A caller that does not know the key type\nreads one into a temporary the ops construct (withKey), then looks it up.",
+					"line": 122,
+					"members": [
+						{
+							"kind": "method",
+							"name": "size_t",
+							"signature": "size_t (*size)(const void* map)",
+							"line": 123
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*clear)(void* map)",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*forEach)(void* map, void* ctx, void (*visit)(void* ctx, const void* key, void* value))",
+							"line": 125
+						},
+						{
+							"kind": "method",
+							"name": "bool",
+							"signature": "bool (*remove)(void* map, const void* key)",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*withKey)(void* ctx, void (*use)(void* ctx, void* key))",
+							"line": 129
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "TMapOpsFor",
+					"namespace": "Mowo",
+					"template": "template<typename M>",
+					"line": 132,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "Key",
+							"signature": "using Key = typename M::key_type",
+							"line": 134
+						},
+						{
+							"kind": "alias",
+							"name": "Value",
+							"signature": "using Value = typename M::mapped_type",
+							"line": 135
+						},
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "static size_t Size(const void* map)",
+							"static": true,
+							"line": 137
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "static void Clear(void* map)",
+							"static": true,
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "ForEach",
+							"signature": "static void ForEach(void* map, void* ctx, void (*visit)(void* ctx, const void* key, void* value))",
+							"static": true,
+							"line": 144
+						},
+						{
+							"kind": "method",
+							"name": "FindOrAdd",
+							"signature": "static void* FindOrAdd(void* map, const void* key)",
+							"static": true,
+							"line": 158
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "static void* Find(void* map, const void* key)",
+							"static": true,
+							"line": 162
+						},
+						{
+							"kind": "method",
+							"name": "Remove",
+							"signature": "static bool Remove(void* map, const void* key)",
+							"static": true,
+							"line": 169
+						},
+						{
+							"kind": "method",
+							"name": "WithKey",
+							"signature": "static void WithKey(void* ctx, void (*use)(void* ctx, void* key))",
+							"static": true,
+							"line": 173
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static const MapOps* Get()",
+							"static": true,
+							"line": 178
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "SetOps",
+					"namespace": "Mowo",
+					"doc": "Type-erased access for PropertyType::Set fields, visited in ascending order\nfor the same reason as a map.",
+					"line": 186,
+					"members": [
+						{
+							"kind": "method",
+							"name": "size_t",
+							"signature": "size_t (*size)(const void* set)",
+							"line": 187
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*clear)(void* set)",
+							"line": 188
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*forEach)(const void* set, void* ctx, void (*visit)(void* ctx, const void* element))",
+							"line": 189
+						},
+						{
+							"kind": "method",
+							"name": "bool",
+							"signature": "bool (*add)(void* set, const void* element)",
+							"line": 190
+						},
+						{
+							"kind": "method",
+							"name": "bool",
+							"signature": "bool (*remove)(void* set, const void* element)",
+							"line": 191
+						},
+						{
+							"kind": "method",
+							"name": "bool",
+							"signature": "bool (*contains)(const void* set, const void* element)",
+							"line": 192
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*withElement)(void* ctx, void (*use)(void* ctx, void* element))",
+							"line": 193
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "TSetOpsFor",
+					"namespace": "Mowo",
+					"template": "template<typename S>",
+					"line": 196,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "Elem",
+							"signature": "using Elem = typename S::key_type",
+							"line": 198
+						},
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "static size_t Size(const void* set)",
+							"static": true,
+							"line": 200
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "static void Clear(void* set)",
+							"static": true,
+							"line": 203
+						},
+						{
+							"kind": "method",
+							"name": "ForEach",
+							"signature": "static void ForEach(const void* set, void* ctx, void (*visit)(void* ctx, const void* element))",
+							"static": true,
+							"line": 207
+						},
+						{
+							"kind": "method",
+							"name": "Add",
+							"signature": "static bool Add(void* set, const void* element)",
+							"static": true,
+							"line": 221
+						},
+						{
+							"kind": "method",
+							"name": "Remove",
+							"signature": "static bool Remove(void* set, const void* element)",
+							"static": true,
+							"line": 224
+						},
+						{
+							"kind": "method",
+							"name": "Contains",
+							"signature": "static bool Contains(const void* set, const void* element)",
+							"static": true,
+							"line": 227
+						},
+						{
+							"kind": "method",
+							"name": "WithElement",
+							"signature": "static void WithElement(void* ctx, void (*use)(void* ctx, void* element))",
+							"static": true,
+							"line": 231
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static const SetOps* Get()",
+							"static": true,
+							"line": 236
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "PropertyFlags",
+					"namespace": "Mowo",
+					"line": 242,
+					"members": [
+						{
+							"kind": "field",
+							"name": "None",
+							"signature": "static constexpr uint16_t None = 0",
+							"static": true,
+							"line": 243
+						},
+						{
+							"kind": "field",
+							"name": "HideInspector",
+							"signature": "static constexpr uint16_t HideInspector = 1 << 0",
+							"static": true,
+							"doc": "serialize but don't show UI",
+							"line": 244
+						},
+						{
+							"kind": "field",
+							"name": "RuntimeOnly",
+							"signature": "static constexpr uint16_t RuntimeOnly = 1 << 1",
+							"static": true,
+							"doc": "skip both serialize and UI",
+							"line": 245
+						},
+						{
+							"kind": "field",
+							"name": "ReadOnly",
+							"signature": "static constexpr uint16_t ReadOnly = 1 << 2",
+							"static": true,
+							"doc": "show in UI but disabled",
+							"line": 246
+						},
+						{
+							"kind": "field",
+							"name": "Color",
+							"signature": "static constexpr uint16_t Color = 1 << 3",
+							"static": true,
+							"doc": "Vec3/Vec4 -> ColorEdit",
+							"line": 247
+						},
+						{
+							"kind": "field",
+							"name": "Replicated",
+							"signature": "static constexpr uint16_t Replicated = 1 << 4",
+							"static": true,
+							"doc": "MREPLICATED — networked",
+							"line": 248
+						},
+						{
+							"kind": "field",
+							"name": "LayerMask",
+							"signature": "static constexpr uint16_t LayerMask = 1 << 5",
+							"static": true,
+							"doc": "uint32_t field is a 32-slot layer bitmask. The inspector resolves the\nbit names through the project's layer registry and edits it as a\nmulti-select instead of a number.",
+							"line": 252
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeShift",
+							"signature": "static constexpr uint16_t NetQuantizeShift = 8",
+							"static": true,
+							"doc": "MNET_QUANTIZE: how the packed replication codec narrows a replicated\nfloat, vector or quaternion. A three-bit field inside the flags, so a\nquantized row needs no new PropertyInfo member — every positional\naggregate in the tree stays valid. Zero = lossless 32-bit floats.",
+							"line": 258
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeMask",
+							"signature": "static constexpr uint16_t NetQuantizeMask = 7 << 8",
+							"static": true,
+							"line": 259
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeWhole",
+							"signature": "static constexpr uint16_t NetQuantizeWhole = 1 << 8",
+							"static": true,
+							"line": 260
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeDeci",
+							"signature": "static constexpr uint16_t NetQuantizeDeci = 2 << 8",
+							"static": true,
+							"line": 261
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeCenti",
+							"signature": "static constexpr uint16_t NetQuantizeCenti = 3 << 8",
+							"static": true,
+							"line": 262
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeMilli",
+							"signature": "static constexpr uint16_t NetQuantizeMilli = 4 << 8",
+							"static": true,
+							"line": 263
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeNormal",
+							"signature": "static constexpr uint16_t NetQuantizeNormal = 5 << 8",
+							"static": true,
+							"line": 264
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeAngle",
+							"signature": "static constexpr uint16_t NetQuantizeAngle = 6 << 8",
+							"static": true,
+							"line": 265
+						},
+						{
+							"kind": "field",
+							"name": "NetQuantizeSmallestThree",
+							"signature": "static constexpr uint16_t NetQuantizeSmallestThree = 7 << 8",
+							"static": true,
+							"line": 266
+						},
+						{
+							"kind": "field",
+							"name": "RepConditionShift",
+							"signature": "static constexpr uint16_t RepConditionShift = 11",
+							"static": true,
+							"doc": "MNET_CONDITION: which peers a replicated field reaches (UE's COND_*).\nA three-bit field like the quantizer, so no PropertyInfo member moves.\nZero = every peer the object is relevant to.",
+							"line": 271
+						},
+						{
+							"kind": "field",
+							"name": "RepConditionMask",
+							"signature": "static constexpr uint16_t RepConditionMask = 7 << 11",
+							"static": true,
+							"line": 272
+						},
+						{
+							"kind": "field",
+							"name": "RepOwnerOnly",
+							"signature": "static constexpr uint16_t RepOwnerOnly = 1 << 11",
+							"static": true,
+							"line": 273
+						},
+						{
+							"kind": "field",
+							"name": "RepSkipOwner",
+							"signature": "static constexpr uint16_t RepSkipOwner = 2 << 11",
+							"static": true,
+							"line": 274
+						},
+						{
+							"kind": "field",
+							"name": "RepInitialOnly",
+							"signature": "static constexpr uint16_t RepInitialOnly = 3 << 11",
+							"static": true,
+							"line": 275
+						},
+						{
+							"kind": "field",
+							"name": "RepInitialOrOwner",
+							"signature": "static constexpr uint16_t RepInitialOrOwner = 4 << 11",
+							"static": true,
+							"line": 276
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "PropertyInfo",
+					"namespace": "Mowo",
+					"doc": "Describes a single reflected field.",
+					"line": 280,
+					"members": [
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "const char* name",
+							"doc": "Display name: \"Intensity\"",
+							"line": 281
+						},
+						{
+							"kind": "field",
+							"name": "serializedName",
+							"signature": "const char* serializedName",
+							"doc": "MDF key: \"intensity\"",
+							"line": 282
+						},
+						{
+							"kind": "field",
+							"name": "type",
+							"signature": "PropertyType type",
+							"line": 283
+						},
+						{
+							"kind": "field",
+							"name": "offset",
+							"signature": "uint32_t offset",
+							"doc": "32-bit: a component with more than 64 KB of fields is ordinary (one\nfixed array member does it), and a truncated offset silently points\nreflection — serialization, inspector, replication — at the wrong bytes.",
+							"line": 287
+						},
+						{
+							"kind": "field",
+							"name": "size",
+							"signature": "uint32_t size",
+							"doc": "sizeof the field",
+							"line": 288
+						},
+						{
+							"kind": "field",
+							"name": "flags",
+							"signature": "uint16_t flags",
+							"doc": "PropertyFlags bitmask",
+							"line": 289
+						},
+						{
+							"kind": "field",
+							"name": "rangeMin",
+							"signature": "float rangeMin",
+							"doc": "For numeric sliders/drags (0 = no min)",
+							"line": 290
+						},
+						{
+							"kind": "field",
+							"name": "rangeMax",
+							"signature": "float rangeMax",
+							"doc": "For numeric sliders/drags (0 = no max)",
+							"line": 291
+						},
+						{
+							"kind": "field",
+							"name": "dragSpeed",
+							"signature": "float dragSpeed",
+							"doc": "Inspector drag speed (0 = default 0.1)",
+							"line": 292
+						},
+						{
+							"kind": "field",
+							"name": "tooltip",
+							"signature": "const char* tooltip",
+							"doc": "Optional tooltip (nullptr = none)",
+							"line": 293
+						},
+						{
+							"kind": "field",
+							"name": "enumDesc",
+							"signature": "const EnumDescriptor* enumDesc",
+							"doc": "For Enum type only (nullptr otherwise)",
+							"line": 294
+						},
+						{
+							"kind": "field",
+							"name": "customTypeKey",
+							"signature": "const char* customTypeKey = nullptr",
+							"doc": "Looked up in PropertyTypeRegistry when type == Custom, nullptr for\nbuilt-in types.",
+							"line": 297
+						},
+						{
+							"kind": "field",
+							"name": "elementType",
+							"signature": "PropertyType elementType = PropertyType::Bool",
+							"doc": "Tail members with defaults so every existing positional aggregate\ninit stays valid. type == Array: elementType + arrayOps required,\nstructDesc set when elementType == Struct, elementEnumDesc when Enum.\ntype == Struct: structDesc points at the nested type's descriptor.",
+							"line": 303
+						},
+						{
+							"kind": "field",
+							"name": "arrayOps",
+							"signature": "const ArrayOps* arrayOps = nullptr",
+							"line": 304
+						},
+						{
+							"kind": "field",
+							"name": "structDesc",
+							"signature": "const TypeDescriptor* structDesc = nullptr",
+							"line": 305
+						},
+						{
+							"kind": "field",
+							"name": "elementEnumDesc",
+							"signature": "const EnumDescriptor* elementEnumDesc = nullptr",
+							"line": 306
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*repNotify)(void* component) = nullptr",
+							"doc": "RepNotify (MREPLICATED_USING): fired by the replication apply path\nwhen this property's bytes actually change on a receiver. MHT emits\na captureless-lambda thunk over the owning type's member function;\nnullptr on every other property.",
+							"line": 312
+						},
+						{
+							"kind": "field",
+							"name": "editCondition",
+							"signature": "const char* editCondition = nullptr",
+							"doc": "MOWO_EDIT_CONDITION: sibling-property gate (\"name\" / \"!name\") the\ninspector evaluates to grey this row. nullptr = always editable.",
+							"line": 316
+						},
+						{
+							"kind": "field",
+							"name": "category",
+							"signature": "const char* category = nullptr",
+							"doc": "MOWO_CATEGORY: inspector section this row files under inside its\ncomponent block, first-appearance ordered. nullptr = the unnamed\nleading section.",
+							"line": 321
+						},
+						{
+							"kind": "field",
+							"name": "assetType",
+							"signature": "const char* assetType = nullptr",
+							"doc": "MOWO_ASSET_TYPE: which AssetType an asset-ref row accepts, as the\ntype's serialized name (\"Curve\", \"Mesh\", ...). The inspector filters\nits picker by this. It lives on the PROPERTY because the alternative —\nan editor-side table keyed by (component name, field name) — has to be\nedited every time a field is added, and drifts silently into showing\nevery asset in the project when a name changes. nullptr = unfiltered.",
+							"line": 329
+						},
+						{
+							"kind": "field",
+							"name": "units",
+							"signature": "const char* units = nullptr",
+							"doc": "MOWO_UNITS: the physical unit the field's STORED number is in (\"m\",\n\"deg\", \"rad\", \"s\", \"kg\", ...). The inspector shows it as a suffix and\nconverts where the stored unit is not the one authors think in —\nrotation is radians on the wire and degrees in every UI, which every\nrotation row used to hand-code against a component name. It lives on the\nPROPERTY because the alternative is an editor-side table keyed by\n(component, field) that silently goes stale on a rename. nullptr =\nunitless.",
+							"line": 339
+						},
+						{
+							"kind": "field",
+							"name": "keyType",
+							"signature": "PropertyType keyType = PropertyType::Bool",
+							"doc": "type == Map: the key's type and the ops (the VALUE type is elementType,\nwith structDesc for a struct value). type == Set: setOps, with the\nelement type in elementType. Keys and set elements are the fixed-width\nand string types (Int, UInt32, UUID, String).",
+							"line": 345
+						},
+						{
+							"kind": "field",
+							"name": "mapOps",
+							"signature": "const MapOps* mapOps = nullptr",
+							"line": 346
+						},
+						{
+							"kind": "field",
+							"name": "setOps",
+							"signature": "const SetOps* setOps = nullptr",
+							"line": 347
+						},
+						{
+							"kind": "method",
+							"name": "ReadEnum",
+							"signature": "int32_t ReadEnum(const void* field) const",
+							"doc": "Enum storage follows the declared underlying type, and `enum class E :\nuint8_t` is the common form. Reading the field as int32_t runs past it\ninto padding, so the value only matched the descriptor when those bytes\nhappened to be zero — go through `size` in both directions instead.",
+							"line": 353
+						},
+						{
+							"kind": "method",
+							"name": "WriteEnum",
+							"signature": "void WriteEnum(void* field, int32_t value) const",
+							"line": 360
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/PropertyReplicator.h",
+			"include": "Reflection/PropertyReplicator.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "PropertyReplicator",
+					"namespace": "Mowo",
+					"line": 56,
+					"members": [
+						{
+							"kind": "method",
+							"name": "IsReplicableType",
+							"signature": "static bool IsReplicableType(PropertyType t)",
+							"static": true,
+							"doc": "Whitelist of field types whose raw bytes ARE their value. Everything\noutside it (String, AssetRef, Array, Struct, Custom) owns heap memory\nand cannot ride a memcpy delta.",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "IsStringReplicableType",
+							"signature": "static bool IsStringReplicableType(PropertyType t)",
+							"static": true,
+							"doc": "Var-length types that replicate BY VALUE with a length prefix.",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "IsArrayReplicable",
+							"signature": "static bool IsArrayReplicable(const PropertyInfo& p)",
+							"static": true,
+							"doc": "Arrays replicate by value too — count-prefixed, elements raw — but only\nwhen the ELEMENT is a fixed-width POD and the descriptor hands us an ops\ntable with a stride. An array of strings/structs would need its own\nper-element codec; those stay refused.",
+							"line": 89
+						},
+						{
+							"kind": "method",
+							"name": "IsWireReplicable",
+							"signature": "static bool IsWireReplicable(const PropertyInfo& p)",
+							"static": true,
+							"doc": "Anything the wire accepts: fixed PODs, length-prefixed strings,\ncount-prefixed arrays, and MSTRUCT values whose every member has a\ncodec. Takes the whole PropertyInfo because an array's or a struct's\nanswer depends on what it holds.",
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "IsWireReplicableType",
+							"signature": "static bool IsWireReplicableType(PropertyType t)",
+							"static": true,
+							"doc": "Type-only form for the callers that have no PropertyInfo (guards,\ntests). Arrays answer false here — their eligibility is per-property.",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "ValidateReplicatedProperties",
+							"signature": "static bool ValidateReplicatedProperties(const TypeDescriptor* desc, const char** outOffender = nullptr)",
+							"static": true,
+							"doc": "True when every Replicated property on `desc` is of a replicable type;\n`outOffender` receives the first violating property's name. Run once\nwhen a descriptor is cached.",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "AppendFieldEntry",
+							"signature": "static void AppendFieldEntry(const PropertyInfo& p, uint16_t idx, const void* cur, std::vector<uint8_t>& out)",
+							"static": true,
+							"doc": "Append one field's wire entry ([idx][payload]) for the CURRENT value.",
+							"line": 136
+						},
+						{
+							"kind": "method",
+							"name": "ArrayWireCount",
+							"signature": "static uint16_t ArrayWireCount(const PropertyInfo& p, const void* arr)",
+							"static": true,
+							"doc": "Elements that fit the 16-bit count. A longer array is TRUNCATED rather\nthan refused: the alternative is silently dropping the whole field, and\n65535 entries is already far past what a replicated list should carry.",
+							"line": 170
+						},
+						{
+							"kind": "method",
+							"name": "BuildDelta",
+							"signature": "static uint32_t BuildDelta(const TypeDescriptor* desc, const void* prev, const void* cur, std::vector<uint8_t>& out)",
+							"static": true,
+							"doc": "Append every Replicated property whose VALUE differs between `prev` (a\nreal instance — strings are compared by value, so a byte blob is not\nacceptable here) and `cur` (the authoritative state) to `out`. Returns\nthe number of fields written — 0 means nothing changed (skip the send).",
+							"line": 179
+						},
+						{
+							"kind": "method",
+							"name": "ArraysDiffer",
+							"signature": "static bool ArraysDiffer(const PropertyInfo& p, const void* a, const void* b)",
+							"static": true,
+							"doc": "Element-wise compare of two live arrays of the same property.",
+							"line": 229
+						},
+						{
+							"kind": "method",
+							"name": "IsContinuousReplicatedType",
+							"signature": "static bool IsContinuousReplicatedType(PropertyType t)",
+							"static": true,
+							"doc": "A replicated field is \"continuous\" when it self-heals under packet loss —\nthe next unreliable snapshot simply overwrites a dropped one (position,\nrotation, velocity). Everything else is \"discrete\": a lost update to\nhealth / ammo / a state enum leaves the value stale until it happens to\nchange again, so discrete fields must ride a reliable channel.",
+							"line": 251
+						},
+						{
+							"kind": "method",
+							"name": "BuildDeltaFiltered",
+							"signature": "static uint32_t BuildDeltaFiltered(const TypeDescriptor* desc, const void* prev, const void* cur, std::vector<uint8_t>& out, bool wantContinuous)",
+							"static": true,
+							"doc": "BuildDelta restricted to replicated fields whose continuity matches\n`wantContinuous` — the split that lets the sender ship continuous fields\nunreliable (self-healing) and discrete fields reliable (until-acked).",
+							"line": 267
+						},
+						{
+							"kind": "method",
+							"name": "ApplyDelta",
+							"signature": "static uint32_t ApplyDelta(const TypeDescriptor* desc, void* instance, const uint8_t* data, size_t len)",
+							"static": true,
+							"doc": "Apply a delta produced by BuildDelta into `instance`. Returns fields\napplied. Bounds-checked against the descriptor + buffer length (a\nmalformed/foreign packet stops at the first inconsistency rather than\noverrunning), and a delta naming a non-replicable slot is refused\noutright — a hostile peer must not be able to talk the receiver into\nmemcpy'ing over a std::string.",
+							"line": 337
+						},
+						{
+							"kind": "field",
+							"name": "kPackedDeltaMarker",
+							"signature": "static constexpr uint16_t kPackedDeltaMarker = 0xFFFF",
+							"static": true,
+							"line": 456
+						},
+						{
+							"kind": "field",
+							"name": "kMaxStructDepth",
+							"signature": "static constexpr uint32_t kMaxStructDepth = 4",
+							"static": true,
+							"line": 457
+						},
+						{
+							"kind": "method",
+							"name": "IsPackedDelta",
+							"signature": "static bool IsPackedDelta(const uint8_t* data, size_t len)",
+							"static": true,
+							"line": 459
+						},
+						{
+							"kind": "method",
+							"name": "QuantizeMode",
+							"signature": "static uint16_t QuantizeMode(const PropertyInfo& p)",
+							"static": true,
+							"line": 463
+						},
+						{
+							"kind": "method",
+							"name": "ElementInfo",
+							"signature": "static PropertyInfo ElementInfo(const PropertyInfo& p)",
+							"static": true,
+							"doc": "A synthetic row describing one element of an array property, so the\nvalue codec handles elements and fields through the same path. The\nelement inherits the array's quantizer.",
+							"line": 470
+						},
+						{
+							"kind": "method",
+							"name": "IsStructReplicable",
+							"signature": "static bool IsStructReplicable(const TypeDescriptor* desc, uint32_t depth)",
+							"static": true,
+							"line": 484
+						},
+						{
+							"kind": "method",
+							"name": "IsPackedValueReplicable",
+							"signature": "static bool IsPackedValueReplicable(const PropertyInfo& p, uint32_t depth)",
+							"static": true,
+							"doc": "What the packed codec can carry by value. A struct member that has no\ncodec refuses the whole struct rather than being skipped: a field that\nsilently never arrives is the failure this layer exists to prevent.",
+							"line": 506
+						},
+						{
+							"kind": "method",
+							"name": "IsWireField",
+							"signature": "static bool IsWireField(const PropertyInfo& p)",
+							"static": true,
+							"line": 532
+						},
+						{
+							"kind": "method",
+							"name": "CountWireFields",
+							"signature": "static uint32_t CountWireFields(const TypeDescriptor* desc)",
+							"static": true,
+							"line": 536
+						},
+						{
+							"kind": "method",
+							"name": "QuantizeScale",
+							"signature": "static float QuantizeScale(uint16_t mode)",
+							"static": true,
+							"line": 551
+						},
+						{
+							"kind": "method",
+							"name": "WriteScaledFloats",
+							"signature": "static void WriteScaledFloats(FNetBitWriter& w, const float* v, uint32_t count, float scale)",
+							"static": true,
+							"doc": "Fixed-point components share one bit width: [1 raw-fallback bit][6-bit\nwidth][count x width bits of zigzag]. A component that is not finite or\ndoes not fit 31 bits after scaling sends the whole vector as raw floats\ninstead of wrapping into a wrong position.",
+							"line": 570
+						},
+						{
+							"kind": "method",
+							"name": "ReadScaledFloats",
+							"signature": "static void ReadScaledFloats(FNetBitReader& r, float* v, uint32_t count, float scale)",
+							"static": true,
+							"line": 610
+						},
+						{
+							"kind": "method",
+							"name": "WriteFloats",
+							"signature": "static void WriteFloats(FNetBitWriter& w, const float* v, uint32_t count, uint16_t mode)",
+							"static": true,
+							"line": 632
+						},
+						{
+							"kind": "method",
+							"name": "ReadFloats",
+							"signature": "static void ReadFloats(FNetBitReader& r, float* v, uint32_t count, uint16_t mode)",
+							"static": true,
+							"line": 656
+						},
+						{
+							"kind": "method",
+							"name": "WriteSmallestThree",
+							"signature": "static void WriteSmallestThree(FNetBitWriter& w, const float* quat)",
+							"static": true,
+							"doc": "Smallest three: the largest-magnitude component is dropped (2-bit\nindex) and rebuilt from the unit norm; the other three lie within\n+-1/sqrt(2) and take 15 bits each. 47 bits instead of 128.",
+							"line": 679
+						},
+						{
+							"kind": "method",
+							"name": "ReadSmallestThree",
+							"signature": "static void ReadSmallestThree(FNetBitReader& r, float* quat)",
+							"static": true,
+							"line": 715
+						},
+						{
+							"kind": "method",
+							"name": "FloatComponentCount",
+							"signature": "static uint32_t FloatComponentCount(PropertyType t)",
+							"static": true,
+							"line": 732
+						},
+						{
+							"kind": "method",
+							"name": "WritePackedValue",
+							"signature": "static void WritePackedValue(FNetBitWriter& w, const PropertyInfo& p, const uint8_t* field, uint32_t depth)",
+							"static": true,
+							"doc": "One value — a field, an array element or a struct member — at `field`.",
+							"line": 749
+						},
+						{
+							"kind": "method",
+							"name": "ReadPackedValue",
+							"signature": "static void ReadPackedValue(FNetBitReader& r, const PropertyInfo& p, uint8_t* field, uint32_t depth)",
+							"static": true,
+							"doc": "Decodes INTO `field`. Only called once the whole delta has been walked\nand found in bounds, so a value never lands half-written.",
+							"line": 795
+						},
+						{
+							"kind": "method",
+							"name": "SkipPackedValue",
+							"signature": "static void SkipPackedValue(FNetBitReader& r, const PropertyInfo& p, uint32_t depth)",
+							"static": true,
+							"doc": "Walks one value without storing it — the bounds pass. Lengths and counts\nare checked against the bits that remain, so a hostile count can never\nbecome an allocation.",
+							"line": 842
+						},
+						{
+							"kind": "method",
+							"name": "EncodeValue",
+							"signature": "static void EncodeValue(const PropertyInfo& p, const uint8_t* field, std::vector<uint8_t>& out, uint64_t& outBits)",
+							"static": true,
+							"doc": "Exactly what `p`'s current value encodes to — the unit of change\ndetection. Comparing encodings rather than raw bytes is what lets a\nquantized field ignore jitter below its quantum.",
+							"line": 890
+						},
+						{
+							"kind": "method",
+							"name": "EncodeReplicatedState",
+							"signature": "static void EncodeReplicatedState(const TypeDescriptor* desc, uint32_t spanStamp, const void* instance, std::vector<uint8_t>& out)",
+							"static": true,
+							"line": 905
+						},
+						{
+							"kind": "method",
+							"name": "IsEncodedBaselineCompatible",
+							"signature": "static bool IsEncodedBaselineCompatible(uint32_t spanStamp, const std::vector<uint8_t>& encoded)",
+							"static": true,
+							"line": 929
+						},
+						{
+							"kind": "method",
+							"name": "WantsField",
+							"signature": "static bool WantsField(const PropertyInfo& p, int wantContinuous)",
+							"static": true,
+							"line": 938
+						},
+						{
+							"kind": "field",
+							"name": "kAudienceNone",
+							"signature": "static constexpr uint32_t kAudienceNone = 0",
+							"static": true,
+							"doc": "Who a delta is being built for, against MNET_CONDITION. kAudienceAll\nignores conditions (tools, tests, the legacy byte form); a sender\nbuilding for one peer passes Owner when that peer owns the object and\nInitial when the peer has never been sent this component. A field the\naudience may not see is left out of the changemask, never zeroed: the\nreceiver keeps whatever it had, which for an owner-only field on a\nnon-owner is the default it spawned with.",
+							"line": 949
+						},
+						{
+							"kind": "field",
+							"name": "kAudienceOwner",
+							"signature": "static constexpr uint32_t kAudienceOwner = 1u << 0",
+							"static": true,
+							"line": 950
+						},
+						{
+							"kind": "field",
+							"name": "kAudienceInitial",
+							"signature": "static constexpr uint32_t kAudienceInitial = 1u << 1",
+							"static": true,
+							"line": 951
+						},
+						{
+							"kind": "field",
+							"name": "kAudienceAll",
+							"signature": "static constexpr uint32_t kAudienceAll = 0xFFFFFFFFu",
+							"static": true,
+							"line": 952
+						},
+						{
+							"kind": "method",
+							"name": "RepCondition",
+							"signature": "static uint16_t RepCondition(const PropertyInfo& p)",
+							"static": true,
+							"line": 954
+						},
+						{
+							"kind": "method",
+							"name": "PassesCondition",
+							"signature": "static bool PassesCondition(const PropertyInfo& p, uint32_t audience)",
+							"static": true,
+							"line": 958
+						},
+						{
+							"kind": "method",
+							"name": "HasConditionalFields",
+							"signature": "static bool HasConditionalFields(const TypeDescriptor* desc)",
+							"static": true,
+							"doc": "True when any wire field of `desc` carries a condition, so a sender can\nskip building per-audience deltas for the common unconditioned type.",
+							"line": 981
+						},
+						{
+							"kind": "method",
+							"name": "WritePackedDelta",
+							"signature": "static void WritePackedDelta(const TypeDescriptor* desc, const void* instance, const std::vector<uint8_t>& send, std::vector<uint8_t>& out)",
+							"static": true,
+							"doc": "Writes [marker][changemask][values] for the wire fields flagged in\n`send` (one entry per wire field, in property order).",
+							"line": 997
+						},
+						{
+							"kind": "method",
+							"name": "BuildDeltaAgainstEncoded",
+							"signature": "static uint32_t BuildDeltaAgainstEncoded(const TypeDescriptor* desc, const std::vector<uint8_t>& encoded, const void* cur, std::vector<uint8_t>& out, int wantContinuous, uint32_t audience = kAudienceAll)",
+							"static": true,
+							"doc": "Packed delta of `cur` against an encoded baseline. `wantContinuous`:\n-1 = every replicated field, 0 = discrete only, 1 = continuous only\n(strings, arrays and structs count as discrete). A truncated/corrupt\nbaseline treats the remaining fields as changed — resending is always\nsafe. Nothing is appended when nothing changed.",
+							"line": 1024
+						},
+						{
+							"kind": "method",
+							"name": "BuildFullFieldSet",
+							"signature": "static uint32_t BuildFullFieldSet(const TypeDescriptor* desc, const void* instance, std::vector<uint8_t>& out, int wantContinuous, uint32_t audience = kAudienceAll)",
+							"static": true,
+							"doc": "Every replicated field of `instance` (of the wanted continuity) as one\npacked delta — the first-send form, when no baseline exists.",
+							"line": 1075
+						},
+						{
+							"kind": "method",
+							"name": "DecodePackedFieldIndices",
+							"signature": "static bool DecodePackedFieldIndices(const TypeDescriptor* desc, const uint8_t* data, size_t len, std::vector<uint16_t>& outIndices)",
+							"static": true,
+							"doc": "The property indices a packed delta carries, read off its changemask —\nfor tools and tests that need to say WHICH fields crossed the wire.",
+							"line": 1104
+						},
+						{
+							"kind": "method",
+							"name": "ApplyPackedDelta",
+							"signature": "static uint32_t ApplyPackedDelta(const TypeDescriptor* desc, void* instance, const uint8_t* data, size_t len)",
+							"static": true,
+							"doc": "Two passes: the first walks every flagged field against the packet's\nlength and refuses the whole delta on any overrun, the second applies.\nEach field's incoming bits are compared with what the receiver's current\nvalue encodes to, so a redundant resend writes nothing and RepNotify\nfires only on a real change.",
+							"line": 1129
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/PropertyTypeRegistry.h",
+			"include": "Reflection/PropertyTypeRegistry.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "PropertyTypeRegistry",
+					"namespace": "Mowo",
+					"line": 23,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static PropertyTypeRegistry& Get()",
+							"static": true,
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "void Register(const char* key, Handler handler, const void* owner = FModuleAnchor::Here())",
+							"doc": "The key is what PropertyInfo::customTypeKey references — short, stable\nand namespaced (\"game.Health\"), not a mangled typeid name.",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "template<typename T> void Register(Handler handler, const void* owner = FModuleAnchor::Here())",
+							"doc": "Keys off typeid instead. Prefer the string overload when the key has\nto be shared outside C++.",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "RemoveAllInModule",
+							"signature": "size_t RemoveAllInModule(void* moduleHandle)",
+							"doc": "Drops every handler a module registered — the unload sweep.",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "const Handler* Find(const char* key) const",
+							"doc": "Returns nullptr when nothing is registered. Serializer and inspector\ntreat that as a silent skip, leaving the field at its default, so a\nmissing registration never crashes a half-loaded scene.",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "template<typename T> const Handler* Find() const",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 65
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "PropertyTypeRegistry::Handler",
+					"namespace": "Mowo",
+					"doc": "serialize / deserialize get the raw field address (comp base +\nPropertyInfo offset) and cast internally. drawInspector gets the field\npointer plus the PropertyInfo's displayName and returns true when it\nconsumed the change for the current frame.",
+					"line": 29,
+					"members": [
+						{
+							"kind": "field",
+							"name": "serialize",
+							"signature": "std::function<void(const void* src, MdfNode& outNode, const char* serializedName)> serialize",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "deserialize",
+							"signature": "std::function<void(const MdfNode& node, void* dst, const char* serializedName)> deserialize",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "drawInspector",
+							"signature": "std::function<bool(void* fieldPtr, const char* label)> drawInspector",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "owner",
+							"signature": "const void* owner = nullptr",
+							"doc": "The registering module (FModuleAnchor): its handlers leave with it.",
+							"line": 35
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/ReflectionRegistry.h",
+			"include": "Reflection/ReflectionRegistry.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "ReflectionRegistry",
+					"namespace": "Mowo",
+					"doc": "Holds every registered TypeDescriptor.",
+					"line": 16,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static ReflectionRegistry& Get()",
+							"static": true,
+							"line": 18
+						},
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "bool Register(const TypeDescriptor* desc)",
+							"doc": "Always returns true, so it can seed a static initializer.",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "const TypeDescriptor* Find(ComponentID id) const",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "FindByDisplayName",
+							"signature": "const TypeDescriptor* FindByDisplayName(const char* displayName) const",
+							"doc": "Display name is the MDF node type name, e.g. \"Light\".",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "GetAll",
+							"signature": "std::vector<const TypeDescriptor*> GetAll() const",
+							"doc": "A snapshot, not the live list: a module unload erases from the registry\nwhile an editor panel may be walking it, and a reference into the vector\nwas a use-after-free.",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "RemoveAllInModule",
+							"signature": "size_t RemoveAllInModule(void* moduleHandle)",
+							"doc": "Drops every descriptor whose static instance lives inside the given\nmodule image (a plugin's MOWO_REFLECTED components register from its\nstatic init and nothing ever unregistered them — any later lookup or\nGetAll walk read freed pages, and a reload appended a duplicate).\nDriven by the FModuleManager unload broadcast. Returns the number of\ndescriptors dropped.",
+							"line": 39
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/ReflectionSerializer.h",
+			"include": "Reflection/ReflectionSerializer.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "ReflectionSerializer",
+					"namespace": "Mowo",
+					"doc": "Generic MDF serialize / deserialize driven by a TypeDescriptor.",
+					"line": 11,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Serialize",
+							"signature": "static void Serialize(const TypeDescriptor& desc, const void* comp, MdfNode& node)",
+							"static": true,
+							"doc": "The node must already carry the correct type name. Calls\ndesc.customSerialize afterwards when non-null.",
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "SerializeWithBaseline",
+							"signature": "static void SerializeWithBaseline(const TypeDescriptor& desc, const void* comp, MdfNode& node, const void* baseline)",
+							"static": true,
+							"doc": "Delta against an explicit baseline component instead of the CDO —\nthe prefab-override capture passes the source-built component so the\nrecorded blob is a true source-delta (per-property override\nsemantics; propagation resumes for fields reverted to source).",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "Deserialize",
+							"signature": "static void Deserialize(const TypeDescriptor& desc, const MdfNode& node, void* comp)",
+							"static": true,
+							"doc": "Missing properties are left UNTOUCHED (merge semantics) — correct for\nfreshly default-constructed components and for prefab-override merges.\nCalls desc.customDeserialize afterwards when non-null.",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "DeserializeExact",
+							"signature": "static void DeserializeExact(const TypeDescriptor& desc, const MdfNode& node, void* comp)",
+							"static": true,
+							"doc": "Exact-restore variant: first resets every serializable POD/String\nproperty to its CDO default (Array/Custom/Struct are skipped — the\nserializer always writes those in full), then applies the node. Use when\nthe node is a STATE SNAPSHOT of a live component (undo/redo): with CDO\ndelta-serialization a snapshot omits default-valued properties, and a\nplain merge-Deserialize would leave current non-default values behind.\nRuntimeOnly fields are never touched.",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "ForgetCachedTypesInModule",
+							"signature": "static void ForgetCachedTypesInModule(void* moduleHandle)",
+							"static": true,
+							"doc": "Deserialize logs at DEBUG every key in the node that no reflected\nproperty claims, so a renamed or removed field is visible instead of\nsilently dropped. The thread-local counter lets tooling assert on that\nwithout scraping the log; it accrues across calls until reset.\nThe per-type default instance and key set Serialize builds once per\ndescriptor. Dropped with a descriptor's module (ReflectionRegistry's\nunload path calls the first), or all at once.",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "ForgetCachedTypes",
+							"signature": "static void ForgetCachedTypes()",
+							"static": true,
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "FindPropertyBySpelling",
+							"signature": "static const PropertyInfo* FindPropertyBySpelling(const TypeDescriptor& desc, const std::string& key)",
+							"static": true,
+							"doc": "The property a hand-written key means when it spells the field the\nother way: `cast_shadows` for `castShadows`, or `castShadows` for a\nfield keyed `cast_shadows`. Case and underscores are ignored; null when\nno property matches. Components key some fields snake_case and leave\nothers under their C++ name, and an author cannot tell which from the\ninspector — a correct value under the other spelling was rejected as\nan unknown property.",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "KeySpellingMatches",
+							"signature": "static bool KeySpellingMatches(const char* fieldName, const std::string& key)",
+							"static": true,
+							"doc": "The comparison behind it, for readers keyed by something other than a\nTypeDescriptor (actor MPROPERTYs).",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "ResetUnknownKeyCount",
+							"signature": "static void ResetUnknownKeyCount()",
+							"static": true,
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "GetUnknownKeyCount",
+							"signature": "static uint32_t GetUnknownKeyCount()",
+							"static": true,
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "ResetNewerVersionCount",
+							"signature": "static void ResetNewerVersionCount()",
+							"static": true,
+							"doc": "Counts nodes whose `_version` is above what this build's descriptor\nknows. Unlike an unknown key — which an old file also produces for a\nremoved field — this can only mean a newer build wrote the node, so a\ndocument loader reads it to refuse saving over what it could not read.\nThread-local and cumulative until reset, like the unknown-key count.",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "GetNewerVersionCount",
+							"signature": "static uint32_t GetNewerVersionCount()",
+							"static": true,
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "NoteNewerVersion",
+							"signature": "static void NoteNewerVersion()",
+							"static": true,
+							"doc": "For a serializer with versions of its own (the actor node): counts one\nnode read from a newer build into the same tally, so the document's\nsave gate refuses it the same way.",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "ExtractUnknownKeys",
+							"signature": "static bool ExtractUnknownKeys(const TypeDescriptor& desc, const MdfNode& node, MdfNode& out)",
+							"static": true,
+							"doc": "The keys and child nodes of `node` that no reflected property of `desc`\nclaims, copied into `out`, so a document owner can hand them back to the\nwriter: a field a newer build added without bumping the version is\notherwise stripped by the first save from an older build. False, with\n`out` untouched, when there is nothing to carry, when the node is older\nthan the descriptor (its migration owns that shape, and an unclaimed key\nthere is a removed field), or when the type reads keys the property\ntable does not name (a custom deserializer or a Custom property).",
+							"line": 85
+						},
+						{
+							"kind": "method",
+							"name": "MergeUnknownKeys",
+							"signature": "static void MergeUnknownKeys(const MdfNode& carried, MdfNode& node)",
+							"static": true,
+							"doc": "Puts back every property and child of `carried` that `node` does not\nalready hold. What this build wrote always wins.",
+							"line": 89
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Reflection/Public/Reflection/TypeDescriptor.h",
+			"include": "Reflection/TypeDescriptor.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "TypeDescriptor",
+					"namespace": "Mowo",
+					"doc": "Describes all reflected properties of a component type.",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "typeName",
+							"signature": "const char* typeName",
+							"doc": "\"LightComponent\"",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "displayName",
+							"signature": "const char* displayName",
+							"doc": "\"Light\" (MDF node name / header label)",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "componentId",
+							"signature": "ComponentID componentId",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "properties",
+							"signature": "const PropertyInfo* properties",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "propertyCount",
+							"signature": "uint32_t propertyCount",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*customSerialize)(const void* comp, MdfNode& node) = nullptr",
+							"doc": "Custom hooks for fields that can't be reflected (vectors, pointers, maps)\nThese are called IN ADDITION to automatic property serialization.",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*customDeserialize)(void* comp, const MdfNode& node) = nullptr",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "bool",
+							"signature": "bool (*customInspector)(void* comp, Scene* scene, EntityID id) = nullptr",
+							"doc": "Returns true if custom inspector fully handled drawing (skip auto properties)",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "version",
+							"signature": "uint32_t version = 1",
+							"doc": "Bump whenever the serialized layout changes incompatibly (field\nrename, semantic shift, unit change). The serializer writes `_version`\ninto every emitted MDF node; when it is missing the deserializer\nassumes 1, which keeps pre-versioning saves loading.",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*migrate)(uint32_t fromVersion, MdfNode& node) = nullptr",
+							"doc": "Invoked before property deserialization when the node's stored version\nis below `version`. It must rename / move / synthesise properties so\nthe standard deserialization path finds the new schema; chain through\nevery version that introduced a change.\nif (from < 2) { rename \"color\" → \"tintColor\"; from = 2; }\nif (from < 3) { split \"size\" Vec2 → \"sizeX\",\"sizeY\"; from = 3; }",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "functions",
+							"signature": "const FunctionInfo* functions = nullptr",
+							"doc": "Reflected callable methods (MFUNCTION). Descriptors without methods\nleave these zero via aggregate init. The call-by-reflection layer\nlooks a method up by name and invokes it through FunctionInfo::invoke.",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "functionCount",
+							"signature": "uint32_t functionCount = 0",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "instanceSize",
+							"signature": "uint32_t instanceSize = 0",
+							"doc": "CDO support, filled by the MHT codegen; zero for descriptors that\npredate it, in which case delta-serialization falls back to writing\nevery property. instanceSize plus placement-new default construction\nlet the serializer diff against a Class Default Object so scenes\npersist only properties that differ from the defaults.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*constructDefault)(void* dst) = nullptr",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "void",
+							"signature": "void (*destructDefault)(void* dst) = nullptr",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "category",
+							"signature": "const char* category = nullptr",
+							"doc": "Editor Add Component grouping (\"Rendering\", \"Physics\", ...). Set by\na struct-level MCATEGORY annotation; null buckets under \"General\".",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "description",
+							"signature": "const char* description = nullptr",
+							"doc": "One-line authored summary for the Add Component menu, from a\nstruct-level MOWO_TOOLTIP. Null when the component never wrote one, in\nwhich case the picker falls back to a line derived from the type name,\nthe category and the property count — which says what the component IS\nnamed, never what it does.",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "FindFunction",
+							"signature": "const FunctionInfo* FindFunction(const char* fnName) const",
+							"doc": "Linear scan — function counts are small.",
+							"line": 75
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "alias",
+					"name": "EntityID",
+					"signature": "using EntityID = uint64_t",
+					"doc": "Reflection sits below ECS in the dep DAG, so ECS/Types.h is not pulled in\nhere — the IDs are opaque to reflection and never dereferenced.",
+					"line": 15
+				},
+				{
+					"kind": "alias",
+					"name": "ComponentID",
+					"signature": "using ComponentID = uint32_t",
+					"line": 16
+				}
+			]
+		}
+	]
+}

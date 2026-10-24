@@ -1,0 +1,57 @@
+---
+title: Perf Trends
+description: See every performance series the benchmark tests recorded, spot regressions against a baseline, tune per-series thresholds and export a report.
+order: 22
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/Panels/PerfTrendsPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/PerfTrendsPanel.h
+  - Engine/Source/Runtime/Core/Public/Core/PerfTrends.h
+verifiedAt: 08e26df3d
+---
+
+**Window ▸ Perf Trends** opens the performance trend store as a document beside the level <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/PerfTrendsPanel.cpp" />. It shows every series the benchmark tests have recorded, whether the latest run regressed, and the threshold it was judged by. It answers "did this change make anything slower?" without reading test logs.
+
+<Screenshot id="editor-perf-trends" alt="The Perf Trends document: the header with 'Performance trends', a red pill reading '1 regression since baseline', and Run suite and Export report buttons; the series list with dots, sparklines and latest values, one regressed series selected; its chart with the baseline band, dashed median, threshold line with its handle and a regressed run ringed in red; and the runs table below." />
+
+## Where the numbers come from
+
+The benchmark tests append one run per metric to a trend store each time they pass. The view reads the open project's `Saved/Perf/Trends.mdfb`, or, without one, the test output's `build/TestResults/Perf/` store beside the binaries. Each combination of test, metric and build configuration is one **series**; a Debug run is never compared with a Release run. The store is <Source symbol="FPerfTrendStore" />.
+
+## Reading the view
+
+| Part | What it shows |
+| --- | --- |
+| Header | A pill counting regressed series (or *No regressions*), the first commit in the store, the run count, **Run suite** and **Export report** |
+| Series list | One row per series: a red dot (regressed), green dot (fine) or ring (no baseline yet), the test and metric, a sparkline and the latest value. **Filter series** searches by test and metric |
+| Chart | The selected series with its unit, the baseline band, the dashed median, the threshold line with a handle, every run, and regressed runs ringed in red |
+| Runs | Newest first: the commit, date, value, change against the baseline, and *Regressed · past +N %* on regressed runs |
+
+The first regressed series is selected when the view opens.
+
+## Baselines
+
+A series is judged against the median of earlier runs in the same configuration, once it has at least three of them. Until then its row reads *no baseline yet* and the chart says how many more runs it needs, with **Run suite now** and **Learn about baselines** (this page).
+
+With no store at all, as on a fresh checkout, the view says *No trend store yet* and names the tests that record runs.
+
+## Thresholds
+
+Each series is judged by a threshold: how far above its baseline a run may go before it counts as a regression <Source symbol="FPerfTrendThresholds" />. To change it, type a percentage into **Threshold** or drag the handle on the chart. Either writes a rule for this series to the project's `Config/DefaultPerfTrends.ini`, replacing any earlier rule for the same series and leaving the rest of the file alone, and the view judges again:
+
+```ini title="Config/DefaultPerfTrends.ini"
++Rule=(Row=arc-bench,Metric=frame_ms,Fraction=0.1)
+```
+
+Commit the file so the whole team, and `mbt perf report`, use the same thresholds.
+
+## Run suite and Export report
+
+**Run suite** re-runs the tests that recorded the store, one after another, with `mbt test --cpp --no-build --allow-skips --filter <test>`. It uses the binaries already built, so it never conflicts with the running editor. A progress card names the current test and can stop the queue; the view reloads when the last one finishes. See [Testing](/docs/testing/).
+
+**Export report** writes every series' verdict to `Saved/Reports/PerfTrends-<date>.json`, in the format `mbt perf report` reads, and offers **Show in Explorer**.
+
+`mbt perf report` judges the same stores from the command line; `--fail-on-regression` makes it exit with an error when any series regressed. See the [mbt CLI reference](/docs/reference/mbt-cli/).
+
+## Related
+
+- [Profiler](/docs/editor/profiler/) for frame-by-frame analysis in the editor.

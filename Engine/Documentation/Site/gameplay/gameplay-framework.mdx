@@ -1,0 +1,225 @@
+---
+title: Gameplay framework
+description: Game modes, game state, player controllers, pawns and characters, and how a match starts when you press Play.
+order: 3
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/AGameMode.h
+  - Engine/Source/Runtime/Game/Public/Game/AGameState.h
+  - Engine/Source/Runtime/Game/Public/Game/AController.h
+  - Engine/Source/Runtime/Game/Public/Game/APlayerController.h
+  - Engine/Source/Runtime/Game/Public/Game/APawn.h
+  - Engine/Source/Runtime/Game/Public/Game/ACharacter.h
+  - Engine/Source/Runtime/Game/Public/Game/APlayerStart.h
+  - Engine/Source/Runtime/Game/Public/Game/MGameInstance.h
+  - Engine/Source/Runtime/Game/Public/Game/AThirdPersonGameMode.h
+  - Engine/Source/Runtime/Game/Public/Game/LocalPlayer.h
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+  - Engine/Source/Runtime/Game/Private/GameFramework.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIController.h
+  - Engine/Source/Runtime/Game/Public/Game/AFirstPersonCharacter.h
+  - Engine/Source/Runtime/Game/Public/Game/ATopDownCharacter.h
+  - Engine/Source/Runtime/Game/Public/Game/ALoomCharacter.h
+  - Engine/Source/Runtime/Game/Public/Game/ALoomGameMode.h
+  - Engine/Source/Runtime/Core/Public/Core/MSubsystem.h
+verifiedAt: b0ec4f599
+---
+
+Mowo ships the same framework classes you know from Unreal: a game mode that holds the rules, a game state that holds match status, controllers that possess pawns, and a character class with movement built in. The framework is optional. A project that names no game mode class gets plain actors and nothing else.
+
+## The classes
+
+| Class | Role |
+| --- | --- |
+| `AGameMode` | The rules. Decides which pawn, controller and game state classes to spawn, and runs the match start. One per world. <Source symbol="AGameMode" /> |
+| `AGameState` | Match phase (`WaitingToStart`, `InProgress`, `WaitingPostMatch`) and elapsed time <Source symbol="AGameState" /> |
+| `AController` | A non-physical actor that possesses a pawn |
+| `APlayerController` | The human player's controller. Owns the player's input bindings and Enhanced Input subsystem. |
+| `AIController` | The AI controller, in the AINavigation module <Source symbol="AIController" /> |
+| `APawn` | An actor a controller can possess. Collects movement input. |
+| `ACharacter` | A pawn with a root, a character movement component and an ability system component <Source symbol="ACharacter" /> |
+| `APlayerStart` | A placed spawn point with a player index |
+| `MGameInstance` | A key-value store that survives scene loads and travel <Source symbol="MGameInstance" /> |
+
+## How a match starts
+
+When the start scene begins play, the host looks up the project's game mode class by name and calls `MWorld::InitializeGameMode`. The packaged runtime and play-in-editor do this the same way. If the name is not a registered class, both log a warning and fall back to the base `AGameMode`. If the setting is empty, no framework actors are spawned. <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" /> <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp" />
+
+<Flow steps={["InitializeGameMode", "InitGame", "StartMatch", "Spawn game state", "Spawn player controller", "Spawn default pawn at a player start", "Possess + PostLogin", "Match InProgress"]} highlight={2} caption="StartMatch spawns the framework actors in this order. A second call does nothing." />
+
+`StartMatch` spawns the game state, the player controller and the default pawn, possesses the pawn, fires `PostLogin`, and sets the match to `InProgress`. <Source path="Engine/Source/Runtime/Game/Private/GameFramework.cpp" /> The pawn is placed at the `APlayerStart` whose player index matches the game mode's `playerIndex`, or the first one found. With no player start in the world, the pawn spawns at the origin. <Source path="Engine/Source/Runtime/Game/Private/GameFramework.cpp" />
+
+On a dedicated server the game mode starts with `spawnLocalPlayerOnStart` off, so no local controller or pawn exists; each joining connection gets its pawn through `RestartPlayer`. <Source symbol="AGameMode" />
+
+## Set up a playable character
+
+<Steps>
+<Step title="Create a pawn class">
+Derive from `ACharacter` for walking, jumping and crouching, or from `APawn` if you handle movement yourself. Override `SetupPlayerInput` to bind input.
+</Step>
+<Step title="Create a game mode">
+Derive from `AGameMode` and set `defaultPawnClass` in the constructor. Leave `playerControllerClass` and `gameStateClass` null to use the base classes. <Source symbol="AGameMode" />
+</Step>
+<Step title="Place a player start">
+Add an `APlayerStart` to your start scene where the player should appear.
+</Step>
+<Step title="Pick the game mode in Project Settings">
+Open **Project Settings**, go to **Project › Maps & Modes**, and set **Game Mode Class**. The field lists the game modes the editor discovered; an empty value means no game framework. <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp" />
+</Step>
+<Step title="Press Play">
+Play-in-editor spawns the framework and possesses your pawn. See [Play in editor](/docs/editor/play-in-editor/).
+</Step>
+</Steps>
+
+<Screenshot id="gameplay-maps-modes-settings" alt="Mowo Editor Project Settings window on the Project › Maps & Modes page, with the Start Scene picker and the Game Mode Class picker open showing discovered game mode classes such as AGameMode and AThirdPersonGameMode" caption="Game Mode Class is stored in the project and read by both play-in-editor and the packaged game." />
+
+### The pawn
+
+```cpp title="ARunner.h" nocompile
+#pragma once
+
+#include "Game/ACharacter.h"
+#include "Game/MPlayerInput.h"
+#include "Input/InputAction.h"
+#include "Math/Math.h"
+
+namespace Mowo {
+
+MCLASS()
+class ARunner : public ACharacter {
+public:
+	MGENERATED_BODY()
+
+	void SetupPlayerInput(MPlayerInput* input) override {
+		input->BindAxis2D("Move", [this](Vec2 value) {
+			AddMovementInput(Vec3(value.x, 0.0f, value.y));
+		});
+
+		input->BindAction("Jump", ETriggerEvent::Started, [this]() {
+			Jump();
+		});
+
+		input->BindAction("Sprint", ETriggerEvent::Started, [this]() {
+			SetSprinting(true);
+		});
+
+		input->BindAction("Sprint", ETriggerEvent::Completed, [this]() {
+			SetSprinting(false);
+		});
+	}
+};
+
+}
+```
+
+`APlayerController` clears its bindings and calls the new pawn's `SetupPlayerInput` every time it possesses one, so bindings never leak from a previous pawn. <Source path="Engine/Source/Runtime/Game/Private/GameFramework.cpp" /> The string names refer to input actions; the [Input](/docs/gameplay/input/) page shows how to bind to action assets and activate a mapping context.
+
+### The game mode
+
+```cpp title="ARunnerGameMode.h" nocompile
+#pragma once
+
+#include "Core/MClassRegistry.h"
+#include "Game/AController.h"
+#include "Game/AGameMode.h"
+#include "Game/APawn.h"
+#include "Game/AThirdPersonCharacter.h"
+
+namespace Mowo {
+
+MCLASS()
+class ARunnerGameMode : public AGameMode {
+public:
+	MGENERATED_BODY()
+
+	ARunnerGameMode() {
+		defaultPawnClass = MClassRegistry::Get().FindForType<AThirdPersonCharacter>();
+	}
+
+	void PostLogin(AController* controller, APawn* pawn) override {
+		AGameMode::PostLogin(controller, pawn);
+		m_Arrivals++;
+	}
+
+private:
+	int32_t m_Arrivals = 0;
+};
+
+}
+```
+
+Replace `AThirdPersonCharacter` with your own pawn class. `FindForType<T>()` returns the reflected `MClass` for a C++ type. You can also bind `OnPostLogin()` and `OnLogout()` from outside the game mode instead of overriding the virtuals. <Source symbol="AGameMode" />
+
+<Callout type="tip">
+The engine ships template game modes, such as `AThirdPersonGameMode`, that point the framework at a ready-made pawn and camera. Set the project's game mode class to one of them to get a playable character with no code. <Source symbol="AThirdPersonGameMode" />
+</Callout>
+
+## Possession
+
+`AController::Possess(pawn)` releases the current pawn first, then calls the pawn's `PossessedBy`. Override `OnPossess` and `OnUnPossess` on a controller subclass to react. <Source symbol="AController" />
+
+A pawn gathers movement through `AddMovementInput(direction, scale)`. The character movement component consumes the accumulated intent each frame; a plain `APawn` without one consumes it in its own `Tick`. <Source symbol="APawn" />
+
+`ACharacter` also implements `IDamageable`: `TakeDamage` routes into the ability system's `Health` attribute and returns the health actually removed. <Source symbol="ACharacter" />
+
+## Input contexts on the controller
+
+`APlayerController::PushInputContext(name)` and `PopInputContext(name)` activate named input contexts, for a menu or a vehicle, on top of the current ones. The controller remembers what it pushed and pops all of it at `EndPlay`, so a context cannot outlive its controller. <Source symbol="APlayerController" />
+
+## Data that survives travel
+
+Loading a scene tears the actor world down. Values that must survive, such as a chosen difficulty or a run seed, go in `MGameInstance`:
+
+```cpp title="Difficulty.cpp" wrap
+#include "Game/MGameInstance.h"
+
+Mowo::MGameInstance& instance = Mowo::MGameInstance::Get();
+instance.SetInt("Difficulty", 2);
+
+int32_t difficulty = instance.GetInt("Difficulty", 1);
+(void)difficulty;
+```
+
+The same store is reachable from Visual Scripting through its reflected functions. <Source symbol="MGameInstance" />
+
+## Local multiplayer
+
+`FLocalPlayerManager` tracks up to four local players, each with a gamepad slot, a player controller, a camera and a screen pane for split-screen. <Source path="Engine/Source/Runtime/Game/Public/Game/LocalPlayer.h" />
+
+## Template characters
+
+Three ready-made characters back the project templates. Each reads the input actions `Move` and `Look` (2D axes) and `Jump`, `Sprint` and `Crouch` (buttons). A missing action reads as zero, so a half-configured project stands still instead of failing. <Source symbol="AThirdPersonCharacter" />
+
+| Class | Camera | Movement | Tuning fields |
+| --- | --- | --- | --- |
+| `AThirdPersonCharacter` | Orbit rig behind the pawn | Camera-relative, turns to face travel | `lookSensitivity`, `turnSpeed` |
+| `AFirstPersonCharacter` | At the eye point | Camera-relative on the ground plane, body follows the camera | `lookSensitivity`, `eyeHeight` <Source symbol="AFirstPersonCharacter" /> |
+| `ATopDownCharacter` | Fixed high camera, no `Look` | World-relative, faces travel | `cameraDistance`, `cameraPitch`, `turnSpeed` <Source symbol="ATopDownCharacter" /> |
+
+Point a game mode at one of them (`AThirdPersonGameMode`, `AFirstPersonGameMode`, `ATopDownGameMode`), or subclass one and override what you need. The fields are editable in the Details panel.
+
+## Subsystems
+
+A subsystem is a singleton that lives as long as its scope and is created on first use. <Source path="Engine/Source/Runtime/Core/Public/Core/MSubsystem.h" />
+
+| Base class | Lifetime | Reach it with |
+| --- | --- | --- |
+| `MEngineSubsystem` | The whole process | `GEngine->GetSubsystem<T>()` |
+| `MWorldSubsystem` | One world | `MWorld::GetSubsystem<T>()` |
+
+Override `Initialize` and `Deinitialize`. Do not rely on the order in which subsystems initialize; if one needs another, fetch it with `GetSubsystem` inside `Initialize`.
+
+## Framework classes in Visual Scripting
+
+A Visual Scripting class can take `AActor`, `APawn`, `ACharacter`, `AGameMode`, `AGameState` or `APlayerController` as its native parent. The engine backs each with a thin class (`ALoomCharacter`, `ALoomGameMode` and so on) that runs the native lifecycle first and then the graph, so a graph-based character still gets capsule movement and health from `ACharacter`. <Source symbol="ALoomCharacter" /> <Source symbol="ALoomGameMode" /> See [Visual Scripting](/docs/visual-scripting/).
+
+## Related
+
+- [Input](/docs/gameplay/input/) for mapping contexts and bindings
+- [Character movement](/docs/gameplay/character-movement/) for movement modes
+- [Project settings](/docs/editor/project-settings/)
+- [Play in editor](/docs/editor/play-in-editor/)
+- API: [Game module](/docs/api/game/), [AINavigation module](/docs/api/ainavigation/)

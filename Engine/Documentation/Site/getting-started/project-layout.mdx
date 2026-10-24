@@ -1,0 +1,83 @@
+---
+title: Project layout
+description: What each folder in a Mowo project holds, which ones you commit and which ones the engine regenerates.
+order: 5
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+  - Engine/Source/Runtime/Core/Private/ProjectLayout.cpp
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/InitCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs
+  - Templates/TP_FirstPerson/TP_FirstPerson.mproject
+  - Templates/TP_FirstPerson/Config/Plugins.ini
+  - Engine/Source/Runtime/Project/Public/Project/ProjectMigration.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h
+verifiedAt: 08e26df3d
+---
+
+A Mowo project has the same shape as an Unreal project. One rule decides where everything goes: nobody opens `Intermediate/`, only its own user opens `Saved/`, and the whole team opens everything else, so you commit everything else. `FProjectLayout` <Source symbol="FProjectLayout" /> owns these names, so the engine, the editor and `mbt` agree on them.
+
+## The folders
+
+```text
+MyGame/
+  MyGame.mproject      JSON manifest
+  Content/             every game asset (mounted as "Content")
+  Config/              the project's INI settings
+  Source/              the C++ game module and the game target
+  Plugins/             project plugins
+  Saved/               per-user output: logs, crashes, autosaves, packages
+  Intermediate/        disposable caches
+  .gitignore
+  .gitattributes
+```
+
+| Folder | Holds | Commit? |
+|---|---|---|
+| `Content/` | Levels (`.mmap`), materials, textures, meshes, sounds and every other asset, with their `.mdfmeta` sidecars | Yes |
+| `Config/` | `Engine.ini`, `Input.ini`, `Plugins.ini`, `Packaging.ini`, `Redirects.ini` and the other project settings | Yes |
+| `Source/` | The game module (`<Module>.Build.cs`, `Public/`, `Private/`) and `<Project>.Target.cs` | Yes |
+| `Plugins/` | Project plugins | Yes |
+| `Saved/` | Logs, crashes, autosaves, save games, screenshots, your editor layout, cooked output and packages | No |
+| `Intermediate/` | The asset registry index, derived data cache, thumbnails, cooked per-asset transcodes | No |
+
+`mbt init` writes a `.gitignore` that leaves out `Saved/`, `Intermediate/`, build output, IDE folders and `*.meaf` archives, and a `.gitattributes` that routes each asset type: text assets as LF text, binary bulk through Git LFS <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/InitCommand.cs" />.
+
+<Callout type="warning">
+Commit each asset's `.mdfmeta` sidecar with it. The sidecar sits beside the file (`rock.png` gets `rock.png.mdfmeta`) and carries the asset's UUID, which every reference to the asset uses. Losing it gives the asset a new identity.
+</Callout>
+
+Asset references are stored as project-relative paths such as `Content/Textures/rock.png`. Never put an absolute path into an asset.
+
+Here is the `Config/Plugins.ini` a template ships. It enables plugins by name:
+
+```ini title="Config/Plugins.ini"
+[enabled]
+Combat=True
+```
+
+## Saved and Intermediate
+
+| Path | Contents |
+|---|---|
+| `Saved/Logs/`, `Saved/Crashes/` | Log files and crash reports for this project |
+| `Saved/Autosaves/`, `Saved/SaveGames/`, `Saved/Screenshots/` | Editor autosaves, game saves, screenshots |
+| `Saved/Config/Editor/` | Your window layout, viewport state and other per-user editor state |
+| `Saved/Cooked/`, `Saved/Packaged/` | `mbt cook` and `mbt package` output |
+| `Saved/AutoScreenshot.png` | The thumbnail the Project Launcher shows for the project |
+| `Intermediate/AssetRegistry.mdfb` | The asset registry index. Deleting it forces a rebuild on the next open |
+
+You can delete `Intermediate/` at any time. The next editor session rebuilds it.
+
+## The manifest
+
+`MyGame.mproject` is JSON. It holds the project's name, version, UUID, the engine version that last saved it, the start scene, the game mode class, the packaged product's name and icon, and the default window settings. You rarely edit it by hand: **Edit › Project Settings…** writes the same fields. Every field, and how the `Config/` INI layers combine, is in [Project files](/docs/reference/).
+
+## Opening an older project
+
+Projects written by an older engine migrate on open. An `Assets/` folder moves to `Content/`, a `.mowo/` folder moves to `Saved/Config/Editor/`, MDF config files such as `Engine.mdf` are converted to INI, and older asset extensions are renamed <Source path="Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h" /> <Source path="Engine/Source/Runtime/Project/Public/Project/ProjectMigration.h" /> <Source path="Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h" />.
+
+## Next steps
+
+- [Your first scene](/docs/getting-started/first-scene/) creates the first level in `Content/Scenes/`.
+- [Your first build](/docs/getting-started/first-build/) compiles the module in `Source/`.
+- [Reference](/docs/reference/) for the full project-file and file-type tables.

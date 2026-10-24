@@ -1,0 +1,629 @@
+{
+	"name": "MowoEngine.GameNet",
+	"displayName": "GameNet",
+	"slug": "gamenet",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/GameNet/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/GameNet/Public/GameNet/MatchConnection.h",
+			"include": "GameNet/MatchConnection.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EMatchConnectionState",
+					"namespace": "Mowo",
+					"line": 26,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Disconnected",
+							"signature": "Disconnected",
+							"line": 27
+						},
+						{
+							"kind": "enumerator",
+							"name": "Connected",
+							"signature": "Connected",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "Finished",
+							"signature": "Finished",
+							"doc": "server ended the match; socket may already be gone",
+							"line": 29
+						},
+						{
+							"kind": "enumerator",
+							"name": "Lost",
+							"signature": "Lost",
+							"doc": "transport dropped — Reconnect() resyncs",
+							"line": 30
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMatchConnection",
+					"namespace": "Mowo",
+					"line": 33,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FMatchConnection",
+							"signature": "FMatchConnection()",
+							"line": 35
+						},
+						{
+							"kind": "method",
+							"name": "~FMatchConnection",
+							"signature": "~FMatchConnection()",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "FMatchConnection",
+							"signature": "FMatchConnection(const FMatchConnection&) = delete",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FMatchConnection& operator=(const FMatchConnection&) = delete",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "OnState",
+							"signature": "std::function<void(const std::string& stateJson, uint64_t version)> OnState",
+							"doc": "Full private-view snapshot, verbatim server JSON, strictly increasing\nversion. Fired only for accepted (in-order) snapshots.",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "OnRejected",
+							"signature": "std::function<void(uint64_t localId, const std::string& reason)> OnRejected",
+							"doc": "The server refused an intent: roll optimistic UI back to the last\nOnState payload. localId is the value SendMove returned.",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "OnFinished",
+							"signature": "std::function<void(const std::string& resultJson)> OnFinished",
+							"doc": "Terminal result payload; the connection is done after this.",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "OnLost",
+							"signature": "std::function<void()> OnLost",
+							"doc": "Transport loss (not a graceful finish) — show \"reconnecting…\".",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "Connect",
+							"signature": "bool Connect(const std::string& gatewayUrl, const std::string& token)",
+							"doc": "Blocking upgrade against `<gatewayUrl>?token=<token>`. On success the\npending resync goes out immediately, which makes the gateway push full\ncurrent state — connect and reconnect are deliberately the same path.",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Reconnect",
+							"signature": "bool Reconnect()",
+							"doc": "Reconnect after Lost: same URL/token, intents queued while offline\nflush after the resync in the order the user acted.",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float dt)",
+							"doc": "Pump once per frame: polls the socket, dispatches envelopes, flushes\nsendable intents, keeps the heartbeat alive.",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "SendMove",
+							"signature": "uint64_t SendMove(const std::string& moveJson)",
+							"doc": "Queue a move intent; `moveJson` is the envelope `data` object.\nReturns the local correlation id OnRejected reports back.",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "SendReaction",
+							"signature": "void SendReaction(const std::string& reactionJson)",
+							"doc": "Fire-and-forget reaction (emoji) — not an intent, never queued/rolled\nback, silently dropped while offline.",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "Close",
+							"signature": "void Close()",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "GetState",
+							"signature": "EMatchConnectionState GetState() const",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "GetStateVersion",
+							"signature": "uint64_t GetStateVersion() const",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "GetSecondsSinceHeard",
+							"signature": "float GetSecondsSinceHeard() const",
+							"doc": "Seconds since the last pong (or connect). The UI surfaces stalls well\nbefore the transport notices — radio silence on mobile looks exactly\nlike a healthy idle socket.",
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "SetHeartbeatInterval",
+							"signature": "void SetHeartbeatInterval(float seconds)",
+							"doc": "Heartbeat cadence; the backend expects ~15 s.",
+							"line": 84
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/GameNet/Public/GameNet/RestClient.h",
+			"include": "GameNet/RestClient.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FRestError",
+					"namespace": "Mowo",
+					"line": 28,
+					"members": [
+						{
+							"kind": "field",
+							"name": "transport",
+							"signature": "bool transport = false",
+							"doc": "no HTTP response at all (DNS, TLS, refused)",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "status",
+							"signature": "long status = 0",
+							"doc": "HTTP status when transport == false",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "type",
+							"signature": "std::string type",
+							"doc": "RFC 9457 \"type\" (empty when not problem+json)",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "title",
+							"signature": "std::string title",
+							"doc": "RFC 9457 \"title\"",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "detail",
+							"signature": "std::string detail",
+							"doc": "RFC 9457 \"detail\", or the transport error",
+							"line": 33
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FRestResult",
+					"namespace": "Mowo",
+					"line": 36,
+					"members": [
+						{
+							"kind": "field",
+							"name": "status",
+							"signature": "long status = 0",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "body",
+							"signature": "std::string body",
+							"doc": "raw response body (JSON on this backend)",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "error",
+							"signature": "FRestError error",
+							"doc": "meaningful when !Ok()",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "Ok",
+							"signature": "bool Ok() const",
+							"line": 41
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FRestClient",
+					"namespace": "Mowo",
+					"line": 46,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FRestClient",
+							"signature": "explicit FRestClient(std::string baseUrl)",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "SetBearerToken",
+							"signature": "void SetBearerToken(std::string token)",
+							"doc": "Token management. Empty token = no Authorization header.",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "GetBearerToken",
+							"signature": "const std::string& GetBearerToken() const",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "SetOnUnauthorized",
+							"signature": "void SetOnUnauthorized(std::function<bool()> hook)",
+							"doc": "Called once when a request returns 401. Return true after refreshing\nthe token (via SetBearerToken) to retry the original request once;\nfalse passes the 401 through.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "AddDefaultHeader",
+							"signature": "void AddDefaultHeader(std::string headerLine)",
+							"doc": "Raw \"Name: value\" lines sent with every request (client version,\nlocale, device id, ...).",
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "SetTimeoutSeconds",
+							"signature": "void SetTimeoutSeconds(long seconds)",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "FRestResult Get(const std::string& path)",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "Post",
+							"signature": "FRestResult Post(const std::string& path, const std::string& jsonBody = \"\")",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "Put",
+							"signature": "FRestResult Put(const std::string& path, const std::string& jsonBody = \"\")",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "Patch",
+							"signature": "FRestResult Patch(const std::string& path, const std::string& jsonBody = \"\")",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "Delete",
+							"signature": "FRestResult Delete(const std::string& path)",
+							"line": 77
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/GameNet/Public/GameNet/SnapshotSync.h",
+			"include": "GameNet/SnapshotSync.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FPendingIntent",
+					"namespace": "Mowo",
+					"line": 24,
+					"members": [
+						{
+							"kind": "field",
+							"name": "localId",
+							"signature": "uint64_t localId = 0",
+							"doc": "client-side correlation id",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "payload",
+							"signature": "std::string payload",
+							"doc": "the envelope \"data\" (already-serialized JSON)",
+							"line": 26
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FSnapshotSync",
+					"namespace": "Mowo",
+					"line": 29,
+					"members": [
+						{
+							"kind": "field",
+							"name": "OnState",
+							"signature": "std::function<void(const std::string& state, uint64_t version)> OnState",
+							"doc": "Fired when a snapshot is accepted (in order). The payload is the\nserver state verbatim — this class never interprets it.",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "OnRollback",
+							"signature": "std::function<void(uint64_t localId, const std::string& reason)> OnRollback",
+							"doc": "Fired when the server rejects an intent: roll the optimistic render\nback to the last accepted snapshot.",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "ApplySnapshot",
+							"signature": "bool ApplySnapshot(uint64_t version, const std::string& state)",
+							"doc": "Returns false (and drops) when the snapshot is stale or duplicate:\nversions are totally ordered and the server pushes whole states, so\nanything <= the last accepted version carries no information.",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "OnReject",
+							"signature": "void OnReject(const std::string& reason)",
+							"doc": "The reject names the oldest in-flight intent (this protocol answers\nintents in order). Everything queued after it stays queued — the\ncaller decides whether to also drop dependents.",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "QueueIntent",
+							"signature": "uint64_t QueueIntent(std::string payload)",
+							"doc": "Queue an intent for sending. Returns the local correlation id.",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "TakeSendable",
+							"signature": "std::vector<FPendingIntent> TakeSendable()",
+							"doc": "Everything ready to go on the wire. Empty while disconnected — the\noutbox holds, nothing is dropped. Sent intents move to the in-flight\nlist until the matching snapshot (acceptance) or reject arrives.",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "ClearInflightThrough",
+							"signature": "void ClearInflightThrough(uint64_t version)",
+							"doc": "A snapshot acknowledges every intent the server has folded in: with\nwhole-state pushes there is no per-intent ack, so acceptance = the\nnext accepted snapshot. Call after ApplySnapshot returns true.",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "OnDisconnected",
+							"signature": "void OnDisconnected()",
+							"line": 111
+						},
+						{
+							"kind": "method",
+							"name": "OnConnected",
+							"signature": "void OnConnected()",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "ConsumeResyncRequest",
+							"signature": "bool ConsumeResyncRequest()",
+							"doc": "True once after a (re)connect: the caller sends a `resync` envelope\nand the gateway answers with full current state.",
+							"line": 130
+						},
+						{
+							"kind": "method",
+							"name": "GetVersion",
+							"signature": "uint64_t GetVersion() const",
+							"line": 138
+						},
+						{
+							"kind": "method",
+							"name": "HasState",
+							"signature": "bool HasState() const",
+							"line": 141
+						},
+						{
+							"kind": "method",
+							"name": "IsConnected",
+							"signature": "bool IsConnected() const",
+							"line": 144
+						},
+						{
+							"kind": "method",
+							"name": "OutboxSize",
+							"signature": "size_t OutboxSize() const",
+							"line": 147
+						},
+						{
+							"kind": "method",
+							"name": "InflightSize",
+							"signature": "size_t InflightSize() const",
+							"line": 150
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/GameNet/Public/GameNet/WebSocket.h",
+			"include": "GameNet/WebSocket.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EWebSocketState",
+					"namespace": "Mowo",
+					"line": 24,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Disconnected",
+							"signature": "Disconnected",
+							"doc": "never connected, or after Close()",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "Connected",
+							"signature": "Connected",
+							"line": 26
+						},
+						{
+							"kind": "enumerator",
+							"name": "Closed",
+							"signature": "Closed",
+							"doc": "server sent CLOSE (graceful)",
+							"line": 27
+						},
+						{
+							"kind": "enumerator",
+							"name": "Failed",
+							"signature": "Failed",
+							"doc": "transport error — see GetError()",
+							"line": 28
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FWebSocketMessage",
+					"namespace": "Mowo",
+					"line": 31,
+					"members": [
+						{
+							"kind": "field",
+							"name": "binary",
+							"signature": "bool binary = false",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "payload",
+							"signature": "std::string payload",
+							"line": 33
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FWebSocket",
+					"namespace": "Mowo",
+					"line": 36,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FWebSocket",
+							"signature": "FWebSocket()",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "~FWebSocket",
+							"signature": "~FWebSocket()",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "FWebSocket",
+							"signature": "FWebSocket(const FWebSocket&) = delete",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FWebSocket& operator=(const FWebSocket&) = delete",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Connect",
+							"signature": "bool Connect(const std::string& url, const std::vector<std::string>& headers = {}, long timeoutSeconds = 15)",
+							"doc": "Blocking HTTP upgrade to ws:// or wss://. Extra headers are raw\n\"Name: value\" lines (e.g. an auth token when the gateway wants it in a\nheader rather than the query string).",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Poll",
+							"signature": "void Poll()",
+							"doc": "Non-blocking pump: drains everything the socket has, reassembles\nfragmented frames, answers PINGs, queues complete messages. Call once\nper tick. State moves to Closed/Failed here, never mid-Receive.",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "Receive",
+							"signature": "bool Receive(FWebSocketMessage& out)",
+							"doc": "Pop one complete message. Returns false when the queue is empty.",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "SendText",
+							"signature": "bool SendText(const std::string& payload)",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "SendBinary",
+							"signature": "bool SendBinary(const void* data, size_t size)",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "SendPing",
+							"signature": "bool SendPing(const std::string& payload = \"\")",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "Close",
+							"signature": "void Close()",
+							"doc": "Sends a CLOSE frame when still connected, then tears down.",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "GetState",
+							"signature": "EWebSocketState GetState() const",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "GetError",
+							"signature": "const std::string& GetError() const",
+							"line": 67
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

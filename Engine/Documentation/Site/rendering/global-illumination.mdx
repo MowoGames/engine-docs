@@ -1,0 +1,156 @@
+---
+title: Global Illumination
+description: How Mowo computes real-time indirect light from a distance field, probes and caches, how to tune it, and how to bake a fallback.
+order: 9
+sources:
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRenderer.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererGi.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererSurfaceCache.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererNeuralGi.cpp
+  - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
+  - Engine/Source/Runtime/Renderer/Public/Renderer/DdgiBake.h
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineLevelEditing.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
+  - Engine/Documentation/ROADMAP.md
+verifiedAt: 1a346c1c5
+---
+
+Global Illumination is Mowo's real-time indirect lighting. It combines a camera-centred signed distance field, a grid of irradiance probes, a radiance cache, a mesh-card surface cache and a screen-space probe gather, with temporal denoising on top. At Epic it can also trace its gather rays through the hardware ray-tracing scene. Nothing has to be baked for it to work; a baked field is only a fallback for tiers that turn the live system off.
+
+<Callout type="note">
+The system's internal codename is Umbra. Some console-variable help text, the **UMBRA GLOBAL ILLUMINATION** heading in Project Settings and some log lines still call it that.
+</Callout>
+
+Global Illumination runs from the **Medium** tier up. Low turns it off and samples a [baked field](#bake-a-fallback-for-low) instead when the scene has one.
+
+## How it fits into the frame
+
+<Flow steps={["SDF build", "Radiance cascades", "Probe update", "…shadows, G-Buffer, lighting…", "Final gather", "Denoise", "Composite onto HDR"]} highlight={[4, 5, 6]} caption="The distance field, cascades and probes are built before the shadow pass; the gather and composite run after deferred lighting." />
+
+The world-space builds run first, and on D3D12, Vulkan and Metal they can run on the async-compute queue while graphics draws shadows and the G-Buffer (`r.GI.AsyncCompute`, default 1). Lighting waits for them. After lighting, the gather computes indirect diffuse per pixel, denoises it and adds it to the lit image.
+
+## The parts
+
+### Distance field
+
+Every ray marches a camera-centred distance field: a 3D volume built on the GPU from the scene's triangles and signed, so that thin walls do not leak light. Meshes can carry a field baked at cook time, which the runtime composites instead of voxelizing them. The field is a clipmap: moving the camera only rebuilds the slab that scrolled into view. A coarser far cascade covers more distance (`r.GiCascades`, default 2; `r.GI.FarCascadeScale` sets its reach).
+
+What enters the field:
+
+- Static meshes, with masked (cutout) materials counted by their coverage (`r.GI.AlphaTested`).
+- Skinned meshes, so a character occludes and bounces light (`r.GI.SkinnedSdf`, default 1).
+- Terrain and tall foliage (`r.GI.TerrainFoliage`, default 1). Foliage shorter than `r.GI.FoliageMinHeight` stays out.
+- Emissive meshes are also injected as small lights, so thin emitters still light the room (`r.GI.EmissiveLights`).
+
+### Irradiance probes
+
+A grid of probes traces the field and stores irradiance and depth. Probes that start inside geometry are moved out. The grid is 8, 12 or 16 probes per axis depending on the tier, fitted to the scene bounds. Once lights, field and grid have been unchanged for a while, the probes update only every few frames (`r.GI.DDGI.ConvergedInterval`).
+
+### Radiance cache
+
+A ray that hits something needs to know how bright that point is. The radiance cache stores the lit radiance of the distance field, including probe indirect and emissive light. It is rebuilt on a tier interval (`r.GI.RadianceInterval`) and only while lighting changes (`r.GI.RadianceDirty`, default 1); a moving camera alone triggers nothing.
+
+### Surface cache
+
+Without a surface cache a ray hit shades from one flat colour per mesh. The surface cache captures each static mesh instance from a few oriented cards into an atlas, so a hit reads real texture detail, normals and emissive (`r.GI.SurfaceCache`, default 1). The atlas is allocated on the first captured card, so a scene with nothing to capture pays nothing. Card resolution and atlas size come from the tier.
+
+### Final gather
+
+How each pixel collects indirect light is set by `r.GI.FinalGather`:
+
+- **World probes** (Medium): each pixel samples the probe grid directly.
+- **Screen probes** (High and up): probes are placed on the depth buffer, one per 16-pixel tile plus extra 8-pixel probes at depth and normal edges (`r.GI.ScreenProbes.Budget`). Each probe traces first through the depth buffer (`r.GI.ScreenTraces`), then through the distance field, and shades hits from the radiance cache. Rays favour directions that were bright last frame (`r.GI.ImportanceSample`), and probes accumulate over time.
+
+### Hardware ray-traced gather
+
+At Epic and Cinematic, screen-probe rays trace the ray-tracing scene with inline ray query instead of marching the distance field, which removes the field's blockiness from nearby indirect light (`r.GI.HWRTGather`). Only the trace changes. Without ray query it falls back to the field trace and logs why once. See [Ray tracing](/docs/rendering/ray-tracing/).
+
+### Denoising
+
+The gathered light goes through a velocity-aware temporal pass and a variance-guided spatial filter (`r.GI.Denoise`: `0` off, `1` on). By default the filter runs at half resolution and upsamples in the composite (`r.GI.DenoiseHalfRes`). AO from GTAO or ray-traced AO darkens the indirect light in the composite (`r.GI.AOWeight`, `r.GI.BentNormalAO`).
+
+### Reflections and translucency
+
+The same cache feeds reflections. A screen-space reflection ray that leaves the screen continues through the distance field and shades from the radiance cache; at Epic a finer near cascade sharpens this (`r.GI.NearCascade`). Glass and water sample the probe field per pixel as their ambient term (`r.GI.Translucency`, default 1). See [Sky and reflections](/docs/rendering/sky-and-reflections/).
+
+## What each tier runs
+
+| | Low | Medium | High | Epic | Cinematic |
+|---|---|---|---|---|---|
+| Live Global Illumination | off (baked field) | on | on | on | on |
+| Final gather | — | world probes | screen probes | screen probes | screen probes |
+| Probe rays per probe | — | 24 | 32 | 48 | 64 |
+| Probes per axis | — | 12 | 16 | 16 | 16 |
+| Screen-probe rays | — | — | 48 | 64 | 96 |
+| Radiance cache interval (frames) | — | 8 | 8 | 2 | 1 |
+| Surface cache card resolution | — | 64 | 128 | 256 | 256 |
+| Distance field resolution | — | 64 | 64 | 64 | 128 |
+| SDF reflections and near cascade | — | off | off | on | on |
+| Hardware ray-traced gather | — | off | off | on | on |
+
+Values come from the tier rows in <Source path="Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp" />. Each has an `r.*` override; see [Quality tiers](/docs/rendering/quality-tiers/).
+
+<Callout type="tip">
+To keep a tier's shadows and resolution but drop the cost of Global Illumination, set `sg.GlobalIlluminationQuality=0`. The on/off switch is part of the tier row, so the group can turn it off without touching anything else.
+</Callout>
+
+## Settings
+
+- **Project Settings > Rendering**: **Dynamic GI Method** (off, screen space or radiance cascades; needs a restart) and **Reflection Method**.
+- **Project Settings > Engine > Global Illumination**: the distance field resolution, radiance interval, denoise mode, final gather, probe and ray counts, surface cache, the tracing step caps and the screen-probe settings.
+- Players get a **Global Illumination** row (off, screen space or radiance cascades) in the **Graphics** settings.
+
+## Tune it for a scene
+
+<Steps>
+<Step title="Check that it is running">
+Make sure the tier is Medium or higher, or force it with `r.DDGI 1`. Switch the viewport to the **Global Illumination** buffer view (or set `r.ViewMode 14`) to see the indirect light on its own.
+</Step>
+<Step title="Balance sky and AO">
+`r.GI.SkyScale` (default 1) scales how much sky light fills outdoor shadows. `r.GI.AOWeight` (default 1) controls how strongly AO darkens the indirect light.
+</Step>
+<Step title="Adjust the indirect intensity">
+`SceneRenderer::Options::DdgiIntensity` is an artist gain on indirect diffuse.
+</Step>
+<Step title="Inspect the distance field">
+If light leaks or thin objects bounce no light, look at the field itself with the SDF debug view, which replaces the image with a sphere-traced view of the field. Raise `r.GI.SDFResolution` for a larger, finer field.
+</Step>
+</Steps>
+
+<Screenshot id="rendering-umbra-gi-buffer" alt="Mowo Editor viewport at the High tier showing the Global Illumination buffer view of a room with a red wall and a white floor lit through a window, with visible red color bleeding onto the floor and ceiling" caption="The Global Illumination view isolates the indirect light." />
+
+## Bake a fallback for Low
+
+Low turns the live system off. Without a bake such a machine lights every room with flat sky light. A baked field stores the converged probe grid beside the scene as `<scene>.mgi`, and Low samples it at the cost of one fullscreen pass (`r.GI.Baked`, default 1).
+
+<Steps>
+<Step title="Open the scene">
+Frame the area you want baked: the bake is taken from the live probe field, which covers the scene while it fits the probe window.
+</Step>
+<Step title="Run Build Lighting">
+Run **Build Lighting** from the command palette. The editor turns the live system on, waits in the viewport until it converges, and writes the field beside the scene. A notification shows progress and has a **Cancel** button.
+</Step>
+<Step title="Ship it">
+The `.mgi` file sits next to the scene file and ships with it. Rebuild after you change lighting or geometry.
+</Step>
+</Steps>
+
+## Neural irradiance cache <Status />
+
+`r.GI.NeuralCache 1` replaces the gather with a small network trained online on the GPU from rays traced off the G-Buffer. It is off by default and console-only: it costs much more than the gather and its colour does not yet match. Do not ship with it.
+
+## Limits
+
+- **The field is camera-centred and finite.** Geometry outside its window is not in the field that rays march; the far cascade extends the reach at lower detail.
+- **Screen-probe tracing starts in screen space.** Off-screen geometry is reached only through the field or, at Epic, the ray-tracing scene.
+- **Probe count changes take effect on the next launch** (`r.DDGI.ProbesPerAxis`). Ray budgets and the radiance interval change live.
+- **Low has only the baked field**, which does not react to moving lights.
+
+## API reference
+
+- [SceneRenderer module](/docs/api/scenerenderer/): `SceneRenderer`, `SceneRenderer::Options`, `FScalabilityTierValues`
+- [Renderer module](/docs/api/renderer/): `FDdgiBake`
+- [Console variables](/docs/reference/console-variables/): the `r.GI.*` and `r.DDGI.*` variables

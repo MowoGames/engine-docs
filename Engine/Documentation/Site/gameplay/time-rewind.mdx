@@ -1,0 +1,47 @@
+---
+title: Time rewind
+description: Rewind the last seconds of play as a gameplay mechanic, with the window, capture rate and memory budget set in project settings.
+order: 27
+sources:
+  - Engine/Source/Runtime/Game/Public/Rollback/RewindBuffer.h
+  - Engine/Source/Runtime/Game/Public/Rollback/RewindSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/MRewindStatics.h
+  - Engine/Source/Runtime/ECS/Public/ECS/World.h
+verifiedAt: 08e26df3d
+---
+
+Time rewind turns "undo the last few seconds" into a mechanic, like Braid or Prince of Persia. It captures the whole ECS world and the physics scene at a fixed rate and can restore any captured moment. It shares its save and restore with rollback netcode; see [Multiplayer](/docs/multiplayer/).
+
+## Turn it on
+
+Set it up in **Project Settings › Engine › Gameplay › Time Rewind**. The page shows a live estimate of the memory the open level needs. <Source symbol="FRewindSystem" />
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `game.Rewind` | 0 | Time rewind on or off |
+| `game.Rewind.Seconds` | 10 | How far back a rewind can go |
+| `game.Rewind.CaptureHz` | 10 | Moments captured per second; a rewind lands on one of them |
+| `game.Rewind.BudgetMB` | 64 | Memory the buffer may hold; past it the oldest moments go first, so a heavy level gets a shorter window |
+
+## Rewind
+
+From Visual Scripting or C++, call `MRewindStatics::RewindSeconds(seconds)`. It returns false when rewind is off or nothing has been captured yet. <Source symbol="MRewindStatics" />
+
+| Function | Returns |
+| --- | --- |
+| `IsRewindEnabled()` | Whether rewind is on |
+| `GetRewindAvailableSeconds()` | How far back the buffer reaches now |
+| `GetRewindMemoryMB()` | Memory the buffer holds |
+| `GetLastRewindSeconds()` | How far the last rewind actually went |
+
+A rewind is applied at the top of the next frame, never in the middle of a system iterating the world. The moment it lands on becomes the present, and the moments after it are dropped, so rewinding again goes further back. Playing on with the same inputs retraces the same history exactly. <Source symbol="FRewindBuffer" />
+
+<Callout type="warning">
+Physics comes back only while the set of bodies matches the captured moment. If a body was spawned or destroyed since, the physics restore fails for that moment; the ECS world, transforms included, still comes back.
+</Callout>
+
+## Related
+
+- [Save games](/docs/gameplay/save-games/)
+- [Physics](/docs/gameplay/physics/) for deterministic stepping
+- API: [Game module](/docs/api/game/)

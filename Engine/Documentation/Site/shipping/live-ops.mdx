@@ -1,0 +1,110 @@
+---
+title: Live ops
+description: Change a released game with signed remote config, run A/B tests on real players, record opted-in telemetry, and render it with mbt liveops report.
+order: 12
+sources:
+  - Engine/Source/Runtime/Game/Public/LiveOps/LiveOps.h
+  - Engine/Source/Runtime/Game/Public/LiveOps/RemoteConfig.h
+  - Engine/Source/Runtime/Game/Private/LiveOps/LiveOps.cpp
+  - Engine/Source/Runtime/Game/Private/LiveOps/RemoteConfig.cpp
+  - Engine/Source/Runtime/Game/Private/LiveOps/Telemetry.cpp
+  - Engine/Source/Runtime/Game/Public/Game/MLiveOpsStatics.h
+  - Engine/Source/Runtime/Core/Public/Core/FAnalytics.h
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/LiveOpsCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ShippingInfo.cs
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+verifiedAt: 08e26df3d
+---
+
+Live ops lets you change a released game without a patch, test two versions of something on real players, and see what they do. The engine starts it after the project opens and flushes it at shutdown <Source path="Engine/Source/Runtime/Game/Public/LiveOps/LiveOps.h" />.
+
+## Remote config
+
+<Source symbol="FRemoteConfig" /> answers `GetString`, `GetNumber`, `GetInt` and `GetBool` from, in order of precedence <Source path="Engine/Source/Runtime/Game/Public/LiveOps/RemoteConfig.h" />:
+
+1. the values of the A/B variant this player is in,
+2. the values of the remote document,
+3. the defaults, set in code or read from a JSON file with `LoadDefaultsFile`.
+
+```cpp wrap title="MyGameMode.cpp"
+#include "LiveOps/RemoteConfig.h"
+#include <cstdint>
+
+Mowo::FRemoteConfig& config = Mowo::FRemoteConfig::Get();
+config.SetDefaultNumber("enemy_health", 80.0);
+const int64_t enemyHealth = config.GetInt("enemy_health", 80);
+```
+
+The game fetches the document over HTTP at start, from the `liveops.ConfigUrl` console variable, which **Project Settings** shows as **Remote Config URL** under **LIVE OPS** <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp" />:
+
+```json title="config.json"
+{
+  "version": 7,
+  "values": { "enemy_health": 120, "event_banner": "Halloween" },
+  "experiments": {
+    "shop_layout": {
+      "variants": [
+        { "name": "control", "weight": 70 },
+        { "name": "grid", "weight": 30, "values": { "shop_columns": 4 } }
+      ]
+    }
+  }
+}
+```
+
+**A document applies only when it is signed.** Sign it with the project's signing key, the same key that signs its paks and modules:
+
+```powershell
+./mbt.cmd liveops sign config.json --out config.signed.json --project D:/Projects/MyGame
+```
+
+Serve the signed file at the config URL. The game verifies it against the signing public key its host carries, so a document changed in transit, served by someone else or edited in the cache is refused. A signed document **older** than the one in force is refused too, because replaying it would roll a fix back <Source path="Engine/Source/Runtime/Game/Private/LiveOps/RemoteConfig.cpp" />. The last verified document is cached in `Saved/LiveOps/RemoteConfig.json` and applied, re-verified, on the next start before any network request.
+
+`--key <meaf_signing.key>` signs with a standalone key file instead of the project's key. [Content protection](/docs/shipping/encrypted-archives/) explains the project's keys.
+
+## A/B tests
+
+A player's variant of an experiment is a pure function of a user id and the experiment's name, hashed into 10,000 buckets and walked against the variant weights. The same player lands in the same variant on every launch and every machine, and experiments bucket independently. The user id is the game's own (an account id) or a random install id kept in `Saved/LiveOps/InstallId.txt`.
+
+`GetVariant("shop_layout")` returns the variant and records one `experiment_exposure` event per experiment.
+
+## Telemetry
+
+`FTelemetry` records `FAnalytics::RecordEvent` calls and its own events. Each event gets the time, a session id, the user id and every A/B variant in force, so any metric splits by variant. Standard events are `session_start`, `session_end` and `experiment_exposure` <Source path="Engine/Source/Runtime/Game/Private/LiveOps/Telemetry.cpp" />.
+
+```cpp wrap title="MyShop.cpp"
+#include "Core/FAnalytics.h"
+
+Mowo::FAnalytics::RecordEvent("shop_purchase", "{\"item\":\"lantern\",\"price\":40}");
+```
+
+Events are POSTed in batches to the analytics endpoint the package was built with, `mbt package --analytics-endpoint <url>`, and a failed batch stays queued for the next flush. With `liveops.TelemetryJournal` on (the default), they are also appended to `Saved/Telemetry/events.jsonl`.
+
+<Callout type="warning">
+Nothing is recorded unless the player opted in. `--analytics-endpoint` writes the endpoint and the opt-in into the package's `Shipping.json` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ShippingInfo.cs" />; ask the player before you build with it.
+</Callout>
+
+| Console variable | Default | Meaning |
+|---|---|---|
+| `liveops.ConfigUrl` | empty | Where the game fetches its signed remote config at start; empty uses the defaults and the cache only |
+| `liveops.TimeoutSeconds` | `5` | How long a fetch or a telemetry upload may take |
+| `liveops.TelemetryBatch` | `50` | Events sent per upload |
+| `liveops.TelemetryJournal` | `1` | Also keep opted-in telemetry in `Saved/Telemetry/events.jsonl` |
+
+## The dashboard
+
+```powershell
+./mbt.cmd liveops report Saved/Telemetry --out report.html
+./mbt.cmd liveops report D:/Ingest --title "Week 41"
+```
+
+`mbt liveops report` turns telemetry journals into one self-contained HTML page: events, sessions, players and average session length, event counts with a per-day histogram, and every experiment variant side by side with its players, sessions, exposures and events per session <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/LiveOpsCommand.cs" />.
+
+## Visual Scripting
+
+`MLiveOpsStatics` exposes `GetRemoteString`, `GetRemoteFloat`, `GetRemoteInt`, `GetRemoteBool`, `GetRemoteConfigVersion`, `GetExperimentVariant`, `RecordTelemetryEvent` and `FetchRemoteConfig` to Visual Scripting <Source path="Engine/Source/Runtime/Game/Public/Game/MLiveOpsStatics.h" />.
+
+## Related
+
+- [`FRemoteConfig`](/docs/api/game/), [`FAnalytics`](/docs/api/core/)
+- [Console variables](/docs/reference/console-variables/)

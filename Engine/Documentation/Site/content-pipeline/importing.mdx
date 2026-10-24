@@ -1,0 +1,183 @@
+---
+title: Importing assets
+sidebarTitle: Importing
+description: Import models, textures and audio into asset packages, choose import options, save presets, and reimport when the source changes.
+order: 6
+sources:
+  - Engine/Source/Editor/MowoEditor/Private/Shell/ImportDialog.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/AssetPackageTypes.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MaudioImportSidecar.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/ExrDecode.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/ModelFormats.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetDisplayInfo.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/TextureImportSidecar.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h
+  - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
+verifiedAt: 08e26df3d
+---
+
+Importing turns a file from a content tool into a project asset. The editor builds the file, from where it lies, into [asset packages](/docs/content-pipeline/asset-formats/) in the `Content/` folder you import into: a model into mesh, skeleton, animation, texture and material packages, a texture into a `.tex`, a sound into a `.sound`. Each package records its source and the options you chose, so a reimport replays them.
+
+<Callout type="tip">
+Keep source files outside `Content/`, in a `SourceArt/` folder beside it at the same relative layout. The project references the packages, not the sources, so the sources never ship and never load at runtime.
+</Callout>
+
+## Supported source formats
+
+| Kind | Extensions | Imported as |
+|---|---|---|
+| Model | `.fbx`, `.gltf`, `.glb`, `.obj` | Static Mesh (`.mesh`) or Skeletal Mesh (`.skmesh`), with `.skel`, `.anim`, `.tex` and `.mat` packages |
+| Texture | `.png`, `.jpg`, `.jpeg`, `.tga`, `.bmp`, `.hdr`, `.exr` | Texture (`.tex`) |
+| Audio | `.wav`, `.ogg`, `.mp3`, `.flac` | Sound Wave (`.sound`) |
+
+The model list comes from the file-type table <Source symbol="FModelFormats" />. An `.exr` is decoded by the engine's own reader and treated like `.hdr`: linear, HDR group, BC6H. Deep and multi-part EXR files are refused with a message asking for a single-part export.
+
+## Import a file
+
+<Steps>
+<Step title="Start the import">
+Drag one or more files from Explorer onto the Content Browser, or use **Import** in the Content Browser toolbar or a folder's context menu. Dragged files land in the folder under the cursor.
+</Step>
+<Step title="Review the batch">
+One dialog opens for the whole batch. The left side lists each file with its size, or a model's triangle and material counts once its summary has been read, and a status mark. Right-click a row for **Import This File**, **Skip** and **Show in Explorer**.
+</Step>
+<Step title="Choose options">
+The right side shows the options for every kind of file in the batch, the selected file's kind first. A kind's options apply to every file of that kind. Reading a model's summary runs on a worker, so the editor stays responsive; importing waits until the summary has landed.
+</Step>
+<Step title="Import">
+Click **Import all** (or **Import N remaining** once part of the batch is done). Packages are built on a worker, one file at a time, and the dialog keeps painting.
+</Step>
+</Steps>
+
+<Screenshot id="content-pipeline-import-dialog-model" alt="The import dialog over the editor with a batch of three files: the Batch list on the left with a .fbx row selected showing its triangle and material counts, and on the right the Mesh sections Transform (Import Scale, Up Axis, Bake pivot to origin), LOD generation, Materials & textures and Skeleton, with Presets, Save preset, Cancel and Import all in the footer" caption="The import dialog with a model selected." />
+
+Your last-used options for each kind are saved per user in `Saved/Config/Editor/ImportPrefs.mdfb` and pre-fill the next import.
+
+## What a model import writes
+
+For a model named `Rock` imported into a folder, the import writes <Source symbol="FAssetPackageTypes" />:
+
+| Package | Holds |
+|---|---|
+| `Rock.mesh` or `Rock.skmesh` | The built render data, the import transform and build settings, and the material slot bindings |
+| `Rock_Skeleton.skel` | The skeleton, for a skinned model |
+| `Rock_<Clip>.anim` | One Animation Sequence per clip |
+| `Rock_<texture>.tex` | One Texture package per texture its materials use, whether beside the source or embedded in it |
+| `Rock_<Material>.mat` | One Material package per material slot, with the slot's factors and textures mapped |
+
+The mesh binds every slot to its Material package, so editing the material changes the mesh. A reimport binds Material packages that already exist and never rewrites one: once it exists, a material belongs to the artist.
+
+Reimporting the same source into the same folder keeps every package's id, so references survive. A same-named package from **another** source is never overwritten: a second `Rock.fbx` from another folder imports as `Rock_2.mesh` and its set, and the dialog tells you.
+
+## Model options
+
+| Section | Option | Effect |
+|---|---|---|
+| Transform | **Import Scale** | A uniform scale, applied when the mesh loads |
+| | **Up Axis** | Auto, X-up, Y-up or Z-up: rotates the source's up axis into the engine's +Y |
+| | **Bake pivot to origin** | Moves the root so the model's bottom center sits at the origin. Skipped for skinned models. |
+| LOD generation | **Auto-generate** | Builds reduced levels of detail from LOD0 |
+| | **LOD count**, **LOD1 / LOD2 reduction** | Total levels (at most 3) and the target triangle ratio per level |
+| | **Build meshlets** | Clusters the mesh for the mesh-shading path |
+| Materials & textures | **Import new** / **Reuse existing** | Create Material packages, or bind ones already in the search path |
+| | **Search path** | Folder for the materials |
+| | **Import textures** | Package the textures the materials use |
+| Skeleton | **Import** / **Skip (static mesh)** | Keep the skeleton and clips, or import the geometry as a static mesh |
+
+The engine target is **Y-up, right-handed, 1 unit = 1 meter**. The defaults are correct for standard glTF and FBX exports, where the importer reads the source's up axis and unit from the file. If a model still comes in sideways or at the wrong size, fix it with **Up Axis** and **Import Scale**. For a whole pipeline with the same problem, the `import.ForceUpAxis` and `import.UniformScale` cvars apply to every import.
+
+The glTF material extensions for emissive strength, clear coat, sheen, transmission and anisotropy carry into the generated materials. A material is marked **masked** (alpha-tested) when the source says so (glTF `alphaMode` MASK), has an opacity texture, or its base color alpha is clearly two-valued (`import.AutoCutoutAlpha`), so foliage and fences do not render as solid quads.
+
+A `.gltf` or `.obj` names other files: buffers, images and `.mtl` libraries. Keep them beside the source at their relative layout so the import resolves them.
+
+## Texture options
+
+| Option | Choices |
+|---|---|
+| **Compression** | Auto, BC1, BC5, BC7, BC6H |
+| **Generate mips** | On or off |
+| **Mip filter** | Box or Kaiser |
+| **Texture group** | Color (sRGB), Normal map, Mask (linear), HDR |
+| **Max size** | Default, No limit, or a clamp on the longest edge |
+| **Alpha coverage** | Off, 0.25, 0.33, 0.5, 0.75 |
+
+The settings are stored in the `.tex` package, and the cook honors them when it builds the mip chain. **Auto** compression picks by group: BC6H for HDR, BC5 for normal maps, BC7 for everything else. Normal maps, masks and HDR textures always sample linear.
+
+**Alpha coverage** keeps alpha-tested foliage, fences and hair cards from thinning out with distance: each mip's alpha is rescaled so the same share of texels passes the alpha test as in mip 0. Match it to your material's cutoff.
+
+You can change every setting after import in the Texture Editor (double-click the texture). See the [editor section](/docs/editor/).
+
+<Screenshot id="content-pipeline-import-dialog-texture" alt="The import dialog with a PNG named Rock_Normal.png selected, showing the Textures sections: Compression set to Auto with the hint that it resolves to BC5 (normal map), Texture group set to Normal map, Generate mips on, Mip filter Box, Max size Default and Alpha coverage Off" caption="The texture options. Auto compression resolves to BC5 for a normal map." />
+
+### Textures recognized by name
+
+A texture with no import settings yet (for example a loose file copied into `Content/` by hand) is classified by the end of its file name, case-insensitively <Source symbol="FTextureImportSidecar" />:
+
+| Suffix examples | Group |
+|---|---|
+| `_n`, `_nrm`, `_norm`, `_normal`, `_normalmap`, `_nmap` | Normal map |
+| `_r`, `_m`, `_ao`, `_roughness`, `_metallic`, `_mask`, `_orm`, `_arm`, `_height`, `_opacity` | Mask (linear) |
+| `_hdr`, `_ibl`, `_envmap` | HDR |
+
+The rule only applies while nothing has set the group, so a rescan never overrides your choice. A project can replace these lists in `Config/TextureImport.ini`.
+
+### AI enhancement
+
+A PNG, JPEG, TGA or BMP texture can be upscaled and given generated normal, roughness and height maps by bundled models that run on your machine. Use the **AI enhance** section of the import dialog, or right-click textures in the Content Browser and choose **AI Enhance**. The work runs in the background with a progress toast. A texture that asks for enhancement at import takes the loose-file path described in [Sidecars and UUIDs](/docs/content-pipeline/sidecars-and-uuids/), because the enhancement reimports it in place.
+
+## Audio options
+
+| Option | Choices |
+|---|---|
+| **Convert to .maudio** | Build a processed clip, or keep the source as authored |
+| **Codec** | PCM 16-bit, PCM 24-bit, PCM float, Opus (lossy) |
+| **Sample rate** | Keep original, 22050, 44100 or 48000 Hz |
+| **Channels** | Keep original, Mono, Stereo |
+| **Loudness** | Leave as authored, -23 LUFS (broadcast), -16 LUFS (game), -14 LUFS (streaming) |
+| **Stream over** | Seconds. Clips at least this long stream. `0` leaves it to the toggle. |
+| **Stream from disk** | Play without holding the decoded clip in memory |
+| **Loop**, **Preload into memory** | Mark the clip as looping; load it at startup instead of on first play |
+
+The `.sound` package holds the built clip, which is what plays in the editor and the game, and keeps the source as editor-only data that the cook strips. Loudness normalization does not scale the samples: the build measures the clip and stores a gain. A streaming clip streams straight out of the package, loose or inside an archive.
+
+Double-click a `.sound` to change its build settings or add a per-platform codec override; **Apply** rebuilds it from the source it carries and keeps its id.
+
+## Named presets
+
+**Presets** in the dialog's footer lists the saved option sets for the selected file's kind; **Save preset** saves the current options under a name. Saving with the name empty overwrites the preset that is loaded. Presets live in `Config/ImportPresets.ini`, a project file the team shares, unlike the per-user last-used values. Each preset holds only its own kind's options:
+
+```ini title="Config/ImportPresets.ini"
+[ImportPresets]
+schema_version=1
+
+[Preset Hero Props]
+kind=Model
++Model=(scale=0.01,up_axis=2,generate_lods=False,lod_count=2,material_search_path="Content/Materials/Shared",import_skeleton=False)
+```
+
+A project's older `ImportPresets.mdf` is converted on first use and the original moved to `Saved/MigratedSources/Config/`.
+
+## Reimport
+
+Right-click a package in the Content Browser (one or a selection) and choose **Reimport**. The package rebuilds from the source it recorded, with the settings it was imported with, under its own file name, with every id kept. A mesh reimports its whole set: its Material packages that exist are bound, not rewritten, and a slot without one gets one. A Skeleton or Animation Sequence reimports the mesh it came with. A Material package has no source to reimport from.
+
+When a source changes after import, the asset tile shows that it changed on disk. Reimport is blocked while Play in Editor runs, because it rebuilds GPU data that live actors use. If the new file does not parse, the old version stays and a notification says the reimport failed.
+
+<Screenshot id="content-pipeline-reimport-menu" alt="Content Browser with a .mesh package tile whose subtitle says its source changed on disk, and its right-click context menu open with Reimport highlighted" caption="Reimport from the Content Browser." />
+
+## Move an older project's sources out of Content
+
+Projects created before packages kept sources and `.mdfmeta` sidecars in `Content/`. `mbt asset migrate <project> --source-art` moves every texture, model and sound source to `SourceArt/` at the same relative path and imports each into a package where it was <Source symbol="FAssetPackageMigration::MigrateSourceArt" />. A texture, model or sound keeps its sidecar's id, the old path redirects to the package, and references under `Content/` are rewritten. A `.gltf` or `.obj` moves with the files it names. Add `--report-only` to see the plan first.
+
+## The loose-file path
+
+Setting `editor.ImportModelsAsPackages 0` (models) or `editor.ImportAsPackages 0` (textures and sounds) restores the older import: the source is copied into `Content/` with a `.mdfmeta` sidecar that holds its id and options. That path, and the **Reimport With New File** and **Reimport From Original Source** commands that go with it, are described in [Sidecars and UUIDs](/docs/content-pipeline/sidecars-and-uuids/).
+
+## Related
+
+- [Asset formats](/docs/content-pipeline/asset-formats/) for what a package holds.
+- [Cooking](/docs/content-pipeline/cooking/) for how packages are built for a target.
+- [Content Browser](/docs/editor/content-browser/) for importing, moving and renaming assets in the editor.
+- API: [`FAssetPackageTypes`](/docs/api/assetformats/fassetpackagetypes/), [`FMaudioImportSidecar`](/docs/api/assetformats/fmaudioimportsidecar/), [`FTextureImportSidecar`](/docs/api/assetsystem/ftextureimportsidecar/).

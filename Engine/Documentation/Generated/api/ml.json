@@ -1,0 +1,894 @@
+{
+	"name": "MowoEngine.ML",
+	"displayName": "ML",
+	"slug": "ml",
+	"category": "Runtime",
+	"publicDir": "Engine/Source/Runtime/ML/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/ML/Public/ML/MLModels.h",
+			"include": "ML/MLModels.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FMLModels",
+					"namespace": "Mowo",
+					"doc": "The ML models (wav2vec2 for auto-subtitles, the PBRify texture models) are\n~128 MB, so they live in an archive of their own instead of\nEngineContent.meaf: MBT packs Engine/Source/Runtime/ML/Models into\nMLModels.meaf beside the binaries, and a game package carries one only when\nit opts into auto-subtitles (and then holds only the speech model). The\narchive is optional — an install without it simply has no models.",
+					"line": 17,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kArchiveName",
+							"signature": "static constexpr const char* kArchiveName = \"MLModels.meaf\"",
+							"static": true,
+							"line": 19
+						},
+						{
+							"kind": "field",
+							"name": "kMountPoint",
+							"signature": "static constexpr const char* kMountPoint = \"Content/ML\"",
+							"static": true,
+							"doc": "The VFS prefix the models answer under: \"Content/ML/ASR/…\", \"Content/ML/PBRify/…\".",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "Mount",
+							"signature": "static bool Mount()",
+							"static": true,
+							"doc": "Mounts MLModels.meaf at kMountPoint the first time it is found beside\nthe executable, under its Content/ folder, under the game root's Content/\nor in the working directory, and the source folder of a dev tree below\nit. Cheap to call before every model read; true when the models are reachable.",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "SourceDirectory",
+							"signature": "static std::string SourceDirectory()",
+							"static": true,
+							"doc": "Engine/Source/Runtime/ML/Models in a source tree; empty when there is none.",
+							"line": 31
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ML/Public/ML/OnnxSession.h",
+			"include": "ML/OnnxSession.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FOnnxSession",
+					"namespace": "Mowo",
+					"line": 19,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FOnnxSession",
+							"signature": "FOnnxSession()",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "~FOnnxSession",
+							"signature": "~FOnnxSession()",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "FOnnxSession",
+							"signature": "FOnnxSession(const FOnnxSession&) = delete",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FOnnxSession& operator=(const FOnnxSession&) = delete",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "IsAvailable",
+							"signature": "static bool IsAvailable()",
+							"static": true,
+							"doc": "False when the module compiled without a usable runtime (should not\nhappen — the build gates on the vendored binary) or the ORT\nenvironment failed to come up.",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "RuntimeVersion",
+							"signature": "static const char* RuntimeVersion()",
+							"static": true,
+							"doc": "The ONNX Runtime version string, for logs/diagnostics.",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "AvailableProviders",
+							"signature": "static std::vector<std::string> AvailableProviders()",
+							"static": true,
+							"doc": "Execution providers compiled into the vendored runtime, CPU last.",
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromFile",
+							"signature": "bool LoadFromFile(const std::string& path)",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromMemory",
+							"signature": "bool LoadFromMemory(const void* data, size_t size)",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "IsLoaded",
+							"signature": "bool IsLoaded() const",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "InputNames",
+							"signature": "const std::vector<std::string>& InputNames() const",
+							"doc": "Model I/O names in declaration order — empty until loaded.",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "OutputNames",
+							"signature": "const std::vector<std::string>& OutputNames() const",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "bool Run(const std::string& inputName, const float* data, const std::vector<int64_t>& shape, const std::string& outputName, std::vector<float>& outData, std::vector<int64_t>& outShape)",
+							"doc": "Run one inference: a single float32 input tensor in, a single float32\noutput tensor out. `shape` is the input's dims (e.g. {1, 3, 512, 512});\nthe output's dims land in `outShape`. Returns false on any ORT error\n(logged). Multi-input models bind by the given name.",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "LastError",
+							"signature": "const std::string& LastError() const",
+							"doc": "The last error message ORT reported, for tests/tools.",
+							"line": 54
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ML/Public/ML/SpeechRecognizer.h",
+			"include": "ML/SpeechRecognizer.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FSpeechTranscript",
+					"namespace": "Mowo",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "text",
+							"signature": "std::string text",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "confidence",
+							"signature": "float confidence = 0.0f",
+							"doc": "Mean probability the model gave the characters it emitted, 0..1.",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "seconds",
+							"signature": "float seconds = 0.0f",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "frames",
+							"signature": "uint32_t frames = 0",
+							"line": 25
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FSpeechRecognizer",
+					"namespace": "Mowo",
+					"doc": "FSpeechRecognizer — on-device speech to text: a CTC acoustic model run\nthrough ONNX Runtime and decoded greedily. The engine ships\nwav2vec2-base-960h (Apache-2.0, int8-quantized, Engine/Source/Runtime/ML/Models/ASR, packed into MLModels.meaf):\nraw 16 kHz audio in, one of 32 characters per 20 ms frame out, which needs\nno mel front end and no language-model search — what lets it run on a\ngame's spare core.",
+					"line": 34,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kSampleRate",
+							"signature": "static constexpr uint32_t kSampleRate = 16000",
+							"static": true,
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "kModelPath",
+							"signature": "static constexpr const char* kModelPath = \"Content/ML/ASR/wav2vec2-base-960h-int8.onnx\"",
+							"static": true,
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "FSpeechRecognizer",
+							"signature": "FSpeechRecognizer()",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "~FSpeechRecognizer",
+							"signature": "~FSpeechRecognizer()",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "FSpeechRecognizer",
+							"signature": "FSpeechRecognizer(const FSpeechRecognizer&) = delete",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FSpeechRecognizer& operator=(const FSpeechRecognizer&) = delete",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromFile",
+							"signature": "bool LoadFromFile(const std::string& path)",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromMemory",
+							"signature": "bool LoadFromMemory(const void* data, size_t size)",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "IsLoaded",
+							"signature": "bool IsLoaded() const",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Transcribe",
+							"signature": "bool Transcribe(const float* samples, size_t count, FSpeechTranscript& outTranscript)",
+							"doc": "Mono samples at 16 kHz, any scale (they are normalized here, as the\nmodel's feature extractor does). False on an inference error.",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "Resample",
+							"signature": "static void Resample(const float* samples, size_t count, uint32_t fromRate, std::vector<float>& outSamples)",
+							"static": true,
+							"doc": "Linear resampling to 16 kHz.",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "DecodeCtc",
+							"signature": "static std::string DecodeCtc(const float* logits, size_t frames, size_t vocabulary, float* outConfidence)",
+							"static": true,
+							"doc": "Greedy CTC over [frames x vocabulary] logits with the wav2vec2 alphabet:\nrepeats collapse, the blank drops, '|' is a space.",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "WordErrorRate",
+							"signature": "static float WordErrorRate(const std::string& reference, const std::string& hypothesis)",
+							"static": true,
+							"doc": "Word error rate of a hypothesis against a reference, case and\npunctuation ignored: (substitutions + deletions + insertions) / words.",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "LastError",
+							"signature": "const std::string& LastError() const",
+							"line": 64
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSpeechCaption",
+					"namespace": "Mowo",
+					"line": 74,
+					"members": [
+						{
+							"kind": "field",
+							"name": "source",
+							"signature": "uint32_t source = 0",
+							"line": 75
+						},
+						{
+							"kind": "field",
+							"name": "text",
+							"signature": "std::string text",
+							"line": 76
+						},
+						{
+							"kind": "field",
+							"name": "confidence",
+							"signature": "float confidence = 0.0f",
+							"line": 77
+						},
+						{
+							"kind": "field",
+							"name": "startSeconds",
+							"signature": "float startSeconds = 0.0f",
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "durationSeconds",
+							"signature": "float durationSeconds = 0.0f",
+							"line": 79
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FSpeechCaptionerSettings",
+					"namespace": "Mowo",
+					"line": 82,
+					"members": [
+						{
+							"kind": "field",
+							"name": "energyThreshold",
+							"signature": "float energyThreshold = 0.015f",
+							"doc": "RMS (of -1..1 samples) a 20 ms window needs to count as speech.",
+							"line": 84
+						},
+						{
+							"kind": "field",
+							"name": "silenceSeconds",
+							"signature": "float silenceSeconds = 0.45f",
+							"doc": "Silence that ends an utterance.",
+							"line": 86
+						},
+						{
+							"kind": "field",
+							"name": "maxSegmentSeconds",
+							"signature": "float maxSegmentSeconds = 8.0f",
+							"doc": "An utterance longer than this is cut and captioned, so a monologue\nstill shows up while it goes on.",
+							"line": 89
+						},
+						{
+							"kind": "field",
+							"name": "minSpeechSeconds",
+							"signature": "float minSpeechSeconds = 0.25f",
+							"doc": "Shorter bursts are clicks and breaths, not words.",
+							"line": 91
+						},
+						{
+							"kind": "field",
+							"name": "preRollSeconds",
+							"signature": "float preRollSeconds = 0.2f",
+							"doc": "Audio kept from before the first loud window, so a soft first\nconsonant is not cut off.",
+							"line": 94
+						},
+						{
+							"kind": "field",
+							"name": "minConfidence",
+							"signature": "float minConfidence = 0.0f",
+							"line": 95
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FSpeechCaptioner",
+					"namespace": "Mowo",
+					"doc": "FSpeechCaptioner — turns streams of audio (one per speaker) into captions:\neach stream is cut into utterances by energy, and every utterance is\ntranscribed — on a worker thread when async, so the game thread only ever\npushes samples and pops finished lines.",
+					"line": 102,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FSpeechCaptioner",
+							"signature": "explicit FSpeechCaptioner(FSpeechRecognizer& recognizer, bool async = true)",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "~FSpeechCaptioner",
+							"signature": "~FSpeechCaptioner()",
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "FSpeechCaptioner",
+							"signature": "FSpeechCaptioner(const FSpeechCaptioner&) = delete",
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FSpeechCaptioner& operator=(const FSpeechCaptioner&) = delete",
+							"line": 108
+						},
+						{
+							"kind": "method",
+							"name": "SetSettings",
+							"signature": "void SetSettings(const FSpeechCaptionerSettings& settings)",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "GetSettings",
+							"signature": "const FSpeechCaptionerSettings& GetSettings() const",
+							"line": 111
+						},
+						{
+							"kind": "method",
+							"name": "Push",
+							"signature": "void Push(uint32_t source, const float* samples, size_t count, uint32_t sampleRate)",
+							"doc": "Any rate, mono, -1..1.",
+							"line": 116
+						},
+						{
+							"kind": "method",
+							"name": "PushPcm16",
+							"signature": "void PushPcm16(uint32_t source, const int16_t* samples, size_t count, uint32_t sampleRate)",
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "Flush",
+							"signature": "void Flush(uint32_t source)",
+							"doc": "Ends the source's current utterance now (a speaker who stopped talking\ninto push-to-talk, the end of a clip).",
+							"line": 121
+						},
+						{
+							"kind": "method",
+							"name": "Pop",
+							"signature": "bool Pop(FSpeechCaption& outCaption)",
+							"line": 123
+						},
+						{
+							"kind": "method",
+							"name": "WaitIdle",
+							"signature": "void WaitIdle()",
+							"doc": "Blocks until every queued utterance is transcribed.",
+							"line": 126
+						},
+						{
+							"kind": "method",
+							"name": "GetUtteranceCount",
+							"signature": "uint32_t GetUtteranceCount() const",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "GetDroppedCount",
+							"signature": "uint32_t GetDroppedCount() const",
+							"line": 131
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/ML/Public/ML/TextureEnhancer.h",
+			"include": "ML/TextureEnhancer.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "ETextureEnhanceModel",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 25,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "UpscaleFast",
+							"signature": "UpscaleFast",
+							"line": 26
+						},
+						{
+							"kind": "enumerator",
+							"name": "UpscaleQuality",
+							"signature": "UpscaleQuality",
+							"line": 27
+						},
+						{
+							"kind": "enumerator",
+							"name": "Normal",
+							"signature": "Normal",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "Roughness",
+							"signature": "Roughness",
+							"line": 29
+						},
+						{
+							"kind": "enumerator",
+							"name": "Height",
+							"signature": "Height",
+							"line": 30
+						},
+						{
+							"kind": "enumerator",
+							"name": "Count",
+							"signature": "Count",
+							"line": 31
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "ETextureEnhanceResult",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 34,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Ok",
+							"signature": "Ok",
+							"line": 35
+						},
+						{
+							"kind": "enumerator",
+							"name": "Failed",
+							"signature": "Failed",
+							"line": 36
+						},
+						{
+							"kind": "enumerator",
+							"name": "Cancelled",
+							"signature": "Cancelled",
+							"line": 37
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FTextureEnhanceImage",
+					"namespace": "Mowo",
+					"line": 40,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Width",
+							"signature": "uint32_t Width = 0",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "Height",
+							"signature": "uint32_t Height = 0",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "Rgba",
+							"signature": "std::vector<uint8_t> Rgba",
+							"line": 43
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FTextureEnhanceTiling",
+					"namespace": "Mowo",
+					"line": 46,
+					"members": [
+						{
+							"kind": "field",
+							"name": "TileSize",
+							"signature": "uint32_t TileSize = 0",
+							"doc": "Input pixels per tile edge and per feathered overlap. Zero picks the\nmodel's default: 256 for the upscalers (a 1024 output tile), 512 for the\nmap generators.",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "Overlap",
+							"signature": "uint32_t Overlap = 0",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "Seamless",
+							"signature": "bool Seamless = true",
+							"doc": "Pad with the opposite edge (tiling textures) instead of the nearest one.",
+							"line": 54
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FTextureEnhancer",
+					"namespace": "Mowo",
+					"line": 60,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FTextureEnhancer",
+							"signature": "FTextureEnhancer() = default",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "FTextureEnhancer",
+							"signature": "FTextureEnhancer(const FTextureEnhancer&) = delete",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FTextureEnhancer& operator=(const FTextureEnhancer&) = delete",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "ModelFileName",
+							"signature": "static const char* ModelFileName(ETextureEnhanceModel model)",
+							"static": true,
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "ModelLabel",
+							"signature": "static const char* ModelLabel(ETextureEnhanceModel model)",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "ModelScale",
+							"signature": "static uint32_t ModelScale(ETextureEnhanceModel model)",
+							"static": true,
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "Load",
+							"signature": "bool Load(ETextureEnhanceModel model, const std::vector<uint8_t>& onnxBytes)",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "IsLoaded",
+							"signature": "bool IsLoaded() const",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "Model",
+							"signature": "ETextureEnhanceModel Model() const",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "ETextureEnhanceResult Run(const FTextureEnhanceImage& input, FTextureEnhanceImage& output, const FTextureEnhanceTiling& tiling, uint32_t outputDivisor, const FTextureEnhanceProgress& progress)",
+							"doc": "Upscalers keep the alpha channel (resampled) and apply `outputDivisor`\n(1, 2 or 4) per tile, so a 4x pass whose result would exceed the output\nbudget lands at 2x or 1x without ever holding the full 4x image. Map\ngenerators write opaque output: a unit normal in DirectX convention\n(green points down the image, the engine's tangent basis), or grey\nroughness / height.",
+							"line": 84
+						},
+						{
+							"kind": "method",
+							"name": "LastError",
+							"signature": "const std::string& LastError() const",
+							"line": 86
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "ETextureUpscaleMode",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 96,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "None",
+							"signature": "None",
+							"line": 97
+						},
+						{
+							"kind": "enumerator",
+							"name": "Fast",
+							"signature": "Fast",
+							"line": 98
+						},
+						{
+							"kind": "enumerator",
+							"name": "Quality",
+							"signature": "Quality",
+							"line": 99
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FTextureEnhanceRequest",
+					"namespace": "Mowo",
+					"line": 102,
+					"members": [
+						{
+							"kind": "field",
+							"name": "SourcePath",
+							"signature": "std::string SourcePath",
+							"line": 103
+						},
+						{
+							"kind": "field",
+							"name": "Upscale",
+							"signature": "ETextureUpscaleMode Upscale = ETextureUpscaleMode::None",
+							"line": 104
+						},
+						{
+							"kind": "field",
+							"name": "MaxOutputSize",
+							"signature": "uint32_t MaxOutputSize = 4096",
+							"doc": "The upscaled texture's largest side never exceeds this; a source already\nat or above it is left alone.",
+							"line": 108
+						},
+						{
+							"kind": "field",
+							"name": "Seamless",
+							"signature": "bool Seamless = true",
+							"line": 110
+						},
+						{
+							"kind": "field",
+							"name": "NormalPath",
+							"signature": "std::string NormalPath",
+							"doc": "Empty skips that map. The caller picks the names so it can steer clear\nof files an artist authored.",
+							"line": 114
+						},
+						{
+							"kind": "field",
+							"name": "RoughnessPath",
+							"signature": "std::string RoughnessPath",
+							"line": 115
+						},
+						{
+							"kind": "field",
+							"name": "HeightPath",
+							"signature": "std::string HeightPath",
+							"line": 116
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FTextureEnhanceJobResult",
+					"namespace": "Mowo",
+					"line": 119,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Result",
+							"signature": "ETextureEnhanceResult Result = ETextureEnhanceResult::Failed",
+							"line": 120
+						},
+						{
+							"kind": "field",
+							"name": "Error",
+							"signature": "std::string Error",
+							"line": 121
+						},
+						{
+							"kind": "field",
+							"name": "Upscaled",
+							"signature": "bool Upscaled = false",
+							"line": 122
+						},
+						{
+							"kind": "field",
+							"name": "SourceWidth",
+							"signature": "uint32_t SourceWidth = 0",
+							"line": 123
+						},
+						{
+							"kind": "field",
+							"name": "SourceHeight",
+							"signature": "uint32_t SourceHeight = 0",
+							"line": 124
+						},
+						{
+							"kind": "field",
+							"name": "OutputWidth",
+							"signature": "uint32_t OutputWidth = 0",
+							"line": 125
+						},
+						{
+							"kind": "field",
+							"name": "OutputHeight",
+							"signature": "uint32_t OutputHeight = 0",
+							"line": 126
+						},
+						{
+							"kind": "field",
+							"name": "WrittenMaps",
+							"signature": "std::vector<std::string> WrittenMaps",
+							"line": 127
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FTextureEnhanceJob",
+					"namespace": "Mowo",
+					"line": 137,
+					"members": [
+						{
+							"kind": "method",
+							"name": "CanEnhance",
+							"signature": "static bool CanEnhance(const std::string& path)",
+							"static": true,
+							"doc": "PNG, JPEG, TGA and BMP: the formats the job can write back in place.",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "MapPath",
+							"signature": "static std::string MapPath(const std::string& sourcePath, ETextureEnhanceModel model)",
+							"static": true,
+							"doc": "`<stem>_<suffix>.png` beside the source.",
+							"line": 143
+						},
+						{
+							"kind": "method",
+							"name": "UpscaleDivisor",
+							"signature": "static uint32_t UpscaleDivisor(uint32_t width, uint32_t height, uint32_t maxOutputSize)",
+							"static": true,
+							"doc": "1 for a full 4x upscale, 2 when only 2x fits `maxOutputSize`, 0 when not\neven that does — a 1x pass would spend minutes to change nothing visible.",
+							"line": 147
+						},
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "static FTextureEnhanceJobResult Run(const FTextureEnhanceRequest& request, const FTextureEnhancerProvider& enhancers, const FTextureEnhanceJobProgress& progress)",
+							"static": true,
+							"line": 149
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "alias",
+					"name": "FTextureEnhanceProgress",
+					"signature": "using FTextureEnhanceProgress = std::function<bool(float)>",
+					"doc": "Called after every tile with the fraction done; returning false cancels.",
+					"line": 58
+				},
+				{
+					"kind": "alias",
+					"name": "FTextureEnhanceJobProgress",
+					"signature": "using FTextureEnhanceJobProgress = std::function<bool(float, const char*)>",
+					"doc": "Progress reports the overall fraction and a short label of the running step.",
+					"line": 131
+				},
+				{
+					"kind": "alias",
+					"name": "FTextureEnhancerProvider",
+					"signature": "using FTextureEnhancerProvider = std::function<FTextureEnhancer*(ETextureEnhanceModel)>",
+					"doc": "Supplies loaded models, so a queue can keep sessions alive across jobs\ninstead of rebuilding a 30 MB graph per texture.",
+					"line": 135
+				}
+			]
+		}
+	]
+}
