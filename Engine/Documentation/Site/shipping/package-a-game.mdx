@@ -5,7 +5,7 @@ order: 1
 sources:
   - Engine/Source/Runtime/Project/Public/Project/PackagingSettings.h
   - Samples/SampleProject/SampleProject.mproject
-verifiedAt: aee5cfcae
+verifiedAt: 4d3133579
 ---
 
 This guide takes a project from the editor to a folder you can hand to a player. It targets Windows, the platform packaging is finished for. macOS, Linux and Android are covered at the end, with what does not work yet.
@@ -127,19 +127,22 @@ Hand out the zip, build an installer, or upload the folder to a store. See [Inst
 
 ## How the game starts
 
-A packaged game starts like an Unreal game: there is no engine splash and no "Made with Mowo Engine" card. The game window opens, still hidden, while the engine starts; the moment the graphics device exists it presents a black frame and shows the window. From then on every startup stage, the level load and the pipeline prewarm, reads the operating system's message queue and presents again, so Windows never marks the window as not responding. The first game frame replaces the black frame.
+A packaged game starts like an Unreal game: there is no engine splash and no "Made with Mowo Engine" card. The game window is on screen, black, within a few hundred milliseconds of launch: the engine shows it as soon as the operating system's video layer is up, before it mounts archives, loads modules and plugins, opens the audio device or creates the graphics device. Once the device exists it presents a black frame of its own. From then on every startup stage, the level load and the pipeline prewarm, reads the operating system's message queue and presents again, so Windows never marks the window as not responding. The first game frame replaces the black frame.
 
-To show an image instead of black, set **Game Splash** in **Project Settings > Maps & Modes > Game Window** (`player.splashImage` in the `.mproject`, a PNG, JPEG or BMP relative to the project root). The game shows it fitted on black until the first game frame. `mbt package` copies it into the engine pak as `GameSplash.<ext>`, because it is read before any content archive is mounted. `--no-splash` skips it; a Play in Editor client never shows either.
+Work that does not have to precede the first frame stays off the way to the window. Crash reports a previous run left behind upload on a background thread, and gamepads are detected after the graphics device is up; a pad that was already plugged in is picked up then, exactly like one plugged in later.
+
+To show an image instead of black, set **Game Splash** in **Project Settings > Maps & Modes > Game Window** (`player.splashImage` in the `.mproject`, a PNG, JPEG or BMP relative to the project root). The game shows it fitted on black from the first device frame until the first game frame. `mbt package` copies it into the engine pak as `GameSplash.<ext>`, because it is read before any content archive is mounted. `--no-splash` skips it; a Play in Editor client never shows either.
 
 The log marks each step from process start, so you can see where your start spends its time:
 
 ```text
-[Startup] Window shown with a black frame at 543 ms after process start
-[Startup] Engine and graphics device up at 543 ms after process start
-[Startup] Start level loaded at 669 ms after process start
-[Startup] Pipeline cache prewarmed at 921 ms after process start
-[Startup] Scene renderer ready at 1037 ms after process start
-[Startup] First game frame submitted at 1047 ms after process start
+[Startup] Window shown (black, before the graphics device) at 49 ms after process start
+[Startup] First device frame presented (black) at 378 ms after process start
+[Startup] Engine and graphics device up at 445 ms after process start
+[Startup] Start level loaded at 532 ms after process start
+[Startup] Pipeline cache prewarmed at 741 ms after process start
+[Startup] Scene renderer ready at 824 ms after process start
+[Startup] First game frame submitted at 834 ms after process start
 ```
 
 Ship the pipeline cache (`Config/PsoCache.mdfb`, see [PSO cache](/docs/shipping/pso-cache/)) so the prewarm compiles from a recorded set instead of the first frames hitching.
