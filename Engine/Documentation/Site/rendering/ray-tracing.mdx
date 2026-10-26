@@ -9,16 +9,20 @@ sources:
   - Engine/Source/Runtime/RHI/Public/RHI/RayTracingPipeline.h
   - Engine/Source/Runtime/RHI/Public/RHI/BlasCompaction.h
   - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
+  - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
+  - Engine/Source/Runtime/RHI/Private/ProjectRenderFeatures.cpp
   - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererGi.cpp
   - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp
   - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPathTrace.cpp
   - Engine/Source/Editor/MowoEditor/Private/Panels/ViewportPanel.cpp
   - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
   - Engine/Shaders/Private/PostProcess/PathTrace.comp.hlsl
-verifiedAt: 7f8f31f8d
+verifiedAt: aee5cfcae
 ---
 
 Mowo uses hardware ray tracing to improve four real-time effects: reflections, ambient occlusion, sun shadows and the Global Illumination gather. MegaLights also traces its shadow rays against the same scene. Every one is optional: when the device has no ray query, or the ray-tracing scene is not ready, each falls back to its raster or screen-space version for that frame. A progressive path tracer uses the same scene as a reference.
+
+Ray tracing is **off for a new project**, like Unreal's **Support Hardware Ray Tracing**. Turn it on in **Project Settings > Rendering > Features > Ray Tracing** (`r.RayTracing.EnableForProject 1`). While it is off no tier and no `r.*` cvar below enables a ray-traced feature, no ray-tracing scene is built, no ray-tracing pipeline compiles, the path tracer view mode stays dark and DLSS Ray Reconstruction does not run. The LiDAR scanner is gameplay, not rendering, and still builds the scene it traces.
 
 ## Hardware requirements
 
@@ -35,6 +39,8 @@ Most ray tracing in Mowo is **inline ray query**: a pixel or compute shader trac
 
 ## Which features, which tier
 
+With **Ray Tracing** on in Project Settings:
+
 | Feature | cvar | Replaces | On by default at |
 |---|---|---|---|
 | Ray-traced reflections | `r.RTReflections` | The world leg of screen-space reflections | Epic, Cinematic |
@@ -46,7 +52,7 @@ Most ray tracing in Mowo is **inline ray query**: a pixel or compute shader trac
 Each cvar takes `-1` for the tier value and `0` or `1` to force the feature.
 
 <Callout type="tip">
-You do not need Epic to try ray tracing. On a High-tier machine with a capable GPU, set `r.RTReflections 1` or `r.RTAO 1`. Each one builds the ray-tracing scene it needs.
+You do not need Epic to try ray tracing. With the project switch on, on a High-tier machine with a capable GPU, set `r.RTReflections 1` or `r.RTAO 1`. Each one builds the ray-tracing scene it needs.
 </Callout>
 
 ## The ray-tracing scene
@@ -92,6 +98,9 @@ These two are covered on their own pages:
 ## Turn on ray tracing for your project
 
 <Steps>
+<Step title="Turn on the project switch">
+**Project Settings > Rendering > Features > Ray Tracing**. It is saved in `Config/Engine.ini`; a project can also set `r.RayTracing.EnableForProject=1` under `[ConsoleVariables]` in `Config/DefaultEngine.ini`. Global Illumination's hardware gather also needs **Global Illumination** on.
+</Step>
 <Step title="Use a backend with ray query">
 D3D12 or Vulkan on a capable GPU, or Metal. D3D11 has no ray tracing. See [Backends](/docs/rendering/backends/).
 </Step>

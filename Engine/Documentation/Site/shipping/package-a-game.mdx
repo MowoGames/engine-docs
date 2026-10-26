@@ -14,6 +14,10 @@ sources:
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DebugInfoSplitter.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/ProjectLayout.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs
+  - Engine/Source/Runtime/MowoGame/Private/MowoGame.cpp
+  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
+  - Engine/Source/Runtime/GameHost/Private/FGameHostBootstrap.cpp
   - Engine/Source/Runtime/Project/Public/Project/PackagingSettings.h
   - Engine/Source/Runtime/Project/Private/PackagingSettings.cpp
   - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
@@ -21,7 +25,7 @@ sources:
   - Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp
   - Samples/SampleProject/SampleProject.mproject
   - Engine/Documentation/ROADMAP.md
-verifiedAt: 7f8f31f8d
+verifiedAt: aee5cfcae
 ---
 
 This guide takes a project from the editor to a folder you can hand to a player. It targets Windows, the platform packaging is finished for. macOS, Linux and Android are covered at the end, with what does not work yet.
@@ -140,6 +144,25 @@ Hand out the zip, build an installer, or upload the folder to a store. See [Inst
 
 </Step>
 </Steps>
+
+## How the game starts
+
+A packaged game starts like an Unreal game: there is no engine splash and no "Made with Mowo Engine" card. The game window opens, still hidden, while the engine starts; the moment the graphics device exists it presents a black frame and shows the window. From then on every startup stage, the level load and the pipeline prewarm, reads the operating system's message queue and presents again, so Windows never marks the window as not responding. The first game frame replaces the black frame.
+
+To show an image instead of black, set **Game Splash** in **Project Settings > Maps & Modes > Game Window** (`player.splashImage` in the `.mproject`, a PNG, JPEG or BMP relative to the project root). The game shows it fitted on black until the first game frame. `mbt package` copies it into the engine pak as `GameSplash.<ext>`, because it is read before any content archive is mounted. `--no-splash` skips it; a Play in Editor client never shows either.
+
+The log marks each step from process start, so you can see where your start spends its time:
+
+```text
+[Startup] Window shown with a black frame at 431 ms after process start
+[Startup] Engine and graphics device up at 433 ms after process start
+[Startup] Start level loaded at 532 ms after process start
+[Startup] Pipeline cache prewarmed at 752 ms after process start
+[Startup] Scene renderer ready at 876 ms after process start
+[Startup] First game frame submitted at 951 ms after process start
+```
+
+Ship the pipeline cache (`Config/PsoCache.mdfb`, see [PSO cache](/docs/shipping/pso-cache/)) so the prewarm compiles from a recorded set instead of the first frames hitching.
 
 ## The committed packaging settings
 

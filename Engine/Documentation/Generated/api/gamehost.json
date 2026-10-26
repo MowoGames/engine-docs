@@ -140,45 +140,52 @@
 						},
 						{
 							"kind": "field",
+							"name": "SplashImage",
+							"signature": "std::string SplashImage",
+							"doc": "Project Settings › Game Window › Game Splash (player.splashImage):\nrelative to the project root, empty for none — the default, so a game\nopens straight onto its first frame as an Unreal game does.",
+							"line": 20
+						},
+						{
+							"kind": "field",
 							"name": "Width",
 							"signature": "int32_t Width = 1920",
-							"line": 17
+							"line": 21
 						},
 						{
 							"kind": "field",
 							"name": "Height",
 							"signature": "int32_t Height = 1080",
-							"line": 18
+							"line": 22
 						},
 						{
 							"kind": "field",
 							"name": "Fullscreen",
 							"signature": "bool Fullscreen = false",
-							"line": 19
+							"line": 23
 						},
 						{
 							"kind": "field",
 							"name": "Resizable",
 							"signature": "bool Resizable = true",
-							"line": 20
+							"line": 24
 						},
 						{
 							"kind": "field",
 							"name": "VSync",
 							"signature": "bool VSync = true",
-							"line": 21
+							"line": 25
 						},
 						{
 							"kind": "field",
 							"name": "SteamEnabled",
 							"signature": "bool SteamEnabled = false",
-							"line": 22
+							"line": 26
 						},
 						{
 							"kind": "field",
 							"name": "SteamAppId",
 							"signature": "uint32_t SteamAppId = 0",
-							"line": 23
+							"line": 27
 						}
 					]
 				},
@@ -187,7 +194,7 @@
 					"name": "FGameHostBootstrap",
 					"namespace": "Mowo",
 					"doc": "The packaged-run bootstrap every host of the player shares — MowoGame,\nand RuntimeTests when it drives the player against a staged package. One copy,\nso what the tests prove about a package is what the shipped exe does.",
-					"line": 29,
+					"line": 33,
 					"members": [
 						{
 							"kind": "method",
@@ -195,7 +202,7 @@
 							"signature": "static bool ApplyBuildInfoManifest()",
 							"static": true,
 							"doc": "Reads BuildInfo.json from the game root, the working directory or the\nexecutable dir: crash attribution, the per-product data root, the build\nid, the crash reporter and analytics. A manifest (or an unwritable game\nroot) marks the run as packaged. True when it named the product.",
-							"line": 35
+							"line": 39
 						},
 						{
 							"kind": "method",
@@ -203,7 +210,7 @@
 							"signature": "static bool ApplyProjectCrashReportClient(const std::string& projectPath)",
 							"static": true,
 							"doc": "An unpackaged run of a game: the project's Config/Engine.ini\n[CrashReportClient] section (else the legacy .mproject crashReporter.dsn)\nbecomes the crash settings every report carries. A BuildInfo.json read by\nApplyBuildInfoManifest wins. True when the project configured anything.",
-							"line": 41
+							"line": 45
 						},
 						{
 							"kind": "method",
@@ -211,7 +218,7 @@
 							"signature": "static bool ArmModuleSignatureGate()",
 							"static": true,
 							"doc": "With the game's signing key registered (FMeafKeyRing), every module the\nplayer loads by name — engine feature modules, plugins, game modules —\nmust carry a signature from that key, and the working directory and PATH\nleave the DLL search. Call after the keys and before Engine::Initialize,\nwhich loads the first of them. True when the gate armed.",
-							"line": 48
+							"line": 52
 						},
 						{
 							"kind": "method",
@@ -219,7 +226,7 @@
 							"signature": "static std::string FindProjectFile()",
 							"static": true,
 							"doc": "--project, else Game.mproject (or the first *.mproject) in the game\nroot, the working directory, then the executable dir. Empty when none.",
-							"line": 52
+							"line": 56
 						},
 						{
 							"kind": "method",
@@ -227,7 +234,7 @@
 							"signature": "static bool HasProject(const std::string& projectPath)",
 							"static": true,
 							"doc": "True when there is a project to start: the manifest on disk, or the one a\npackage carries inside its engine pak.",
-							"line": 56
+							"line": 60
 						},
 						{
 							"kind": "method",
@@ -235,7 +242,15 @@
 							"signature": "static FGameLaunchSettings ReadLaunchSettings(const std::string& projectPath)",
 							"static": true,
 							"doc": "The manifest on disk when there is one, else the copy cooked into the\ncontent archive.",
-							"line": 60
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "ReadSplashImage",
+							"signature": "static std::string ReadSplashImage(const std::string& projectPath, const FGameLaunchSettings& settings)",
+							"static": true,
+							"doc": "The Game Splash's encoded bytes (PNG, JPEG or BMP): the file beside the\nproject in a dev run, else the GameSplash.<ext> `mbt package` put in the\nengine pak. Empty when the project has none.",
+							"line": 69
 						},
 						{
 							"kind": "method",
@@ -243,7 +258,7 @@
 							"signature": "static void ApplyProductName(const FGameLaunchSettings& settings, bool buildInfoProductSet)",
 							"static": true,
 							"doc": "The game's product name owns its per-user data root — call before\nEngine::Initialize picks the log directory. BuildInfo.json wins when it\nalready named a product.",
-							"line": 65
+							"line": 74
 						}
 					]
 				}
@@ -322,68 +337,81 @@
 						},
 						{
 							"kind": "method",
+							"name": "BeginStartupPresentation",
+							"signature": "void BeginStartupPresentation(std::chrono::steady_clock::time_point origin, std::string splashImageBytes)",
+							"doc": "The start a player sees, as an Unreal game does it: no engine splash.\nThe (hidden) window shows the moment the graphics device exists, with a\nblack frame — or the project's Game Splash image, fitted — and every\nstartup stage after that pumps the OS queue and presents again, so a\nlong level load or pipeline compile never reads as \"not responding\".\nCall before Initialize and route the init-progress callback to\nPumpStartupFrame. `origin` is the process start the \"[Startup]\" log\nlines measure from. The window keeps the last startup frame until the\nfirst game frame replaces it.",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "PumpStartupFrame",
+							"signature": "void PumpStartupFrame()",
+							"line": 74
+						},
+						{
+							"kind": "method",
 							"name": "RequestTravel",
 							"signature": "void RequestTravel(const std::string& scenePath, const FTravelOptions& options = FTravelOptions())",
-							"line": 64
+							"line": 76
 						},
 						{
 							"kind": "method",
 							"name": "RequestLoadSlot",
 							"signature": "void RequestLoadSlot(int32_t slot)",
-							"line": 65
+							"line": 77
 						},
 						{
 							"kind": "method",
 							"name": "PushUIScreen",
 							"signature": "int32_t PushUIScreen(const std::string& assetPath, int32_t zOrder = 1000, bool modal = false)",
 							"doc": "Game-code surface for the ArcUI screen stack: push/pop code-driven\nscreens (pause, main menu, loading) and set the input mode. Modes map\nto InputManager's EInputMode; UIOnly and GameAndUI show the cursor,\nGameOnly leaves cursor policy to game code. A modal pushed screen\nforces UIOnly until it pops.",
-							"line": 72
+							"line": 84
 						},
 						{
 							"kind": "method",
 							"name": "PopUIScreen",
 							"signature": "bool PopUIScreen(int32_t handle)",
-							"line": 73
+							"line": 85
 						},
 						{
 							"kind": "method",
 							"name": "SetUIInputMode",
 							"signature": "void SetUIInputMode(EInputMode mode)",
-							"line": 74
+							"line": 86
 						},
 						{
 							"kind": "method",
 							"name": "GetUIInputMode",
 							"signature": "EInputMode GetUIInputMode() const",
-							"line": 75
+							"line": 87
 						},
 						{
 							"kind": "method",
 							"name": "ReconcileModalInputMode",
 							"signature": "void ReconcileModalInputMode()",
 							"doc": "Apply \"a modal screen forces UIOnly\" from the stack's own answer.\nCalled every tick, so every push path is covered.",
-							"line": 81
+							"line": 93
 						},
 						{
 							"kind": "method",
 							"name": "RegisterUIAction",
 							"signature": "void RegisterUIAction(const std::string& action, std::function<void()> handler)",
 							"doc": "Named UI action handlers the .ui event sink dispatches to. A Visual Script\nsink later registers the same way — action string in, callable out.",
-							"line": 85
+							"line": 97
 						},
 						{
 							"kind": "method",
 							"name": "HasFatalError",
 							"signature": "bool HasFatalError() const",
 							"doc": "True when StartGame failed (e.g. project not found) and the engine\nshowed the error box instead of exiting silently.",
-							"line": 89
+							"line": 101
 						},
 						{
 							"kind": "method",
 							"name": "EnterErrorMode",
 							"signature": "virtual void EnterErrorMode(const std::string& message)",
 							"doc": "Native \"project not found\" message box + Stop(). Call after the window\nis up but the project failed. Virtual because a host with nobody in\nfront of it must not block on a modal box until its watchdog fires.",
-							"line": 95
+							"line": 107
 						}
 					]
 				}

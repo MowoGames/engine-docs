@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Runtime/D3D12RHI/Private/D3D12RHI/D3D12Context.cpp
   - Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
-verifiedAt: 7f8f31f8d
+verifiedAt: aee5cfcae
 ---
 
 The first time a GPU driver sees a pipeline, it compiles the shader bytecode into the GPU's own instruction set. If that happens during play, the player sees a hitch. A **bundled PSO cache** moves that work to startup: development runs record which pipelines the game creates, the result ships with the package, and the packaged game creates every recorded pipeline before its first frame.
@@ -25,7 +25,7 @@ The cache stores backend-independent descriptions of each pipeline (shader ident
 1. **Record.** Every pipeline a development build creates is added to `Saved/PsoCache/PsoCache.mdfb` in your project, deduplicated by content. The file grows across sessions, so playing more of the game records more coverage. Recording is on by default whenever a project is open in a build that is not `release` or `profile` <Source path="Engine/Source/Runtime/RHI/Private/PsoCache.cpp" />.
 2. **Promote.** A deliberate step copies the recording to `Config/PsoCache.mdfb` <Source path="Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h" />. `Saved/` is per developer and ignored by git; `Config/` is committed. So what a build ships is a choice someone made, not whichever machine last played the game.
 3. **Ship.** `mbt package` copies `Config/PsoCache.mdfb` into the package as `Cache/PsoCache.mdfb` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />. Server packages skip it, because they create no pipelines.
-4. **Prewarm.** After the level loads and before the scene renderer builds its pipelines, the packaged game creates every recorded pipeline in parallel on the job workers. The splash screen shows a live count, and the log records `[Runtime] PSO prewarm: N pipelines in M ms` <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />.
+4. **Prewarm.** After the level loads and before the scene renderer builds its pipelines, the packaged game creates every recorded pipeline in parallel on the job workers. The window keeps presenting its startup frame meanwhile, and the log records `[Runtime] PSO prewarm: N pipelines in M ms` <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />.
 
 ## Record and promote a cache
 

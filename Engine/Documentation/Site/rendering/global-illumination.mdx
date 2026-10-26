@@ -9,6 +9,8 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererNeuralGi.cpp
   - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
+  - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
+  - Engine/Source/Runtime/RHI/Private/ProjectRenderFeatures.cpp
   - Engine/Source/Runtime/Renderer/Public/Renderer/DdgiBake.h
   - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
   - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineLevelEditing.cpp
@@ -20,12 +22,16 @@ sources:
   - Engine/Shaders/Private/PostProcess/GTAO.hlsl
   - Engine/Shaders/Private/GI/GiDenoise.hlsl
   - Engine/Documentation/ROADMAP.md
-verifiedAt: 5922e6e5e
+verifiedAt: aee5cfcae
 ---
 
 Global Illumination is Mowo's real-time indirect lighting. It combines a camera-centred signed distance field, a grid of irradiance probes, a radiance cache, a mesh-card surface cache and a screen-space probe gather, with temporal denoising on top. At Epic it can also trace its gather rays through the hardware ray-tracing scene. Nothing has to be baked for it to work; a baked field is only a fallback for tiers that turn the live system off.
 
-Global Illumination runs from the **Medium** tier up. Low turns it off and samples a [baked field](#bake-a-fallback-for-low) instead when the scene has one.
+Global Illumination is **off for a new project**. Turn it on in **Project Settings > Rendering > Features > Global Illumination** (`r.GlobalIllumination.EnableForProject 1`). Until you do, no tier, device profile or `r.*` cvar runs it, and the renderer builds none of its pipelines, volumes or probes. Once it is on it runs from the **Medium** tier up; Low turns it off and samples a [baked field](#bake-a-fallback-for-low) instead when the scene has one.
+
+<Callout type="note">
+The switch covers everything that traces the Global Illumination distance field: DDGI and screen probes, SSGI, the neural cache, SDF reflections, the translucent SDF reflections and the far sun shadows past the cascades. The hardware ray-traced gather also needs [Ray Tracing](/docs/rendering/ray-tracing/) on.
+</Callout>
 
 ## How it fits into the frame
 
@@ -110,15 +116,16 @@ To keep a tier's shadows and resolution but drop the cost of Global Illumination
 
 ## Settings
 
+- **Project Settings > Rendering > Features > Global Illumination**: the project switch. Off by default; the rest of this list applies once it is on.
 - **Project Settings > Rendering**: **Dynamic GI Method** (off, screen space or radiance cascades; needs a restart) and **Reflection Method**.
 - **Project Settings > Engine > Global Illumination**: the distance field resolution, radiance interval, denoise mode, final gather, probe and ray counts, surface cache, the tracing step caps, the screen-probe settings, and an **Ambient Occlusion** section (AO slices, the ray-traced AO rays, radius scale, calibration and history, **AO Weight On Indirect**, **Bent Normal Occlusion** and the AO and bent-normal resolutions).
-- Players get a **Global Illumination** row (off, screen space or radiance cascades) in the **Graphics** settings.
+- Players get a **Global Illumination** row (off, screen space or radiance cascades) in the **Graphics** settings. In a game that leaves the project switch off it is greyed out with "this game does not use it".
 
 ## Tune it for a scene
 
 <Steps>
 <Step title="Check that it is running">
-Make sure the tier is Medium or higher, or force it with `r.DDGI 1`. Switch the viewport to the **Global Illumination** buffer view (or set `r.ViewMode 14`) to see the indirect light on its own.
+Make sure **Global Illumination** is on in Project Settings and the tier is Medium or higher, or force it with `r.DDGI 1`. Switch the viewport to the **Global Illumination** buffer view (or set `r.ViewMode 14`) to see the indirect light on its own.
 </Step>
 <Step title="Balance sky and AO">
 `r.GI.SkyScale` (default 1) scales how much sky light fills outdoor shadows. `r.GI.AOWeight` (default 1) controls how strongly AO darkens the indirect light. Neither changes metals: a fully metallic surface takes no diffuse fill, so light it through its reflections instead.

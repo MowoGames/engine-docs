@@ -6,6 +6,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/SceneRenderer.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
   - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
+  - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/QualityAutoTier.h
   - Engine/Source/Runtime/SceneRenderer/Private/QualityAutoTier.cpp
   - Engine/Source/Runtime/SceneRenderer/Private/DeviceProfiles.cpp
@@ -18,10 +19,12 @@ sources:
   - Engine/Source/Editor/MowoEditor/Private/Settings/ScalabilitySettingsPage.cpp
   - Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp
   - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
-verifiedAt: 5922e6e5e
+verifiedAt: aee5cfcae
 ---
 
 A quality tier is one setting that decides which rendering features run and how much each one may spend. Mowo has five tiers: **Low, Medium, High, Epic and Cinematic** (<Source symbol="EQualityPreset" />). High is the code default.
+
+A tier only **scales what the project enabled**. Global Illumination, ray tracing, MegaLights, the volumetric cloud volume, volumetric fog and frame generation are project switches in **Project Settings > Rendering > Features**, all off for a new project ([Project Settings](/docs/editor/project-settings/#rendering)). A tier, a device profile, an `sg.*` group or an `r.*` cvar never turns one of them on while its switch is off, and the renderer does not build its targets or pipelines.
 
 The rule is **the tier sets, the cvar refines**. A tier writes a whole row of values into `SceneRenderer::Options`; any `r.*` cvar that is not `-1` then overrides its one value. A tier change applies at the next `BeginScene`, and resources that change size, such as the shadow atlas or the probe grid, are recreated then. No restart is needed.
 
@@ -137,37 +140,37 @@ The auto-tier also picks the anti-aliasing method. It chooses the engine's TSR, 
 
 ## What each tier turns on
 
-Values come from the tier rows in <Source path="Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp" />.
+Values come from the tier rows in <Source path="Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp" />. The **Project switch** column names the switch a row also needs; with it off the row is off at every tier (`FScalabilityTiers::GetComposed` clears it, and `FScalabilityTiers::Get` keeps the raw table).
 
-| Feature | cvar | Low | Medium | High | Epic | Cinematic |
-|---|---|---|---|---|---|---|
-| Clustered lighting | — | on | on | on | on | on |
-| Auto-exposure | — | on | on | on | on | on |
-| Bloom, motion blur, contact shadows | — | off | on | on | on | on |
-| Global Illumination | `r.DDGI` | off | on | on | on | on |
-| Screen-space reflections | `r.SSR` | off | on | on | on | on |
-| GTAO | `r.GTAO` | off | on | on | on | on |
-| Screen-space subsurface scattering | — | off | on | on | on | on |
-| SDF far sun shadows | `r.Shadow.SdfFar` | off | on | on | on | on |
-| Screen-probe final gather | — | off | off | on | on | on |
-| Depth prepass | `r.DepthPrepass` | off | off | on | on | on |
-| PCSS soft shadows | `r.Shadow.Soft` | off | off | on | on | on |
-| Translucent reflections | `r.Reflections.Translucent` | off | off | on | on | on |
-| Terrain runtime virtual texture | `r.Terrain.RVT` | off | off | on | on | on |
-| Cloud shadows | `r.Clouds.Shadows` | off | off | on | on | on |
-| Virtual shadow maps | `r.VSM` | off | off | off | on | on |
-| MegaLights | `r.MegaLights` | off | off | off | on | on |
-| Ray-traced reflections | `r.RTReflections` | off | off | off | on | on |
-| Ray-traced AO | `r.RTAO` | off | off | off | on | on |
-| Hardware ray-traced GI gather | `r.GI.HWRTGather` | off | off | off | on | on |
-| SDF reflections and the near radiance cascade | `r.GI.NearCascade` | off | off | off | on | on |
-| Volumetric fog | `r.VolumetricFog` | off | off | off | on | on |
-| Meshlet G-Buffer | `r.MeshletGBuffer` | off | off | off | on | on |
-| Ray-traced sun shadows | `r.RTShadows` | off | off | off | off | on |
+| Feature | cvar | Project switch | Low | Medium | High | Epic | Cinematic |
+|---|---|---|---|---|---|---|---|
+| Clustered lighting | — | — | on | on | on | on | on |
+| Auto-exposure | — | — | on | on | on | on | on |
+| Bloom, motion blur, contact shadows | — | — | off | on | on | on | on |
+| Global Illumination | `r.DDGI` | Global Illumination | off | on | on | on | on |
+| Screen-space reflections | `r.SSR` | — | off | on | on | on | on |
+| GTAO | `r.GTAO` | — | off | on | on | on | on |
+| Screen-space subsurface scattering | — | — | off | on | on | on | on |
+| SDF far sun shadows | `r.Shadow.SdfFar` | Global Illumination | off | on | on | on | on |
+| Screen-probe final gather | — | Global Illumination | off | off | on | on | on |
+| Depth prepass | `r.DepthPrepass` | — | off | off | on | on | on |
+| PCSS soft shadows | `r.Shadow.Soft` | — | off | off | on | on | on |
+| Translucent reflections | `r.Reflections.Translucent` | Global Illumination | off | off | on | on | on |
+| Terrain runtime virtual texture | `r.Terrain.RVT` | — | off | off | on | on | on |
+| Cloud shadows | `r.Clouds.Shadows` | Volumetric Clouds | off | off | on | on | on |
+| Virtual shadow maps | `r.VSM` | — | off | off | off | on | on |
+| MegaLights | `r.MegaLights` | MegaLights | off | off | off | on | on |
+| Ray-traced reflections | `r.RTReflections` | Ray Tracing | off | off | off | on | on |
+| Ray-traced AO | `r.RTAO` | Ray Tracing | off | off | off | on | on |
+| Hardware ray-traced GI gather | `r.GI.HWRTGather` | Global Illumination + Ray Tracing | off | off | off | on | on |
+| SDF reflections and the near radiance cascade | `r.GI.NearCascade` | Global Illumination | off | off | off | on | on |
+| Volumetric fog | `r.VolumetricFog` | Volumetric Fog | off | off | off | on | on |
+| Meshlet G-Buffer | `r.MeshletGBuffer` | — | off | off | off | on | on |
+| Ray-traced sun shadows | `r.RTShadows` | Ray Tracing | off | off | off | off | on |
 
 Most of these cvars take `-1` for the tier value and `0` or `1` to force the feature. `r.GI.NearCascade` and `r.Reflections.Translucent` are gates instead: they default to `1` and let the tier's choice through; set `0` to turn the feature off.
 
-Ray-traced rows need ray query on the device, and the meshlet path needs mesh shaders. Without them the feature falls back each frame, see [Ray tracing](/docs/rendering/ray-tracing/). SSGI is off at every tier; `r.SSGI 1` forces it.
+Ray-traced rows need ray query on the device, and the meshlet path needs mesh shaders. Without them the feature falls back each frame, see [Ray tracing](/docs/rendering/ray-tracing/). SSGI is off at every tier; `r.SSGI 1` forces it when Global Illumination is on. The raymarched cloud volume (Epic and Cinematic pick it once clouds are on) also needs **Volumetric Clouds**; without it a cloud actor draws the flat cloud layer at every tier.
 
 ## Numeric budgets per tier
 

@@ -20,8 +20,10 @@ sources:
   - Engine/Source/Editor/MowoEditor/Private/Settings/LayersSettingsPage.cpp
   - Engine/Source/Editor/MowoEditor/Private/Settings/ScalabilitySettingsPage.cpp
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+  - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
+  - Engine/Source/Runtime/Project/Public/Project/Project.h
   - Engine/Source/Runtime/ML/Private/OnnxSession.cpp
-verifiedAt: 5922e6e5e
+verifiedAt: aee5cfcae
 ---
 
 Two windows hold every setting you can change from the editor:
@@ -77,7 +79,7 @@ A page whose features the active graphics API can never support is hidden; a fea
 | Page | Stored in | Contents |
 | --- | --- | --- |
 | General | `.mproject` | Name, version, product, company, copyright, description |
-| Maps & Modes | `.mproject` | Start level, game mode class, game window defaults |
+| Maps & Modes | `.mproject` | Start level, game mode class, game window defaults, and the **Game Splash** (`player.splashImage`) |
 | Layers | `.mproject` | The named layer slots every layer mask uses <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/LayersSettingsPage.cpp" /> |
 | Platform | `.mproject` | Steam, Discord and Mowo Online Services integration |
 | Crypto | `Config/DefaultCrypto.ini` | Generate the encryption and signing keys, and choose whether packages encrypt content and sign archives and modules <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/CryptoSettingsPage.cpp" /> |
@@ -101,7 +103,7 @@ All Engine pages write `Config/Engine.ini`.
 
 | Page | Example settings |
 | --- | --- |
-| Rendering | Graphics API and dynamic GI method (both need a restart) |
+| Rendering | Graphics API and dynamic GI method (both need a restart), and the project feature switches under **Features** |
 | Scalability | The active quality preset (`r.Quality`) and per-category overrides <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ScalabilitySettingsPage.cpp" /> |
 | Performance | Parallel command recording, async compute, pipeline deduplication, variable rate shading, and **Inference Device** under **On-device inference** |
 | Physics | Maximum substeps, distance LOD, physics debug drawing |
@@ -109,6 +111,33 @@ All Engine pages write `Config/Engine.ini`.
 | Networking | Encryption and pre-shared key, RPC rate limits, replication budgets, character prediction |
 | Save & Persistence | Game autosave and the world persistence journal |
 | Garbage Collection | Collection interval and incremental marking and sweep budgets |
+
+### Rendering
+
+**Engine > Rendering > Features** holds the project's heavy rendering features, Unreal's "Support Hardware Ray Tracing" and "Dynamic Global Illumination Method" in one place. Every switch is **off for a new project**, the templates and the samples; turn on the ones your game needs.
+
+| Switch | Console variable | Off means |
+| --- | --- | --- |
+| Global Illumination | `r.GlobalIllumination.EnableForProject` | No DDGI, screen probes, SSGI, neural cache, SDF reflections or SDF far shadows; sky light and AO light the scene |
+| Ray Tracing | `r.RayTracing.EnableForProject` | No ray-traced reflections, shadows or AO, no HWRT gather, no path tracer, no DLSS Ray Reconstruction, no ray-tracing scene |
+| MegaLights | `r.MegaLights.EnableForProject` | Shadowed local lights past the shadow atlas take the screen-space march |
+| Volumetric Clouds | `r.VolumetricClouds.EnableForProject` | A cloud actor draws the flat cloud layer at every tier |
+| Volumetric Fog | `r.VolumetricFog.EnableForProject` | Height fog stays analytic; no froxel volumes |
+| Frame Generation | `r.FrameGeneration.EnableForProject` | `r.FrameGeneration` is ignored and the player's options grey the rows out |
+
+A switch that is off wins over every [quality tier](/docs/rendering/quality-tiers/), device profile and `r.*` cvar, and the renderer allocates nothing for it. Sun shadows (cascaded and virtual), local-light shadows, GTAO, SSR, bloom, TSR and TAA, auto exposure, height fog and the upscalers are not switches: the tiers scale them as before.
+
+The page writes a switch into `Config/Engine.ini` only where it has to differ from the layers below. A project can also set them under `[ConsoleVariables]` in `Config/DefaultEngine.ini`; the page then shows that value and turning it off writes an explicit `0`:
+
+```ini title="Config/DefaultEngine.ini"
+[ConsoleVariables]
+r.GlobalIllumination.EnableForProject=1
+r.RayTracing.EnableForProject=1
+```
+
+### Game Splash
+
+**Project > Maps & Modes > Game Window > Game Splash** names a PNG, JPEG or BMP relative to the project root, Unreal's **Windows > Splash > Game Splash**. The game shows it fitted on black from the moment its window opens until the first game frame. Empty, the default, opens on a black frame and then the game, with no engine branding. Play in Editor never shows it; `--no-splash` skips it. See [Package a game](/docs/shipping/package-a-game/#how-the-game-starts).
 
 <Callout type="note">
 The Input page's gamepad slot table is per user: which physical pad is Player 2 belongs to one machine, so it is written to your `Saved/Config/` rather than the project config <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/InputSettingsPage.cpp" />.
