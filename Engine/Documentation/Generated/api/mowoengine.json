@@ -1,0 +1,2117 @@
+{
+	"name": "MowoEngine",
+	"displayName": "MowoEngine",
+	"slug": "mowoengine",
+	"category": "Runtime",
+	"scope": "full",
+	"publicDir": "Engine/Source/Runtime/EngineLoop/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/EngineLoop/Public/Core/BuildInfoManifest.h",
+			"include": "Core/BuildInfoManifest.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FBuildInfoManifest",
+					"namespace": "Mowo",
+					"doc": "A package's BuildInfo.json, applied before the engine exists: crash\nattribution and the game's crash settings, the per-product data root, the\nbuild id, the crash reporter path and analytics. Every packaged host reads\nit — the player through FGameHostBootstrap, the dedicated server directly —\nso a server's crash reports go to the game's DSN too.",
+					"line": 15,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Apply",
+							"signature": "static bool Apply()",
+							"static": true,
+							"doc": "Looks in the game root, the working directory and the executable dir,\nthen inside the engine pak. A manifest (or an unwritable game root)\nmarks the run as packaged. True when it named the product.",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "WasApplied",
+							"signature": "static bool WasApplied()",
+							"static": true,
+							"doc": "True once a BuildInfo.json was applied this run; the project's own\nConfig/Engine.ini then no longer speaks for the crash settings.",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "ApplyProjectCrashReportClient",
+							"signature": "static bool ApplyProjectCrashReportClient(const std::string& projectPath)",
+							"static": true,
+							"doc": "An unpackaged run of a game: the project's Config/Engine.ini\n[CrashReportClient] section (else the legacy .mproject crashReporter.dsn)\nbecomes the crash settings every report carries; a project that names\nnothing keeps its reports on disk. No-op once a BuildInfo.json was\napplied. True when the project configured anything.",
+							"line": 31
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/EngineLoop/Public/Core/DisplaySettings.h",
+			"include": "Core/DisplaySettings.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EWindowMode",
+					"namespace": "Mowo",
+					"bases": "int32_t",
+					"doc": "How the game window presents. Persisted to Display.ini so the choice\nsurvives across sessions on the same machine.\nWindowed             — bordered, movable/resizable desktop window.\nBorderlessFullscreen — borderless window covering the target monitor at\nthe desktop resolution (fast alt-tab, no mode set).\nExclusiveFullscreen  — real fullscreen mode set to the chosen resolution\n+ refresh rate (SDL sets an SDL_DisplayMode).",
+					"line": 21,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Windowed",
+							"signature": "Windowed = 0",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "BorderlessFullscreen",
+							"signature": "BorderlessFullscreen = 1",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "ExclusiveFullscreen",
+							"signature": "ExclusiveFullscreen = 2",
+							"line": 24
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FDisplayMode",
+					"namespace": "Mowo",
+					"doc": "One selectable fullscreen video mode of a monitor.",
+					"line": 28,
+					"members": [
+						{
+							"kind": "field",
+							"name": "width",
+							"signature": "int32_t width = 0",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "height",
+							"signature": "int32_t height = 0",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "refreshRate",
+							"signature": "float refreshRate = 0.0f",
+							"line": 31
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMonitorInfo",
+					"namespace": "Mowo",
+					"doc": "One connected monitor, in the order SDL enumerates them (index 0 = the\ndisplay SDL reports first). name is the OS display name; the resolution +\nrefresh are the current desktop mode.",
+					"line": 37,
+					"members": [
+						{
+							"kind": "field",
+							"name": "index",
+							"signature": "int32_t index = 0",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "name",
+							"signature": "std::string name",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "width",
+							"signature": "int32_t width = 0",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "height",
+							"signature": "int32_t height = 0",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "refreshRate",
+							"signature": "float refreshRate = 0.0f",
+							"line": 42
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FDisplayConfig",
+					"namespace": "Mowo",
+					"doc": "The persisted display configuration. Round-trips through Display.ini via\nLoad/Save. hasBeenSet distinguishes \"user has never touched display\nsettings\" (keep the engine/launch defaults) from an explicit choice.",
+					"line": 48,
+					"members": [
+						{
+							"kind": "field",
+							"name": "mode",
+							"signature": "EWindowMode mode = EWindowMode::Windowed",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "width",
+							"signature": "int32_t width = 0",
+							"doc": "0 = use the monitor's desktop resolution.",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "height",
+							"signature": "int32_t height = 0",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "refreshRate",
+							"signature": "float refreshRate = 0.0f",
+							"doc": "0 = use the monitor's default refresh.",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "vsync",
+							"signature": "bool vsync = true",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "monitor",
+							"signature": "int32_t monitor = -1",
+							"doc": "-1 = primary / current display.",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "hasBeenSet",
+							"signature": "bool hasBeenSet = false",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Load",
+							"signature": "static FDisplayConfig Load(const std::string& path)",
+							"static": true,
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Save",
+							"signature": "bool Save(const std::string& path) const",
+							"line": 58
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "DisplaySettings",
+					"namespace": "Mowo",
+					"doc": "Player-facing display settings: a static facade over Config for persistence,\nSDL for enumeration, and Window + Renderer for applying a change at runtime.",
+					"line": 63,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FDisplayConfig Get()",
+							"static": true,
+							"doc": "Persisted to Display.ini under AppData / the project's Saved dir.",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "Save",
+							"signature": "static void Save(const FDisplayConfig& cfg)",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "EnumerateMonitors",
+							"signature": "static std::vector<FMonitorInfo> EnumerateMonitors()",
+							"static": true,
+							"doc": "Needs an initialized SDL video subsystem.",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "EnumerateModes",
+							"signature": "static std::vector<FDisplayMode> EnumerateModes(int32_t monitorIndex)",
+							"static": true,
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "GetWindowRefreshRate",
+							"signature": "static float GetWindowRefreshRate(Window& window)",
+							"static": true,
+							"doc": "Refresh rate of the monitor the window is on now, 0 when unknown. Cheap\nenough to poll once per frame (SDL caches the current mode).",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "Apply",
+							"signature": "static void Apply(Window& window, const FDisplayConfig& cfg, bool applyVSync = true)",
+							"static": true,
+							"doc": "Pushes the config onto a live window (mode / monitor / resolution /\nrefresh) and, when applyVSync is true, drives Renderer::SetVSync with a\ndeferred swapchain recreate. Persists nothing — call Save() for that.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "ApplyPersisted",
+							"signature": "static void ApplyPersisted(Window& window)",
+							"static": true,
+							"doc": "Reads the persisted config and applies it. No-op for window/monitor/\nresolution when the user has never set anything (hasBeenSet == false), so\nlaunch defaults survive; vsync always follows the config.",
+							"line": 85
+						},
+						{
+							"kind": "method",
+							"name": "SetVSyncRuntime",
+							"signature": "static void SetVSyncRuntime(bool enabled)",
+							"static": true,
+							"doc": "Drives Renderer::SetVSync immediately and persists the new value. Safe to\ncall every frame — SetVSync early-outs when unchanged.",
+							"line": 89
+						},
+						{
+							"kind": "method",
+							"name": "ParseMode",
+							"signature": "static EWindowMode ParseMode(const std::string& s)",
+							"static": true,
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "ModeToString",
+							"signature": "static const char* ModeToString(EWindowMode m)",
+							"static": true,
+							"line": 92
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/EngineLoop/Public/Core/Engine.h",
+			"include": "Core/Engine.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "EngineConfig",
+					"namespace": "Mowo",
+					"line": 26,
+					"members": [
+						{
+							"kind": "field",
+							"name": "windowTitle",
+							"signature": "std::wstring windowTitle = L\"Mowo Application\"",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "windowWidth",
+							"signature": "int windowWidth = 1280",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "windowHeight",
+							"signature": "int windowHeight = 720",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "fullscreen",
+							"signature": "bool fullscreen = false",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "resizable",
+							"signature": "bool resizable = true",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "decorated",
+							"signature": "bool decorated = true",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "startMaximized",
+							"signature": "bool startMaximized = false",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "vsync",
+							"signature": "bool vsync = false",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "debugDevice",
+							"signature": "bool debugDevice = false",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "windowIconPath",
+							"signature": "std::string windowIconPath",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "customTitleBar",
+							"signature": "bool customTitleBar = false",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "titleBarHeight",
+							"signature": "int titleBarHeight = 30",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "enableOverlay",
+							"signature": "bool enableOverlay = true",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "appDrivesRenderFrame",
+							"signature": "bool appDrivesRenderFrame = false",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "headless",
+							"signature": "bool headless = false",
+							"doc": "No window, no rendering (dedicated server)",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "startHidden",
+							"signature": "bool startHidden = false",
+							"doc": "Create the window hidden; reveal via",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "useConfigWindowOverrides",
+							"signature": "bool useConfigWindowOverrides = true",
+							"doc": "Fixed-size dialog hosts (crash reporter) set this false so the\nwindow.* values in GlobalConfig cannot override the requested\ntitle/size/vsync.",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "ignoreUserConfig",
+							"signature": "bool ignoreUserConfig = false",
+							"doc": "Test hosts set this (and `mbt test` passes --no-user-config to every\nrow): the per-user Engine.ini is neither read nor written. A path tracer\nswitched on in the editor's settings once turned sixty rendering rows red,\nand a test saving settings would otherwise overwrite the user's own.",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "flushCrashUploadsOnInit",
+							"signature": "bool flushCrashUploadsOnInit = true",
+							"doc": "Engine::Initialize ships dumps a previous run left behind. Hosts whose\nwhole purpose is asking the user first (crash reporter) set this false\nso the report is still on disk when the UI comes up.",
+							"line": 59
+						},
+						{
+							"kind": "field",
+							"name": "enableGameRuntime",
+							"signature": "bool enableGameRuntime = true",
+							"doc": "Physics, audio, networking, SceneManager, ECS world, AudioThread.\nLauncher-class apps set this false: they only need window +\nVulkan + overlay + VFS + ProjectManager.",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "unfocusedFrameRateHz",
+							"signature": "int unfocusedFrameRateHz = 30",
+							"doc": "Frame rate cap (Hz) when the main window lacks OS input focus, so an\neditor or game left in the background doesn't burn power. The Engine\nsleeps at the end of each frame to hit it. 0 disables the throttle.",
+							"line": 69
+						},
+						{
+							"kind": "field",
+							"name": "idleFrameRateHz",
+							"signature": "int idleFrameRateHz = 0",
+							"line": 70
+						},
+						{
+							"kind": "field",
+							"name": "supplementalShaderArchives",
+							"signature": "std::vector<std::string> supplementalShaderArchives =",
+							"doc": "Shader archives mounted under \"Shaders\" below Shaders.meaf, each found\nlike it. StandaloneShaders.meaf carries only Arc's UI shaders, so the\ncrash reporter and the launchers draw when no full archive ships beside\nthem; test hosts add TestShaders.meaf, which keeps test-only blobs out of\nthe archive every game ships. Any other <Name>Shaders.meaf beside the\nexecutable (a plugin's) is mounted the same way without being listed.",
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "archiveDirectories",
+							"signature": "std::vector<std::string> archiveDirectories",
+							"doc": "More folders the named archives (Shaders.meaf, EngineContent.meaf and\nthe supplemental ones) are looked for in, after the executable's own: a\nsingle-file host extracts the copies linked into it to one of these.",
+							"line": 83
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "Engine",
+					"namespace": "Mowo",
+					"bases": "public MObject",
+					"doc": "Derives from MObject so the GC sees it as a discoverable root. The ctor\nroots it; MObject::~MObject auto-unroots via Unregister.",
+					"line": 88,
+					"members": [
+						{
+							"kind": "method",
+							"name": "GetGEngine",
+							"signature": "static Engine* GetGEngine()",
+							"static": true,
+							"doc": "Process-wide Engine accessor. Set by Engine::Initialize, cleared by\nEngine::Shutdown; nullptr before init and after shutdown.",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "Engine",
+							"signature": "Engine()",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "~Engine",
+							"signature": "~Engine() override",
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "bool Initialize(const EngineConfig& config = EngineConfig())",
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown()",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "WriteRunMetrics",
+							"signature": "static bool WriteRunMetrics(const std::string& path)",
+							"static": true,
+							"doc": "Writes the run record `--metrics=<file>` asks for (Shutdown calls it):\nframe-time distribution plus everything that decides whether two\nrecords are comparable — build configuration, commit, RHI and seed.",
+							"line": 103
+						},
+						{
+							"kind": "field",
+							"name": "kExitDeviceLost",
+							"signature": "static constexpr int kExitDeviceLost = 4",
+							"static": true,
+							"doc": "What the host should exit with once the loop ends: kExitDeviceLost after\na GPU device loss, else 0. A lost device used to end in exit 0 with\nplausible metrics, which a harness read as a fast successful run.",
+							"line": 108
+						},
+						{
+							"kind": "method",
+							"name": "GetRunExitCode",
+							"signature": "static int GetRunExitCode()",
+							"static": true,
+							"line": 109
+						},
+						{
+							"kind": "method",
+							"name": "LoadFeatureModules",
+							"signature": "static void LoadFeatureModules()",
+							"static": true,
+							"doc": "Loads the engine systems that sit above this umbrella (AI, sequencer,\ndestruction, ...) by name. They depend on the engine, so the engine cannot\nlink them; every host calls this before plugins load so their components\nand scene systems are registered before any scene deserializes. Missing\nbinaries are skipped: a NoOnline player ships without the online ones.",
+							"line": 116
+						},
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "void Run()",
+							"line": 117
+						},
+						{
+							"kind": "alias",
+							"name": "InitProgressFn",
+							"signature": "using InitProgressFn = std::function<void(const char* label, float fraction)>",
+							"doc": "Set before Initialize(). The engine reports coarse startup stages\n(label, 0..1 fraction) for a splash status bar. No-op if unset.",
+							"line": 121
+						},
+						{
+							"kind": "method",
+							"name": "SetInitProgressCallback",
+							"signature": "void SetInitProgressCallback(InitProgressFn fn)",
+							"line": 122
+						},
+						{
+							"kind": "method",
+							"name": "ReportInitProgress",
+							"signature": "void ReportInitProgress(const char* label, float fraction)",
+							"line": 125
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "virtual void Tick(float dt)",
+							"doc": "Per-frame app logic. Runs after the engine-core update (input, world,\nevents, jobs) and before UI submission.",
+							"line": 137
+						},
+						{
+							"kind": "method",
+							"name": "Draw",
+							"signature": "virtual void Draw()",
+							"doc": "App-level UI submission. Runs between the overlay Begin/EndFrame\ncallbacks.",
+							"line": 143
+						},
+						{
+							"kind": "method",
+							"name": "RouteEvent",
+							"signature": "virtual void RouteEvent(Event& e)",
+							"doc": "Pre-dispatch, before EventBus subscribers see the event.",
+							"line": 147
+						},
+						{
+							"kind": "method",
+							"name": "OnShadersReloaded",
+							"signature": "virtual void OnShadersReloaded(uint32_t changedShaders)",
+							"doc": "Fires after a shader hot-reload that changed at least one shader. Runs\nat the top of the frame, before Renderer::BeginFrame.",
+							"line": 153
+						},
+						{
+							"kind": "method",
+							"name": "OnCoreInitialized",
+							"signature": "virtual void OnCoreInitialized()",
+							"doc": "Runs inside Initialize once logging, cvars and the object-system\nresolvers are up, before config, memory, physics, audio, the window or\nthe device start. Work that needs only static-init state (the MClass\nregistry, FMObjectArray) goes here so it still reports when a later\nstage fails to come up.",
+							"line": 162
+						},
+						{
+							"kind": "method",
+							"name": "OnEnterBackground",
+							"signature": "virtual void OnEnterBackground()",
+							"doc": "Mobile app lifecycle (M2.4). EnterBackground runs AFTER the GPU is\nidled and before the frame loop pauses — flush saves here, the process\nmay never run again on iOS. EnterForeground runs before the first\nresumed frame. Both also broadcast through FCoreDelegates so game code\ncan subscribe without subclassing.",
+							"line": 170
+						},
+						{
+							"kind": "method",
+							"name": "OnEnterForeground",
+							"signature": "virtual void OnEnterForeground()",
+							"line": 172
+						},
+						{
+							"kind": "method",
+							"name": "IsInBackground",
+							"signature": "bool IsInBackground() const",
+							"doc": "True while the OS holds the app in background: no frames render, the\nloop idles. Never true on desktop.",
+							"line": 177
+						},
+						{
+							"kind": "method",
+							"name": "IsRenderPaused",
+							"signature": "bool IsRenderPaused() const",
+							"doc": "The frame-captured render gate Engine::Run used THIS frame: minimized\nOR backgrounded. Hosts must gate their scene recording on this, not on\nWindow::IsMinimized() alone — a background transition skips BeginFrame\nwithout minimizing the window, and recording into the never-begun main\ncommand buffer is a crash.",
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "GetWindow",
+							"signature": "Window* GetWindow() const",
+							"line": 190
+						},
+						{
+							"kind": "method",
+							"name": "GetInput",
+							"signature": "InputManager* GetInput() const",
+							"line": 193
+						},
+						{
+							"kind": "method",
+							"name": "GetWorld",
+							"signature": "World* GetWorld() const",
+							"line": 196
+						},
+						{
+							"kind": "method",
+							"name": "GetVFS",
+							"signature": "VFS* GetVFS() const",
+							"line": 199
+						},
+						{
+							"kind": "method",
+							"name": "GetScenes",
+							"signature": "SceneManager* GetScenes() const",
+							"line": 202
+						},
+						{
+							"kind": "method",
+							"name": "GetActiveScene",
+							"signature": "Scene* GetActiveScene() const",
+							"line": 205
+						},
+						{
+							"kind": "method",
+							"name": "IsRunning",
+							"signature": "bool IsRunning() const",
+							"line": 207
+						},
+						{
+							"kind": "method",
+							"name": "Stop",
+							"signature": "void Stop()",
+							"line": 210
+						},
+						{
+							"kind": "method",
+							"name": "GetSubsystem",
+							"signature": "template<typename T> T* GetSubsystem()",
+							"doc": "Auto-instanced MEngineSubsystem singletons, each living as long as the\nengine. Initialize() fires lazily on the first GetSubsystem<T>() call —\nthere is no manual registration.",
+							"line": 217
+						},
+						{
+							"kind": "method",
+							"name": "ForEachSubsystem",
+							"signature": "template<typename Func> void ForEachSubsystem(Func&& fn)",
+							"doc": "Visit every live subsystem in registration order.",
+							"line": 238
+						},
+						{
+							"kind": "method",
+							"name": "SetAutoSyncCursorLock",
+							"signature": "void SetAutoSyncCursorLock(bool enabled)",
+							"doc": "In standalone Runtime, Engine::Run mirrors game code's Input.CursorLocked\ninto Window::SetMouseCapture every frame. In editor PIE, PreviewWindow\nowns cursor lock through SDL relative mode and tracks its own ESC sticky,\nso this sync would double-engage SDL relative mode and let\nWindow::NotifyUserClicked — fired on any mouse-down — clear the escape\nand immediately re-lock. The editor disables it at startup; default true\nkeeps standalone builds unchanged.",
+							"line": 252
+						},
+						{
+							"kind": "method",
+							"name": "IsAutoSyncCursorLockEnabled",
+							"signature": "bool IsAutoSyncCursorLockEnabled() const",
+							"line": 255
+						},
+						{
+							"kind": "method",
+							"name": "RequestShaderReload",
+							"signature": "void RequestShaderReload()",
+							"doc": "The reload is APPLIED at the top of the next frame, before\nRenderer::BeginFrame — never while a command buffer records.",
+							"line": 261
+						},
+						{
+							"kind": "method",
+							"name": "SetShaderHotReloadEnabled",
+							"signature": "void SetShaderHotReloadEnabled(bool enabled)",
+							"doc": "Watches the loose Shaders/ overlay (CWD-relative, the same folder the\nnative VFS mount serves) and requests a reload when `mbt shaders --watch`\ndrops fresh blobs there. Roughly 2 scans/s.",
+							"line": 267
+						},
+						{
+							"kind": "method",
+							"name": "IsShaderHotReloadEnabled",
+							"signature": "bool IsShaderHotReloadEnabled() const",
+							"line": 268
+						},
+						{
+							"kind": "method",
+							"name": "PollShaderWatch",
+							"signature": "void PollShaderWatch()",
+							"doc": "One scan of the overlay on the caller; it requests a reload once a\nchange has held still for a whole scan. Public so a host that runs no\nframe loop (a test case) can drive the watch itself. The frame loop\npolls through PollShaderWatchAsync instead.",
+							"line": 276
+						},
+						{
+							"kind": "method",
+							"name": "ConsumeShaderReloadRequest",
+							"signature": "bool ConsumeShaderReloadRequest()",
+							"line": 277
+						},
+						{
+							"kind": "method",
+							"name": "GetDeltaTime",
+							"signature": "float GetDeltaTime() const",
+							"line": 284
+						},
+						{
+							"kind": "method",
+							"name": "GetTotalTime",
+							"signature": "float GetTotalTime() const",
+							"line": 285
+						},
+						{
+							"kind": "method",
+							"name": "TickTimer",
+							"signature": "void TickTimer()",
+							"line": 286
+						},
+						{
+							"kind": "method",
+							"name": "HasPendingResize",
+							"signature": "bool HasPendingResize(uint32_t& w, uint32_t& h)",
+							"line": 288
+						},
+						{
+							"kind": "method",
+							"name": "LoadScene",
+							"signature": "void LoadScene(const std::string& path)",
+							"line": 290
+						},
+						{
+							"kind": "alias",
+							"name": "OverlayCallback",
+							"signature": "using OverlayCallback = std::function<void()>",
+							"doc": "Registered by editor/runtime overlay systems (Arc).",
+							"line": 293
+						},
+						{
+							"kind": "method",
+							"name": "SetOverlayBeginFrame",
+							"signature": "void SetOverlayBeginFrame(OverlayCallback cb)",
+							"line": 294
+						},
+						{
+							"kind": "method",
+							"name": "SetOverlayEndFrame",
+							"signature": "void SetOverlayEndFrame(OverlayCallback cb)",
+							"line": 297
+						},
+						{
+							"kind": "method",
+							"name": "SetOverlayRenderDrawData",
+							"signature": "void SetOverlayRenderDrawData(OverlayCallback cb)",
+							"line": 300
+						},
+						{
+							"kind": "method",
+							"name": "SetOverlayRenderViewports",
+							"signature": "void SetOverlayRenderViewports(OverlayCallback cb)",
+							"line": 303
+						},
+						{
+							"kind": "method",
+							"name": "SetOverlayDrawFrame",
+							"signature": "void SetOverlayDrawFrame(OverlayCallback cb)",
+							"line": 306
+						},
+						{
+							"kind": "method",
+							"name": "OverlayBeginFrame",
+							"signature": "void OverlayBeginFrame()",
+							"line": 310
+						},
+						{
+							"kind": "method",
+							"name": "OverlayEndFrame",
+							"signature": "void OverlayEndFrame()",
+							"line": 315
+						},
+						{
+							"kind": "method",
+							"name": "OverlayRenderDrawData",
+							"signature": "void OverlayRenderDrawData()",
+							"line": 320
+						},
+						{
+							"kind": "method",
+							"name": "OverlayRenderViewports",
+							"signature": "void OverlayRenderViewports()",
+							"line": 325
+						},
+						{
+							"kind": "method",
+							"name": "OverlayDrawFrame",
+							"signature": "void OverlayDrawFrame()",
+							"line": 330
+						},
+						{
+							"kind": "alias",
+							"name": "FrameUpdateCallback",
+							"signature": "using FrameUpdateCallback = std::function<void(float dt)>",
+							"doc": "Called once per frame for app-level logic, before Tick.",
+							"line": 337
+						},
+						{
+							"kind": "method",
+							"name": "SetFrameUpdateCallback",
+							"signature": "void SetFrameUpdateCallback(FrameUpdateCallback cb)",
+							"line": 338
+						},
+						{
+							"kind": "alias",
+							"name": "IdlePredicate",
+							"signature": "using IdlePredicate = std::function<bool()>",
+							"line": 342
+						},
+						{
+							"kind": "method",
+							"name": "SetIdlePredicate",
+							"signature": "void SetIdlePredicate(IdlePredicate cb)",
+							"line": 343
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameThrottle",
+							"signature": "EFrameThrottle GetFrameThrottle() const",
+							"line": 356
+						},
+						{
+							"kind": "method",
+							"name": "GetFrameThrottleHz",
+							"signature": "int GetFrameThrottleHz() const",
+							"line": 359
+						},
+						{
+							"kind": "method",
+							"name": "GetIdleFrameRateHz",
+							"signature": "int GetIdleFrameRateHz() const",
+							"doc": "The idle cap this host was configured with; 0 = never throttles idle.",
+							"line": 363
+						},
+						{
+							"kind": "method",
+							"name": "SetRenderAhead",
+							"signature": "void SetRenderAhead(bool enabled)",
+							"doc": "Hosts whose frame path owns the publish-time render fence (the overlap\npipeline) disable the loop-top render-thread drain with this.",
+							"line": 369
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "Engine::EFrameThrottle",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Which cap held the last frame back, for readouts that would otherwise\nreport a throttled rate as the frame rate the hardware manages.",
+					"line": 349,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "None",
+							"signature": "None",
+							"line": 350
+						},
+						{
+							"kind": "enumerator",
+							"name": "Idle",
+							"signature": "Idle",
+							"line": 351
+						},
+						{
+							"kind": "enumerator",
+							"name": "Unfocused",
+							"signature": "Unfocused",
+							"line": 352
+						},
+						{
+							"kind": "enumerator",
+							"name": "Minimized",
+							"signature": "Minimized",
+							"line": 353
+						},
+						{
+							"kind": "enumerator",
+							"name": "BatterySaver",
+							"signature": "BatterySaver",
+							"line": 354
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/EngineLoop/Public/Core/LiveCoding.h",
+			"include": "Core/LiveCoding.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FLiveCoding",
+					"namespace": "Mowo",
+					"line": 26,
+					"members": [
+						{
+							"kind": "method",
+							"name": "IsAvailable",
+							"signature": "static bool IsAvailable(std::string* outWhy = nullptr)",
+							"static": true,
+							"doc": "False, with the reason, where Live Coding cannot run: not Windows, a\npackaged build with no tree beside it, mbt never published.",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "Start",
+							"signature": "static bool Start()",
+							"static": true,
+							"doc": "Starts compiling every .cpp changed since the running binaries were\nlinked. False when a compile is already running or Live Coding is\nunavailable (the reason is logged).",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "IsCompiling",
+							"signature": "static bool IsCompiling()",
+							"static": true,
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "static void Tick()",
+							"static": true,
+							"doc": "Applies a finished compile. Called once a frame by the engine loop.",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "RegisterConsoleCommand",
+							"signature": "static void RegisterConsoleCommand()",
+							"static": true,
+							"doc": "`LiveCoding` at the console; Engine::Initialize registers it.",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "static void Shutdown()",
+							"static": true,
+							"doc": "Waits for a compile still running, so its thread is not torn down\nunder it at exit.",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "RunCompile",
+							"signature": "static int32_t RunCompile(const std::vector<std::string>& extraArgs, const std::string& reportPath, std::string& outOutput)",
+							"static": true,
+							"doc": "Synchronous halves, for tests and tools: run `mbt livecoding` with the\nextra arguments and write its report to `reportPath`; then apply that\nreport. RunCompile returns mbt's exit code (-1 when it could not run).",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "ApplyReport",
+							"signature": "static FResult ApplyReport(const std::string& reportPath)",
+							"static": true,
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "LastResult",
+							"signature": "static FResult LastResult()",
+							"static": true,
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "SuccessfulPatches",
+							"signature": "static uint32_t SuccessfulPatches()",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "CompletedCompiles",
+							"signature": "static uint32_t CompletedCompiles()",
+							"static": true,
+							"doc": "Compiles that finished and were applied (or refused) this session, so\na UI can tell a new outcome from the one it already showed.",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "CompileProgress",
+							"signature": "static FProgress CompileProgress()",
+							"static": true,
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "SourceTreeRoot",
+							"signature": "static std::string SourceTreeRoot()",
+							"static": true,
+							"doc": "The tree the running binaries were built from, found by walking up from\nthe executable; empty in a packaged build.",
+							"line": 85
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLiveCoding::FResult",
+					"namespace": "Mowo",
+					"line": 28,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Ok",
+							"signature": "bool Ok = false",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "ObjectsApplied",
+							"signature": "uint32_t ObjectsApplied = 0",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "FunctionsPatched",
+							"signature": "uint32_t FunctionsPatched = 0",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "FunctionsAdded",
+							"signature": "uint32_t FunctionsAdded = 0",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "DataBound",
+							"signature": "uint32_t DataBound = 0",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "DataNew",
+							"signature": "uint32_t DataNew = 0",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "Skipped",
+							"signature": "uint32_t Skipped = 0",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "Refused",
+							"signature": "uint32_t Refused = 0",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "Errors",
+							"signature": "uint32_t Errors = 0",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "Lines",
+							"signature": "std::vector<std::string> Lines",
+							"line": 38
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FLiveCoding::FProgress",
+					"namespace": "Mowo",
+					"doc": "The running compile as mbt reports it: the file it is on (1-based), the\ncount, and the files started so far. Total is 0 until mbt names one.",
+					"line": 75,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Current",
+							"signature": "int32_t Current = 0",
+							"line": 76
+						},
+						{
+							"kind": "field",
+							"name": "Total",
+							"signature": "int32_t Total = 0",
+							"line": 77
+						},
+						{
+							"kind": "field",
+							"name": "Files",
+							"signature": "std::vector<std::string> Files",
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "Modules",
+							"signature": "std::vector<std::string> Modules",
+							"line": 79
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/EngineLoop/Public/Core/TagLayerConfig.h",
+			"include": "Core/TagLayerConfig.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "LayerMask",
+					"namespace": "Mowo",
+					"line": 12,
+					"members": [
+						{
+							"kind": "field",
+							"name": "value",
+							"signature": "uint32_t value = 0xFFFFFFFF",
+							"doc": "all layers",
+							"line": 13
+						},
+						{
+							"kind": "method",
+							"name": "LayerMask",
+							"signature": "LayerMask() = default",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "LayerMask",
+							"signature": "explicit LayerMask(uint32_t v) : value(v)",
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "FromLayer",
+							"signature": "static LayerMask FromLayer(int layer)",
+							"static": true,
+							"line": 19
+						},
+						{
+							"kind": "method",
+							"name": "All",
+							"signature": "static LayerMask All()",
+							"static": true,
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "None",
+							"signature": "static LayerMask None()",
+							"static": true,
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "Contains",
+							"signature": "bool Contains(int layer) const",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "operator|",
+							"signature": "LayerMask operator|(const LayerMask& other) const",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "operator&",
+							"signature": "LayerMask operator&(const LayerMask& other) const",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "operator~",
+							"signature": "LayerMask operator~() const",
+							"line": 42
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "TagLayerConfig",
+					"namespace": "Mowo",
+					"doc": "Tags are arbitrary strings for grouping entities; layers are 32 slots\n(0-31) used for physics and rendering filtering.",
+					"line": 49,
+					"members": [
+						{
+							"kind": "field",
+							"name": "BUILTIN_TAG_COUNT",
+							"signature": "static constexpr int BUILTIN_TAG_COUNT = 7",
+							"static": true,
+							"doc": "Indices 0-6, cannot be removed.",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "BUILTIN_TAGS",
+							"signature": "static constexpr const char* BUILTIN_TAGS[] =",
+							"static": true,
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "BUILTIN_LAYER_COUNT",
+							"signature": "static constexpr int BUILTIN_LAYER_COUNT = FLayerRegistry::kBuiltinCount",
+							"static": true,
+							"doc": "Layer names live in FLayerRegistry (Project module) — the same list the\ninspector's layer-mask dropdown and Project Settings > Layers edit.\nThese mirror its constants so callers keep compiling.",
+							"line": 66
+						},
+						{
+							"kind": "field",
+							"name": "MAX_LAYERS",
+							"signature": "static constexpr int MAX_LAYERS = FLayerRegistry::kMaxLayers",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "TagLayerConfig",
+							"signature": "TagLayerConfig()",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "~TagLayerConfig",
+							"signature": "~TagLayerConfig() = default",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static TagLayerConfig& Get()",
+							"static": true,
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "GetTags",
+							"signature": "const std::vector<std::string>& GetTags() const",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "GetTagIndex",
+							"signature": "int GetTagIndex(const std::string& tag) const",
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "GetTagName",
+							"signature": "std::string GetTagName(int index) const",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "AddTag",
+							"signature": "bool AddTag(const std::string& tag)",
+							"doc": "Add a custom tag. Returns true if added (false if duplicate or invalid).",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "RemoveTag",
+							"signature": "bool RemoveTag(const std::string& tag)",
+							"doc": "Remove a custom tag. Returns true if removed (false if built-in or not found).",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "IsBuiltinTag",
+							"signature": "bool IsBuiltinTag(const std::string& tag) const",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "GetLayers",
+							"signature": "const std::vector<std::string>& GetLayers() const",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "GetLayerIndex",
+							"signature": "int GetLayerIndex(const std::string& layerName) const",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "GetLayerName",
+							"signature": "std::string GetLayerName(int index) const",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "GetLayerMask",
+							"signature": "LayerMask GetLayerMask(const std::string& layerName) const",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "SetLayerName",
+							"signature": "bool SetLayerName(int index, const std::string& name)",
+							"doc": "Only the non-built-in slots may be renamed.",
+							"line": 101
+						},
+						{
+							"kind": "method",
+							"name": "IsBuiltinLayer",
+							"signature": "bool IsBuiltinLayer(int index) const",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "CanCollide",
+							"signature": "bool CanCollide(int layerA, int layerB) const",
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "SetCollision",
+							"signature": "void SetCollision(int layerA, int layerB, bool canCollide)",
+							"doc": "Symmetric — sets both directions.",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "GetCollisionMask",
+							"signature": "uint32_t GetCollisionMask(int layer) const",
+							"line": 112
+						},
+						{
+							"kind": "method",
+							"name": "ResetCollisionMatrix",
+							"signature": "void ResetCollisionMatrix()",
+							"doc": "Back to all layers colliding.",
+							"line": 115
+						},
+						{
+							"kind": "method",
+							"name": "GetCustomTags",
+							"signature": "std::vector<std::string> GetCustomTags() const",
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "GetCustomLayers",
+							"signature": "std::vector<std::pair<int, std::string>> GetCustomLayers() const",
+							"doc": "Indices 8-31 with non-empty names.",
+							"line": 120
+						},
+						{
+							"kind": "method",
+							"name": "SetCustomTags",
+							"signature": "void SetCustomTags(const std::vector<std::string>& customTags)",
+							"doc": "Appends to the built-in set.",
+							"line": 123
+						},
+						{
+							"kind": "method",
+							"name": "SetCustomLayers",
+							"signature": "void SetCustomLayers(const std::vector<std::pair<int, std::string>>& customLayers)",
+							"line": 125
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/EngineLoop/Public/Core/Window.h",
+			"include": "Core/Window.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "WindowDesc",
+					"namespace": "Mowo",
+					"line": 28,
+					"members": [
+						{
+							"kind": "field",
+							"name": "title",
+							"signature": "std::wstring title = L\"Mowo Application\"",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "width",
+							"signature": "int width = 1280",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "height",
+							"signature": "int height = 720",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "fullscreen",
+							"signature": "bool fullscreen = false",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "resizable",
+							"signature": "bool resizable = true",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "decorated",
+							"signature": "bool decorated = true",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "startMaximized",
+							"signature": "bool startMaximized = false",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "iconPath",
+							"signature": "std::wstring iconPath",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "customTitleBar",
+							"signature": "bool customTitleBar = false",
+							"doc": "Custom titlebar (implies borderless)",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "titleBarHeight",
+							"signature": "int titleBarHeight = 30",
+							"doc": "Caption height for the custom titlebar hit test",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "startHidden",
+							"signature": "bool startHidden = false",
+							"doc": "Reveal via Show() once init is done, so no",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "wantVulkanSurface",
+							"signature": "bool wantVulkanSurface = true",
+							"doc": "half-built window flashes behind the splash.",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "wantMetalView",
+							"signature": "bool wantMetalView = false",
+							"line": 42
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "Window",
+					"namespace": "Mowo",
+					"line": 45,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Window",
+							"signature": "Window()",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "~Window",
+							"signature": "~Window()",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "bool Initialize(const WindowDesc& desc)",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown()",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "ProcessMessages",
+							"signature": "bool ProcessMessages()",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "SetTitle",
+							"signature": "void SetTitle(const std::wstring& title)",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "SetMinimumSize",
+							"signature": "void SetMinimumSize(int width, int height)",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "SetWindowIcon",
+							"signature": "void SetWindowIcon(const std::wstring& iconPath)",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "SetWindowIconFromMemory",
+							"signature": "bool SetWindowIconFromMemory(const void* data, size_t size)",
+							"doc": "Decode an encoded image (PNG/...) from memory and set it as the window\nicon — the VFS path for packaged icons that only exist inside\nEngineContent.meaf. Returns false when decoding fails.",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "HasWindowIcon",
+							"signature": "bool HasWindowIcon() const",
+							"doc": "True once a SetWindowIcon/SetWindowIconFromMemory call stuck.",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "GetHandle",
+							"signature": "WindowHandle GetHandle() const",
+							"doc": "Native handle for RHI (HWND on Windows, CAMetalLayer* on macOS)",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "GetMetalView",
+							"signature": "void* GetMetalView() const",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "GetMetalLayer",
+							"signature": "void* GetMetalLayer() const",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "GetWidth",
+							"signature": "int GetWidth() const",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "GetHeight",
+							"signature": "int GetHeight() const",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "GetPixelWidth",
+							"signature": "int GetPixelWidth() const",
+							"doc": "Framebuffer size — differs from GetWidth on",
+							"line": 82
+						},
+						{
+							"kind": "method",
+							"name": "GetPixelHeight",
+							"signature": "int GetPixelHeight() const",
+							"doc": "Retina/high-DPI displays.",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "GetAspectRatio",
+							"signature": "float GetAspectRatio() const",
+							"line": 84
+						},
+						{
+							"kind": "method",
+							"name": "GetPixelDensity",
+							"signature": "float GetPixelDensity() const",
+							"doc": "Backing scale factor.",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "IsMinimized",
+							"signature": "bool IsMinimized() const",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "IsShown",
+							"signature": "bool IsShown() const",
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "ShouldClose",
+							"signature": "bool ShouldClose() const",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "GetCloseReason",
+							"signature": "const char* GetCloseReason() const",
+							"doc": "Why the window asked the loop to end. A headless test that dies because\nits window was closed out from under it (a stray Cmd+Q while the suite\ncycles windows, a logout) otherwise reports exactly what a test that\nverified nothing reports — a bare exit code with no line in the log.\nThree GI rows failed that way on 2026-08-20 and cost a full diagnosis.",
+							"line": 101
+						},
+						{
+							"kind": "method",
+							"name": "IsInBackground",
+							"signature": "bool IsInBackground() const",
+							"doc": "Mobile app lifecycle (M2.4): the OS moved the app out of / back to the\nforeground. Engine::Run gates all GPU work on this the way it gates on\nminimize — iOS kills apps that touch the GPU in background. Desktop\nSDL never raises these events, so the flag stays false there.",
+							"line": 109
+						},
+						{
+							"kind": "method",
+							"name": "SetLowMemoryCallback",
+							"signature": "void SetLowMemoryCallback(std::function<void()> callback)",
+							"doc": "The OS asked for memory (mobile). Fired from the event pump; the\ncallback should drop caches, not allocate.",
+							"line": 114
+						},
+						{
+							"kind": "method",
+							"name": "IsFocused",
+							"signature": "bool IsFocused() const",
+							"doc": "True when the OS has keyboard/input focus on this window. Drives the\nframe-rate throttle: a focused editor runs uncapped, an idle background\nwindow doesn't burn 170 FPS of CPU/GPU. Queries SDL flags every call.",
+							"line": 121
+						},
+						{
+							"kind": "method",
+							"name": "WaitForEvent",
+							"signature": "bool WaitForEvent(double seconds)",
+							"doc": "Blocks up to `seconds` or until the OS queues an event for this process,\nwhichever is first; the event stays queued for the next ProcessMessages.\nThe idle throttle waits here instead of sleeping, so a key or a mouse\nmove ends the wait immediately instead of landing in the next 24 Hz\nframe. Returns true when an event ended the wait.",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "SetAuxFocusCheck",
+							"signature": "void SetAuxFocusCheck(std::function<bool()> check)",
+							"doc": "Extra focus sources that count as \"the app is focused\" for the\nunfocused throttle — e.g. torn-off editor panels living in their own\nOS windows. IsFocused() ORs this in when set.",
+							"line": 133
+						},
+						{
+							"kind": "method",
+							"name": "IsHDROutputActive",
+							"signature": "bool IsHDROutputActive() const",
+							"doc": "True when this window's swapchain negotiated an HDR format/colorspace\n(r.HDROutput). Forwards Renderer::IsHDROutputActive for editor UI.",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "IsKeyDown",
+							"signature": "bool IsKeyDown(int vkCode) const",
+							"line": 141
+						},
+						{
+							"kind": "method",
+							"name": "IsKeyPressed",
+							"signature": "bool IsKeyPressed(int vkCode) const",
+							"line": 144
+						},
+						{
+							"kind": "method",
+							"name": "GetMouseDelta",
+							"signature": "void GetMouseDelta(float& dx, float& dy) const",
+							"line": 148
+						},
+						{
+							"kind": "method",
+							"name": "SetMouseCapture",
+							"signature": "void SetMouseCapture(bool capture)",
+							"line": 152
+						},
+						{
+							"kind": "method",
+							"name": "IsMouseCaptured",
+							"signature": "bool IsMouseCaptured() const",
+							"line": 153
+						},
+						{
+							"kind": "method",
+							"name": "SetCursorVisible",
+							"signature": "void SetCursorVisible(bool visible)",
+							"line": 156
+						},
+						{
+							"kind": "method",
+							"name": "SetCursorConfined",
+							"signature": "void SetCursorConfined(bool confined)",
+							"doc": "Confine the cursor to the window WITHOUT taking it into relative mode,\nfor a game that keeps a visible cursor. Relative mode confines as a side\neffect; this is the other half, and it was missing entirely.",
+							"line": 161
+						},
+						{
+							"kind": "method",
+							"name": "IsCursorConfined",
+							"signature": "bool IsCursorConfined() const",
+							"line": 162
+						},
+						{
+							"kind": "method",
+							"name": "ClassifyCaptionHit",
+							"signature": "static ECaptionHit ClassifyCaptionHit(const FCaptionHitInputs& in)",
+							"static": true,
+							"line": 201
+						},
+						{
+							"kind": "method",
+							"name": "SetEditorRelativeMouseMode",
+							"signature": "void SetEditorRelativeMouseMode(bool enabled)",
+							"doc": "Editor-only SDL relative mouse mode, separate from the game/runtime\nSetMouseCapture. Viewport panels use it for FPS-style RMB drag without\nmanually warping the cursor, which is what caused the visible teleport\nwhen crossing the viewport edge. Engine ignores this path entirely, so\ntoggling it never fights the InputManager. SDL3 restores the cursor to\nits pre-relative-mode position on disable.",
+							"line": 209
+						},
+						{
+							"kind": "method",
+							"name": "IsEditorRelativeMouseMode",
+							"signature": "bool IsEditorRelativeMouseMode() const",
+							"line": 210
+						},
+						{
+							"kind": "method",
+							"name": "ConsumeEditorMouseDelta",
+							"signature": "void ConsumeEditorMouseDelta(float& dx, float& dy)",
+							"doc": "Reads and clears the accumulated relative motion since the last call.\ndx/dy are zeroed before returning so each frame's caller gets a\nfresh slice — call once per frame from one site.",
+							"line": 216
+						},
+						{
+							"kind": "method",
+							"name": "IsAnyRelativeMouseMode",
+							"signature": "bool IsAnyRelativeMouseMode() const",
+							"doc": "True when any relative-mouse path is engaged (runtime SetMouseCapture\nOR editor RMB). Used by the editor to neutralise io.MousePos for the\nframe so panels under the invisible-but-still-moving virtual cursor\ndon't fire hover/click events.",
+							"line": 222
+						},
+						{
+							"kind": "alias",
+							"name": "ResizeCallback",
+							"signature": "using ResizeCallback = std::function<void(int, int)>",
+							"line": 226
+						},
+						{
+							"kind": "method",
+							"name": "SetResizeCallback",
+							"signature": "void SetResizeCallback(ResizeCallback callback)",
+							"line": 227
+						},
+						{
+							"kind": "alias",
+							"name": "FileDropCallback",
+							"signature": "using FileDropCallback = std::function<void(const std::vector<std::string>&, int, int)>",
+							"doc": "Fires when files are dragged in from the OS file explorer.",
+							"line": 232
+						},
+						{
+							"kind": "method",
+							"name": "SetFileDropCallback",
+							"signature": "void SetFileDropCallback(FileDropCallback callback)",
+							"line": 233
+						},
+						{
+							"kind": "alias",
+							"name": "SDLEventCallback",
+							"signature": "using SDLEventCallback = std::function<void(const SDL_Event*)>",
+							"doc": "SDL event callback — called for every SDL event before Window handles it.\nUsed by UI backends that need raw events.",
+							"line": 239
+						},
+						{
+							"kind": "method",
+							"name": "SetSDLEventCallback",
+							"signature": "void SetSDLEventCallback(SDLEventCallback callback)",
+							"line": 240
+						},
+						{
+							"kind": "method",
+							"name": "AddSDLEventCallback",
+							"signature": "void AddSDLEventCallback(SDLEventCallback callback)",
+							"doc": "Additional listener, for when more than one subsystem needs SDL events.\nListeners fire in the order they were added.",
+							"line": 245
+						},
+						{
+							"kind": "alias",
+							"name": "CloseRequestCallback",
+							"signature": "using CloseRequestCallback = std::function<bool()>",
+							"doc": "Veto for the OS close request (Alt+F4 / titlebar X). Return true to allow\nthe window to close, false to ignore the request. If unset, the request\nis always accepted. Used by the editor to refuse close while a modal\n(e.g. Exporter) is active.",
+							"line": 253
+						},
+						{
+							"kind": "method",
+							"name": "SetCloseRequestCallback",
+							"signature": "void SetCloseRequestCallback(CloseRequestCallback callback)",
+							"line": 254
+						},
+						{
+							"kind": "method",
+							"name": "SetInputManager",
+							"signature": "void SetInputManager(InputManager* inputManager)",
+							"line": 258
+						},
+						{
+							"kind": "method",
+							"name": "SetTitleBarLeftInteractiveWidth",
+							"signature": "void SetTitleBarLeftInteractiveWidth(int width)",
+							"doc": "Left interactive (non-draggable) band of the custom titlebar.",
+							"line": 263
+						},
+						{
+							"kind": "method",
+							"name": "GetTitleBarLeftInteractiveWidth",
+							"signature": "int GetTitleBarLeftInteractiveWidth() const",
+							"line": 266
+						},
+						{
+							"kind": "method",
+							"name": "SetTitleBarRightInteractiveLeftX",
+							"signature": "void SetTitleBarRightInteractiveLeftX(int x)",
+							"doc": "Every X >= this value, left of the close/max/min buttons, is a normal\nclickable region instead of an SDL drag handle. Caller passes the\nleftmost X of the right cluster after laying it out. Default INT_MAX =\nno right band, so the whole right side stays draggable except the three\nwindow-control buttons.",
+							"line": 275
+						},
+						{
+							"kind": "method",
+							"name": "GetTitleBarRightInteractiveLeftX",
+							"signature": "int GetTitleBarRightInteractiveLeftX() const",
+							"line": 278
+						},
+						{
+							"kind": "method",
+							"name": "HasCustomTitleBar",
+							"signature": "bool HasCustomTitleBar() const",
+							"line": 282
+						},
+						{
+							"kind": "method",
+							"name": "GetTitleBarHeight",
+							"signature": "int GetTitleBarHeight() const",
+							"line": 285
+						},
+						{
+							"kind": "method",
+							"name": "SetTitleBarHeight",
+							"signature": "void SetTitleBarHeight(int height)",
+							"doc": "Window pixels, not logical ones: the hit test runs in the OS coordinate\nspace, so a host that draws its caption in logical units has to push the\nscaled height in whenever the display scale changes, or the bottom band\nof the drawn bar stops dragging the window.",
+							"line": 293
+						},
+						{
+							"kind": "method",
+							"name": "SetTitleBarButtonsWidth",
+							"signature": "void SetTitleBarButtonsWidth(int width)",
+							"doc": "Width of the min/max/close cluster; the hit test treats the whole band\nas normal-clickable. Default 138 = 3 x 46, the legacy chrome's buttons;\napps drawing their own set the exact width after layout.",
+							"line": 300
+						},
+						{
+							"kind": "method",
+							"name": "GetTitleBarButtonsWidth",
+							"signature": "int GetTitleBarButtonsWidth() const",
+							"line": 303
+						},
+						{
+							"kind": "method",
+							"name": "Minimize",
+							"signature": "void Minimize()",
+							"line": 307
+						},
+						{
+							"kind": "method",
+							"name": "Maximize",
+							"signature": "void Maximize()",
+							"line": 308
+						},
+						{
+							"kind": "method",
+							"name": "Show",
+							"signature": "void Show()",
+							"doc": "reveal a startHidden window once init is done",
+							"line": 309
+						},
+						{
+							"kind": "method",
+							"name": "Hide",
+							"signature": "void Hide()",
+							"doc": "instant visual close while shutdown proceeds",
+							"line": 310
+						},
+						{
+							"kind": "method",
+							"name": "Restore",
+							"signature": "void Restore()",
+							"line": 311
+						},
+						{
+							"kind": "method",
+							"name": "ToggleMaximize",
+							"signature": "void ToggleMaximize()",
+							"line": 312
+						},
+						{
+							"kind": "method",
+							"name": "IsMaximized",
+							"signature": "bool IsMaximized() const",
+							"line": 313
+						},
+						{
+							"kind": "method",
+							"name": "GetPosition",
+							"signature": "void GetPosition(int& x, int& y) const",
+							"doc": "Screen-space placement (editor editor persistence). GetPosition\nreports the window's current top-left in global coordinates; the\nsetters move/resize the OS window (no-ops while unset/minimized).",
+							"line": 318
+						},
+						{
+							"kind": "method",
+							"name": "SetPosition",
+							"signature": "void SetPosition(int x, int y)",
+							"line": 319
+						},
+						{
+							"kind": "method",
+							"name": "SetSize",
+							"signature": "void SetSize(int width, int height)",
+							"line": 320
+						},
+						{
+							"kind": "method",
+							"name": "GetSDLWindow",
+							"signature": "SDL_Window* GetSDLWindow() const",
+							"line": 322
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "Window::ECaptionHit",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Where a point in the custom title bar lands. Pulled out of the SDL\ncallback so it can be asserted without a window: the caption metrics\narrive from the UI in LOGICAL units and the hit test works in window\npixels, and a host that forgets the scale gets a title bar whose drawn\nbuttons are wider than the band reserved for them — so the click that\nshould close the window drags it instead.",
+					"line": 172,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Normal",
+							"signature": "Normal = 0",
+							"line": 173
+						},
+						{
+							"kind": "enumerator",
+							"name": "Draggable",
+							"signature": "Draggable",
+							"line": 174
+						},
+						{
+							"kind": "enumerator",
+							"name": "ResizeTop",
+							"signature": "ResizeTop",
+							"line": 175
+						},
+						{
+							"kind": "enumerator",
+							"name": "ResizeBottom",
+							"signature": "ResizeBottom",
+							"line": 176
+						},
+						{
+							"kind": "enumerator",
+							"name": "ResizeLeft",
+							"signature": "ResizeLeft",
+							"line": 177
+						},
+						{
+							"kind": "enumerator",
+							"name": "ResizeRight",
+							"signature": "ResizeRight",
+							"line": 178
+						},
+						{
+							"kind": "enumerator",
+							"name": "ResizeTopLeft",
+							"signature": "ResizeTopLeft",
+							"line": 179
+						},
+						{
+							"kind": "enumerator",
+							"name": "ResizeTopRight",
+							"signature": "ResizeTopRight",
+							"line": 180
+						},
+						{
+							"kind": "enumerator",
+							"name": "ResizeBottomLeft",
+							"signature": "ResizeBottomLeft",
+							"line": 181
+						},
+						{
+							"kind": "enumerator",
+							"name": "ResizeBottomRight",
+							"signature": "ResizeBottomRight",
+							"line": 182
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "Window::FCaptionHitInputs",
+					"namespace": "Mowo",
+					"line": 185,
+					"members": [
+						{
+							"kind": "field",
+							"name": "X",
+							"signature": "int X = 0",
+							"line": 186
+						},
+						{
+							"kind": "field",
+							"name": "Y",
+							"signature": "int Y = 0",
+							"line": 187
+						},
+						{
+							"kind": "field",
+							"name": "WindowW",
+							"signature": "int WindowW = 0",
+							"line": 188
+						},
+						{
+							"kind": "field",
+							"name": "WindowH",
+							"signature": "int WindowH = 0",
+							"line": 189
+						},
+						{
+							"kind": "field",
+							"name": "TitleBarHeight",
+							"signature": "int TitleBarHeight = 0",
+							"line": 190
+						},
+						{
+							"kind": "field",
+							"name": "ButtonsWidth",
+							"signature": "int ButtonsWidth = 0",
+							"line": 191
+						},
+						{
+							"kind": "field",
+							"name": "LeftInteractiveWidth",
+							"signature": "int LeftInteractiveWidth = 0",
+							"line": 192
+						},
+						{
+							"kind": "field",
+							"name": "RightInteractiveLeftX",
+							"signature": "int RightInteractiveLeftX = INT_MAX",
+							"doc": "\"Nothing on the right is interactive\", matching the window's own\ndefault. Zero would read as \"everything from x=0 is\", which makes\nthe whole caption undraggable — the opposite of no band at all.",
+							"line": 196
+						},
+						{
+							"kind": "field",
+							"name": "BorderSize",
+							"signature": "int BorderSize = 8",
+							"line": 197
+						},
+						{
+							"kind": "field",
+							"name": "Maximized",
+							"signature": "bool Maximized = false",
+							"line": 198
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

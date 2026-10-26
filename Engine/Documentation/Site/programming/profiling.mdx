@@ -74,7 +74,27 @@ The capture turns on the profiler, which takes a lock per scope and changes thre
 
 ## Tracy
 
-Tracy is compiled in by default in `dev` and `profile` builds on Windows and macOS, idle until a viewer connects. Elsewhere it is opt-in with `-o MOWO_ENABLE_TRACY=true`, and `=false` turns the default off.
+Tracy is compiled in by default in `dev` and `profile` builds on Windows and macOS, idle until a viewer connects. Elsewhere it is opt-in with `-o MOWO_ENABLE_TRACY=true`, and `=false` turns the default off. Run `tracy-profiler` and connect to the running game or editor.
+
+Game code profiles with the macros in `Core/Profiler.h` and never includes a Tracy header: the engine hosts the one Tracy client and the macros reach it through functions it exports, so a game module built against the installed engine compiles and records zones the same way. Where Tracy is compiled out, so is the Tracy half of every macro; zones still feed the CSV profile, the Profiler panel and traces. <Source path="Engine/Source/Runtime/Core/Public/Core/Profiler.h" />
+
+```cpp
+#include "Core/Profiler.h"
+
+void AWaveSpawner::Tick(float deltaTime) {
+	MOWO_PROFILE_FUNCTION();
+	MOWO_PROFILE_PLOT("Waves/Alive", static_cast<int64_t>(m_alive.size()));
+}
+```
+
+| Macro | Records |
+| --- | --- |
+| `MOWO_PROFILE_SCOPE(name)`, `MOWO_PROFILE_FUNCTION()` | A zone until the end of the scope; the name may be a runtime string |
+| `MOWO_PROFILE_RENDER(name)`, `_PHYSICS`, `_AUDIO`, `_SCRIPT`, `_INPUT`, `_SCENE`, `_ASSET`, `_UI`, `_ECS`, `_MEMORY` | A zone in that category's colour |
+| `MOWO_PROFILE_PLOT(name, value)` | A value over time; `value` is an `int64_t`, `double` or `float` |
+| `MOWO_PROFILE_MESSAGE(text, size)`, `MOWO_PROFILE_MESSAGE_L(literal)` | A message on the timeline |
+| `MOWO_PROFILE_ALLOC(ptr, size)`, `MOWO_PROFILE_FREE(ptr)` | An allocation and its free, for Tracy's memory view |
+| `MOWO_PROFILE_MUTEX(name, description)` | A mutex member Tracy draws on its lock timeline; lock it as `std::lock_guard<Mowo::FProfiledMutex>` |
 
 ## Whole-run traces
 

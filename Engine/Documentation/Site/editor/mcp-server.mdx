@@ -70,7 +70,7 @@ MCP 2025-06-18 over JSON-RPC 2.0: `initialize`, `ping`, `tools/list` and `tools/
 
 ## Adding your own tools
 
-An editor plugin can register tools in <Source symbol="FMcpToolRegistry" />. A tool has a name, a description, an input schema, an access level (Full when not set) and a handler that returns an <Source symbol="FMcpToolResult" />. Return `FMcpToolResult::Wait()` to be called again next frame. Unregister the tool when your module shuts down. See [Plugins and extensions](/docs/editor/plugins/).
+An editor plugin can register tools in <Source symbol="FMcpToolRegistry" />. A tool has a name, a description, an input schema, an access level (Full when not set) and a handler that returns an <Source symbol="FMcpToolResult" />. Arguments, schemas and results are <Source symbol="FMcpJson" /> values: `Value(key, fallback)` reads an argument and falls back when it is missing or of another type, `Get(key)` reaches a nested object, and `Parse` / `Dump` convert to and from JSON text, so a plugin needs no JSON library of its own. Return `FMcpToolResult::Wait()` to be called again next frame. Unregister the tool when your module shuts down. See [Plugins and extensions](/docs/editor/plugins/).
 
 ```cpp title="MyPluginMcpTools.cpp"
 #include <EditorFramework/McpServer.h>
@@ -84,8 +84,8 @@ void RegisterCountTool() {
 	tool.Description = "Echo a message back to the agent.";
 	tool.InputSchema = Mowo::FMcpToolRegistry::Schema({ { "message", "string" } });
 	tool.Access = Mowo::EMcpToolAccess::Read;
-	tool.Handler = [](const nlohmann::json& args, uint32_t) {
-		return Mowo::FMcpToolResult::Text(args.value("message", std::string()));
+	tool.Handler = [](const Mowo::FMcpJson& args, uint32_t) {
+		return Mowo::FMcpToolResult::Text(args.Value("message", std::string()));
 	};
 
 	Mowo::FMcpToolRegistry::Get().Register(std::move(tool));
