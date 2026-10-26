@@ -5,16 +5,9 @@ order: 6
 sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassRegistry.h
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptClassRegistry.cpp
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassValidator.h
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
-  - Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp
-  - Engine/Source/Runtime/Game/Private/AVisualScriptActor.cpp
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptCharacter.h
-  - Engine/Source/Runtime/Game/Private/Game/ActorSerializer.cpp
-  - Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/ActorEditorPanel.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -41,7 +34,7 @@ An instance is always an object of a native **backing class**. The registry walk
 
 So a class under your own `ACharacter` subclass is an `AVisualScriptCharacter` too, and a visual child inherits its visual parent's backing. Every backing class owns one `FVisualScriptRuntime` and forwards its lifecycle there after its native base's own, so a Character class behaves like an Actor class in the graph and a `Tick` graph reads where the character has already moved <Source symbol="FVisualScriptRuntime" />. C++ that needs the visual state of any backed object asks `FVisualScriptRuntime::Of(object)`.
 
-A native parent that is not in the backing class's ancestry, such as a component class, is rejected: the class is reparented onto the backing class and an error is logged <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptClassRegistry.cpp" />. A parent name that does not resolve yet is left alone, because it may be a visual class that registers later. Classes register parents first, whatever the file order.
+A native parent that is not in the backing class's ancestry, such as a component class, is rejected: the class is reparented onto the backing class and an error is logged. A parent name that does not resolve yet is left alone, because it may be a visual class that registers later. Classes register parents first, whatever the file order.
 
 ## How members resolve
 
@@ -70,7 +63,7 @@ Blocking is per graph: a class with one broken event still runs its sound ones, 
 
 ## Class defaults
 
-Each variable's default is the class default. An instance keeps a copy of the defaults it was seeded with, and that copy decides what happens when the class changes <Source path="Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp" />:
+Each variable's default is the class default. An instance keeps a copy of the defaults it was seeded with, and that copy decides what happens when the class changes:
 
 <Steps>
 <Step title="You change a default and compile">
@@ -97,7 +90,7 @@ A value that differs is authored instance state. It survives the reload.
 
 ### Per-instance overrides in a level
 
-A placed instance can override variables marked **Instance Editable** in the level's Details panel. Only variables that differ from the class default are written to the scene, under `VisualScriptVars` on the actor. Component slot overrides are written under `VisualScriptSlotOverrides` as `<slot>.<property>`, and are read back before construction runs, so the class default cannot overwrite them <Source path="Engine/Source/Runtime/Game/Private/Game/ActorSerializer.cpp" />. Reset a row to its default and the delta disappears from the scene.
+A placed instance can override variables marked **Instance Editable** in the level's Details panel. Only variables that differ from the class default are written to the scene, under `VisualScriptVars` on the actor. Component slot overrides are written under `VisualScriptSlotOverrides` as `<slot>.<property>`, and are read back before construction runs, so the class default cannot overwrite them. Reset a row to its default and the delta disappears from the scene.
 
 ## Component slots
 
@@ -112,14 +105,14 @@ Each slot has:
 
 A slot with no placement lands on the actor's own entity. A slot with a transform or an attach parent gets its own child entity under the actor. Attachment is resolved after every slot exists, so a slot may name a parent declared after it. Slot defaults cover bools, every integer width, floats, enums, vectors, quaternions, strings and asset paths. A property a slot default cannot express is reported by name.
 
-A slot of type `Trigger` gives the actor a live trigger component and keeps it ticking, so overlaps run the class's `OnTriggerEnter` and `OnTriggerExit` graphs <Source path="Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp" />. The [door how-to](/docs/visual-scripting/how-to-door/) uses this.
+A slot of type `Trigger` gives the actor a live trigger component and keeps it ticking, so overlaps run the class's `OnTriggerEnter` and `OnTriggerExit` graphs. The [door how-to](/docs/visual-scripting/how-to-door/) uses this.
 
 ### Edit slots
 
 <Steps>
 <Step title="Add a component">
 
-In the Visual Scripting editor, click **+** in the **My Visual Script** header and pick a component, or use the **Components** panel once the class has one. A class with component slots opens in the class layout, with the **Components** panel and a **Viewport** tab that draws the slots <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp" />.
+In the Visual Scripting editor, click **+** in the **My Visual Script** header and pick a component, or use the **Components** panel once the class has one. A class with component slots opens in the class layout, with the **Components** panel and a **Viewport** tab that draws the slots.
 
 </Step>
 <Step title="Set its defaults">
@@ -134,7 +127,7 @@ Save. The editor writes the class and re-registers it, so placed instances pick 
 </Step>
 </Steps>
 
-The standalone **Actor Editor** also edits a `.vscript` class's slots, their attach hierarchy and property defaults. Open it with **Open With > Actor Editor** in the Content Browser <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ActorEditorPanel.cpp" />.
+The standalone **Actor Editor** also edits a `.vscript` class's slots, their attach hierarchy and property defaults. Open it with **Open With > Actor Editor** in the Content Browser.
 
 <Screenshot id="visual-script-actor-editor-slots" alt="Visual Scripting editor in the class layout on BP_DoorTrigger: the Components panel shows the actor root with a Trigger slot selected, Details on the right shows its shape set to Sphere and radius set to 3, and the Viewport tab shows the trigger's sphere" caption="Component slots in the class layout." />
 

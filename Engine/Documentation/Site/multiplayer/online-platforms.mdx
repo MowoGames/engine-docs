@@ -4,30 +4,16 @@ description: Add Steam, Discord and Mowo Online through their opt-in plugins - l
 order: 9
 sources:
   - Engine/Plugins/SteamPlatform/SteamPlatform.mplugin
-  - Engine/Plugins/SteamPlatform/SteamPlatform.Build.cs
-  - Engine/Plugins/SteamPlatform/Private/SteamInit.cpp
-  - Engine/Plugins/SteamPlatform/Private/SteamWorkshop.cpp
-  - Engine/Plugins/SteamPlatform/Private/SteamTextInput.h
   - Engine/Plugins/DiscordPlatform/DiscordPlatform.mplugin
-  - Engine/Plugins/DiscordPlatform/DiscordPlatform.Build.cs
-  - Engine/Plugins/DiscordPlatform/Private/DiscordInit.cpp
   - Engine/Plugins/MowoOnlinePlatform/MowoOnlinePlatform.mplugin
-  - Engine/Plugins/MowoOnlinePlatform/MowoOnlinePlatform.Build.cs
-  - Engine/Plugins/MowoOnlinePlatform/Private/MowoOnlineService.cpp
-  - Engine/Plugins/MowoOnlinePlatform/Public/MowoOnlinePlatform/MMowoOnlineStatics.h
   - Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos_sdk.h
   - Engine/Source/Runtime/Networking/Public/Networking/OnlineService.h
   - Engine/Source/Runtime/Networking/Public/Networking/PlatformInit.h
   - Engine/Source/Runtime/Networking/Public/Networking/Subsystems/MPlatformSubsystem.h
   - Engine/Source/Runtime/Networking/Public/Networking/SteamTicketValidator.h
   - Engine/Source/Runtime/Networking/Public/Networking/ClientAuth.h
-  - Engine/Source/Runtime/Networking/Private/CompositeTransport.cpp
-  - Engine/Source/Runtime/AssetSystem/Private/ProjectSerializer.cpp
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-  - Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs
-  - Engine/Documentation/ROADMAP.md
-verifiedAt: 7f8f31f8d
+verifiedAt: 3f3a08d31
 ---
 
 Steam, Discord and Mowo Online are not built into the engine. Each lives in its own plugin, and all three are **off by default** for a project (`"enabledByDefault": false`). When a plugin loads, it registers an `IOnlineService` with the engine, and engine code talks only to that interface <Source symbol="IOnlineService" />. No engine module includes a platform SDK header. A build without the plugins still hosts and joins over ENet with a direct address.
@@ -40,13 +26,13 @@ Steam, Discord and Mowo Online are not built into the engine. Each lives in its 
 
 ## Build options
 
-Each plugin builds unless its MBT build option is off. All three default to on <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs" />:
+Each plugin builds unless its MBT build option is off. All three default to on:
 
 | Option | Plugin | Also needs |
 |---|---|---|
 | `MOWO_ENABLE_STEAM` | SteamPlatform | The vendored Steamworks SDK for the platform (`win-x64`, `linux-x64`, `osx-arm64`). Never on mobile. |
 | `MOWO_ENABLE_DISCORD` | DiscordPlatform | The vendored Discord Social SDK (`win-x64`, `linux-x64`, `osx-arm64`). Never on mobile. |
-| `MOWO_ENABLE_MOWO_ONLINE` | MowoOnlinePlatform | Nothing; the MOS SDK is built from source. Never on mobile. |
+| `MOWO_ENABLE_MOWO_ONLINE` | MowoOnlinePlatform | Nothing; the MOS SDK ships with the engine. Never on mobile. |
 
 Build with `-o MOWO_ENABLE_STEAM=false` (and so on) to leave a platform out entirely. See the [mbt CLI reference](/docs/reference/mbt-cli/).
 
@@ -69,11 +55,11 @@ Open Project Settings on the **Project › Platform** page. For Steam, turn on *
 <Screenshot id="multiplayer-project-settings-platform" alt="Mowo Editor Project Settings window on the Project › Platform page, showing the STEAM section with Enable Steam on, Steam App ID set to 480, Require Ticket Auth, Default Lobby Type, Default Max Players and the presence fields, the DISCORD section with Enable Discord and Discord Application ID, and the Mowo Online Services section with Enable Mowo Online, Mowo Product ID and Restart Through Launcher" caption="Project › Platform in Project Settings." />
 </Step>
 <Step title="Save">
-The page writes the `platform` section of the `.mproject` file. The engine applies it through `FPlatformInit::Apply` whenever the project opens <Source symbol="FPlatformInit" />.
+The page writes the `platform` section of the `.mproject` file. The engine applies it through `FPlatformInit::Apply` whenever the project opens.
 </Step>
 </Steps>
 
-The `platform` settings and their defaults <Source symbol="FPlatformInitParams" />:
+The `platform` settings and their defaults:
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -138,7 +124,7 @@ The service comes up only when the project enables it and the launcher started t
 
 While running, the plugin ticks the SDK every frame, places the launcher overlay over the game window, points cloud saves at the game's SaveGames folder (unless the game chose another), and quits the engine when the launcher asks it to. Through `IOnlineService` it provides presence, session adverts, achievements (stats set achievement progress), the overlay callback, cloud files and a Mowo ID access token as the session ticket. It never becomes the transport identity: Steam keeps lobbies, P2P and ticket authentication.
 
-`MMowoOnlineStatics` <Source path="Engine/Plugins/MowoOnlinePlatform/Public/MowoOnlinePlatform/MMowoOnlineStatics.h" /> exposes the rest to C++ and Visual Scripting. Every function answers `false` or empty when the game was not started by the launcher:
+`MMowoOnlineStatics` exposes the rest to C++ and Visual Scripting. Every function answers `false` or empty when the game was not started by the launcher:
 
 | Functions | Area |
 |---|---|
@@ -155,7 +141,7 @@ A game not built with the engine can link `mos_sdk` directly: include `mos/mos_s
 
 ## Steam extras
 
-- **Workshop.** The player's subscribed, installed Workshop items load as mod folders. Each one is verified like a local mod, so a Workshop item gets no more trust than one in `Saved/Mods` <Source path="Engine/Plugins/SteamPlatform/Private/SteamWorkshop.cpp" />. See [Shipping](/docs/shipping/) for mods.
+- **Workshop.** The player's subscribed, installed Workshop items load as mod folders. Each one is verified like a local mod, so a Workshop item gets no more trust than one in `Saved/Mods`. See [Shipping](/docs/shipping/) for mods.
 - **On-screen keyboard.** `IOnlineService::ShowTextInput` opens the Big Picture keyboard, or the Steam Deck's floating keyboard over a focused Arc text field.
 - **Steam Input glyphs.** `GetGamepadFamily` and `GetGamepadGlyphPath` report the controller family (including Steam Deck) and a glyph image per button.
 
@@ -184,7 +170,7 @@ Without `--appid` and a key, the dedicated server accepts every connection witho
 ## Status
 
 <Callout type="warning">
-<Status /> The Steam integration is complete in code, but the two-machine live Steam runbook (lobbies, invites, tickets and cloud saves between two real accounts) has not been run yet <Source path="Engine/Documentation/ROADMAP.md" />. Treat Steam sessions as untested outside Play in Editor until it has.
+<Status /> The Steam integration is complete in code, but the two-machine live Steam runbook (lobbies, invites, tickets and cloud saves between two real accounts) has not been run yet. Treat Steam sessions as untested outside Play in Editor until it has.
 </Callout>
 
 ## Related

@@ -14,7 +14,6 @@ sources:
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MtexLoader.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MaudioFormat.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MaudioLoader.h
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/AssetCommand.cs
 verifiedAt: c1d08db53
 ---
 
@@ -22,7 +21,7 @@ Every asset in `Content/` is an **asset package**: one data model with two encod
 
 ## Asset packages
 
-A package has three parts <Source symbol="MdfPackage" />:
+A package has three parts:
 
 | Part | What it holds |
 |---|---|
@@ -32,13 +31,13 @@ A package has three parts <Source symbol="MdfPackage" />:
 
 <Flow steps={["Header (MPKG)", "Summary (binary MDF)", "Payload (binary MDF)", "Bulk chunks"]} caption="A binary package. A text package is the same summary node followed by the payload nodes, with no bulk." />
 
-A binary package starts with the magic `MPKG` and a 56-byte header with the offset and size of each part <Source symbol="MdfPackageHeader" />. Because the summary sits at the front, the registry and the Content Browser read a thumbnail or an asset's references without pulling its geometry off disk.
+A binary package starts with the magic `MPKG` and a 56-byte header with the offset and size of each part. Because the summary sits at the front, the registry and the Content Browser read a thumbnail or an asset's references without pulling its geometry off disk.
 
 References between packages are by **id**, with the path kept beside it. A rename leaves a [redirect](/docs/content-pipeline/redirectors/) for the path; the id keeps resolving either way.
 
 ### What each binary type holds
 
-| Type | Extension | Contents <Source symbol="FAssetPackageTypes" /> |
+| Type | Extension | Contents |
 |---|---|---|
 | Static Mesh, Skeletal Mesh | `.mesh`, `.skmesh` | The built model in the `RenderData` chunk. The payload carries mesh settings (collision, sockets, material slot bindings) and the summary tags each material slot with its `.mat` package. |
 | Skeleton | `.skel` | Bones in the payload. |
@@ -62,7 +61,7 @@ See the [mbt CLI reference](/docs/reference/mbt-cli/).
 
 ## What the cook does to a package
 
-`mbt cook` runs `FAssetPackageCook` <Source symbol="FAssetPackageCook" /> over every binary package it stages:
+`mbt cook` runs `FAssetPackageCook` over every binary package it stages:
 
 - a Texture builds its mip chain for the target (BC7 for color, BC5 for normal maps, BC6H for HDR, ASTC on mobile);
 - a Sound is re-encoded when the target asks for another codec (Opus on mobile);
@@ -84,7 +83,7 @@ Three formats carry what the renderer and audio engine decode at runtime without
 
 ### Rules every format follows
 
-The AssetFormats module states three rules every binary format keeps <Source symbol="FFormatContract" />:
+The AssetFormats module states three rules every binary format keeps:
 
 - **Little-endian on disk.** Every shipping target is little-endian.
 - **Versioning is additive.** A reader accepts any version from 1 up to a ceiling and gates each newer block on `version >= N`. It never rejects a file for being older, and a writer never reuses a field.
@@ -92,7 +91,7 @@ The AssetFormats module states three rules every binary format keeps <Source sym
 
 ### .mmodel
 
-A `.mmodel` is a pre-processed model that loads straight to the GPU <Source symbol="MmodelHeader" />. The format grew one block at a time, and older files still load:
+A `.mmodel` is a pre-processed model that loads straight to the GPU. The format grew one block at a time, and older files still load:
 
 | Version | Added |
 |---|---|
@@ -113,7 +112,7 @@ A `.mmodel` is a pre-processed model that loads straight to the GPU <Source symb
 
 ### .mtex
 
-A `.mtex` holds a texture ready for upload. The 64-byte header records size, depth (6 for a cubemap, or the layer or slice count of an array or volume), mip count, compression, flags, channel count and bytes per channel <Source symbol="MtexCompression" />:
+A `.mtex` holds a texture ready for upload. The 64-byte header records size, depth (6 for a cubemap, or the layer or slice count of an array or volume), mip count, compression, flags, channel count and bytes per channel:
 
 | Compression | Use |
 |---|---|
@@ -129,7 +128,7 @@ Flags mark sRGB, cubemap, normal map, HDR, premultiplied alpha, arrays and volum
 
 ### .maudio
 
-A `.maudio` holds audio with its playback metadata. The 80-byte header records sample rate, channel count, codec, flags, sample count, duration and loop points <Source symbol="MaudioCodec" />.
+A `.maudio` holds audio with its playback metadata. The 80-byte header records sample rate, channel count, codec, flags, sample count, duration and loop points.
 
 - **Codecs.** PCM 16-bit, PCM 24-bit, 32-bit float, and Opus (20 ms packets with an offset table). Vorbis is reserved and never written.
 - **Flags.** Streaming, looping, spatial and preload.
@@ -172,4 +171,4 @@ const float seconds = clip.header.duration;
 
 - [File types](/docs/content-pipeline/file-types/) for every extension.
 - [Cooking](/docs/content-pipeline/cooking/) for when these files are written.
-- API: [`MdfPackage`](/docs/api/mdf/mdfpackage/), [`FAssetPackageTypes`](/docs/api/assetformats/fassetpackagetypes/), [`MmodelLoader`](/docs/api/assetformats/mmodelloader/), [`MtexLoader`](/docs/api/assetformats/mtexloader/), [`MaudioLoader`](/docs/api/assetformats/maudioloader/), [`FFormatContract`](/docs/api/assetformats/fformatcontract/).
+- API: [`MdfPackage`](/docs/api/mdf/mdfpackage/).

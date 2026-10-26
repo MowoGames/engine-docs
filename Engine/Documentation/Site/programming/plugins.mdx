@@ -4,20 +4,14 @@ description: Write a plugin with a .mplugin manifest, runtime and editor C++ mod
 order: 7
 sources:
   - Engine/Source/Runtime/Project/Public/Project/PluginManager.h
-  - Engine/Source/Runtime/Project/Private/PluginManager.cpp
   - Engine/Source/Runtime/Core/Public/Core/FModuleManager.h
   - Engine/Source/Runtime/Game/Public/Game/EngineModularRegistry.h
   - Engine/Source/Runtime/ECS/Public/ECS/SceneSystemRegistry.h
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorPanelRegistry.h
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorExtensionRegistry.h
-  - Engine/Source/Developer/MowoEditorPluginProbe/Private/EditorPluginProbe.cpp
-  - Engine/Source/Developer/MowoEditorPluginProbe/MowoEditorPluginProbe.Build.cs
   - Engine/Plugins/Combat/Combat.mplugin
-  - Engine/Plugins/Combat/Combat.Build.cs
   - Samples/SampleProject/Config/Plugins.ini
-  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp
-verifiedAt: 7f8f31f8d
+verifiedAt: 3f3a08d31
 ---
 
 A plugin is a folder with a `.mplugin` manifest and, usually, C++ modules and a `Content/` folder. When a project enables it, its content mounts into the virtual filesystem, its modules load and register their types, and its editor module (if it has one) extends the editor. The engine ships <Fact id="plugins.length" /> plugins in `Engine/Plugins/`, all off by default.
@@ -68,7 +62,7 @@ A plugin lives either in `Engine/Plugins/<Name>/` (shared by every project on th
 | `modules` | The C++ modules to load: a name, or an object with `name`, `type` and `loadingPhase` |
 | `requiresOnline`, `server`, `dlc`, `beta`, `marketplaceUrl` | Flags the Plugins window and packaging read |
 
-A module's `type` decides which hosts load it. `"Runtime"` (the default) loads everywhere; `"Editor"` loads only in the editor, and the game, the server and packaging skip it. <Source path="Engine/Source/Runtime/Project/Private/PluginManager.cpp" />
+A module's `type` decides which hosts load it. `"Runtime"` (the default) loads everywhere; `"Editor"` loads only in the editor, and the game, the server and packaging skip it.
 
 ## Enabling a plugin
 
@@ -198,8 +192,6 @@ extern "C" MOWO_MODULE_EXPORT void ShutdownModule() {
 Remove in `ShutdownModule` everything you added in `InitializeModule`. A panel factory, a menu callback and every widget they built are code inside your DLL; an entry left behind is called or destroyed after that code is gone.
 </Callout>
 
-`Engine/Source/Developer/MowoEditorPluginProbe` is a complete editor module that registers one of each extension kind. <Source path="Engine/Source/Developer/MowoEditorPluginProbe/Private/EditorPluginProbe.cpp" />
-
 ## The module ABI check
 
 Every module binary exports its ABI version with `MOWO_IMPLEMENT_MODULE_API_VERSION()` from `Core/FModuleManager.h`. Right after loading a library, `FModuleManager` compares it with the engine's `MOWO_MODULE_API_VERSION` and the C++ runtime the module was built against. A binary that exports another number, or none, is refused: the log names the module and says to rebuild it against this engine, its static registrations are removed, and the library is freed. <Source symbol="FModuleManager::LoadModule" />
@@ -230,4 +222,4 @@ An enabled plugin's `Content/` mounts at `Plugins/<Name>`, so its assets are ref
 
 ## Engine plugins and feature modules
 
-Engine systems such as AI and navigation, the Sequencer and destruction are feature modules, not plugins: they always ship and the engine loads them by name. What stays a plugin is what a game opts into: platform SDKs (SteamPlatform, DiscordPlatform, MowoOnlinePlatform), gameplay kits (Combat, Survival), SmartProps and ScanHierarchy. No engine module depends on a plugin. See [Architecture](/docs/programming/architecture/#feature-modules).
+Engine systems such as AI and navigation, the Sequencer and destruction are feature modules, not plugins: they always ship and the engine loads them by name. What stays a plugin is what a game opts into: platform SDKs (SteamPlatform, DiscordPlatform, MowoOnlinePlatform), gameplay kits (Combat, Survival), SmartProps and ScanHierarchy. No engine module depends on a plugin. See [Architecture](/docs/getting-started/core-concepts/#feature-modules).

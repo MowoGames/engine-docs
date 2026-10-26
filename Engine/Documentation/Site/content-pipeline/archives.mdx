@@ -10,12 +10,6 @@ sources:
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/IoStoreFileSystem.h
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/PackagePaks.h
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/VFS.h
-  - Engine/Source/Runtime/Filesystem/Private/VFS.cpp
-  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
-  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
-  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
-  - Engine/Source/Programs/MowoIoStore/Private/MowoIoStore.cpp
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
 verifiedAt: 7f8f31f8d
 ---
 
@@ -39,14 +33,14 @@ Game content mounts at the root because the cook prefixes every key with `Conten
 
 ## Paks in a packaged game
 
-`mbt package` stages archives in the package's `Content/Paks` folder. Their file names are opaque hashes; each archive describes itself in a reserved `__pak.mdf` entry: its kind (`engine`, `shaders`, `content` or `patch`), its mount point, and its order within the kind, which is a content chunk's id or a patch's sequence <Source symbol="FPakDescriptor" />. At startup the game scans the folder and mounts each pak by its descriptor <Source symbol="FPackagePaks" />.
+`mbt package` stages archives in the package's `Content/Paks` folder. Their file names are opaque hashes; each archive describes itself in a reserved `__pak.mdf` entry: its kind (`engine`, `shaders`, `content` or `patch`), its mount point, and its order within the kind, which is a content chunk's id or a patch's sequence. At startup the game scans the folder and mounts each pak by its descriptor.
 
 ## The .meaf archive
 
-A `.meaf` is a flat, hash-indexed archive, currently version 8 <Source symbol="MEAFHeader" />:
+A `.meaf` is a flat, hash-indexed archive, currently version 8:
 
 - **Compression per entry.** zstd (the default) or LZ4. Entries of 256 KiB or more are block-compressed, so a range read decodes only the blocks it touches. An entry that does not shrink, such as an already compressed texture or video, is stored as is. Small text entries of one type can share a trained zstd dictionary.
-- **Encryption.** XChaCha20 over the table of contents and entry payloads, with the key looked up by the header's key id in `FMeafKeyRing` <Source symbol="FMeafKeyRing" />. The header stays plaintext.
+- **Encryption.** XChaCha20 over the table of contents and entry payloads, with the key looked up by the header's key id in `FMeafKeyRing`. The header stays plaintext.
 - **Signing.** EdDSA over BLAKE2b covers the header, the table of contents and every payload byte. A signed archive checks each data block the first time a read touches it, so mounting does not hash the whole pak.
 - **Open order.** Entries can be laid out in the order a play session first read them, from `Config/OpenOrder.txt`, so startup reads are contiguous. `mbt package --promote-open-order` copies a recording made with `MowoGame --record-open-order` over that file.
 
@@ -54,7 +48,7 @@ A `.meaf` is a flat, hash-indexed archive, currently version 8 <Source symbol="M
 
 ## IoStore containers
 
-An IoStore container splits an archive's content into two files <Source symbol="FIoStoreFormat" />:
+An IoStore container splits an archive's content into two files:
 
 - **`<name>.mutoc`**, the table of contents: one row per chunk and per compression block. It is the only file read at mount.
 - **`<name>.mucas`**, the container: every chunk cut into fixed-size blocks (64 KiB by default), each compressed on its own and read on demand.

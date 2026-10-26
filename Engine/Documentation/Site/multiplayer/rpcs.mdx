@@ -5,16 +5,11 @@ order: 3
 sources:
   - Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
-  - Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/RpcDispatcher.h
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/NetBlobChannel.h
-  - Engine/Source/Runtime/Networking/Private/NetBlobChannel.cpp
   - Engine/Source/Runtime/Networking/Public/Networking/Session/FNetSession.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetEventCodec.h
-  - Engine/Source/Runtime/Networking/Private/NetSession.cpp
-  - Engine/Source/Developer/MowoSandbox/Public/Sandbox/NetShooterComponent.h
-  - Engine/Source/Developer/MowoSandbox/Private/SandboxNetGame.cpp
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h
 verifiedAt: 5922e6e5e
 ---
@@ -63,7 +58,7 @@ struct MOWO_REFLECTED_NAMED("NetShooter") MCATEGORY("Networking") NetShooterComp
 }
 ```
 
-This is the shape of the engine's own sandbox example <Source symbol="NetShooterComponent" />. Arguments must be marshallable: `bool`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `float`, `double`, `Vec2`, `Vec3`, `Vec4`, `Quat` and `std::string`. RPC methods return `void`. Object and custom parameter types make a method unusable as an RPC <Source symbol="FRpcDispatcher" />.
+This is the shape of the engine's own sandbox example. Arguments must be marshallable: `bool`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `float`, `double`, `Vec2`, `Vec3`, `Vec4`, `Quat` and `std::string`. RPC methods return `void`. Object and custom parameter types make a method unusable as an RPC <Source symbol="FRpcDispatcher" />.
 
 ## What the annotation does for you
 
@@ -118,12 +113,12 @@ static bool RequestFire(Mowo::World& world, Mowo::EntityID entity, const Mowo::V
 The host uses `SendRpcToAllClients` or `SendRpcToClient` for the other directions. On the receiving side, `FRpcDispatcher::DispatchComponentRpcByIndex` resolves the component on the target entity and invokes the method.
 
 <Callout type="engine">
-While a session is running, `FNetSession` owns the RPC receiver. For component RPCs it looks up the entity and calls `DispatchComponentRpcByIndex` itself, then runs any fallback you installed with `SetRpcFallback` <Source path="Engine/Source/Runtime/Networking/Private/NetSession.cpp" />. You do not need to install a receiver of your own; the sandbox uses the fallback to turn a received `ServerFire` into a `MulticastFire` <Source path="Engine/Source/Developer/MowoSandbox/Private/SandboxNetGame.cpp" />.
+While a session is running, `FNetSession` owns the RPC receiver. For component RPCs it looks up the entity and calls `DispatchComponentRpcByIndex` itself, then runs any fallback you installed with `SetRpcFallback`. You do not need to install a receiver of your own; the sandbox uses the fallback to turn a received `ServerFire` into a `MulticastFire`.
 </Callout>
 
 ## The authority gate
 
-Client-to-server RPCs are **denied by default**. Each one clears these checks in order before it reaches your code <Source path="Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp" />:
+Client-to-server RPCs are **denied by default**. Each one clears these checks in order before it reaches your code:
 
 <Flow steps={["Known peer", "Direction allowed", "Method allow-listed", "Within rate limit", "Owner check", "Invoke"]} highlight={4} caption="A client RPC that fails any check is dropped and counted in GetRpcSecurityStats()." />
 
@@ -160,7 +155,7 @@ The default bucket suits actions a player triggers by hand. A continuously swept
 
 An RPC whose arguments reach 64 KiB does not fit the normal RPC packet. It goes through the **blob lane** instead: the packet is cut into 1 KiB chunks and sent on the reliable unordered channel, the receiver acknowledges them, and the sender keeps at most a window of unacknowledged chunks in flight at a set byte rate per peer <Source symbol="FNetBlobChannel" />. A large payload therefore neither stalls the ordered reliable channel nor floods the link. When the last chunk arrives, the receiver handles the RPC exactly as if it had come in one packet, so a client RPC still passes the [authority gate](#the-authority-gate).
 
-A blob is not ordered against the rest of the reliable stream. That is why smaller RPCs stay on their own channel by default; set `net.RpcBlobThreshold` to route every RPC packet above that many bytes through the lane as well. A client paces its blob lane to at most half the host's incoming byte budget, so the host's flood guard does not drop a large client RPC chunk by chunk <Source path="Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp" />.
+A blob is not ordered against the rest of the reliable stream. That is why smaller RPCs stay on their own channel by default; set `net.RpcBlobThreshold` to route every RPC packet above that many bytes through the lane as well. A client paces its blob lane to at most half the host's incoming byte budget, so the host's flood guard does not drop a large client RPC chunk by chunk.
 
 | Cvar | Default | Meaning |
 |---|---|---|

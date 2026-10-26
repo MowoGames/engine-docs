@@ -4,22 +4,8 @@ sidebarTitle: Targets and link modes
 description: Which target a package builds, how a dedicated server package differs, and when to ship a monolithic or a modular build.
 order: 2
 sources:
-  - Engine/Source/MowoGame.Target.cs
-  - Engine/Source/MowoServer.Target.cs
-  - Engine/Source/MowoGameNoOnline.Target.cs
-  - Engine/Source/MowoEditor.Target.cs
   - Templates/TP_Coop/Source/TP_Coop.Target.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageStagingPlan.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PeImports.cs
-  - Engine/Source/Runtime/MowoServer/Private/MowoServer.cpp
-  - Engine/Source/Runtime/GameHost/GameHost.Build.cs
-  - Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp
-verifiedAt: 7f8f31f8d
+verifiedAt: 3f3a08d31
 ---
 
 Two choices shape every package: which **target** you build, and how the engine is **linked** into it. The target decides which executable ships and what code it contains. The link mode decides whether the engine arrives as many libraries or inside one executable.
@@ -31,15 +17,16 @@ A target is a `<Target>.Target.cs` file that names a launch module, a target typ
 | Target | Type | Launch module | What it adds | Packaged by |
 |---|---|---|---|---|
 | `MowoGame` | Game | `MowoGame` | nothing | `mbt package` (default) |
-| `MowoServer` | Server | `MowoServer` | `WITH_SERVER=1`, its own output tree | `mbt package --target Server` |
-| `MowoGameNoOnline` | Game | `MowoGame` | `MOWO_NOONLINE=1`, no session or replication layer, its own output tree | `mbt build -t MowoGameNoOnline` only |
-| `MowoEditor` | Editor | `MowoEditor` | editor modules; refused in `release` and `profile` | `mbt package-editor` |
+| `MowoServer` | Server | `MowoServer` | `WITH_SERVER=1` | `mbt package --target Server` |
 
-<Source path="Engine/Source/MowoServer.Target.cs" /> and <Source path="Engine/Source/MowoGameNoOnline.Target.cs" /> set `bSeparateOutputTree`, so their binaries build into a folder of their own, `Engine/Binaries/<platform>/<config>-server/` and `.../<config>-noonline/`, instead of overwriting the shared ones.
 
-A project created from a template carries its own targets in `Source/`: `<Project>.Target.cs` (type Game, launch module `MowoGame`, `OutputName` the project, the game module in `ExtraModuleNames`) and `<Project>Editor.Target.cs` <Source path="Templates/TP_Coop/Source/TP_Coop.Target.cs" />. `mbt package` builds the game host through the project's own target: the only `.Target.cs` in `Source/`, or the one named after the `.mproject` when there are several. Without one it builds the engine's `MowoGame` target with the project's `Source/` modules added <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />. Either way the staged host is named after the product: `Binaries/<platform>/<Product>.exe`.
+A project created from a template carries its own targets in `Source/`: `<Project>.Target.cs` (type Game, launch module `MowoGame`, `OutputName` the project, the game module in `ExtraModuleNames`) and `<Project>Editor.Target.cs` <Source path="Templates/TP_Coop/Source/TP_Coop.Target.cs" />. `mbt package` builds the game host through the project's own target: the only `.Target.cs` in `Source/`, or the one named after the `.mproject` when there are several. Without one it builds the engine's `MowoGame` target with the project's `Source/` modules added. Either way the staged host is named after the product: `Binaries/<platform>/<Product>.exe`.
 
 `mbt package` accepts `--target Game` (the default) and `--target Server`.
+
+<Callout type="warning">
+The installed editor build ships the engine prebuilt in the `dev` configuration, and `mbt` builds your game module in that configuration only. Packages made from it are therefore `dev` packages. A dedicated server package needs the Server target's own engine build, which the installed build does not include yet.
+</Callout>
 
 ## The dedicated server package
 
@@ -47,7 +34,7 @@ A project created from a template carries its own targets in `Source/`: `<Projec
 
 - It builds the Server target, whose module set leaves the GPU backends and the scene renderer out.
 - It skips shader compilation and ships no shader archives, no engine content and no PSO cache.
-- The host is `Binaries/<platform>/<Product>Server.exe` behind a console launcher `<Product>Server.exe` at the package root <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs" />.
+- The host is `Binaries/<platform>/<Product>Server.exe` behind a console launcher `<Product>Server.exe` at the package root.
 - It lands in `Saved/Packaged/<Product>Server`, beside the game package and never inside it. A configured `outputDir` gets the `Server` suffix too.
 - It keeps its content in named archives and a `Manifest.txt` at its root, because `MowoServer` mounts by name.
 - It ships no crash reporter and no VC++ redist fallback. Server fleets collect dumps and logs through their orchestrator.
@@ -58,7 +45,7 @@ A project created from a template carries its own targets in `Source/`: `<Projec
 ./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject --target Server
 ```
 
-The server listens on `--port` (7777 by default) and ticks at `--tickrate` (60 by default) <Source path="Engine/Source/Runtime/MowoServer/Private/MowoServer.cpp" />. The editor's packaging window does not build servers.
+The server listens on `--port` (7777 by default) and ticks at `--tickrate` (60 by default). The editor's packaging window does not build servers.
 
 ## Monolithic and modular
 
@@ -73,34 +60,31 @@ The server listens on `--port` (7777 by default) and ticks at `--tickrate` (60 b
 | Vendor libraries (SDL3, Steam, upscalers) | ship beside the host | ship beside the host |
 | Crash reporter | its own monolithic executable | its own executable |
 
-The link mode resolves in this order: an explicit `--monolithic` or `--modular`, then a server package (modular), then `monolithic` in the project's `Config/Packaging.ini`, then the configuration: `release` and `profile` are monolithic, everything else modular <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs" />. Passing both options is an error.
+The link mode resolves in this order: an explicit `--monolithic` or `--modular`, then a server package (modular), then `monolithic` in the project's `Config/Packaging.ini`, then the configuration: `release` and `profile` are monolithic, everything else modular. Passing both options is an error.
 
-Monolithic mode defines `MOWO_MONOLITHIC`, builds every first-party library module as a static library and links it into the host, the model Unreal uses for its shipping builds. ThinLTO then optimizes across what would otherwise be dozens of DLL boundaries. Your project's C++ modules link the same way, with their whole archive forced in so their reflection registrations survive. The engine's feature modules, which the player loads by name in a modular build, are linked in too <Source path="Engine/Source/Runtime/GameHost/GameHost.Build.cs" />.
+Monolithic mode defines `MOWO_MONOLITHIC`, builds every first-party library module as a static library and links it into the host, the model Unreal uses for its shipping builds. ThinLTO then optimizes across what would otherwise be dozens of DLL boundaries. Your project's C++ modules link the same way, with their whole archive forced in so their reflection registrations survive. The engine's feature modules, which the player loads by name in a modular build, are linked in too.
 
-A build whose link mode is not its configuration's default gets its own output folder, so static libraries never overwrite the modular import libraries: a modular `release` build goes to `Engine/Binaries/<platform>/release-modular/`, a monolithic `dev` build to `.../dev-monolithic/` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />.
 
 <Callout type="note" title="Which one to pick">
-Ship monolithic. Choose modular for a test package you want to rebuild quickly from the shared development tree, or when you need to swap one module's DLL.
+Ship monolithic. Choose modular for a test package you want to rebuild quickly, or when you need to swap one module's DLL.
 </Callout>
 
-In the editor, the **Monolithic** row of the packaging window passes `--monolithic` when it is enabled and `--modular` when it is disabled, so the row always decides <Source path="Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp" />.
+In the editor, the **Monolithic** row of the packaging window passes `--monolithic` when it is enabled and `--modular` when it is disabled, so the row always decides.
 
 <Screenshot id="shipping-monolithic-checkbox" alt="The packaging window's profile with Release selected on the toolbar and the Monolithic row set to Enabled." />
 
 ### The import table check
 
-A monolithic build that quietly kept a dynamic dependency on an engine DLL would pass on your machine and fail on a player's. So after staging, the packager reads the shipped host's PE import table. If it still imports a first-party DLL, or any DLL whose name starts with `MowoEngine` or the shared build environment's prefix, the package fails <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageStagingPlan.cs" />:
+A monolithic build that quietly kept a dynamic dependency on an engine DLL would pass on your machine and fail on a player's. So after staging, the packager reads the shipped host's PE import table. If it still imports a first-party DLL, or any DLL whose name starts with `MowoEngine` or the shared build environment's prefix, the package fails:
 
 ```text
 Monolithic verification FAILED: MyGame.exe still imports first-party DLLs: MowoEngine.Core.dll
 The engine did not link statically — rebuild without --skip-build.
 ```
 
-The usual cause is `--skip-build` reusing a modular build. On success the log reports how many DLLs the executable imports, none of them first-party. The check runs when packaging on a Windows host <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PeImports.cs" />.
+The usual cause is `--skip-build` reusing a modular build. On success the log reports how many DLLs the executable imports, none of them first-party. The check runs when packaging on a Windows host.
 
 ## Related
 
 - [Packaging and shipping](/docs/shipping/)
 - [Build configurations](/docs/build-tool/configurations/)
-- [Output layout](/docs/build-tool/output-layout/)
-- [`MGameEngine`](/docs/api/gamehost/), the player the Game target hosts

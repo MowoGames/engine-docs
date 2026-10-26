@@ -5,23 +5,14 @@ description: How a .ui asset describes a game screen, how the screen stack mount
 order: 3
 sources:
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUIAsset.h
-  - Engine/Source/Runtime/ArcUI/Private/FArcUIAsset.cpp
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcWidgetFactory.h
-  - Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/CArcUIScreenStack.h
-  - Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUIBindingLibrary.h
-  - Engine/Source/Runtime/ArcUI/Private/FArcUIAnimPlayer.cpp
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUIAnimPlayer.h
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUIModalInputGate.h
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Statics/MUIStatics.h
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/ECS/Components/ArcUIComponent.h
-  - Engine/Source/Runtime/ArcUI/Private/Widgets/AArcUICanvas.cpp
   - Engine/Source/Runtime/GameHost/Public/GameHost/MGameEngine.h
-  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
-  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/MainMenu.ui
-  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/VisualScriptDemo.ui
-  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
 verifiedAt: c1d08db53
 ---
 
@@ -39,7 +30,7 @@ A game screen in Mowo is a `.ui` asset: an MDF document holding a widget tree, d
 
 ## The .ui format
 
-A screen is a `.ui` file (older projects used `.ui`, which still loads and is renamed when the project opens) <Source path="Engine/Source/Runtime/Core/Private/FileTypes.cpp" />. A file starts with a `Package` block that carries the asset id and the assets it imports, then the `ArcUI` document. This is an excerpt of the test project's main menu <Source path="Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/MainMenu.ui" />:
+A screen is a `.ui` file (older projects used `.ui`, which still loads and is renamed when the project opens). A file starts with a `Package` block that carries the asset id and the assets it imports, then the `ArcUI` document. This is an excerpt of the test project's main menu:
 
 ```mdf title="Content/UI/MainMenu.ui (excerpt)"
 ArcUI "Widget" {
@@ -118,13 +109,13 @@ Every `Widget` node has a `class` and a name. The name is what bindings, animati
 | `size_to_content_x`, `size_to_content_y` | Take the widget's desired size on that axis |
 | `z_order` | Paint and hit-test order inside a canvas |
 | `variable` | Expose the widget by name to the controller |
-| `slot_margin`, `slot_fill`, `slot_h_align`, `slot_v_align` | Slot settings when the parent is a box, overlay or grid <Source path="Engine/Source/Runtime/ArcUI/Private/FArcUIAsset.cpp" /> |
+| `slot_margin`, `slot_fill`, `slot_h_align`, `slot_v_align` | Slot settings when the parent is a box, overlay or grid |
 | `nav_up`, `nav_down`, `nav_left`, `nav_right` and their `_target`s, `clip_to_bounds`, `flow_direction` | Gamepad navigation rules, clipping and reading direction. See [Arc widgets and layout](/docs/ui/arc-widgets-and-layout/#navigation-rules-in-ui-assets). |
-| `design_hidden`, `design_locked` | Designer-only; ignored unless the factory runs in designer mode <Source path="Engine/Source/Runtime/ArcUI/Private/FArcUIAsset.cpp" /> |
+| `design_hidden`, `design_locked` | Designer-only; ignored unless the factory runs in designer mode |
 
 ### Text properties
 
-`Text` nodes take these optional properties; a node that sets no font property keeps the style's font <Source path="Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp" />:
+`Text` nodes take these optional properties; a node that sets no font property keeps the style's font:
 
 | Property | Meaning |
 | --- | --- |
@@ -146,7 +137,7 @@ Fields are written only when they differ from their default, so opening and savi
 
 ## Widget types
 
-The factory knows these class names <Source path="Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp" />:
+The factory knows these class names:
 
 | Kind | Classes |
 | --- | --- |
@@ -157,7 +148,7 @@ The factory knows these class names <Source path="Engine/Source/Runtime/ArcUI/Pr
 | Display | `Image`, `ProgressBar`, `Spinner`, `Spacer`, `VideoPlayer`, `Breadcrumb` |
 | Composite | `UserWidget`, `SettingsScreen`, `RebindScreen`, `LobbyScreen` |
 
-A `ListView` takes an `items` array and one child node as its row template. Strings in the template can use `$item`, `$index`, or `$0`, `$1`… for fields of an array item <Source path="Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp" />.
+A `ListView` takes an `items` array and one child node as its row template. Strings in the template can use `$item`, `$index`, or `$0`, `$1`… for fields of an array item.
 
 A `UserWidget` embeds another `.ui`. `ClipBox` is a canvas panel that always clips. Nesting deeper than `MaxUserWidgetDepth` (8), or a reference back to an asset that is already being expanded, becomes a placeholder and a build error instead of a crash <Source symbol="FArcWidgetFactory" />.
 
@@ -167,7 +158,7 @@ There are two ways to mount a screen.
 
 **World screens.** Add an `ArcUI` component to an entity. It has `asset`, `z_order`, `visible` and `auto_focus` <Source symbol="ArcUIComponent" />. `SyncFromWorld` mounts every visible one.
 
-**Code screens.** Call `PushScreen(assetPath, zOrder, modal)`. It returns a handle for `PopScreen`, or `0` if the asset failed to load. `PopTopScreen()` pops the most recent one <Source symbol="CArcUIScreenStack" />. In a game, `MGameEngine` wraps these as `PushUIScreen` and `PopUIScreen` <Source symbol="MGameEngine" />.
+**Code screens.** Call `PushScreen(assetPath, zOrder, modal)`. It returns a handle for `PopScreen`, or `0` if the asset failed to load. `PopTopScreen()` pops the most recent one <Source symbol="CArcUIScreenStack" />. In a game, `MGameEngine` wraps these as `PushUIScreen` and `PopUIScreen`.
 
 ```cpp title="MainMenuFlow.cpp"
 #include <ArcUI/CArcUIScreenStack.h>
@@ -188,21 +179,21 @@ void HideMainMenu(Mowo::CArcUIScreenStack& stack)
 }
 ```
 
-In a packaged game, the host owns the stack's event sink. Use `MGameEngine::RegisterUIAction(action, handler)` to map an action string from a `.ui` event, such as the sample's `StartMatch`, to a C++ handler <Source symbol="MGameEngine" />. `QuitGame` is registered by default and stops the engine <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />.
+In a packaged game, the host owns the stack's event sink. Use `MGameEngine::RegisterUIAction(action, handler)` to map an action string from a `.ui` event, such as the sample's `StartMatch`, to a C++ handler. `QuitGame` is registered by default and stops the engine.
 
 ### Modal screens
 
 A modal screen:
 
 - keeps gamepad focus inside itself;
-- is drawn over a full-screen scrim that eats clicks and wheel input, so nothing reaches screens or gameplay below <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />;
+- is drawn over a full-screen scrim that eats clicks and wheel input, so nothing reaches screens or gameplay below;
 - switches the input mode to `UIOnly` and gives back the previous mode when it pops.
 
 The input-mode rule is re-checked every tick against the stack's own `HasModalScreen()`, so it works however the screen was pushed, including from a graph and in Play-In-Editor <Source symbol="FArcUIModalInputGate" />.
 
 ### Safe zone
 
-`SetSafeZoneInsets(x, y)` insets every screen's root canvas by a fraction of each axis, clamped to 0–0.25 <Source path="Engine/Source/Runtime/ArcUI/Private/Widgets/AArcUICanvas.cpp" />. The default is zero.
+`SetSafeZoneInsets(x, y)` insets every screen's root canvas by a fraction of each axis, clamped to 0–0.25. The default is zero.
 
 ## Bindings
 
@@ -217,7 +208,7 @@ Bindings {
 }
 ```
 
-**Bindable properties** <Source path="Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp" />:
+**Bindable properties**:
 
 | Property | Widgets |
 | --- | --- |
@@ -231,7 +222,7 @@ Bindings {
 | `spinning` | Spinner |
 | `media`, `playing`, `volume` | VideoPlayer |
 
-**Sources**, in the order the stack tries them <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />:
+**Sources**, in the order the stack tries them:
 
 <Steps>
 <Step title="Published values">
@@ -260,13 +251,13 @@ An `On` entry wires a widget event to an action string. Several entries for the 
 
 Actions are resolved in this order:
 
-1. Built-in animation verbs: `PlayAnim:Name`, `PlayAnimReverse:Name`, `StopAnim:Name` <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
-2. `VisualScript:<Class>.<Event>[:payload]`, which runs an event graph on the controller class <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
+1. Built-in animation verbs: `PlayAnim:Name`, `PlayAnimReverse:Name`, `StopAnim:Name`.
+2. `VisualScript:<Class>.<Event>[:payload]`, which runs an event graph on the controller class.
 3. Anything else goes to the host's event sink. In a game, that is the `RegisterUIAction` table.
 
 ## Animations
 
-An `Anim` is a named timeline. Each `Track` animates one property of one named node: `opacity`, `translation_x`, `translation_y`, `scale` or `rotation` <Source path="Engine/Source/Runtime/ArcUI/Private/FArcUIAnimPlayer.cpp" />. Color tracks tint Text and RichText widgets. Keys have a time `t`, a value, and an `easing` into that key: `linear`, or `quad`, `cubic`, `quart`, `quint`, `sine`, `expo`, `circ`, `back`, `bounce`, `elastic` with `_in`, `_out` or `_in_out` <Source path="Engine/Source/Runtime/ArcUI/Private/FArcUIAnimPlayer.cpp" />.
+An `Anim` is a named timeline. Each `Track` animates one property of one named node: `opacity`, `translation_x`, `translation_y`, `scale` or `rotation`. Color tracks tint Text and RichText widgets. Keys have a time `t`, a value, and an `easing` into that key: `linear`, or `quad`, `cubic`, `quart`, `quint`, `sine`, `expo`, `circ`, `back`, `bounce`, `elastic` with `_in`, `_out` or `_in_out`.
 
 `auto_play` starts a timeline when the screen mounts; `loop` wraps it. From C++, use `PlayAnimation(assetPath, name, params)` with `FArcUIAnimPlayParams` (`Loop`, `Reverse`, `OnFinished`) <Source symbol="FArcUIAnimPlayParams" />. Every finished run also reports `anim_finished` through the event sink.
 
@@ -274,9 +265,9 @@ An `Anim` is a named timeline. Each `Track` animates one property of one named n
 
 A screen can be driven entirely from [Visual Scripting](/docs/visual-scripting/). Set `visual_script_class` at the root to a `.vscript` class, then:
 
-- **Pull values** with `visualscript.<Class>.<Function>` bindings. The stack keeps one shared instance per class and caches each source's result per tick. Evaluation runs under a 50,000-step budget, so a runaway loop warns and yields nothing <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
-- **Push events** with `VisualScript:<Class>.<Event>` actions. Before the graph runs, the stack sets the variables `WidgetName`, `EventName`, `PinPayload`, `ScreenPath` and `OwnerEntity` <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
-- **React to the screen**: the controller receives `OnScreenShown`, `OnScreenHidden`, and `OnUIEvent` for every widget event on the screen <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
+- **Pull values** with `visualscript.<Class>.<Function>` bindings. The stack keeps one shared instance per class and caches each source's result per tick. Evaluation runs under a 50,000-step budget, so a runaway loop warns and yields nothing.
+- **Push events** with `VisualScript:<Class>.<Event>` actions. Before the graph runs, the stack sets the variables `WidgetName`, `EventName`, `PinPayload`, `ScreenPath` and `OwnerEntity`.
+- **React to the screen**: the controller receives `OnScreenShown`, `OnScreenHidden`, and `OnUIEvent` for every widget event on the screen.
 - **Reach back** with the `MUIStatics` functions: `SetWidgetText`, `SetWidgetVisible`, `SetProgress`, `PlayWidgetAnim`, `StopWidgetAnim`, `PushScreen`, `PopScreen`, `SetBindingValue`, `SetBindingNumber` and the video controls <Source symbol="MUIStatics" />.
 
 <Callout type="warning">

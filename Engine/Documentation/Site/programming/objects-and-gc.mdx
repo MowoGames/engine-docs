@@ -12,7 +12,6 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/FReferenceCollector.h
   - Engine/Source/Runtime/Core/Public/Core/FCoreDelegates.h
   - Engine/Source/Runtime/Core/Public/Core/MClassRegistry.h
-  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
 verifiedAt: 5922e6e5e
 ---
@@ -44,7 +43,7 @@ The collector is mark-and-sweep. It starts from the roots and follows two kinds 
 - **The outer chain.** Each reachable object keeps its outer alive.
 - **Reflected references.** Every `MPROPERTY` that refers to an `MObject`. The [header tool](/docs/programming/reflection/) generates the trace function for each class, so you never write one.
 
-Roots are the objects added with `FMObjectArray::AddRoot` (counted: each `AddRoot` needs its own `RemoveRoot`), `TStrongObjectPtr` holders, and the objects `FGCObject` referencers report. The engine roots itself and its subsystems. <Source symbol="FMObjectArray::AddRoot" />
+Roots are the objects added with `FMObjectArray::AddRoot` (counted: each `AddRoot` needs its own `RemoveRoot`), `TStrongObjectPtr` holders, and the objects `FGCObject` referencers report. The engine roots itself and its subsystems.
 
 <Flow steps={["Roots", "Outer chain", "MPROPERTY references", "Mark reachable", "Sweep the rest"]} highlight={2} caption="A pointer member without MPROPERTY is invisible to the collector." />
 
@@ -54,7 +53,7 @@ A property can hold an object reference as `T*` or `TObjectPtr<T>`, or inside `s
 
 The collector is **incremental**: it marks in slices of a frame and sweeps a bounded number of objects per frame, so your code keeps running while a collection is half done. If you store a reference into an object the collector has already scanned, it could miss the new target and free a live object.
 
-`TObjectPtr<T>` prevents that: every store through it runs a write barrier that tells the collector about the new target. When no collection is marking, the barrier costs one atomic load. <Source symbol="FMObjectArray::NotifyReferenceWrite" />
+`TObjectPtr<T>` prevents that: every store through it runs a write barrier that tells the collector about the new target. When no collection is marking, the barrier costs one atomic load.
 
 <Callout type="danger">
 **Every object `MPROPERTY` must be a `TObjectPtr<T>`**, including elements of containers. A raw `T*` property written while the collector marks can hide its target, and nothing in the header tool or the build catches it.
@@ -84,7 +83,7 @@ Inserting a `TObjectPtr` into a container copies it, which runs the barrier, so 
 | `mowo.GC.StepBudgetMs` | 1.0 | Marking budget per frame |
 | `mowo.GC.SweepBudget` | 128 | Objects deleted per frame |
 
-<Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" /> `FMObjectArray::CollectGarbage()` runs a full synchronous collection when you need one. `FCoreDelegates::OnPreGarbageCollect()` and `OnPostGarbageCollect()` fire around each collection.
+ `FMObjectArray::CollectGarbage()` runs a full synchronous collection when you need one. `FCoreDelegates::OnPreGarbageCollect()` and `OnPostGarbageCollect()` fire around each collection.
 
 ## Destroying objects
 

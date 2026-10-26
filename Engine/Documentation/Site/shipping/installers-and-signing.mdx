@@ -3,21 +3,6 @@ title: Installers and code signing
 sidebarTitle: Installers and signing
 description: Version stamp and icon, the zip, MSI, self-extracting installer and disk image, Authenticode signing, and the Steam DRM wrap.
 order: 4
-sources:
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageFinalizeOrder.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VersionInfoStamper.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/IconEmbedder.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherBuilder.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DistributableZip.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/InstallerGenerator.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/CodeSigner.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SteamDrmWrapper.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageManifest.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/ThirdParty/ThirdPartyCatalog.cs
-  - Engine/Content/Branding/Windows/mowo-player.ico
-  - Engine/Documentation/ROADMAP.md
 verifiedAt: 7f8f31f8d
 ---
 
@@ -27,7 +12,7 @@ The last step of `mbt package` turns the staged folder into what you hand out: s
 
 <Flow steps={["Version stamp", "Icon", "Steam DRM wrap", "Code sign", "Module sign", "Symbol upload", "File manifest", "Zip", "Installer"]} highlight={2} caption="The distribute phase. The DRM wrap replaces the host executable, so it comes before signing; the file manifest hashes final bytes, so it comes after every rewrite." />
 
-The order is enforced, not just followed. A guard fails the package when a step runs at or before one that already ran <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageFinalizeOrder.cs" />. Both failures it prevents would otherwise reach players without breaking the build:
+The order is enforced, not just followed. A guard fails the package when a step runs at or before one that already ran. Both failures it prevents would otherwise reach players without breaking the build:
 
 - A DRM wrap after signing strips the Authenticode signature. The log would say the package was signed while every player got an unsigned binary.
 - Any rewrite after the file manifest leaves its hashes describing bytes that no longer exist.
@@ -36,17 +21,17 @@ Steps may be skipped, but never reordered or repeated.
 
 ## The launcher, version info and icon
 
-The file a player double-clicks is `<Product>.exe` at the package root: a thin launcher that sets the working directory to the package root, starts `Binaries/<platform>/<Product>.exe`, forwards the command line and returns the game's exit code. The packager compiles it at package time with the detected clang-cl and lld-link <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherBuilder.cs" />. A server package gets a console launcher.
+The file a player double-clicks is `<Product>.exe` at the package root: a thin launcher that sets the working directory to the package root, starts `Binaries/<platform>/<Product>.exe`, forwards the command line and returns the game's exit code. The packager compiles it at package time with the detected clang-cl and lld-link. A server package gets a console launcher.
 
-On Windows, the packager stamps a `VS_VERSION_INFO` resource into the launcher: company, description, version, copyright, product name and the package's build id <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VersionInfoStamper.cs" />. The values come from `player.*` and `project.version` in your `.mproject`.
+On Windows, the packager stamps a `VS_VERSION_INFO` resource into the launcher: company, description, version, copyright, product name and the package's build id. The values come from `player.*` and `project.version` in your `.mproject`.
 
-The icon comes from `--icon`, then the manifest's `player.iconPath` (absolute or relative to the project), then the engine's default `Engine/Content/Branding/Windows/mowo-player.ico`. Both `.ico` and `.png` work; a PNG is wrapped into an icon resource <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/IconEmbedder.cs" />. Both stamps are Windows-only.
+The icon comes from `--icon`, then the manifest's `player.iconPath` (absolute or relative to the project), then the engine's default `Engine/Content/Branding/Windows/mowo-player.ico`. Both `.ico` and `.png` work; a PNG is wrapped into an icon resource. Both stamps are Windows-only.
 
 <Screenshot id="shipping-exe-properties-details" alt="Windows Explorer, right-click the packaged MyGame.exe launcher > Properties > Details tab, showing File description, File version 1.0.0, Product name, Copyright and the embedded game icon at the top." />
 
 ## The distributable zip
 
-`--zip` is on by default. The zip is named `<Product>-<version>-<config>.zip` and written beside the package folder. Entries are sorted and carry a fixed timestamp, so the same input produces a byte-identical zip <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DistributableZip.cs" />. Pass `--zip false` to skip it.
+`--zip` is on by default. The zip is named `<Product>-<version>-<config>.zip` and written beside the package folder. Entries are sorted and carry a fixed timestamp, so the same input produces a byte-identical zip. Pass `--zip false` to skip it.
 
 ## Installers
 
@@ -60,7 +45,7 @@ The icon comes from `--icon`, then the manifest's `player.iconPath` (absolute or
 
 ### The WiX MSI
 
-The game MSI installs per machine under Program Files, with a Start Menu shortcut to the launcher. It declares a major upgrade, so installing a newer version replaces an older one, and it refuses a downgrade <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/InstallerGenerator.cs" />.
+The game MSI installs per machine under Program Files, with a Start Menu shortcut to the launcher. It declares a major upgrade, so installing a newer version replaces an older one, and it refuses a downgrade.
 
 The MSI's UpgradeCode is derived from the product name. Keep the product name stable across releases, or a new version installs beside the old one instead of upgrading it.
 
@@ -77,14 +62,14 @@ It needs no admin rights. Ship the `.ps1` and the zip together.
 ### The macOS disk image
 
 <Callout type="warning" title="In development">
-The `.dmg` holds an `.app` signed ad hoc only (`codesign --sign -`). There is no Developer ID signing, no hardened runtime, no notarization and no stapling for game packages <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs" />. Gatekeeper on a buyer's Mac will not open it. The ROADMAP tracks notarization as an open blocker <Source path="Engine/Documentation/ROADMAP.md" />.
+The `.dmg` holds an `.app` signed ad hoc only (`codesign --sign -`). There is no Developer ID signing, no hardened runtime, no notarization and no stapling for game packages. Gatekeeper on a buyer's Mac will not open it. The ROADMAP tracks notarization as an open blocker.
 </Callout>
 
-Building the `.dmg` needs a macOS host, because it runs `codesign` and `hdiutil`. Linux has no native installer format yet. `mbt package-launcher` is the one command that can sign with a Developer ID and notarize, for the Mowo Games Launcher; see [Mowo Games Launcher](/docs/shipping/games-launcher/#package-the-launcher).
+Building the `.dmg` needs a macOS host, because it runs `codesign` and `hdiutil`. Linux has no native installer format yet.
 
 ## Code signing
 
-Sign a Windows package with `--sign`, or set the `MOWO_SIGN_CERT` environment variable so every package is signed <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/CodeSigner.cs" />:
+Sign a Windows package with `--sign`, or set the `MOWO_SIGN_CERT` environment variable so every package is signed:
 
 ```powershell
 ./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject --sign D:/Secrets/MyStudio.pfx
@@ -106,19 +91,18 @@ A hardware-token certificate installs into the user store and is addressed by th
 | `MOWO_SIGN_PASSWORD` | Password for a `.pfx` file |
 | `MOWO_SIGN_TIMESTAMP_URL` | RFC 3161 timestamp server, when the default should not be used |
 
-Signatures use SHA256 digests and are always timestamped, so they stay valid after the certificate expires. The packager signs the host, the launcher, every first-party DLL and the crash reporter <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />. Vendor libraries keep their own vendors' signatures.
+Signatures use SHA256 digests and are always timestamped, so they stay valid after the certificate expires. The packager signs the host, the launcher, every first-party DLL and the crash reporter. Vendor libraries keep their own vendors' signatures.
 
 Signing needs `signtool.exe` from the Windows SDK and a Windows host. Without either, or without a certificate, the step is skipped and the package ships unsigned. A `signtool` failure is a warning and the package also ships unsigned, so read the log before you release.
 
 Authenticode is separate from the game's own module signatures (`.mowosig`), which every protected package carries whether or not you pass `--sign`. See [Content protection](/docs/shipping/encrypted-archives/).
 
 <Callout type="tip">
-`mbt package-editor` and `mbt package-launcher` take the same `--sign` option and `MOWO_SIGN_CERT` fallback.
 </Callout>
 
 ## Steam DRM wrap
 
-`--drm-wrap` wraps the game host with Steam DRM through `steamcmd`. A wrapped executable refuses to run outside a Steam client that owns the app <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SteamDrmWrapper.cs" />. It is opt-in, because it also stops you from testing the package outside Steam.
+`--drm-wrap` wraps the game host with Steam DRM through `steamcmd`. A wrapped executable refuses to run outside a Steam client that owns the app. It is opt-in, because it also stops you from testing the package outside Steam.
 
 ```powershell
 ./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject --drm-wrap --steam-user mybuildaccount --sign D:/Secrets/MyStudio.pfx
@@ -134,11 +118,11 @@ It wraps `Binaries/win-x64/<Product>.exe` in place. If `steamcmd` fails or write
 
 ## License notices
 
-Every package carries `Engine/Legal/ThirdPartyNotices.txt`: each bundled third-party library with its version, license, copyright holder and the license texts its folder carries. A game package lists only the libraries it actually ships; build-only tools are left out <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/ThirdParty/ThirdPartyCatalog.cs" />. A package that ships auto-subtitles therefore lists ONNX Runtime and the ONNX Runtime WebGPU execution provider, whose entry carries the provider's MIT license, Dawn's BSD-3-Clause license and the license texts of the DXC that ships beside it on Windows.
+Every package carries `Engine/Legal/ThirdPartyNotices.txt`: each bundled third-party library with its version, license, copyright holder and the license texts its folder carries. A game package lists only the libraries it actually ships; build-only tools are left out. A package that ships auto-subtitles therefore lists ONNX Runtime and the ONNX Runtime WebGPU execution provider, whose entry carries the provider's MIT license, Dawn's BSD-3-Clause license and the license texts of the DXC that ships beside it on Windows.
 
 ## The file manifest
 
-Every game package writes `<Product>-Manifest.txt` beside the package folder: one line per shipped file with its sha256, its size and its forward-slash relative path, sorted <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageManifest.cs" />. It is written after stamping, wrapping and signing, so the hashes match what players receive. Use it to verify an install or to compare two builds; the player never reads it. A server package keeps its `Manifest.txt` at its root instead.
+Every game package writes `<Product>-Manifest.txt` beside the package folder: one line per shipped file with its sha256, its size and its forward-slash relative path, sorted. It is written after stamping, wrapping and signing, so the hashes match what players receive. Use it to verify an install or to compare two builds; the player never reads it. A server package keeps its `Manifest.txt` at its root instead.
 
 ## Related
 

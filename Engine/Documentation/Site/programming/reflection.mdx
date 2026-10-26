@@ -8,14 +8,6 @@ sources:
   - Engine/Source/Runtime/ECS/Public/ECS/Component.h
   - Engine/Source/Runtime/Core/Public/Core/MObject.h
   - Engine/Source/Runtime/Game/Public/Gameplay/GameplayDelegates.h
-  - Engine/Source/Programs/MowoHeaderTool/Specifiers/TypeSpecifiers.cs
-  - Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs
-  - Engine/Source/Programs/MowoHeaderTool/Parser/HeaderParser.cs
-  - Engine/Source/Programs/MowoHeaderTool/Validation/Validators.cs
-  - Engine/Source/Programs/MowoHeaderTool/Emit/GeneratedHeaderEmitter.cs
-  - Engine/Source/Programs/MowoHeaderTool/Emit/ReflSourceEmitter.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleResolver.cs
-  - Engine/Source/Runtime/Reflection/Private/PropertyTypeRegistry.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -81,7 +73,7 @@ On an `MCLASS`, only `MPROPERTY` fields are reflected, and they may be private. 
 | `DisplayName=`, `Category=`, `Tooltip=` | Describe the class in the editor |
 | `meta=(...)` | Open key-value metadata, read at run time with `MClass::FindMeta` |
 
-An unknown specifier is a build error that lists the known ones. <Source path="Engine/Source/Programs/MowoHeaderTool/Specifiers/TypeSpecifiers.cs" />
+An unknown specifier is a build error that lists the known ones.
 
 ### Property specifiers
 
@@ -97,11 +89,11 @@ An unknown specifier is a build error that lists the known ones. <Source path="E
 | `Key=`, `DisplayName=`, `Tooltip=`, `Range=`, `ClampMin=`, `ClampMax=`, `Step=`, `Units=`, `Color`, `LayerMask`, `EditCondition=`, `Hidden`, `ReadOnly`, `RuntimeOnly`, `Custom=`, `Nested=` | The same meanings as the field markers below |
 | `meta=(...)` | Anything else, carried into the module's JSON export |
 
-<Source path="Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs" />
+
 
 ### Function specifiers
 
-`MFUNCTION` reflects a public method's name, return type and parameters. `MFUNCTION(Server)`, `(Client)` and `(Multicast)` make it an RPC; `Reliable` or `Unreliable` picks the channel. Naming two directions is a build error, and so is an `MFUNCTION` that is not public. `Category=`, `DisplayName=`, `Tooltip=` and `Description=` describe the node Visual Scripting shows. <Source path="Engine/Source/Programs/MowoHeaderTool/Validation/Validators.cs" />
+`MFUNCTION` reflects a public method's name, return type and parameters. `MFUNCTION(Server)`, `(Client)` and `(Multicast)` make it an RPC; `Reliable` or `Unreliable` picks the channel. Naming two directions is a build error, and so is an `MFUNCTION` that is not public. `Category=`, `DisplayName=`, `Tooltip=` and `Description=` describe the node Visual Scripting shows.
 
 Write `MOWO_TOOLTIP("...")` before `MFUNCTION` (or `MFUNCTION(Tooltip="...")`) to describe what a call does; the Visual Scripting node shows it on hover. Every `MFUNCTION` is exposed to [Visual Scripting](/docs/visual-scripting/) automatically.
 
@@ -157,7 +149,7 @@ MHT turns this into a type descriptor with a property table and registers the co
 
 `std::vector<T>` fields become arrays, `std::map`, `std::unordered_map` and `TMap` become maps, `std::set`, `std::unordered_set` and `TSet` become sets, and a field typed as another reflected struct becomes a nested struct. Map keys and set elements are `int32_t`, `uint32_t`, `UUID` or `std::string`. Shapes MHT does not support (a vector of vectors, a vector of enums) are skipped with a build warning; mark them `MOWO_RUNTIME_ONLY` or give them a custom handler.
 
-A field typed `FGameplayTag` or `FGameplayTagContainer` goes to a built-in handler without any marker: it saves as the tag name (a container as a list of names), and the Details panel shows a picker over the project's declared tags instead of a text box. An explicit `MOWO_CUSTOM("key")` or `Custom=` still wins. <Source path="Engine/Source/Runtime/Reflection/Private/PropertyTypeRegistry.cpp" />
+A field typed `FGameplayTag` or `FGameplayTagContainer` goes to a built-in handler without any marker: it saves as the tag name (a container as a list of names), and the Details panel shows a picker over the project's declared tags instead of a text box. An explicit `MOWO_CUSTOM("key")` or `Custom=` still wins.
 
 `MOWO_CUSTOM_SERIALIZE(fn)` and `MOWO_CUSTOM_DESERIALIZE(fn)` on the struct add hooks that run beside the reflected fields. Define them in the component's own module: the generated code that references them compiles into that module.
 
@@ -180,7 +172,7 @@ enum class MENUM() EDoorState : uint8_t {
 ```
 
 - `MMETA(DisplayName="...")` relabels an enumerator; the saved string is always the identifier, so relabelling never breaks a saved level.
-- `MMETA(Hidden)` keeps an enumerator out of the drop-down. A trailing `Count`, `MAX` or `Num` sentinel is hidden automatically. <Source path="Engine/Source/Programs/MowoHeaderTool/Parser/HeaderParser.cs" />
+- `MMETA(Hidden)` keeps an enumerator out of the drop-down. A trailing `Count`, `MAX` or `Num` sentinel is hidden automatically.
 - A header that only marks enums can include `Reflection/ReflectMacros.h` instead of `Reflect.h`.
 
 ## Interfaces
@@ -196,7 +188,7 @@ public:
 };
 ```
 
-MHT registers a class named `MDamageable` for the interface, and every `MCLASS` deriving from `IDamageable` lists it, so `GetClass()->ImplementsInterface(FName("IDamageable"))` answers without the C++ type. `IDamageable::StaticInterfaceClass()` returns the descriptor. `MIMPLEMENTS("IFoo")` declares an interface a class implements without inheriting it in C++. <Source path="Engine/Source/Programs/MowoHeaderTool/Emit/ReflSourceEmitter.cs" />
+MHT registers a class named `MDamageable` for the interface, and every `MCLASS` deriving from `IDamageable` lists it, so `GetClass()->ImplementsInterface(FName("IDamageable"))` answers without the C++ type. `IDamageable::StaticInterfaceClass()` returns the descriptor. `MIMPLEMENTS("IFoo")` declares an interface a class implements without inheriting it in C++.
 
 ## Delegates
 
@@ -223,7 +215,7 @@ MHT runs inside the build tool, between reading the rules and compiling, for eve
 | `<Header>.refl.cpp` | Descriptors, registrations, trace functions and call thunks, compiled into the module |
 | `<Module>.reflection.json` | The module's markup: types, properties, functions, enums, delegates, metadata |
 
-The output folder, `Reflection/` under the module's generated directory, is a public include path of the module. <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleResolver.cs" /> Generated sources include `stdafx.h`, so every scanned module needs one in its `Private/` folder or on its forced includes (the game-module scaffold handles this). A pass with an error writes nothing, and an unchanged output keeps its timestamp.
+The output folder, `Reflection/` under the module's generated directory, is a public include path of the module. Generated sources include `stdafx.h`, so every scanned module needs one in its `Private/` folder or on its forced includes (the game-module scaffold handles this). A pass with an error writes nothing, and an unchanged output keeps its timestamp.
 
 <Callout type="warning">
 A reflected component in a module without `bUseHeaderTool = true` gets no descriptor: it does not appear in the editor and does not save. New modules that declare reflected types must opt in.

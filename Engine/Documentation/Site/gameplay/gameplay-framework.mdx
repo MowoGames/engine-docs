@@ -14,11 +14,6 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/AThirdPersonGameMode.h
   - Engine/Source/Runtime/Game/Public/Game/LocalPlayer.h
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
-  - Engine/Source/Runtime/Game/Private/GameFramework.cpp
-  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIController.h
   - Engine/Source/Runtime/Game/Public/Game/AFirstPersonCharacter.h
   - Engine/Source/Runtime/Game/Public/Game/ATopDownCharacter.h
@@ -46,11 +41,11 @@ Mowo ships the same framework classes you know from Unreal: a game mode that hol
 
 ## How a match starts
 
-When the start scene begins play, the host looks up the project's game mode class by name and calls `MWorld::InitializeGameMode`. The packaged runtime and play-in-editor do this the same way. If the name is not a registered class, both log a warning and fall back to the base `AGameMode`. If the setting is empty, no framework actors are spawned. <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" /> <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp" />
+When the start scene begins play, the host looks up the project's game mode class by name and calls `MWorld::InitializeGameMode`. The packaged runtime and play-in-editor do this the same way. If the name is not a registered class, both log a warning and fall back to the base `AGameMode`. If the setting is empty, no framework actors are spawned.
 
 <Flow steps={["InitializeGameMode", "InitGame", "StartMatch", "Spawn game state", "Spawn player controller", "Spawn default pawn at a player start", "Possess + PostLogin", "Match InProgress"]} highlight={2} caption="StartMatch spawns the framework actors in this order. A second call does nothing." />
 
-`StartMatch` spawns the game state, the player controller and the default pawn, possesses the pawn, fires `PostLogin`, and sets the match to `InProgress`. <Source path="Engine/Source/Runtime/Game/Private/GameFramework.cpp" /> The pawn is placed at the `APlayerStart` whose player index matches the game mode's `playerIndex`, or the first one found. With no player start in the world, the pawn spawns at the origin. <Source path="Engine/Source/Runtime/Game/Private/GameFramework.cpp" />
+`StartMatch` spawns the game state, the player controller and the default pawn, possesses the pawn, fires `PostLogin`, and sets the match to `InProgress`. The pawn is placed at the `APlayerStart` whose player index matches the game mode's `playerIndex`, or the first one found. With no player start in the world, the pawn spawns at the origin.
 
 On a dedicated server the game mode starts with `spawnLocalPlayerOnStart` off, so no local controller or pawn exists; each joining connection gets its pawn through `RestartPlayer`. <Source symbol="AGameMode" />
 
@@ -67,7 +62,7 @@ Derive from `AGameMode` and set `defaultPawnClass` in the constructor. Leave `pl
 Add an `APlayerStart` to your start scene where the player should appear.
 </Step>
 <Step title="Pick the game mode in Project Settings">
-Open **Project Settings**, go to **Project › Maps & Modes**, and set **Game Mode Class**. The field lists the game modes the editor discovered; an empty value means no game framework. <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp" />
+Open **Project Settings**, go to **Project › Maps & Modes**, and set **Game Mode Class**. The field lists the game modes the editor discovered; an empty value means no game framework.
 </Step>
 <Step title="Press Play">
 Play-in-editor spawns the framework and possesses your pawn. See [Play in editor](/docs/editor/play-in-editor/).
@@ -115,7 +110,7 @@ public:
 }
 ```
 
-`APlayerController` clears its bindings and calls the new pawn's `SetupPlayerInput` every time it possesses one, so bindings never leak from a previous pawn. <Source path="Engine/Source/Runtime/Game/Private/GameFramework.cpp" /> The string names refer to input actions; the [Input](/docs/gameplay/input/) page shows how to bind to action assets and activate a mapping context.
+`APlayerController` clears its bindings and calls the new pawn's `SetupPlayerInput` every time it possesses one, so bindings never leak from a previous pawn. The string names refer to input actions; the [Input](/docs/gameplay/input/) page shows how to bind to action assets and activate a mapping context.
 
 ### The game mode
 

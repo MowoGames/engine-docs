@@ -5,7 +5,6 @@ order: 4
 sources:
   - Engine/Source/Runtime/Input/Public/Input/InputAction.h
   - Engine/Source/Runtime/Input/Public/Input/InputActionSystem.h
-  - Engine/Source/Runtime/Input/Private/InputActionSystem.cpp
   - Engine/Source/Runtime/Game/Public/Game/MPlayerInput.h
   - Engine/Source/Runtime/Game/Public/Game/MEnhancedInputSubsystem.h
   - Engine/Source/Runtime/Game/Public/Game/APlayerController.h
@@ -13,16 +12,10 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/FControlRebinding.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/InputActionAsset.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/InputMappingContextAsset.h
-  - Engine/Source/Runtime/Game/Private/ThirdPersonTemplate.cpp
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Settings/FArcRebindModel.h
-  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/ViewportPanel.cpp
-  - Engine/Source/Runtime/Game/Private/GameFramework.cpp
   - Engine/Source/Runtime/Input/Public/Input/InputManager.h
   - Engine/Source/Runtime/Game/Public/Game/MInputStatics.h
-  - Engine/Source/Runtime/Input/Private/InputManager.cpp
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
   - Engine/Source/Runtime/Input/Public/Input/InputBindingsConfig.h
 verifiedAt: 5922e6e5e
 ---
@@ -45,7 +38,7 @@ The pieces:
 | `MPlayerInput` | The per-player binding list. `APlayerController` evaluates it every tick. <Source symbol="MPlayerInput" /> |
 | `InputActionSystem` | The engine-wide evaluator underneath, with the context stack and player overrides |
 
-Both assets are created from the Content Browser's **Add › New asset › More** menu (**Input Action** and **Input Mapping Context**, also under **New › More** when you right-click an empty area of the asset view), and each opens in its own editor. <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp" /> See [Asset editors](/docs/editor/asset-editors/).
+Both assets are created from the Content Browser's **Add › New asset › More** menu (**Input Action** and **Input Mapping Context**, also under **New › More** when you right-click an empty area of the asset view), and each opens in its own editor. See [Asset editors](/docs/editor/asset-editors/).
 
 <Screenshot id="gameplay-input-mapping-context-editor" alt="Mowo Editor with IMC_Default.inputcontext open in the Input Mapping Context editor; the mapping list shows Move bound to W, A, S and D with axis and scale columns, Jump bound to Space, and a Hold trigger expanded on one mapping" caption="A mapping context maps device sources to input actions." />
 
@@ -118,7 +111,7 @@ Keep the mapping context alive for as long as it is active: the subsystem only h
 `MPlayerInput` has two families of overloads. The ones taking a `const InputActionAsset*` bind to an action asset; the string overloads bind by action name, for code that has not adopted action assets. `BindAxis` and `BindAxis2D` fire every frame with the current value, which is 0 when idle. <Source symbol="MPlayerInput" />
 
 <Callout type="tip">
-The engine's character templates load `Content/Input/IMC_Default.inputcontext` first and only build a C++ fallback context when that file is missing. Editing the asset in the editor changes their controls with no code change. <Source path="Engine/Source/Runtime/Game/Private/ThirdPersonTemplate.cpp" />
+The engine's character templates load `Content/Input/IMC_Default.inputcontext` first and only build a C++ fallback context when that file is missing. Editing the asset in the editor changes their controls with no code change.
 </Callout>
 
 ## Modifiers and triggers
@@ -153,7 +146,7 @@ A `Hold` trigger with `allowToggle` set respects the player's hold-to-toggle acc
 
 ## Contexts and priority
 
-- Add a context with `AddMappingContext(imc, priority)` and remove it with `RemoveMappingContext(imc)`. When the controller unpossesses its pawn, it clears all mapping contexts. <Source path="Engine/Source/Runtime/Game/Private/GameFramework.cpp" />
+- Add a context with `AddMappingContext(imc, priority)` and remove it with `RemoveMappingContext(imc)`. When the controller unpossesses its pawn, it clears all mapping contexts.
 - A context that consumes input blocks the contexts below it. <Source symbol="APlayerController" />
 - For named contexts defined in project config, use `APlayerController::PushInputContext` and `PopInputContext`. The controller pops whatever it pushed at `EndPlay`. <Source symbol="APlayerController" />
 
@@ -200,12 +193,12 @@ static bool RebindJumpToSpace(const std::string& contextName) {
 
 | Console variable | Effect |
 | --- | --- |
-| `i.MouseSensitivity` | Multiplier on both mouse axes before any modifier (0.05 to 10) <Source path="Engine/Source/Runtime/Input/Private/InputActionSystem.cpp" /> |
+| `i.MouseSensitivity` | Multiplier on both mouse axes before any modifier (0.05 to 10) |
 | `i.MouseInvertY` | Inverts mouse Y |
 | `i.HoldToToggle` | Hold-to-toggle for `Hold` triggers marked `allowToggle` |
-| `i.DebugOverlay` | Draws a per-action overlay: context, phase, value and trigger events <Source path="Engine/Source/Runtime/Input/Private/InputActionSystem.cpp" /> |
+| `i.DebugOverlay` | Draws a per-action overlay: context, phase, value and trigger events |
 
-In the editor, the same overlay is a toggle named **Input Debug** in the viewport's menu. <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ViewportPanel.cpp" />
+In the editor, the same overlay is a toggle named **Input Debug** in the viewport's menu.
 
 <Screenshot id="gameplay-input-debug-overlay" alt="Mowo Editor during play-in-editor with the Input Debug overlay enabled in the viewport, showing rows for the Move, Jump and Crouch actions with their context, phase, value and trigger events while the W key is held" caption="The Input Debug overlay shows what each action is doing this frame." />
 
@@ -227,7 +220,7 @@ An event counts as consumed only when a widget handled it, not when a widget mer
 
 ## Devices
 
-- **Deadzones** belong to the device, not to each binding: `i.StickDeadzone` (default 0.15) and `i.TriggerDeadzone` (default 0.05) apply to every pad, and `i.Gamepad0.StickDeadzone` to `i.Gamepad3.TriggerDeadzone` override one slot. Project Settings › Engine › Input writes them. Per-binding `DeadZone` modifiers still apply on top. <Source path="Engine/Source/Runtime/Input/Private/InputManager.cpp" />
+- **Deadzones** belong to the device, not to each binding: `i.StickDeadzone` (default 0.15) and `i.TriggerDeadzone` (default 0.05) apply to every pad, and `i.Gamepad0.StickDeadzone` to `i.Gamepad3.TriggerDeadzone` override one slot. Project Settings › Engine › Input writes them. Per-binding `DeadZone` modifiers still apply on top.
 - **Gamepad slots**: up to four pads, addressed by player slot. The player's slot choice is remembered per device in the same `InputUser.mdfb` file.
 - **Rumble**: `InputManager::RumbleGamepad(slot, low, high, ms)` and `RumbleGamepadTriggers`. `i.RumbleScale` scales all rumble.
 - **Focus loss** releases every held key and zeroes the axes, so nothing stays held after alt-tab.

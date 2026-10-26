@@ -4,21 +4,8 @@ sidebarTitle: Cooking
 description: What mbt cook does to each asset type, how it packs .meaf archives, cooks for a target platform, follows cook rules, and splits output into chunks.
 order: 9
 sources:
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CookCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/AssetPacker.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/PackageCook.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/MdfCooker.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/MdfValidateCooker.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/PassthroughCooker.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/AudioCooker.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/SourceAssetCook.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/CookRules.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/ChunkManifest.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/ChunkPartitioner.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/AssetPackageCook.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/PrimaryAssetManager.h
-  - Engine/Source/Runtime/GameHost/Private/FCookDeps.cpp
 verifiedAt: 7f8f31f8d
 ---
 
@@ -32,7 +19,7 @@ From the project folder, or any folder below it:
 ./mbt.cmd cook
 ```
 
-`mbt` finds the project by walking up from the working directory and cooks its `Content/` folder. Without `-o`, the archive goes to the cook directory set in `Config/Packaging.ini`, or to `Saved/Cooked/Content.meaf` when none is set (`Saved/Cooked/<Platform>/Content.meaf` with `--platform`) <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs" />.
+`mbt` finds the project by walking up from the working directory and cooks its `Content/` folder. Without `-o`, the archive goes to the cook directory set in `Config/Packaging.ini`, or to `Saved/Cooked/Content.meaf` when none is set (`Saved/Cooked/<Platform>/Content.meaf` with `--platform`).
 
 The cook is incremental. Results are cached in `.mbt-cache`, and an unchanged asset is not cooked again. Pass `--force` to recook everything.
 
@@ -55,7 +42,7 @@ The Asset Manager's primary asset rules decide what must ship (`AlwaysCook`) and
 Each file goes to the cooker that claims its extension. Plugin cookers register first, then the built-in ones, so the MDF validation gate always wins.
 </Step>
 <Step title="Cook packages">
-Binary asset packages are cooked in a staging folder by `MowoGame --cook-packages`, never in `Content/`, so your packages keep the source data a reimport compares against <Source symbol="FAssetPackageCook" />.
+Binary asset packages are cooked in a staging folder by `MowoGame --cook-packages`, never in `Content/`, so your packages keep the source data a reimport compares against.
 </Step>
 <Step title="Pack">
 `MeafBuilder` packs the staged tree into the archive. Every key is prefixed with `Content/`, or `Plugins/<Name>/` for an enabled plugin's content, so keys read exactly like the paths levels store.
@@ -127,7 +114,7 @@ A full cook packs everything under `Content/`. A selective cook packs only what 
 ./mbt.cmd cook --scenes "Content/Maps/A.mmap,Content/Maps/B.mmap"
 ```
 
-`MowoGame --cook-deps` walks each level, following materials to textures, prefabs to their contents, and ids through the asset registry <Source path="Engine/Source/Runtime/GameHost/Private/FCookDeps.cpp" />. It reads `Config/Redirects.ini`, so a level that names an old path still reaches the right file. glTF buffers and images and OBJ material chains are added, so a multi-file model ships whole. `AlwaysCook` levels join the entry levels; a `NeverCook` level never enters.
+`MowoGame --cook-deps` walks each level, following materials to textures, prefabs to their contents, and ids through the asset registry. It reads `Config/Redirects.ini`, so a level that names an old path still reaches the right file. glTF buffers and images and OBJ material chains are added, so a multi-file model ships whole. `AlwaysCook` levels join the entry levels; a `NeverCook` level never enters.
 
 ## Cook rules
 
@@ -151,7 +138,7 @@ By default a reference that resolves to nothing only warns, so a project in prog
 
 ## Split the archive into chunks
 
-A `Config/Chunks.ini` file splits the cooked output into several archives: chunk 0 is `Content.meaf`, and chunk N is `Content_chunkN.meaf`. The cook also writes a `chunks.json` report next to the archives <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/ChunkManifest.cs" />.
+A `Config/Chunks.ini` file splits the cooked output into several archives: chunk 0 is `Content.meaf`, and chunk N is `Content_chunkN.meaf`. The cook also writes a `chunks.json` report next to the archives.
 
 ```ini title="Config/Chunks.ini"
 [Chunk 1]

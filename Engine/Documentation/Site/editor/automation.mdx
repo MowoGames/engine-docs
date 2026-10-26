@@ -1,22 +1,18 @@
 ---
-title: Automation and tests
-description: Drive the editor from a script for batch edits, checks and screenshots, and run the engine's test cases from the Automation panel.
+title: Editor automation
+sidebarTitle: Automation
+description: Drive the editor from a script for batch edits, reproduction steps, checks and screenshots.
 order: 23
-sources:
-  - Engine/Source/Editor/MowoEditor/Private/Automation/EditorAutomation.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Automation/AutomationReflection.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/AutomationRunnerPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Mcp/EditorMcpTools.cpp
-verifiedAt: 7f8f31f8d
+verifiedAt: 3f3a08d31
 ---
 
-The editor can be driven by a script instead of by hand, and it can run the engine's test executables from a panel. Both are for repeatable work: batch edits, reproduction steps, checks and screenshots.
+The editor can be driven by a script instead of by hand, for repeatable work: batch edits, reproduction steps, checks and screenshots.
 
 ## Editor scripts
 
-An editor script is a list of commands that run through the editor's real operations: the same level, undo history, asset manager, Play and screen capture the UI uses <Source path="Engine/Source/Editor/MowoEditor/Private/Automation/EditorAutomation.cpp" />. A script edit is an ordinary, undoable editor edit.
+An editor script is a list of commands that run through the editor's real operations: the same level, undo history, asset manager, Play and screen capture the UI uses. A script edit is an ordinary, undoable editor edit.
 
-Run a script in a live editor through the [MCP server](/docs/editor/mcp-server/)'s `run_script` tool <Source path="Engine/Source/Editor/MowoEditor/Private/Mcp/EditorMcpTools.cpp" />. The editor executable has no command-line switch for scripts; unattended runs belong to the test targets ([Testing](/docs/testing/)).
+Run a script in a live editor through the [MCP server](/docs/editor/mcp-server/)'s `run_script` tool. The editor executable has no command-line switch for scripts.
 
 ### Script format
 
@@ -65,33 +61,7 @@ quit
 | `assert-cb-tiles` | | Fail if a laid-out Content Browser tile is taller than the tallest tile asks to be, or a level tile shows the failed thumbnail |
 | `quit` | | End the script with success |
 
-`set` and `assert-prop` take a `Component.field` path resolved through the same reflection tables the Details panel uses <Source path="Engine/Source/Editor/MowoEditor/Private/Automation/AutomationReflection.cpp" />. The component matches by display name (`Transform`) or type name (`TransformComponent`), and the field by its C++ name or serialized key. Vectors take a comma list (`1,2,3`) or one component (`Transform.position.x`).
+`set` and `assert-prop` take a `Component.field` path resolved through the same reflection tables the Details panel uses. The component matches by display name (`Transform`) or type name (`TransformComponent`), and the field by its C++ name or serialized key. Vectors take a comma list (`1,2,3`) or one component (`Transform.position.x`).
 
 A failed assertion marks the run failed but the script continues, so one run reports every assertion. A refused command (no level, bad path, unknown component) stops the script at once.
 
-## The Automation panel
-
-**Window ▸ Debug ▸ Automation** lists every test case of the engine's test executables and runs the ones you pick in the background <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/AutomationRunnerPanel.cpp" />. It asks each executable in `Engine/Binaries/<platform>/<config>` for its cases, the same listing `mbt test` uses. It never builds: it runs whatever binaries are there now, so it is a faster loop than `mbt test`, not a replacement for it. The editor never runs a test inside itself; each case is a separate process.
-
-<Screenshot id="editor-automation-runner" alt="The Automation tool document: the toolbar with Run selected, Stop, Run failed, Headless on and the Filter menu, the progress card reading 'Running 42 tests · 30 passed · 1 failed · 2 skipped' with a bar and Cancel, the test tree grouped by name with status icons, and the Log pane showing the failed test's output with the failing line highlighted." />
-
-| Toolbar | Effect |
-| --- | --- |
-| Run selected | Runs the selected tests and groups, or everything the filter shows |
-| Stop | Stops the running test and clears the queue |
-| Run failed | Runs every failed or crashed test again |
-| Headless | On by default: leaves out tests that open a GPU window, so a quick pass does not take the device or your focus |
-| Filter | All tests, Failed, Needs a GPU, CPU only, or a name search |
-
-The tree groups tests by name. A group's icon shows the worst status inside it, so a collapsed group still says whether something broke. <Kbd>Enter</Kbd> or a double-click runs a test. The row menu has Run, Expand, Collapse, **Open log file** and **Copy flag**.
-
-| Status | Meaning |
-| --- | --- |
-| Pass | Exit code 0; a skipped block inside a passing test is shown beside it |
-| Skip | The test reported it could not run, with the reason |
-| Fail | Any other failure, with the first failing check |
-| Crash | A signal or exception, named; a timeout reports as a failure |
-
-Tests that open a GPU window run one at a time with nothing beside them. Cases that need a packaged build, or a graphics API this machine does not have, are listed as **N/A**. Every finished test saves its output to a log file in your temp folder, with the same name `mbt test` uses. The **Log** pane beside the tree shows the focused test's log, or the latest failure's, streaming while it runs.
-
-See [Testing](/docs/testing/) for writing tests and running the full gate with `mbt test`.

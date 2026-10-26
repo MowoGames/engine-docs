@@ -5,14 +5,8 @@ order: 12
 sources:
   - Engine/Source/Runtime/Game/Public/LiveOps/LiveOps.h
   - Engine/Source/Runtime/Game/Public/LiveOps/RemoteConfig.h
-  - Engine/Source/Runtime/Game/Private/LiveOps/LiveOps.cpp
-  - Engine/Source/Runtime/Game/Private/LiveOps/RemoteConfig.cpp
-  - Engine/Source/Runtime/Game/Private/LiveOps/Telemetry.cpp
   - Engine/Source/Runtime/Game/Public/Game/MLiveOpsStatics.h
   - Engine/Source/Runtime/Core/Public/Core/FAnalytics.h
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/LiveOpsCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/BuildInfo.cs
-  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
 verifiedAt: 7f8f31f8d
 ---
 
@@ -35,7 +29,7 @@ config.SetDefaultNumber("enemy_health", 80.0);
 const int64_t enemyHealth = config.GetInt("enemy_health", 80);
 ```
 
-The game fetches the document over HTTP at start, from the `liveops.ConfigUrl` console variable, which **Project Settings** shows as **Remote Config URL** under **LIVE OPS** <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp" />:
+The game fetches the document over HTTP at start, from the `liveops.ConfigUrl` console variable, which **Project Settings** shows as **Remote Config URL** under **LIVE OPS**:
 
 ```json title="config.json"
 {
@@ -58,7 +52,7 @@ The game fetches the document over HTTP at start, from the `liveops.ConfigUrl` c
 ./mbt.cmd liveops sign config.json --out config.signed.json --project D:/Projects/MyGame
 ```
 
-Serve the signed file at the config URL. The game verifies it against the signing public key its host carries, so a document changed in transit, served by someone else or edited in the cache is refused. A signed document **older** than the one in force is refused too, because replaying it would roll a fix back <Source path="Engine/Source/Runtime/Game/Private/LiveOps/RemoteConfig.cpp" />. The last verified document is cached in `Saved/LiveOps/RemoteConfig.json` and applied, re-verified, on the next start before any network request.
+Serve the signed file at the config URL. The game verifies it against the signing public key its host carries, so a document changed in transit, served by someone else or edited in the cache is refused. A signed document **older** than the one in force is refused too, because replaying it would roll a fix back. The last verified document is cached in `Saved/LiveOps/RemoteConfig.json` and applied, re-verified, on the next start before any network request.
 
 `--key <meaf_signing.key>` signs with a standalone key file instead of the project's key. [Content protection](/docs/shipping/encrypted-archives/) explains the project's keys.
 
@@ -70,7 +64,7 @@ A player's variant of an experiment is a pure function of a user id and the expe
 
 ## Telemetry
 
-`FTelemetry` records `FAnalytics::RecordEvent` calls and its own events. Each event gets the time, a session id, the user id and every A/B variant in force, so any metric splits by variant. Standard events are `session_start`, `session_end` and `experiment_exposure` <Source path="Engine/Source/Runtime/Game/Private/LiveOps/Telemetry.cpp" />.
+`FTelemetry` records `FAnalytics::RecordEvent` calls and its own events. Each event gets the time, a session id, the user id and every A/B variant in force, so any metric splits by variant. Standard events are `session_start`, `session_end` and `experiment_exposure`.
 
 ```cpp wrap title="MyShop.cpp"
 #include "Core/FAnalytics.h"
@@ -81,7 +75,7 @@ Mowo::FAnalytics::RecordEvent("shop_purchase", "{\"item\":\"lantern\",\"price\":
 Events are POSTed in batches to the analytics endpoint the package was built with, `mbt package --analytics-endpoint <url>`, and a failed batch stays queued for the next flush. With `liveops.TelemetryJournal` on (the default), they are also appended to `Saved/Telemetry/events.jsonl`.
 
 <Callout type="warning">
-Nothing is recorded unless the player opted in. `--analytics-endpoint` writes the endpoint and the opt-in into the package's `BuildInfo.json` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/BuildInfo.cs" />; ask the player before you build with it.
+Nothing is recorded unless the player opted in. `--analytics-endpoint` writes the endpoint and the opt-in into the package's `BuildInfo.json`; ask the player before you build with it.
 </Callout>
 
 | Console variable | Default | Meaning |
@@ -98,7 +92,7 @@ Nothing is recorded unless the player opted in. `--analytics-endpoint` writes th
 ./mbt.cmd liveops report D:/Ingest --title "Week 41"
 ```
 
-`mbt liveops report` turns telemetry journals into one self-contained HTML page: events, sessions, players and average session length, event counts with a per-day histogram, and every experiment variant side by side with its players, sessions, exposures and events per session <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/LiveOpsCommand.cs" />.
+`mbt liveops report` turns telemetry journals into one self-contained HTML page: events, sessions, players and average session length, event counts with a per-day histogram, and every experiment variant side by side with its players, sessions, exposures and events per session.
 
 ## Visual Scripting
 

@@ -3,19 +3,8 @@ title: Patches, chunks and DLC
 description: Ship updates as binary .mpatch bundles or patch paks, split content into chunks with Config/Chunks.ini, and package DLC with --dlc and --base.
 order: 6
 sources:
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PatchCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PatchBuilder.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/BinaryDelta.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DlcPackager.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VersionInfoStamper.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/ChunkManifest.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/ChunkPartitioner.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/AssetCommand.cs
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/DlcManager.h
-  - Engine/Source/Runtime/AssetSystem/Private/DlcManager.cpp
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/PackagePaks.h
-  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
-  - Engine/Source/Runtime/Networking/Private/NetSession.cpp
 verifiedAt: 7f8f31f8d
 ---
 
@@ -23,7 +12,7 @@ A released game changes after launch. Mowo gives you three tools for that: **bin
 
 ## How archives stack at runtime
 
-The packaged game mounts its archives at fixed priorities. A higher priority wins when two archives hold the same key <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />:
+The packaged game mounts its archives at fixed priorities. A higher priority wins when two archives hold the same key:
 
 | Priority | Archives |
 |---|---|
@@ -36,7 +25,7 @@ So a patch pak overrides the base, and DLC overrides both, by shipping the same 
 
 ## Binary patches with `mbt patch`
 
-`mbt patch` diffs two package folders and writes one `.mpatch` bundle that turns the old one into the new one <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PatchCommand.cs" />:
+`mbt patch` diffs two package folders and writes one `.mpatch` bundle that turns the old one into the new one:
 
 ```powershell
 ./mbt.cmd patch --from D:/Builds/MyGame-1.0.0 --to D:/Builds/MyGame-1.1.0 --out D:/Builds/MyGame-1.0.0-to-1.1.0.mpatch
@@ -45,7 +34,7 @@ So a patch pak overrides the base, and DLC overrides both, by shipping the same 
 
 ### What goes into a patch
 
-The bundle is a zip with a `patch.json` manifest and one payload per changed file <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PatchBuilder.cs" />:
+The bundle is a zip with a `patch.json` manifest and one payload per changed file:
 
 | Change | Stored as |
 |---|---|
@@ -53,7 +42,7 @@ The bundle is a zip with a `patch.json` manifest and one payload per changed fil
 | File removed | A removal entry |
 | File changed | A binary delta against the old file, or the whole new file when that is smaller |
 
-The delta is rsync-style: the old file is split into 2 KiB blocks indexed by a rolling hash, and the delta copies matching blocks and inserts the rest <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/BinaryDelta.cs" />. Because pak names are stable and archive output is deterministic, an unchanged pak rebuilds byte-identical and never appears in the patch.
+The delta is rsync-style: the old file is split into 2 KiB blocks indexed by a rolling hash, and the delta copies matching blocks and inserts the rest. Because pak names are stable and archive output is deterministic, an unchanged pak rebuilds byte-identical and never appears in the patch.
 
 ### What applying checks
 
@@ -68,7 +57,7 @@ For a content-only update you can ship one small archive of the changed files in
 
 ## Content chunks
 
-Without configuration, a package splits content by category. A `Config/Chunks.ini` replaces that split with chunks you define, for install-on-demand store depots, size budgets or late downloads <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/ChunkManifest.cs" />:
+Without configuration, a package splits content by category. A `Config/Chunks.ini` replaces that split with chunks you define, for install-on-demand store depots, size budgets or late downloads:
 
 ```ini title="Config/Chunks.ini"
 [Chunk 0]
@@ -92,11 +81,11 @@ BudgetMB=512
 
 Chunk 0 is the base chunk; declare it only to give it a budget. A project with the older `Config/Chunks.mdf` is still read as it is.
 
-The manifest can also be generated from primary asset rules in `Config/DefaultGame.ini`: `mbt asset primary <project> --write-chunks` writes it, and never replaces a hand-written one <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/AssetCommand.cs" />. See [Content pipeline](/docs/content-pipeline/) for primary assets and cook rules.
+The manifest can also be generated from primary asset rules in `Config/DefaultGame.ini`: `mbt asset primary <project> --write-chunks` writes it, and never replaces a hand-written one. See [Content pipeline](/docs/content-pipeline/) for primary assets and cook rules.
 
-**The partition rule.** Every cooked file lands in exactly one archive. A file reached by several chunks goes to the lowest-numbered one, and a file reached by none goes to chunk 0 <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/ChunkPartitioner.cs" />. So chunk 0 is self-contained, and a higher chunk never holds a file a lower one needs. Cooked texture and mesh derivatives follow their source.
+**The partition rule.** Every cooked file lands in exactly one archive. A file reached by several chunks goes to the lowest-numbered one, and a file reached by none goes to chunk 0. So chunk 0 is self-contained, and a higher chunk never holds a file a lower one needs. Cooked texture and mesh derivatives follow their source.
 
-In a package, every chunk becomes a hash-named pak whose descriptor carries the chunk id as its `order`. The chunk report, `<Product>-chunks.json`, is written beside the package folder and lists each chunk's archive, size and keys. It is the package's content identity: the `buildId` in `BuildInfo.json` is a hash of it <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VersionInfoStamper.cs" />.
+In a package, every chunk becomes a hash-named pak whose descriptor carries the chunk id as its `order`. The chunk report, `<Product>-chunks.json`, is written beside the package folder and lists each chunk's archive, size and keys. It is the package's content identity: the `buildId` in `BuildInfo.json` is a hash of it.
 
 A missing chunk archive is not an error at runtime. Its keys do not resolve, which is what an optional download looks like before it finishes.
 
@@ -120,7 +109,7 @@ DLC is an ordinary content plugin in your project's `Plugins/` folder, marked as
 - `"minBaseBuild"` optionally names the exact base `buildId` the DLC requires. Empty accepts any base build.
 - `"storeIds.steamAppId"` is the Steam DLC app id.
 
-In the editor the plugin mounts like any other content plugin, so you author DLC content as `Plugins/SwampExpansion/...`. DLC content may reference base content; base content must never reference DLC content, and the DLC build fails when the base package ships a key under the DLC's prefix <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DlcPackager.cs" />.
+In the editor the plugin mounts like any other content plugin, so you author DLC content as `Plugins/SwampExpansion/...`. DLC content may reference base content; base content must never reference DLC content, and the DLC build fails when the base package ships a key under the DLC's prefix.
 
 ### Package DLC
 
@@ -143,7 +132,7 @@ Package the base game first, then the DLC against it:
 
 ### How the game finds and gates DLC
 
-After the base archives mount, the game scans `Content/Paks/DLC/*/dlc.json` with <Source symbol="FDlcManager" /> <Source path="Engine/Source/Runtime/AssetSystem/Private/DlcManager.cpp" />:
+After the base archives mount, the game scans `Content/Paks/DLC/*/dlc.json` with <Source symbol="FDlcManager" />:
 
 1. `minBaseBuild` is checked against the package's `buildId`. A mismatch is refused with a logged reason; a development build (`buildId` `dev`) accepts anything.
 2. An entitlement policy decides ownership. The default, `FLocalDlcEntitlement`, treats a present archive as owned, which suits DRM-free releases and stores that install only owned DLC. `FSteamDlcEntitlement` asks Steam by `storeIds.steamAppId` and falls back to the file check without Steam; install it, or a policy of your own, with `FDlcManager::Get().SetEntitlement(...)` before content mounts.
@@ -158,7 +147,7 @@ After the base archives mount, the game scans `Content/Paks/DLC/*/dlc.json` with
 Mowo::FDlcManager::Get().SetEntitlement(std::make_unique<Mowo::FSteamDlcEntitlement>());
 ```
 
-In multiplayer, the join handshake carries the client's `buildId` and a hash of its mounted DLC set. The host refuses a join when either differs and sends the reason to the refused client. Other builds (every configuration but `release` and `profile`) are always compatible <Source path="Engine/Source/Runtime/Networking/Private/NetSession.cpp" />.
+In multiplayer, the join handshake carries the client's `buildId` and a hash of its mounted DLC set. The host refuses a join when either differs and sends the reason to the refused client. Other builds (every configuration but `release` and `profile`) are always compatible.
 
 ### Steam depots for chunks and DLC
 

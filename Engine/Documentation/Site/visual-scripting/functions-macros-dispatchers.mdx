@@ -5,14 +5,8 @@ description: Factor graphs into functions and macros, choose between them, and b
 order: 5
 sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptClassRegistry.cpp
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptMacroExpander.cpp
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptDispatcherRegistry.h
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptDispatcherRegistry.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp
-  - Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -30,7 +24,7 @@ Click **+** in the **Functions** section of **My Visual Script**. The function o
 </Step>
 <Step title="Declare parameters and locals">
 
-In the function's details, add inputs and locals. Parameter types in the picker are Boolean, Integer, Float and String <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp" />. Each parameter is an output pin on the entry node. **Get Parameter** reads one anywhere in the graph.
+In the function's details, add inputs and locals. Parameter types in the picker are Boolean, Integer, Float and String. Each parameter is an output pin on the entry node. **Get Parameter** reads one anywhere in the graph.
 
 </Step>
 <Step title="Return a value">
@@ -55,13 +49,13 @@ A function cannot suspend. A Delay or Timeline inside a function runs instantly 
 
 ### Pure functions
 
-Tick **Pure** on a function and its call node loses its exec pins. The VM runs the function on demand each time a downstream pin reads the result <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />. Use it for computed getters such as `IsPlayerInRange` or `GetHealthPercent`.
+Tick **Pure** on a function and its call node loses its exec pins. The VM runs the function on demand each time a downstream pin reads the result. Use it for computed getters such as `IsPlayerInRange` or `GetHealthPercent`.
 
 A reflected C++ function declared `const` is pure the same way. You do not need to mark it.
 
 ### RPC functions
 
-A function's Details include **Replication** (Not replicated, Server, Client, Multicast) and **Reliable** <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp" />. A replicated function is routed across the session instead of running wherever the call happens:
+A function's Details include **Replication** (Not replicated, Server, Client, Multicast) and **Reliable**. A replicated function is routed across the session instead of running wherever the call happens:
 
 | Flag | Called on the authority | Called on a client |
 | --- | --- | --- |
@@ -69,11 +63,11 @@ A function's Details include **Replication** (Not replicated, Server, Client, Mu
 | Client | Sent to the owning client (runs locally when the owner is the listen host) | Runs locally |
 | Multicast | Runs locally and is sent to every client | Runs locally only |
 
-Outside a session everything runs locally. A call that must travel but cannot is dropped with an error, never run on the wrong machine <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />. An RPC must return nothing and must not be pure.
+Outside a session everything runs locally. A call that must travel but cannot is dropped with an error, never run on the wrong machine. An RPC must return nothing and must not be pure.
 
 ## Macros
 
-A macro is a sub-graph that is **inlined** when the class registers. The VM never sees a macro node: every event graph and function has its macro instances expanded in place first <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptClassRegistry.cpp" />. The definitions stay on the class, so a child class can use its parent's macros and the editor keeps showing the unexpanded form.
+A macro is a sub-graph that is **inlined** when the class registers. The VM never sees a macro node: every event graph and function has its macro instances expanded in place first. The definitions stay on the class, so a child class can use its parent's macros and the editor keeps showing the unexpanded form.
 
 Because a macro is pasted in rather than called, it can do two things a function cannot:
 
@@ -84,7 +78,7 @@ Add one with **+** in the **Macros** section. Its body starts at a **Macro Input
 
 ### Standard macros
 
-Two macros ship with the engine and appear under **Macros (Standard)** in every class <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptMacroExpander.cpp" />:
+Two macros ship with the engine and appear under **Macros (Standard)** in every class:
 
 | Macro | Inputs | Outputs | Does |
 | --- | --- | --- | --- |
@@ -123,12 +117,12 @@ In the listening class, add **Bind Event On Target**. Wire the broadcasting acto
 </Step>
 </Steps>
 
-When the target broadcasts, the listener's handler runs in the **listener's** context, with its own variables <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />. An unlinked Target pin means self.
+When the target broadcasts, the listener's handler runs in the **listener's** context, with its own variables. An unlinked Target pin means self.
 
 Bindings are safe to leave behind:
 
 - The registry holds both ends weakly and prunes bindings to dead actors when it broadcasts.
-- When an actor ends play, every binding that mentions it is removed <Source path="Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp" />.
+- When an actor ends play, every binding that mentions it is removed.
 - On hot reload, bindings move to the new class definition.
 - More than 32 nested cross-actor broadcasts are refused <Source symbol="VisualScriptDispatcherRegistry" />.
 

@@ -3,22 +3,14 @@ title: Profiling
 description: Measure a running editor, game or server with stat commands, cycle counters, per-frame CSV captures, Tracy, whole-run traces and MowoInsights.
 order: 13
 sources:
-  - Engine/Source/Runtime/Core/Private/FStatDisplay.cpp
   - Engine/Source/Runtime/Core/Public/Core/EngineStats.h
-  - Engine/Source/Runtime/ArcUI/Private/Widgets/AArcUIStatOverlay.cpp
   - Engine/Source/Runtime/Core/Public/Core/FStats.h
   - Engine/Source/Runtime/Core/Public/Core/FFrameStats.h
   - Engine/Source/Runtime/Core/Public/Core/FCsvProfile.h
   - Engine/Source/Runtime/Core/Public/Core/Profiler.h
   - Engine/Source/Runtime/Core/Public/Core/ProfilerCapture.h
-  - Engine/Source/Runtime/Core/Private/ProfilerCapture.cpp
   - Engine/Source/Runtime/Core/Public/Core/TraceWriter.h
-  - Engine/Source/Runtime/Core/Private/TraceWriter.cpp
   - Engine/Source/Runtime/Core/Public/Core/FMemoryTracker.h
-  - Engine/Source/Runtime/Core/Core.Build.cs
-  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
-  - Engine/Source/Programs/MowoInsights/Private/MowoInsights.cpp
-  - Engine/Source/Programs/MowoInsights/Private/InsightsApp.cpp
 verifiedAt: 7f8f31f8d
 ---
 
@@ -42,7 +34,7 @@ Type them in the editor's Output Log console or the game console, or call `ICons
 | `stat enable <group>`, `stat disable <group>` | Turns a group's measurement on or off |
 | `stat startfile [path]`, `stat stopfile` | Writes one CSV row per frame: frame number, time and deltas |
 
-<Source path="Engine/Source/Runtime/Core/Private/FStatDisplay.cpp" /> The display commands toggle, so typing `stat fps` twice turns it off. Values are coloured against the frame budget (16.67 ms by default, `FFrameStats::SetBudgetMs`): amber past it, red past twice it. Hitches are counted at 1.5×, 2× and 4× the budget.
+ The display commands toggle, so typing `stat fps` twice turns it off. Values are coloured against the frame budget (16.67 ms by default, `FFrameStats::SetBudgetMs`): amber past it, red past twice it. Hitches are counted at 1.5×, 2× and 4× the budget.
 
 ### What stat unit measures
 
@@ -76,13 +68,13 @@ To share a counter between files, declare it in a header with `MOWO_DECLARE_CYCL
 
 ## Per-zone CSV capture
 
-`--csvprofile=<file>` writes one row per frame and one column per profiler zone (the summed milliseconds of every zone of that name), after `frame,frameMs,gpuMs`. Diff two captures zone by zone to find a regression. <Source symbol="FCsvProfile" />
+`--csvprofile=<file>` writes one row per frame and one column per profiler zone (the summed milliseconds of every zone of that name), after `frame,frameMs,gpuMs`. Diff two captures zone by zone to find a regression.
 
 The capture turns on the profiler, which takes a lock per scope and changes thread timing. Judge timing-sensitive crashes from a run without it.
 
 ## Tracy
 
-Tracy is compiled in by default in `dev` and `profile` builds on Windows and macOS, idle until a viewer connects. Elsewhere it is opt-in with `-o MOWO_ENABLE_TRACY=true`, and `=false` turns the default off. <Source path="Engine/Source/Runtime/Core/Core.Build.cs" />
+Tracy is compiled in by default in `dev` and `profile` builds on Windows and macOS, idle until a viewer connects. Elsewhere it is opt-in with `-o MOWO_ENABLE_TRACY=true`, and `=false` turns the default off.
 
 ## Whole-run traces
 
@@ -92,7 +84,7 @@ A trace records every frame of a run (CPU scopes per thread, GPU passes, memory 
 MowoGame.exe --trace=Saved/Profiling/Run.mtrace
 ```
 
-`--trace=<file>` sets the `mowo.Trace.File` console variable at start-up; setting it from the console starts a trace mid-run, and setting it empty stops it. A writer thread encodes the frames, so the game thread only queues them; if the writer falls behind, frames are counted as dropped instead of stalling the game. Past `mowo.Trace.MaxSizeMB` (2048 by default) the trace continues in `Run_001.mtrace`, `Run_002.mtrace` and so on. A trace from a process that crashed keeps every whole frame before the crash. <Source path="Engine/Source/Runtime/Core/Private/TraceWriter.cpp" />
+`--trace=<file>` sets the `mowo.Trace.File` console variable at start-up; setting it from the console starts a trace mid-run, and setting it empty stops it. A writer thread encodes the frames, so the game thread only queues them; if the writer falls behind, frames are counted as dropped instead of stalling the game. Past `mowo.Trace.MaxSizeMB` (2048 by default) the trace continues in `Run_001.mtrace`, `Run_002.mtrace` and so on. A trace from a process that crashed keeps every whole frame before the crash.
 
 Publish your own per-frame numbers with `FTraceWriter::Get().SetCounter("DrawCalls", n)`; MowoInsights plots them.
 
@@ -118,8 +110,8 @@ You can also drop a file on the window or use **Open…**; **Reload** rereads a 
 
 ## Retained frames in the editor
 
-The editor's Profiler panel keeps a ring of recent frames you can scrub after a spike has passed, and saves it as `.mprof`. The ring is disarmed until the panel records, because copying every scope each frame has a cost. In a game or on a server, `mowo.Profiler.Capture 1` arms it. <Source path="Engine/Source/Runtime/Core/Private/ProfilerCapture.cpp" /> See [Editor](/docs/editor/).
+The editor's Profiler panel keeps a ring of recent frames you can scrub after a spike has passed, and saves it as `.mprof`. The ring is disarmed until the panel records, because copying every scope each frame has a cost. In a game or on a server, `mowo.Profiler.Capture 1` arms it. See [Editor](/docs/editor/).
 
 ## Memory
 
-`stat memory` reads the memory tracker, which is compiled out of normal builds. Build with `mbt build --memtrack` to get live bytes, peak and allocation counts per tag. Tag your own allocations with `MOWO_LLM_SCOPE(tag)`. <Source symbol="FMemoryTracker" />
+`stat memory` reads the memory tracker, which is compiled out of normal builds. Build with `mbt build --memtrack` to get live bytes, peak and allocation counts per tag. Tag your own allocations with `MOWO_LLM_SCOPE(tag)`.

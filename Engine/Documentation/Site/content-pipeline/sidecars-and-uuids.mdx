@@ -4,15 +4,9 @@ description: What a .mdfmeta sidecar holds, which files have one, why its name a
 order: 7
 sources:
   - Engine/Source/Runtime/Core/Public/Core/UUID.h
-  - Engine/Source/Runtime/AssetSystem/Private/Asset.cpp
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/EditorAssetManager.h
-  - Engine/Source/Runtime/AssetSystem/Private/EditorAssetManager.cpp
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/SidecarPaths.h
   - Engine/Source/Runtime/MDF/Public/mdf/mdf_package.h
-  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/SourceAssetCook.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/AssetPacker.cs
-  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/Decals/T_DecalNormal.png.mdfmeta
 verifiedAt: 5922e6e5e
 ---
 
@@ -62,7 +56,7 @@ AssetMeta {
 | `Import` | The import options. Each asset type writes its own keys |
 | `original_source` and its `_hash`, `_mtime`, `_size` | The file outside the project that the asset was imported from, when there is one |
 
-The first five keys and the `Import` node are written by `Asset::SaveMetadata` <Source path="Engine/Source/Runtime/AssetSystem/Private/Asset.cpp" />. The `original_source` keys are written at import <Source path="Engine/Source/Runtime/AssetSystem/Private/EditorAssetManager.cpp" />. A model's sidecar carries its mesh options:
+The first five keys and the `Import` node are written by `Asset::SaveMetadata`. The `original_source` keys are written at import. A model's sidecar carries its mesh options:
 
 ```mdf title="Samples/SampleProject/Content/Characters/SampleBiped.glb.mdfmeta"
 AssetMeta {
@@ -105,26 +99,26 @@ References that go through the asset registry use the UUID, so they survive a re
 
 ## Sidecar names append
 
-A sidecar's name is the full source file name plus `.mdfmeta`: `rock.png` gets `rock.png.mdfmeta` and `rock.jpg` gets `rock.jpg.mdfmeta` <Source symbol="EditorAssetManager" />. Two files that differ only in extension therefore keep separate UUIDs and separate settings. Text assets follow the same rule, so a level `Main.mmap` has `Main.mmap.mdfmeta`.
+A sidecar's name is the full source file name plus `.mdfmeta`: `rock.png` gets `rock.png.mdfmeta` and `rock.jpg` gets `rock.jpg.mdfmeta`. Two files that differ only in extension therefore keep separate UUIDs and separate settings. Text assets follow the same rule, so a level `Main.mmap` has `Main.mmap.mdfmeta`.
 
-Older projects used the extension-replacing form, `rock.mdfmeta`. The engine still reads those, but only while the sidecar's stored `source` names the file being asked about. That check stops `rock.jpg` from adopting the sidecar of `rock.png` <Source symbol="EditorAssetManager" />.
+Older projects used the extension-replacing form, `rock.mdfmeta`. The engine still reads those, but only while the sidecar's stored `source` names the file being asked about. That check stops `rock.jpg` from adopting the sidecar of `rock.png`.
 <Callout type="engine">
-The rule has one implementation per side. `FSidecarPaths` in the AssetFormats module serves the cook, the asset migrator and the runtime <Source symbol="FSidecarPaths" />. `EditorAssetManager::ResolveMdfmetaPath` finds an existing sidecar in the editor and `GenerateMdfmetaPath` only mints the new name. The build tool mirrors the same rule when it cooks <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/SourceAssetCook.cs" />.
+The rule has one implementation per side. `FSidecarPaths` in the AssetFormats module serves the cook, the asset migrator and the runtime. `EditorAssetManager::ResolveMdfmetaPath` finds an existing sidecar in the editor and `GenerateMdfmetaPath` only mints the new name. The build tool mirrors the same rule when it cooks.
 </Callout>
 
 ## When a source moves behind the editor's back
 
-Renaming or moving a file outside the editor, for example in Explorer, with `git mv`, or by switching branches while the editor is closed, leaves its sidecar pointing at a path that no longer exists. The editor never deletes such a sidecar, because deleting it destroys every reference to the asset with no undo <Source symbol="EditorAssetManager" />. On the next directory scan it does one of two things.
+Renaming or moving a file outside the editor, for example in Explorer, with `git mv`, or by switching branches while the editor is closed, leaves its sidecar pointing at a path that no longer exists. The editor never deletes such a sidecar, because deleting it destroys every reference to the asset with no undo. On the next directory scan it does one of two things.
 
 <Flow steps={["Sidecar without its source", "Find files with the same name", "Exactly one unclaimed match?", "Relink: rewrite source, move sidecar"]} highlight={3} caption="Relinking keeps the UUID, so every reference keeps working." branch={{ from: "Exactly one unclaimed match?", label: "no: quarantine to Saved/OrphanedMeta/" }} />
 
 ### Relink
 
-The editor looks for a file with the same name elsewhere in the project. The move is applied only when it is unambiguous: exactly one candidate, and that candidate does not already own a different sidecar. The editor then rewrites the sidecar's `source`, moves the sidecar next to the file, and keeps the UUID <Source path="Engine/Source/Runtime/AssetSystem/Private/EditorAssetManager.cpp" />. The log line reads `Relinked moved asset`. A renamed folder resolves the same way, because each file and its sidecar moved together.
+The editor looks for a file with the same name elsewhere in the project. The move is applied only when it is unambiguous: exactly one candidate, and that candidate does not already own a different sidecar. The editor then rewrites the sidecar's `source`, moves the sidecar next to the file, and keeps the UUID. The log line reads `Relinked moved asset`. A renamed folder resolves the same way, because each file and its sidecar moved together.
 
 ### Quarantine
 
-When the move is ambiguous or the source is really gone, the sidecar is moved to `Saved/OrphanedMeta/`, at the same relative path it had in the project. An earlier quarantine of the same path is never overwritten; the new one gets a numeric suffix <Source path="Engine/Source/Runtime/AssetSystem/Private/EditorAssetManager.cpp" />.
+When the move is ambiguous or the source is really gone, the sidecar is moved to `Saved/OrphanedMeta/`, at the same relative path it had in the project. An earlier quarantine of the same path is never overwritten; the new one gets a numeric suffix.
 
 <Callout type="warning">
 `Saved/` is not committed, so a quarantined sidecar exists only on the machine that quarantined it. If you restore the source file, copy the sidecar from `Saved/OrphanedMeta/` back next to it to recover the asset's original UUID.
@@ -161,9 +155,9 @@ Right-click the folder in the Content Browser and choose **Refresh**. The asset 
 
 ## Sidecars in a cooked game
 
-The cook reads sidecars while it builds, but only one kind ships in the archive. A mesh source's sidecar is packed, because the packaged runtime reads its `Import` block (scale, up axis, LODs, skeleton) the way the editor does, and the cooked `.mmodel` bakes only the vertex-level choices <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/AssetPacker.cs" />. Every other sidecar is editor-only, since its cooked output already embodies it. See [Cooking](/docs/content-pipeline/cooking/).
+The cook reads sidecars while it builds, but only one kind ships in the archive. A mesh source's sidecar is packed, because the packaged runtime reads its `Import` block (scale, up axis, LODs, skeleton) the way the editor does, and the cooked `.mmodel` bakes only the vertex-level choices. Every other sidecar is editor-only, since its cooked output already embodies it. See [Cooking](/docs/content-pipeline/cooking/).
 
 ## Related
 
 - [Redirectors](/docs/content-pipeline/redirectors/) covers references that store paths instead of UUIDs.
-- API: [UUID](/docs/api/core/uuid/), [FSidecarPaths](/docs/api/assetformats/fsidecarpaths/), [EditorAssetManager](/docs/api/assetsystem/editorassetmanager/).
+- API: [UUID](/docs/api/core/uuid/).

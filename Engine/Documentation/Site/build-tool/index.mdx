@@ -1,23 +1,14 @@
 ---
 title: Build tool
-description: MowoBuildTool (mbt) builds the engine and your game from C# rules files. How it runs, what a build does and what each page of this section covers.
+description: mbt builds your project's C++ modules, cooks and packages your game from C# rules files. How to run it and what a build does in the installed editor build.
 order: 10
 icon: Hammer
 sources:
-  - mbt.cmd
-  - mbt.sh
-  - Engine/Source/Programs/MowoBuildTool/publish.bat
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/RootCommandFactory.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/RulesAssembly.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Graph/BuildCache.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/BuildLock.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/ProgressReporter.cs
-verifiedAt: 7f8f31f8d
+  - Templates/TP_Coop/Source/TP_Coop/TP_Coop.Build.cs
+verifiedAt: 3f3a08d31
 ---
 
-**MowoBuildTool**, run as `mbt`, is the engine's build system, modeled on Unreal Build Tool. It is a C# program on .NET 10 that lives in `Engine/Source/Programs/MowoBuildTool/`. It compiles the engine and your game, compiles shaders, cooks and packs content, generates IDE projects, scaffolds projects, classes and programs, runs the tests and packages builds. There is no CMake and no separate configure step.
+**MowoBuildTool**, run as `mbt`, is Mowo's build tool, modeled on Unreal Build Tool. It compiles your project's C++ modules against the prebuilt engine, cooks and packs content, packages the game, generates IDE projects and scaffolds projects and classes. The editor runs it for you when you compile or package from the UI; you run it yourself from a terminal or a build machine. There is no CMake and no configure step.
 
 ## Rules are C# files
 
@@ -36,49 +27,43 @@ public class MyGame : ModuleRules
 }
 ```
 
-Folders replace most lines: `Public/` and `Classes/` are public include paths, `Private/` holds the sources, new `.cpp` files are picked up automatically. `mbt` compiles all rules files of a scope into one assembly with Roslyn and caches it in `.mbt-cache/Rules/`, so a build that changed no rules runs no compiler for them <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/RulesAssembly.cs" />. [Modules and targets](/docs/build-tool/modules-and-targets/) covers the files.
+Folders replace most lines: `Public/` and `Classes/` are public include paths, `Private/` holds the sources, and new `.cpp` files are picked up automatically. `mbt` compiles the rules files with Roslyn and caches the result, so a build that changed no rules runs no compiler for them. [Modules and targets](/docs/build-tool/modules-and-targets/) covers the files.
 
 ## Running mbt
 
-Run `mbt` through the wrapper at the engine root: `mbt.cmd` on Windows, `mbt.sh` on Linux and macOS. On the first run the wrapper publishes `mbt` as one self-contained executable into `Engine/Source/Programs/MowoBuildTool/publish/`, and it publishes again whenever a source file of `mbt` (or of the header tool it runs) is newer than that executable <Source path="mbt.cmd" />. The first run needs the .NET 10 SDK; later runs only start the published file.
+Run `mbt` through the wrapper at the root of the install: `mbt.cmd` on Windows. The `mbt` it starts is self-contained, so you do not need the .NET SDK.
 
 ```powershell
 ./mbt.cmd doctor
-./mbt.cmd build
-./mbt.cmd build -t MowoEditor -c dev
-./mbt.cmd info
+./mbt.cmd build -t MyGame --extra-source D:/Projects/MyGame/Source
+./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject
 ```
 
-`mbt` finds the engine by walking up from the current directory, so you can run it from anywhere inside the checkout. If a publish fails, the wrapper refuses to run the previous `mbt` against newer sources and exits 1.
+In the installed build the engine's modules are prebuilt. `mbt build` compiles only the module you name with `-t`, against the engine's libraries, and refuses a build without `-t`. It always builds in the configuration the engine shipped as, because C runtime flavors cannot mix across the engine's DLLs; another `-c` is corrected with a log line.
 
 ### Global options
 
-Every command takes these <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/RootCommandFactory.cs" />:
+Every command takes these:
 
 | Option | Meaning |
 |---|---|
 | `-v, --verbose` | Verbose output |
 | `--dry-run` | Show what would be done without doing it |
-| `--progress console\|json` | `json` writes one JSON object per line (`progress`, `diagnostic`, `stage`, `complete`) for tools that drive `mbt`, such as the editor <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/ProgressReporter.cs" /> |
+| `--progress console\|json` | `json` writes one JSON object per line (`progress`, `diagnostic`, `stage`, `complete`) for tools that drive `mbt`, such as the editor |
 
 ## What a build does
 
-<Flow steps={["Compile rules", "Resolve modules", "Header tool", "Compile", "Link", "Pack archives"]} highlight={3} caption="One mbt build. Shaders compile beside the C++ build, from its start." />
+<Flow steps={["Compile rules", "Resolve modules", "Header tool", "Compile", "Link"]} highlight={2} caption="One mbt build of a game module." />
 
 1. **Compile rules.** Every `.Build.cs` and `.Target.cs` in scope, or the cached assembly.
-2. **Resolve modules.** `-t <name>` names a target first and a module second. A target builds its launch module, its `ExtraModuleNames` and, for game, editor and server targets, the enabled plugins. Without `-t`, `mbt build` builds every module. A module that links one its target type or configuration rules out fails the build: an editor module in a game, a developer module in `release`.
-3. **Header tool.** For every module with `bUseHeaderTool`, the reflection code generator runs in process and writes the generated code the module compiles with.
-4. **Compile.** Each translation unit is fingerprinted from its source, its flags and the headers it included last time, and only changed units recompile <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Graph/BuildCache.cs" />. The fingerprints live in `.mbt-cache/`.
-5. **Link** each module into a shared library (or a static one in a monolithic build) and each target into an executable.
-6. **Pack archives.** Modules that declare a shader or content archive get it compiled and packed beside the binaries.
+2. **Resolve modules.** `-t <name>` names the module to build. Its engine dependencies resolve to the prebuilt libraries. A module that depends on one its target type or configuration rules out fails the build, such as an editor module in a game.
+3. **Header tool.** For every module with `bUseHeaderTool`, the reflection code generator runs inside `mbt` and writes the code the module compiles with.
+4. **Compile.** Each translation unit is fingerprinted from its source, its flags and the headers it included last time, and only changed units recompile.
+5. **Link** the module into a shared library the editor and the game load.
 
-Only one build runs per checkout at a time: a second `mbt` waits for the first, because concurrent builds share `.mbt-cache` and would corrupt each other's objects <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/BuildLock.cs" />.
+Only one build runs at a time: a second `mbt` waits for the first, because concurrent builds share the object cache.
 
 `--shared-cache <folder or https bucket>` (or `MBT_SHARED_CACHE`) shares compiled objects across a team: a changed translation unit is pulled from the cache when another machine already compiled it with the same source, headers and flags, and published there otherwise. `--shared-cache-read-only` pulls without publishing.
-
-## Where output goes
-
-Binaries land in `Engine/Binaries/<platform>/<config>/`, one folder per configuration, and file names carry only the name: `Engine/Binaries/win-x64/dev/MowoEditor.exe`, `Engine/Binaries/win-x64/debug/MowoEditor.exe`. Objects and generated code go to `Engine/Intermediate/Build/`. Every binary finds the engine from its own location, so the working directory does not matter. [Output layout](/docs/build-tool/output-layout/) has the details.
 
 ## In this section
 
@@ -86,9 +71,6 @@ Binaries land in `Engine/Binaries/<platform>/<config>/`, one folder per configur
   <Card title="Commands" href="/docs/build-tool/commands/" icon="Hammer">What each mbt command is for, by task.</Card>
   <Card title="Modules and targets" href="/docs/build-tool/modules-and-targets/" icon="Boxes">Write .Build.cs and .Target.cs rules.</Card>
   <Card title="Build configurations" href="/docs/build-tool/configurations/" icon="Layers">debug, debuggame, dev, profile and release.</Card>
-  <Card title="Toolchains and platforms" href="/docs/build-tool/toolchains-and-platforms/" icon="Workflow">Clang everywhere, pinned versions, cross-compiling.</Card>
-  <Card title="Output layout" href="/docs/build-tool/output-layout/" icon="FolderInput">Binary names, variant folders, intermediates.</Card>
-  <Card title="Shaders and cook" href="/docs/build-tool/shaders-and-cook/" icon="Sun">mbt shaders, shader roots, workers and the shader cache.</Card>
-  <Card title="Programs" href="/docs/build-tool/programs/" icon="Braces">Standalone tools under Engine/Source/Programs.</Card>
+  <Card title="Toolchains and platforms" href="/docs/build-tool/toolchains-and-platforms/" icon="Workflow">The clang toolchain a game module needs.</Card>
   <Card title="Exit codes" href="/docs/build-tool/exit-codes/" icon="FileText">What each exit code means, for scripts and CI.</Card>
 </CardGrid>

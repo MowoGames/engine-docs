@@ -3,15 +3,9 @@ title: Dedicated server
 description: Build, run and package MowoServer, the headless authoritative server that hosts a session with no player on the host machine.
 order: 7
 sources:
-  - Engine/Source/MowoServer.Target.cs
-  - Engine/Source/Runtime/MowoServer/MowoServer.Build.cs
-  - Engine/Source/Runtime/MowoServer/Private/MowoServer.cpp
-  - Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp
-  - Engine/Source/Runtime/MowoServer/Private/ServerEngine.h
   - Engine/Source/Runtime/Networking/Public/Networking/PlatformInit.h
   - Engine/Plugins/DiscordPlatform/DiscordPlatform.mplugin
   - Engine/Plugins/MowoOnlinePlatform/MowoOnlinePlatform.mplugin
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
 verifiedAt: 6caf55861
 ---
 
@@ -21,7 +15,7 @@ verifiedAt: 6caf55861
 
 <Flow steps={["Open project", "Load scene", "Init game mode", "Host session", "Tick at --tickrate"]} highlight={3} caption="MServerEngine brings up a world before it hosts, then runs the runtime systems every tick." />
 
-1. It opens the project (or the cooked package's manifest) and reads the start scene, the game mode class and the `platform.*` settings <Source path="Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp" />.
+1. It opens the project (or the cooked package's manifest) and reads the start scene, the game mode class and the `platform.*` settings.
 2. It loads the `--map` scene, or the project's start scene, or an empty world when neither is set.
 3. With a game mode, it initializes that `AGameMode` on the actor world without a local player. Each player who joins is spawned through `AGameMode::RestartPlayer`; without a game mode, joining players get bare replicated pawns.
 4. It hosts the session with `spawnHostPawn` off, relevancy off, no lobby or rich presence, and no host-wide uplink cap (only the per-client budget applies).
@@ -48,7 +42,7 @@ MowoServer.exe --project=MyGame.mproject --map=Content/Maps/Level01.mmap --port=
 | `--ticket-key <hex>`, `--ticket-key-file <path>` | none | Encrypted app ticket key |
 | `--travel-after <s>`, `--travel-to <scene>` | none | Travel to another scene after this many seconds |
 
-Options parse through the engine command line, so `--port 7777` and `--port=7777` both work <Source path="Engine/Source/Runtime/MowoServer/Private/MowoServer.cpp" />. Ctrl+C, SIGTERM or closing the console stops the server gracefully: clients see the session close rather than a timeout, and the process exits with code 0. That makes it a well-behaved citizen under systemd, containers or another supervisor.
+Options parse through the engine command line, so `--port 7777` and `--port=7777` both work. Ctrl+C, SIGTERM or closing the console stops the server gracefully: clients see the session close rather than a timeout, and the process exits with code 0. That makes it a well-behaved citizen under systemd, containers or another supervisor.
 
 <Callout type="tip">
 The server writes its log to an unbuffered stdout, so a supervising process sees lines as they happen.
@@ -68,7 +62,7 @@ With `platform.steamEnabled` on in the project, the server logs on anonymously a
 ./mbt.cmd package --target Server
 ```
 
-`--target Server` produces a headless server package instead of the branded player <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />. A packaged server mounts the same encrypted, signed content as the game, carries its manifest as `Game.mproject` at the package root, and reports crashes through the game's crash settings. See [Shipping](/docs/shipping/) and the [mbt CLI reference](/docs/reference/mbt-cli/).
+`--target Server` produces a headless server package instead of the branded player. A packaged server mounts the same encrypted, signed content as the game, carries its manifest as `Game.mproject` at the package root, and reports crashes through the game's crash settings. See [Shipping](/docs/shipping/) and the [mbt CLI reference](/docs/reference/mbt-cli/).
 
 ## Related
 

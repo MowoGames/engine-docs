@@ -5,26 +5,13 @@ description: The player settings and rebinding screens that ship with ArcUI, the
 order: 5
 sources:
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Settings/FGameUserSettings.h
-  - Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUISettingsScreen.h
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUIRebindScreen.h
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Settings/FArcRebindModel.h
-  - Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp
-  - Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp
-  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
-  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp
-  - Engine/Source/Runtime/Camera/Private/CameraSystem.cpp
-  - Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp
-  - Engine/Source/Runtime/Input/Private/InputManager.cpp
-  - Engine/Source/Runtime/Input/Private/InputActionSystem.cpp
-  - Engine/Source/Runtime/Narrative/Private/SubtitleSystem.cpp
   - Engine/Source/Runtime/Arc/Public/Arc/Accessibility/CArcAccessibility.h
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Statics/MRebindStatics.h
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUILobbyScreen.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-  - Engine/Source/Runtime/Arc/Private/Animation/CArcAnimationManager.cpp
-  - Engine/Source/Runtime/Arc/Private/Mowo/CArcMowoTheme.cpp
-  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
 verifiedAt: aee5cfcae
 ---
 
@@ -51,7 +38,7 @@ Each row has a backend <Source symbol="FGameUserSettings" />:
 
 <Steps>
 <Step title="Place the screen in a .ui">
-Add a node with `class: "SettingsScreen"`. It fires `closed` when the player closes it and `rebind` when they ask for key bindings. A `RebindScreen` node fires `closed` <Source path="Engine/Source/Runtime/ArcUI/Private/FArcWidgetFactory.cpp" />.
+Add a node with `class: "SettingsScreen"`. It fires `closed` when the player closes it and `rebind` when they ask for key bindings. A `RebindScreen` node fires `closed`.
 </Step>
 <Step title="Wire the events">
 Handle `closed` and `rebind` like any other ArcUI event: a `PlayAnim:` verb, a `VisualScript:Class.Event` action, or a C++ action handler. See [ArcUI screens](/docs/ui/arcui-screens/#events).
@@ -63,7 +50,7 @@ Push the asset as a modal screen so gameplay stops receiving input while it is o
 
 In C++, build them with `ArcNew(Arcf::AArcUISettingsScreen)` and `ArcNew(Arcf::AArcUIRebindScreen)`.
 
-The packaged runtime prepares the model at startup: it builds the rows against the probed device, loads the save file, and pushes the stored values to their backends <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />. You can also drive the model directly:
+The packaged runtime prepares the model at startup: it builds the rows against the probed device, loads the save file, and pushes the stored values to their backends. You can also drive the model directly:
 
 ```cpp title="QuickAccessibility.cpp" wrap
 #include <ArcUI/Settings/FGameUserSettings.h>
@@ -85,17 +72,17 @@ settings.Apply();
 ## Apply, revert and confirmation
 
 - Edits stage as pending values. `Apply()` commits them, `Revert()` drops them, and `ResetToDefaults()` stages the shipped defaults for one category or all.
-- The four display rows (Window Mode, Monitor, Resolution, Refresh Rate) need confirmation. After Apply, a countdown runs; if the player does not confirm, the previous values come back. The default window is 15 seconds <Source symbol="FGameUserSettings" />. The screen stack advances the countdown every tick <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
+- The four display rows (Window Mode, Monitor, Resolution, Refresh Rate) need confirmation. After Apply, a countdown runs; if the player does not confirm, the previous values come back. The default window is 15 seconds <Source symbol="FGameUserSettings" />. The screen stack advances the countdown every tick.
 - Rows marked `NeedsRestart`, such as UI Scale Override and Global Illumination, take effect on the next launch.
-- If a cvar row has no registered variable (for example, a disabled plugin owns it), Apply logs a warning naming the row <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />.
+- If a cvar row has no registered variable (for example, a disabled plugin owns it), Apply logs a warning naming the row.
 
 ### Device gating
 
-`FArcDeviceProfile::Probe()` reads what the graphics API and GPU support. A control the API can never do is greyed with the backend's name; one the GPU lacks is greyed with "unavailable on this RHI/GPU" <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />. A third axis is the game itself: the Global Illumination, ray-tracing, MegaLights, volumetric fog and frame-generation rows are greyed with "this game does not use it" when the project left that feature off in Project Settings > Rendering > Features. A saved value for a greyed row is dropped on load, because the save file can outlive the GPU it was written on.
+`FArcDeviceProfile::Probe()` reads what the graphics API and GPU support. A control the API can never do is greyed with the backend's name; one the GPU lacks is greyed with "unavailable on this RHI/GPU". A third axis is the game itself: the Global Illumination, ray-tracing, MegaLights, volumetric fog and frame-generation rows are greyed with "this game does not use it" when the project left that feature off in Project Settings > Rendering > Features. A saved value for a greyed row is dropped on load, because the save file can outlive the GPU it was written on.
 
 ### Where settings are saved
 
-`<project>/Saved/Config/GameUserSettings.ini`, or the per-user folder when no project is open. An older `GameUserSettings.mdf` is converted on first read <Source path="Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h" /> <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />. Never the project's committed `Config/` folder. A value at its default is not written, so a later engine that changes a default carries the player along.
+`<project>/Saved/Config/GameUserSettings.ini`, or the per-user folder when no project is open. An older `GameUserSettings.mdf` is converted on first read <Source path="Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h" />. Never the project's committed `Config/` folder. A value at its default is not written, so a later engine that changes a default carries the player along.
 
 ## Categories
 
@@ -112,30 +99,30 @@ There are six categories: Display, Graphics, Audio, Controls, Gameplay and Acces
 
 ## Accessibility options
 
-Every Accessibility row writes a console variable that an engine system reads, so a game gets these options without extra wiring <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />. | Setting | Cvar | Range (default) | What reads it |
+Every Accessibility row writes a console variable that an engine system reads, so a game gets these options without extra wiring. | Setting | Cvar | Range (default) | What reads it |
 | --- | --- | --- | --- |
-| Colour Vision | `r.ColorBlind.Mode` | Off, Protanopia, Deuteranopia, Tritanopia (Off) | Post-tonemap color correction on the scene <Source path="Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp" /> |
-| Colour Vision Strength | `r.ColorBlind.Strength` | 0–1 (1) | Same pass <Source path="Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp" /> |
-| Gamma | `r.DisplayGamma` | 1.8–2.6 (2.2) | Re-encodes the SDR image for the panel's gamma <Source path="Engine/Source/Runtime/SceneRenderer/Private/SceneRendererPost.cpp" /> |
-| Field Of View | `cam.FOV` | 0–120° (0) | Gameplay camera's vertical FOV. 0 keeps each camera's own value; Sequencer cut cameras always keep theirs <Source path="Engine/Source/Runtime/Camera/Private/CameraSystem.cpp" /> |
-| Camera Shake | `cam.ShakeScale` | 0–1× (1) | Scales every camera shake <Source path="Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp" /> |
-| Controller Vibration | `i.RumbleScale` | 0–1× (1) | Scales every rumble and trigger-haptic request; 0 is off <Source path="Engine/Source/Runtime/Input/Private/InputManager.cpp" /> |
+| Colour Vision | `r.ColorBlind.Mode` | Off, Protanopia, Deuteranopia, Tritanopia (Off) | Post-tonemap color correction on the scene |
+| Colour Vision Strength | `r.ColorBlind.Strength` | 0–1 (1) | Same pass |
+| Gamma | `r.DisplayGamma` | 1.8–2.6 (2.2) | Re-encodes the SDR image for the panel's gamma |
+| Field Of View | `cam.FOV` | 0–120° (0) | Gameplay camera's vertical FOV. 0 keeps each camera's own value; Sequencer cut cameras always keep theirs |
+| Camera Shake | `cam.ShakeScale` | 0–1× (1) | Scales every camera shake |
+| Controller Vibration | `i.RumbleScale` | 0–1× (1) | Scales every rumble and trigger-haptic request; 0 is off |
 | Subtitle Other Players | `audio.AutoSubtitles` | on/off (off) | Transcribes what other players say in voice chat on this machine and shows it as subtitles |
-| Hold To Toggle | `i.HoldToToggle` | on/off (off) | Hold actions marked toggleable latch on one press and release on the next <Source path="Engine/Source/Runtime/Input/Private/InputActionSystem.cpp" /> |
+| Hold To Toggle | `i.HoldToToggle` | on/off (off) | Hold actions marked toggleable latch on one press and release on the next |
 | High Contrast UI | `ui.HighContrast` | on/off (off) | Arc accessibility manager flag |
 | Reduced Motion | `ui.ReducedMotion` | on/off (off) | Arc accessibility manager flag |
 
 The color-vision correction applies to the rendered scene only. The UI has its own high-contrast mode.
 
-Apply pushes `ui.HighContrast` and `ui.ReducedMotion` into `CArcAccessibilityManager`. With High Contrast UI on, Arc draws with its high-contrast colours <Source path="Engine/Source/Runtime/Arc/Private/Mowo/CArcMowoTheme.cpp" />. With Reduced Motion on, decorative transitions jump to their end and popups open without sliding <Source path="Engine/Source/Runtime/Arc/Private/Animation/CArcAnimationManager.cpp" />.
+Apply pushes `ui.HighContrast` and `ui.ReducedMotion` into `CArcAccessibilityManager`. With High Contrast UI on, Arc draws with its high-contrast colours. With Reduced Motion on, decorative transitions jump to their end and popups open without sliding.
 
 `Hold To Toggle` only affects actions the game marks as toggleable (the row's own examples are crouch, sprint and aim).
 
-The Accessibility category also has four `r.PointCloud.*` rows: Scan Palette (including red-green safe, blue-yellow safe and monochrome-with-shapes palettes), Scan Point Size, Scan Density and Streamer Mode <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />. They serve the engine's LiDAR point-cloud renderer and matter only for games that use it.
+The Accessibility category also has four `r.PointCloud.*` rows: Scan Palette (including red-green safe, blue-yellow safe and monochrome-with-shapes palettes), Scan Point Size, Scan Density and Streamer Mode. They serve the engine's LiDAR point-cloud renderer and matter only for games that use it.
 
 ### Subtitles and captions
 
-Subtitle options live in the **Audio** category. The Narrative module's subtitle system registers the cvars <Source path="Engine/Source/Runtime/Narrative/Private/SubtitleSystem.cpp" />.
+Subtitle options live in the **Audio** category. The Narrative module's subtitle system registers the cvars.
 
 | Setting | Cvar | Range (default) |
 | --- | --- | --- |
@@ -146,7 +133,7 @@ Subtitle options live in the **Audio** category. The Narrative module's subtitle
 | Background Opacity | `audio.SubtitleBackgroundOpacity` | 0–1 (0.6) |
 | Max Subtitle Lines | `audio.SubtitleMaxLines` | 1–6 (3) |
 
-These rows are defined in the settings table <Source path="Engine/Source/Runtime/ArcUI/Private/Settings/FGameUserSettings.cpp" />.
+These rows are defined in the settings table.
 
 ## Rebinding keys
 
@@ -159,7 +146,7 @@ These rows are defined in the settings table <Source path="Engine/Source/Runtime
 | `ResetAction`, `ResetContext`, `ResetAll` | Drop overrides |
 | `Save()` | Write the player's bindings |
 
-While `IsCapturing()` is true, the host routes raw input to the model instead of the game <Source symbol="FArcRebindModel" />. Rebinding the keyboard column keeps the gamepad binding and the other way round. Actions and contexts are the project's `.inputaction` and `.inputcontext` assets <Source path="Engine/Source/Runtime/Core/Private/FileTypes.cpp" />. Conflicts are reported on the row (`KeyboardConflicts`, `GamepadConflicts`) but not refused, since some overlaps are intentional.
+While `IsCapturing()` is true, the host routes raw input to the model instead of the game <Source symbol="FArcRebindModel" />. Rebinding the keyboard column keeps the gamepad binding and the other way round. Actions and contexts are the project's `.inputaction` and `.inputcontext` assets. Conflicts are reported on the row (`KeyboardConflicts`, `GamepadConflicts`) but not refused, since some overlaps are intentional.
 
 <Screenshot id="ui-rebind-capture" alt="The RebindScreen in a running game with one keyboard cell in the capturing state (KeyCap showing its listening style) and another row flagged with a conflict marker" caption="Capturing a new key on the rebind screen." />
 

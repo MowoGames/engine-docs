@@ -5,14 +5,10 @@ description: Expose C++ functions as nodes with MFUNCTION, learn how the VM reso
 order: 7
 sources:
   - Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h
-  - Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs
   - Engine/Source/Runtime/Core/Public/Core/MObject.h
   - Engine/Source/Runtime/Core/Public/Core/MClassRegistry.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptNodeCatalog.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptValue.h
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptRpc.cpp
-  - Engine/Source/Programs/MowoHeaderTool/Emit/ReflSourceEmitter.cs
   - Engine/Source/Runtime/Game/Public/Game/AActor.h
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
@@ -102,7 +98,7 @@ What a graph sees for this class:
 
 ## How the VM resolves a call
 
-A **Call Function** node stores a function name. The VM resolves it like this <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />:
+A **Call Function** node stores a function name. The VM resolves it like this:
 
 1. **Qualified name.** If the name has the form `Class::Function`, the VM finds that class and calls the function on its default object, or with no instance if the function is static. This is how the **Library** nodes such as `MGameplayStatics::SpawnActorByClass` work from any graph.
 2. **The running class.** Otherwise it walks the running instance's native class chain and takes the first match. `AActor` exposes functions such as `GetActorLocation`, `SetActorLocation`, `GetActorName` and `GetComponentByClass` this way <Source symbol="AActor" />. A Character class reaches `ACharacter`'s functions the same way.
@@ -132,7 +128,7 @@ The VM checks the argument count strictly: a node that supplies the wrong number
 
 ### RPC specifiers
 
-`MFUNCTION(Server)`, `MFUNCTION(Client)` and `MFUNCTION(Multicast)`, optionally with `Reliable`, declare a network RPC <Source path="Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs" />. A call to one routes over the session instead of running locally. An RPC must be a non-static, non-const method that returns `void`; the VM refuses anything else at the call, and the editor flags it as a compile error. The receiving side re-checks the direction against where the packet came from <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptRpc.cpp" />, so a peer cannot run a non-RPC or wrong-direction function by naming it.
+`MFUNCTION(Server)`, `MFUNCTION(Client)` and `MFUNCTION(Multicast)`, optionally with `Reliable`, declare a network RPC. A call to one routes over the session instead of running locally. An RPC must be a non-static, non-const method that returns `void`; the VM refuses anything else at the call, and the editor flags it as a compile error. The receiving side re-checks the direction against where the packet came from, so a peer cannot run a non-RPC or wrong-direction function by naming it.
 
 ## Call a visual class from C++
 

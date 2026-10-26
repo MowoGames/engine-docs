@@ -11,16 +11,11 @@ sources:
   - Engine/Source/Runtime/MDF/Public/mdf/mdf_binary.h
   - Engine/Source/Runtime/MDF/Public/mdf/mdf.h
   - Engine/Source/Runtime/MDF/Public/mdf/mdf_package.h
-  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
   - Engine/Source/Runtime/Serialization/Public/Serialization/MdfCompat.h
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/MdfCooker.cs
-  - Engine/Source/Programs/MdfTool/Private/main.cpp
   - Templates/TP_Shooter/Content/Materials/M_BulletHole.mat
   - Templates/TP_FirstPerson/Content/Items/Crate.item
   - Templates/TP_Coop/Content/Environment/DayCycle.environment
   - Templates/TP_TopDown/Content/UI/HUD.ui
-  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/Scenes/VisualScriptUiDemo.mmap
 verifiedAt: c1d08db53
 ---
 
@@ -57,7 +52,7 @@ The first root, `Package`, is the asset's package summary: its class, its id, an
 
 ## Grammar
 
-The parser documents its grammar in its header <Source symbol="MdfParser" />:
+The parser documents its grammar in its header:
 
 ```text
 document     = node* comment*
@@ -76,9 +71,9 @@ enum_value   = IDENTIFIER
 
 A node is a type identifier, an optional quoted name, and a body in braces. The type says what the node is, such as `Scene`, `Entity` or `Mapping`. The name tells siblings apart. Several children may share the same type, and a file may hold more than one root node.
 
-Inside a body, the parser tells properties and child nodes apart by the token after the identifier. A colon starts a property. A brace or a quoted name starts a child node <Source symbol="MdfParser" />.
+Inside a body, the parser tells properties and child nodes apart by the token after the identifier. A colon starts a property. A brace or a quoted name starts a child node.
 
-Nesting is capped at 256 levels in both encodings, so a corrupt or hostile file fails with a diagnostic instead of overflowing the stack <Source symbol="MdfParser" />.
+Nesting is capped at 256 levels in both encodings, so a corrupt or hostile file fails with a diagnostic instead of overflowing the stack.
 
 ### Properties and values
 
@@ -97,11 +92,11 @@ Nesting is capped at 256 levels in both encodings, so a corrupt or hostile file 
 | Enum | A bare identifier | `anchor: BottomCenter` |
 | Array | Square brackets, comma separated, trailing comma allowed | `keys: [0.0, 0.048, 4.0, 0.062]` |
 
-The value types are fixed by `MdfValueType` <Source symbol="MdfValueType" />. The constructors `vec2`, `vec3`, `vec4`, `quat`, `rgb`, `rgba`, `hex` and `uuid` are the only ones the parser knows. Any other name followed by `(` is an error <Source symbol="MdfParser" />. The colors `rgb`, `rgba` and `hex` all read back as a `vec4`, with alpha set to 1 when you leave it out. Hex digits are divided by 255.
+The value types are fixed by `MdfValueType`. The constructors `vec2`, `vec3`, `vec4`, `quat`, `rgb`, `rgba`, `hex` and `uuid` are the only ones the parser knows. Any other name followed by `(` is an error. The colors `rgb`, `rgba` and `hex` all read back as a `vec4`, with alpha set to 1 when you leave it out. Hex digits are divided by 255.
 
 ### Comments
 
-Text MDF supports `// line` and `/* block */` comments. The lexer keeps them as tokens, and the parser attaches each one to the node or property that follows it, or to the property on the same line <Source symbol="MdfTokenType" />. That is why an MDF file keeps its comments when the editor saves it or `mbt mdf fmt` rewrites it. A comment in a place nothing can own, such as inside an array, still parses but is dropped on rewrite.
+Text MDF supports `// line` and `/* block */` comments. The lexer keeps them as tokens, and the parser attaches each one to the node or property that follows it, or to the property on the same line. That is why an MDF file keeps its comments when the editor saves it or `mbt mdf fmt` rewrites it. A comment in a place nothing can own, such as inside an array, still parses but is dropped on rewrite.
 
 ## Real examples
 
@@ -171,14 +166,14 @@ Scene "VisualScriptUiDemo" {
 
 ## Text and binary
 
-The binary encoding, `mdfb`, carries the same document model. It starts with the four bytes `MDFB`, has a 56-byte header, stores every string once in a string table, and checks both the node stream and the string table with CRC32 <Source symbol="MdfbHeader" />. Binary MDF drops comments by design, because nobody edits it.
+The binary encoding, `mdfb`, carries the same document model. It starts with the four bytes `MDFB`, has a 56-byte header, stores every string once in a string table, and checks both the node stream and the string table with CRC32. Binary MDF drops comments by design, because nobody edits it.
 
-`MdfDocument::ParseFromString` and `ParseFromFile` read the first four bytes. If they spell `MDFB`, the binary reader runs. Otherwise the text parser runs <Source symbol="MdfDocument" />. An empty file is an error, not an empty document, so a truncated asset cannot load as all defaults.
+`MdfDocument::ParseFromString` and `ParseFromFile` read the first four bytes. If they spell `MDFB`, the binary reader runs. Otherwise the text parser runs. An empty file is an error, not an empty document, so a truncated asset cannot load as all defaults.
 
 A cooked file keeps its original extension. A cooked `Main.mmap` is binary MDF under the same name, so loaders never need a second path. Per-user files nobody edits by hand, such as editor layouts, are binary MDF under the `.mdfb` extension.
 
 <Callout type="engine">
-Both encodings are written through a temp file and a rename. A crash or a full disk during a save leaves the old file intact rather than a zero-length asset <Source symbol="MdfDocument" />.
+Both encodings are written through a temp file and a rename. A crash or a full disk during a save leaves the old file intact rather than a zero-length asset.
 </Callout>
 
 ## Extensions
@@ -187,7 +182,7 @@ No file is named `.mdf`. Every text asset type has its own extension (`.mat`, `.
 
 ## Command-line tools
 
-`mbt mdf` wraps the native `MdfTool`. Build the tool first with `mbt build -t MdfTool` if `mbt` reports it missing <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" />.
+`mbt mdf` wraps the native `MdfTool`. Build the tool first with `mbt build -t MdfTool` if `mbt` reports it missing.
 
 ```bash
 ./mbt.cmd mdf validate Content/Maps/Main.mmap
@@ -200,21 +195,21 @@ No file is named `.mdf`. Every text asset type has its own extension (`.mat`, `.
 
 | Command | What it does |
 |---|---|
-| `mdf validate <paths…>` | Parses each file, text or binary, and reports OK or `line:col` errors <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" /> |
-| `mdf validate --schema` | Also checks the root type, `schema_version` and known child nodes for scenes, prefabs and materials, keyed on the extension <Source path="Engine/Source/Programs/MdfTool/Private/main.cpp" /> |
-| `mdf convert --to-binary` / `--to-text` | Converts one file. Without `-o`, the output is the input with `.mdfb` or `.mdf` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" /> |
+| `mdf validate <paths…>` | Parses each file, text or binary, and reports OK or `line:col` errors |
+| `mdf validate --schema` | Also checks the root type, `schema_version` and known child nodes for scenes, prefabs and materials, keyed on the extension |
+| `mdf convert --to-binary` / `--to-text` | Converts one file. Without `-o`, the output is the input with `.mdfb` or `.mdf` |
 | `mdf fmt <paths…>` | Rewrites text files in canonical form in place, keeping comments |
-| `mdf fmt --check` | Lists files that would change and exits non-zero without writing, for CI <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" /> |
+| `mdf fmt --check` | Lists files that would change and exits non-zero without writing, for CI |
 
-`validate` and `fmt` accept files, directories and `*` globs. A directory is searched recursively for the text asset, level and built-data extensions of the [file-type table](/docs/content-pipeline/file-types/). `fmt --force` is still accepted but ignored, because comments now survive a rewrite <Source path="Engine/Source/Programs/MdfTool/Private/main.cpp" />.
+`validate` and `fmt` accept files, directories and `*` globs. A directory is searched recursively for the text asset, level and built-data extensions of the [file-type table](/docs/content-pipeline/file-types/). `fmt --force` is still accepted but ignored, because comments now survive a rewrite.
 
 <Callout type="note">
-`--schema` checks structure only. Checking component property types needs the engine's reflection tables, so that half runs inside the engine when the editor loads a file <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MdfCommand.cs" />.
+`--schema` checks structure only. Checking component property types needs the engine's reflection tables, so that half runs inside the engine when the editor loads a file.
 </Callout>
 
 ## Reading and writing MDF in C++
 
-The format is a header-only library in the `MDF` namespace, included as `<mdf/mdf.h>`. The engine re-exports the main types into `Mowo` through `Serialization/MdfCompat.h`, which also converts between MDF and engine math types <Source symbol="FMdfCompat" />.
+The format is a header-only library in the `MDF` namespace, included as `<mdf/mdf.h>`. The engine re-exports the main types into `Mowo` through `Serialization/MdfCompat.h`, which also converts between MDF and engine math types.
 
 Read user data with the defaulted getters. `AsInt(def)` and its siblings return your fallback when a key is missing or has the wrong type, while the bare `AsInt()` throws.
 

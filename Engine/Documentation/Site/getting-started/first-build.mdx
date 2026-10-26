@@ -4,16 +4,8 @@ sidebarTitle: First build
 description: Compile your project's C++ game module, load it in the editor, and package the project into a folder you can run on another machine.
 order: 7
 sources:
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewClassCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs
-  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
   - Templates/TP_FirstPerson/Source/TP_FirstPerson.Target.cs
-verifiedAt: 7f8f31f8d
+verifiedAt: 3f3a08d31
 ---
 
 Your game's C++ code lives in a **game module**: a shared library the editor and the player load at run time. This page builds that module from the command line and from the editor, then packages the whole project into a folder you can hand to someone else.
@@ -22,7 +14,7 @@ Run every `mbt` command on this page from the engine repository root, after you 
 
 ## What is in the game module
 
-`mbt init` and every template except Blank give you a module with the same parts <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs" />:
+`mbt init` and every template except Blank give you a module with the same parts:
 
 - `<Module>.Build.cs`, the module's rules: it depends on `EngineLoop` and runs the header tool over `Public/<Module>/`, so every `MCLASS` there gets a class descriptor at run time;
 - `Private/<Module>Module.cpp`, which exports `InitializeModule` and `ShutdownModule`;
@@ -61,15 +53,15 @@ The last include of a reflected header is its `<Header>.generated.h`, which the 
 
 ## Build from the command line
 
-Pass your project's target to `-t` and its `Source/` folder to `--extra-source`, so `mbt` finds the `.Build.cs` and `.Target.cs` files outside the engine tree <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs" />:
+Pass your project's target to `-t` and its `Source/` folder to `--extra-source`, so `mbt` finds the `.Build.cs` and `.Target.cs` files outside the engine tree:
 
 ```powershell
 .\mbt.cmd build -t MyGame --extra-source D:\Projects\MyGame\Source
 ```
 
-The target is named after your project, both for `mbt init` projects and for templates (the launcher renames a template's `TP_<Name>` module and targets after your project). `-t MyGame` builds the module and the game host `MyGame` into `Engine/Binaries/<platform>/<config>/`. Use the same `-c` configuration as the editor you run.
+The target is named after your project, both for `mbt init` projects and for templates (the launcher renames a template's `TP_<Name>` module and targets after your project). `-t MyGame` builds the module and the game host `MyGame` into the install's `Engine/Binaries/<platform>/<config>/` folder, in the configuration the editor was installed as.
 
-When the editor opens a project, it loads each game module it finds at `Source/<Module>/<Module>.Build.cs` whose binary exists. A module that is not built yet is skipped with a log line <Source path="Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp" />.
+When the editor opens a project, it loads each game module it finds at `Source/<Module>/<Module>.Build.cs` whose binary exists. A module that is not built yet is skipped with a log line.
 
 <Callout type="warning">
 Close the editor before a plain `mbt build`. The running editor holds the engine libraries open, so relinking them fails. To build while the editor runs, use **Compile Game Module** below.
@@ -77,7 +69,7 @@ Close the editor before a plain `mbt build`. The running editor holds the engine
 
 ## Build and reload from the editor
 
-With the project open, choose **Build › Compile Game Module**. The editor runs this for you <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp" />:
+With the project open, choose **Build › Compile Game Module**. The editor runs this for you:
 
 ```text
 mbt build -t <Module> --hot-reload --frozen-engine --extra-source <Project>/Source
@@ -95,7 +87,7 @@ Use **Tools › New C++ Class…** in the editor, or the command line:
 .\mbt.cmd newclass ADoorActor --project D:\Projects\MyGame
 ```
 
-`--parent` picks `actor` (the default), `component` or `none`. `--parent-class` with `--parent-include` subclasses any reflected class, for example `--parent-class ACharacter --parent-include Game/ACharacter.h`. The command scaffolds the module first if the project has none <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewClassCommand.cs" />.
+`--parent` picks `actor` (the default), `component` or `none`. `--parent-class` with `--parent-include` subclasses any reflected class, for example `--parent-class ACharacter --parent-include Game/ACharacter.h`. The command scaffolds the module first if the project has none.
 
 <Screenshot id="getting-started-editor-build-menu" alt="Mowo Editor with the Build menu open showing Compile Game Module, Package Project… and Cook Content…, over a project whose Source folder contains a game module." caption="The Build menu." />
 
@@ -115,10 +107,10 @@ Use **Tools › New C++ Class…** in the editor, or the command line:
 |---|---|
 | Configuration | `release`, when you pass no `-c` |
 | Product name | `--name`, else `build.outputName` from the manifest, else the manifest's file name |
-| Output folder | `Config/Packaging.ini` if it sets one, else `Saved/Packaged/<Product>/` in the project <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" /> |
+| Output folder | `Config/Packaging.ini` if it sets one, else `Saved/Packaged/<Product>/` in the project |
 | Zip | On: `<Product>-<version>-<config>.zip` |
 
-The package looks like this <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs" />:
+The package looks like this:
 
 ```text
 MyGame/

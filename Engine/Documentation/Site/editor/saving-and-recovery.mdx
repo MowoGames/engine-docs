@@ -3,20 +3,6 @@ title: Saving, undo and recovery
 sidebarTitle: Saving and recovery
 description: How Mowo Editor saves levels and assets, how undo is scoped, how autosave works, and how to restore unsaved work after a crash.
 order: 9
-sources:
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineAutosave.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/SceneSaveAs.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/AutosaveRecovery.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/EditorTransaction.h
-  - Engine/Source/Editor/MowoEditor/Private/Core/PropertyEditSession.h
-  - Engine/Source/Editor/MowoEditor/Private/Core/KeepSimulationChanges.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/AssetDocument.h
-  - Engine/Source/Editor/MowoEditor/Private/Shell/RecoveryDialog.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/UndoHistoryPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/WorldJournalPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferences.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -30,13 +16,13 @@ Mowo Editor writes your work when you save, when you Save All, and on an autosav
 | **File ▸ Save Scene As…** | <Kbd>Ctrl+Shift+S</Kbd> | The level, to a new path you choose |
 | **File ▸ Save All** | <Kbd>Ctrl+Shift+Alt+S</Kbd> | Every unsaved level and every unsaved asset document |
 
-Save All is also a button in the Content Browser toolbar and an option in the quit dialog <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp" />.
+Save All is also a button in the Content Browser toolbar and an option in the quit dialog.
 
 <Kbd>Ctrl+S</Kbd> goes to the focused asset editor first. A viewer with nothing to write passes the shortcut on to the level behind it.
 
 ### Saving a new level
 
-**File ▸ New Scene** creates an untitled level with no file. The first save opens a file dialog in your project's `Content/` folder with the `.mmap` extension filled in <Source path="Engine/Source/Editor/MowoEditor/Private/Core/SceneSaveAs.cpp" />.
+**File ▸ New Scene** creates an untitled level with no file. The first save opens a file dialog in your project's `Content/` folder with the `.mmap` extension filled in.
 
 - A name without an extension, or with another extension, becomes `.mmap`.
 - A relative name is placed under `Content/`.
@@ -53,7 +39,7 @@ Each open document has its own undo history:
 - Each **level** tab has its own history. Switching tabs keeps it; closing the tab discards it.
 - Each **asset** document has its own history, separate from the level.
 
-<Kbd>Ctrl+Z</Kbd> goes to the surface you are working in: the active asset editor first, the Content Browser's file-operation history while the pointer is over the browser, and the level otherwise. Level and asset histories each keep up to 256 entries, dropping the oldest first <Source path="Engine/Source/Editor/MowoEditor/Private/Core/EditorTransaction.h" /> <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/AssetDocument.h" />.
+<Kbd>Ctrl+Z</Kbd> goes to the surface you are working in: the active asset editor first, the Content Browser's file-operation history while the pointer is over the browser, and the level otherwise. Level and asset histories each keep up to 256 entries, dropping the oldest first.
 
 <Callout type="note">
 If you save and then make more than 256 edits, the point where you saved falls off the history. The document then stays marked unsaved until you save again, because the editor can no longer prove it matches the file.
@@ -61,23 +47,23 @@ If you save and then make more than 256 edits, the point where you saved falls o
 
 ### The Undo History panel
 
-**Window ▸ Debug ▸ Undo History** lists the active level's history. Click an entry to step back to it <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/UndoHistoryPanel.cpp" />.
+**Window ▸ Debug ▸ Undo History** lists the active level's history. Click an entry to step back to it.
 
 ### Edits that were interrupted
 
-A property edit in the Details panel is written into the actor immediately and recorded when you commit it. If something interrupts it first (you switch levels, close the colour picker, or the selection changes), the editor commits it instead of dropping it, so it can be undone and it counts as unsaved work <Source path="Engine/Source/Editor/MowoEditor/Private/Core/PropertyEditSession.h" />. The same flush runs before Save and Save All, and graph editors flush their pending edits before a save too, so an edit made in the same frame as a save is never skipped.
+A property edit in the Details panel is written into the actor immediately and recorded when you commit it. If something interrupts it first (you switch levels, close the colour picker, or the selection changes), the editor commits it instead of dropping it, so it can be undone and it counts as unsaved work. The same flush runs before Save and Save All, and graph editors flush their pending edits before a save too, so an edit made in the same frame as a save is never skipped.
 
 ### Play and undo
 
 Play runs in a copy of the level. When you stop, the copy is discarded and the edits you made during play are replayed onto the level, so tuning during play survives and your earlier history stays intact. Travelling to another level or loading a save game during play turns the replay off for that session. See [Play in editor](/docs/editor/play-in-editor/).
 
-What the *game* did, such as where physics settled a crate, is thrown away with the copy. To keep it, select the actors and press <Kbd>K</Kbd> (**Keep Simulation Changes**) while simulating, or while playing after <Kbd>F8</Kbd> ejects you <Source path="Engine/Source/Editor/MowoEditor/Private/Core/KeepSimulationChanges.cpp" />. On Stop, the captured component states are applied to the level as one undo entry. Actors and components spawned during play are skipped.
+What the *game* did, such as where physics settled a crate, is thrown away with the copy. To keep it, select the actors and press <Kbd>K</Kbd> (**Keep Simulation Changes**) while simulating, or while playing after <Kbd>F8</Kbd> ejects you. On Stop, the captured component states are applied to the level as one undo entry. Actors and components spawned during play are skipped.
 
 Unsaved landscape edits are part of what Play copies, so the game runs on the terrain you see. Sculpting during play does not reach the level.
 
 ## Autosave
 
-The editor autosaves every `editor.AutosaveIntervalSeconds` seconds; the default is 300 and `0` turns it off <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineAutosave.cpp" />. Set it per user in **Editor Preferences** <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EditorPreferences.cpp" />.
+The editor autosaves every `editor.AutosaveIntervalSeconds` seconds; the default is 300 and `0` turns it off. Set it per user in **Editor Preferences**.
 
 <Flow steps={["Timer reaches interval", "Every unsaved level", "Every unsaved asset document", "Saved/Autosaves/<path>.autosave"]} caption="Autosave writes copies; it never touches your real files." />
 
@@ -87,7 +73,7 @@ On each tick the editor writes a copy of every unsaved level, including backgrou
 <Project>/Saved/Autosaves/<project-relative path with / replaced by +>.autosave
 ```
 
-For example, `Content/Levels/Rooftop.mmap` autosaves to `Content+Levels+Rooftop.mmap.autosave` <Source path="Engine/Source/Editor/MowoEditor/Private/Core/AutosaveRecovery.cpp" />. Encoding the whole path keeps two levels with the same file name apart. An untitled level is autosaved under `@Untitled+<name>.mmap.autosave`.
+For example, `Content/Levels/Rooftop.mmap` autosaves to `Content+Levels+Rooftop.mmap.autosave`. Encoding the whole path keeps two levels with the same file name apart. An untitled level is autosaved under `@Untitled+<name>.mmap.autosave`.
 
 Autosave never runs during Play or Simulate and never opens a dialog. The file is written on a background thread, so autosave does not stall the frame. When you save a document for real, or close an untitled level without saving, its autosave file is deleted.
 
@@ -99,7 +85,7 @@ While the editor window is minimized, rendering stops but imports, autosave and 
 
 ## Restoring after a crash
 
-When you open a project, the editor scans `Saved/Autosaves` and keeps only autosaves newer than the file they shadow. If any qualify, **Restore unsaved work?** lists them, each ticked, with its kind and the time it was written <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/RecoveryDialog.cpp" />.
+When you open a project, the editor scans `Saved/Autosaves` and keeps only autosaves newer than the file they shadow. If any qualify, **Restore unsaved work?** lists them, each ticked, with its kind and the time it was written.
 
 <Screenshot id="editor-saving-recovery-dialog" alt="The Restore unsaved work? dialog listing a level and a material instance, both ticked, each with 'autosave HH:MM', the note that restored assets open as dirty, and the Restore 2 assets, Discard all, Open autosave folder and Skip buttons." />
 
@@ -114,7 +100,7 @@ A restored untitled level opens as a new untitled tab. Scripted and automated ru
 
 ## The World Journal
 
-**Window ▸ Debug ▸ World Journal** shows the open level's world-state journal: the record of destroyed entities, modified entities and runtime spawns that world persistence keeps between sector reloads <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/WorldJournalPanel.cpp" />. It also shows the editor and runtime autosave status and the time of the last autosave. **Clear Journal** discards the recorded entries; destroyed entities respawn on the next sector reload or level load. The journal is off when `world.Persistence` is 0. See [Gameplay](/docs/gameplay/).
+**Window ▸ Debug ▸ World Journal** shows the open level's world-state journal: the record of destroyed entities, modified entities and runtime spawns that world persistence keeps between sector reloads. It also shows the editor and runtime autosave status and the time of the last autosave. **Clear Journal** discards the recorded entries; destroyed entities respawn on the next sector reload or level load. The journal is off when `world.Persistence` is 0. See [Gameplay](/docs/gameplay/).
 
 ## Importing is all-or-nothing
 

@@ -5,33 +5,17 @@ description: How mbt package turns a project into a self-contained folder a play
 order: 9
 icon: PackageCheck
 sources:
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePaks.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ConfigIniStager.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ForbiddenRuntimeCheck.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Targets/TargetDefines.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs
-  - Engine/Source/Runtime/Logging/Private/Logger.cpp
-  - Engine/Source/Runtime/SceneRenderer/Private/SceneRendererProbes.cpp
   - Engine/Source/Runtime/Core/Public/Core/FPaths.h
-  - Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ShipCondition.cs
-  - Engine/Source/ThirdParty/OnnxRuntime/OnnxRuntime.Build.cs
-  - Engine/Source/ThirdParty/OnnxRuntimeWebGpu/OnnxRuntimeWebGpu.Build.cs
 verifiedAt: 7f8f31f8d
 ---
 
-A package is the folder a player downloads and runs. It holds the game, its cooked content and every runtime file it needs, and nothing else: no editor, no engine checkout, no developer tools. One command, `mbt package`, produces it from your project.
+A package is the folder a player downloads and runs. It holds the game, its cooked content and every runtime file it needs, and nothing else: no editor, no engine sources, no developer tools. One command, `mbt package`, produces it from your project.
 
 This page explains what that command does and what ends up in the folder. The other pages in this section cover the tasks around it: packaging step by step, choosing a link mode, protecting content, installers and signing, Steam, patches and DLC, crash reporting, and the Mowo Games Launcher.
 
 ## How `mbt package` works
 
-`mbt package` runs the whole pipeline in one process. Each step logs a numbered line, `[1/6]` to `[6/6]` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />.
+`mbt package` runs the whole pipeline in one process. Each step logs a numbered line, `[1/6]` to `[6/6]`.
 
 <Flow steps={["Build C++", "Compile shaders", "Cook content", "Stage runtime", "Finalize", "Distributables"]} highlight={3} caption="The package pipeline. Staging decides what ships; the other steps produce its inputs or wrap the result." />
 
@@ -52,7 +36,7 @@ Every option of `mbt package` is listed in the [mbt command reference](/docs/ref
 
 ## Release is the default
 
-`mbt package` builds the `release` configuration unless you pass `-c`. `release` and its profilable twin `profile` are the configurations a player receives: ThinLTO code generation, editor code compiled out, and `MOWO_BUILD_RELEASE=1` and `WITH_EDITOR=0` defined for every module <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Targets/TargetDefines.cs" />. `profile` adds `MOWO_BUILD_PROFILE=1`, which keeps the log and the console's stat commands, with GPU timers available through `r.GpuTimings`, so you can profile the shipped code <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs" />.
+`mbt package` builds the `release` configuration unless you pass `-c`. `release` and its profilable twin `profile` are the configurations a player receives: ThinLTO code generation, editor code compiled out, and `MOWO_BUILD_RELEASE=1` and `WITH_EDITOR=0` defined for every module. `profile` adds `MOWO_BUILD_PROFILE=1`, which keeps the log and the console's stat commands, with GPU timers available through `r.GpuTimings`, so you can profile the shipped code.
 
 What this removes from the binary itself, not just from the folder:
 
@@ -60,7 +44,7 @@ What this removes from the binary itself, not just from the folder:
 - Engine asserts (`MOWO_WITH_ASSERTS` is defined only in `debug`, `debuggame` and `dev`).
 - Author-side tools in the player, and every command-line switch that is not on the player allowlist. The command-line switches page of the [reference](/docs/reference/) lists what a release game keeps.
 
-Logging also changes. A release build logs at Warning level and writes no log file unless the player passes `--log` or the shipped `Config/Engine.ini` sets `logging.enabled` <Source path="Engine/Source/Runtime/Logging/Private/Logger.cpp" />. `--log-floor info|warning|error` compiles log lines below a level out of a release build altogether, format strings included.
+Logging also changes. A release build logs at Warning level and writes no log file unless the player passes `--log` or the shipped `Config/Engine.ini` sets `logging.enabled`. `--log-floor info|warning|error` compiles log lines below a level out of a release build altogether, format strings included.
 
 <Callout type="engine">
 No product executable carries test code, so a release build cannot report on itself. Judge a package from outside: launch it, read its log, check its exit code.
@@ -68,9 +52,9 @@ No product executable carries test code, so a release build cannot report on its
 
 ## Where the output goes
 
-The package lands in `Saved/Packaged/<Product>/` under your game project, unless the project's `Config/Packaging.ini` sets another `outputDir` or you pass `-o` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs" />. `<Product>` is the manifest's `build.outputName`, then the manifest's file name; `--name` overrides both.
+The package lands in `Saved/Packaged/<Product>/` under your game project, unless the project's `Config/Packaging.ini` sets another `outputDir` or you pass `-o`. `<Product>` is the manifest's `build.outputName`, then the manifest's file name; `--name` overrides both.
 
-The output folder is deleted at the start of each run, but only when it already looks like a package (it has `Binaries/`, `Content/Paks/`, `Data/` or a `Game.mproject`). A non-empty folder that does not look like one stops the run instead, so `-o` cannot delete an unrelated directory <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs" />.
+The output folder is deleted at the start of each run, but only when it already looks like a package (it has `Binaries/`, `Content/Paks/`, `Data/` or a `Game.mproject`). A non-empty folder that does not look like one stops the run instead, so `-o` cannot delete an unrelated directory.
 
 A Windows game package looks like this:
 
@@ -99,13 +83,13 @@ Saved/Packaged/
 └── MyGame-symbols/<buildId>/              archived symbols (not shipped)
 ```
 
-<Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs" /> is the one place every packaged path is defined.
+ is the one place every packaged path is defined.
 
-`Game.mproject`, `BuildInfo.json`, the asset registry and the list of shipped plugins do not sit loose at the root. They travel inside the engine pak, which the player reads before any file system is mounted <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs" />.
+`Game.mproject`, `BuildInfo.json`, the asset registry and the list of shipped plugins do not sit loose at the root. They travel inside the engine pak, which the player reads before any file system is mounted.
 
 ### Why the paks have hash names
 
-Every archive in `Content/Paks/` is named with a stable hash of the product name and the pak's logical name. The name says nothing about the contents, but it stays the same from build to build, so a patch compares the same files. What the runtime needs to know (kind, mount point, mount order) travels inside the archive as a reserved descriptor entry; nothing mounts by file name <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePaks.cs" />. Shaders get one pak per graphics API.
+Every archive in `Content/Paks/` is named with a stable hash of the product name and the pak's logical name. The name says nothing about the contents, but it stays the same from build to build, so a patch compares the same files. What the runtime needs to know (kind, mount point, mount order) travels inside the archive as a reserved descriptor entry; nothing mounts by file name. Shaders get one pak per graphics API.
 
 Without a `Config/Chunks.ini`, content splits by category: data, maps, textures, meshes and audio. Every pak mounts, so the split does not speed up loading. It keeps patches small: changing one texture rewrites only the textures pak. See [Patches, chunks and DLC](/docs/shipping/patches-and-dlc/).
 
@@ -113,7 +97,7 @@ Without a `Config/Chunks.ini`, content splits by category: data, maps, textures,
 
 ### Baked reflection probes
 
-With `r.ReflectionProbes.Bake` on (the default), the editor and development runs store each captured and prefiltered reflection probe in the project's derived data cache instead of capturing it again on the next level open <Source path="Engine/Source/Runtime/SceneRenderer/Private/SceneRendererProbes.cpp" />. `mbt package` packs those baked probes from `Intermediate/DerivedDataCache` into a pak of their own, signed like the engine pak, so the shipped game loads them and never captures probes at run time <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs" />. Open each level in the editor before packaging so its probes are baked.
+With `r.ReflectionProbes.Bake` on (the default), the editor and development runs store each captured and prefiltered reflection probe in the project's derived data cache instead of capturing it again on the next level open. `mbt package` packs those baked probes from `Intermediate/DerivedDataCache` into a pak of their own, signed like the engine pak, so the shipped game loads them and never captures probes at run time. Open each level in the editor before packaging so its probes are baked.
 
 ## Staging is an allowlist
 
@@ -129,11 +113,11 @@ A few things ship only when your project asks for them:
 | The plugin is enabled in `Config/Plugins.ini`, or on by default and not switched off | That plugin's module |
 | The project turns on auto-subtitles | The speech recognizer, its model, ONNX Runtime and the ONNX Runtime WebGPU execution provider (on Windows with the engine's DXC beside it) |
 
-The WebGPU provider is what lets inference run on the GPU. It adds 10.4 MiB on Windows plus 31.9 MB for `dxcompiler.dll` and `dxil.dll`, 15.7 MiB on Linux and 14.3 MiB on macOS. On Windows the package carries the engine's own DXC 1.9, not the DXC 1.8 the provider's package comes with: under the engine's D3D12 Agility SDK, DXC 1.8 failed to compile the provider's pipelines. On Linux the provider needs the system's Vulkan loader, `libvulkan.so.1`, at run time; without it inference stays on the CPU <Source path="Engine/Source/ThirdParty/OnnxRuntimeWebGpu/OnnxRuntimeWebGpu.Build.cs" />.
+The WebGPU provider is what lets inference run on the GPU. It adds 10.4 MiB on Windows plus 31.9 MB for `dxcompiler.dll` and `dxil.dll`, 15.7 MiB on Linux and 14.3 MiB on macOS. On Windows the package carries the engine's own DXC 1.9, not the DXC 1.8 the provider's package comes with: under the engine's D3D12 Agility SDK, DXC 1.8 failed to compile the provider's pipelines. On Linux the provider needs the system's Vulkan loader, `libvulkan.so.1`, at run time; without it inference stays on the CPU.
 
-From the project's `Config/` folder, `Engine.ini`, `Input.ini` and `Redirects.ini` ship, plus the `Default*.ini` layers and the target platform's folder; editor INIs and `DefaultCrypto.ini` stay behind <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ConfigIniStager.cs" />.
+From the project's `Config/` folder, `Engine.ini`, `Input.ini` and `Redirects.ini` ship, plus the `Default*.ini` layers and the target platform's folder; editor INIs and `DefaultCrypto.ini` stay behind.
 
-Before the file manifest is written, the packager fails the run when the package carries, or a shipped binary imports, a runtime no player has: the debug C runtime or a sanitizer runtime. A `debug` or `debug-asan` build cannot reach a player by accident <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ForbiddenRuntimeCheck.cs" />.
+Before the file manifest is written, the packager fails the run when the package carries, or a shipped binary imports, a runtime no player has: the debug C runtime or a sanitizer runtime. A `debug` or `debug-asan` build cannot reach a player by accident.
 
 ## Packaged mode
 
@@ -141,7 +125,7 @@ When the player finds `BuildInfo.json`, or when its install folder is not writab
 
 ## Packaging from the editor
 
-**Build > Package Project…** opens the packaging window, and **Build > Cook Content…** opens it in cook mode <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp" />. It is a front end over the command line: it runs `mbt package` or `mbt cook` as a child process and shows its steps and log <Source path="Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp" />.
+**Build > Package Project…** opens the packaging window, and **Build > Cook Content…** opens it in cook mode. It is a front end over the command line: it runs `mbt package` or `mbt cook` as a child process and shows its steps and log.
 
 <Screenshot id="shipping-package-project-window" alt="Mowo Editor with a project open, Build > Package Project… clicked. The packaging window shows its toolbar (Windows selected, Linux and Console disabled, Release selected, the Package button), the profile rows Maps, Cook, Monolithic, Compress and Archive to, and the pipeline with Build, Cook, Stage, Package and Archive." caption="The packaging window. Its rows map onto mbt package options." />
 
@@ -168,8 +152,6 @@ The team half of the window's settings is saved in the project's `Config/Packagi
   <Card title="Patches, chunks and DLC" href="/docs/shipping/patches-and-dlc/" icon="Layers">Binary patches, content chunks and DLC packs.</Card>
   <Card title="Crash reporting" href="/docs/shipping/crash-reporting/" icon="FlaskConical">The crash reporter, consent, uploads and symbols.</Card>
   <Card title="Bundled PSO cache" href="/docs/shipping/pso-cache/" icon="Sun">Move first-run pipeline compiles into the loading screen.</Card>
-  <Card title="Installed editor build" href="/docs/shipping/installed-editor-build/" icon="Hammer">Ship the editor and SDK without engine sources.</Card>
-  <Card title="Mowo Games Launcher" href="/docs/shipping/games-launcher/" icon="Rocket">The player-facing launcher and how to package it.</Card>
   <Card title="Mods and the Workshop" href="/docs/shipping/mods/" icon="Boxes">Signed mod paks, the mod editor and Workshop uploads.</Card>
   <Card title="Live ops" href="/docs/shipping/live-ops/" icon="Network">Signed remote config, A/B tests and telemetry.</Card>
   <Card title="Shipping checklist" href="/docs/shipping/shipping-checklist/" icon="Rocket">What to check before a release, and what is still open.</Card>

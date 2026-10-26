@@ -5,12 +5,7 @@ description: Record or gather the pipelines your game creates, commit them, and 
 order: 8
 sources:
   - Engine/Source/Runtime/RHI/Public/RHI/PsoCache.h
-  - Engine/Source/Runtime/RHI/Private/PsoCache.cpp
-  - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-  - Engine/Source/Runtime/D3D12RHI/Private/D3D12RHI/D3D12Context.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
 verifiedAt: aee5cfcae
 ---
 
@@ -22,10 +17,10 @@ The cache stores backend-independent descriptions of each pipeline (shader ident
 
 <Flow steps={["Record or gather", "Promote to Config/", "Commit", "mbt package ships it", "Prewarm at startup"]} highlight={1} caption="A recording is per developer; the copy in Config/ is what every build ships." />
 
-1. **Record.** Every pipeline a development build creates is added to `Saved/PsoCache/PsoCache.mdfb` in your project, deduplicated by content. The file grows across sessions, so playing more of the game records more coverage. Recording is on by default whenever a project is open in a build that is not `release` or `profile` <Source path="Engine/Source/Runtime/RHI/Private/PsoCache.cpp" />.
+1. **Record.** Every pipeline a development build creates is added to `Saved/PsoCache/PsoCache.mdfb` in your project, deduplicated by content. The file grows across sessions, so playing more of the game records more coverage. Recording is on by default whenever a project is open in a build that is not `release` or `profile`.
 2. **Promote.** A deliberate step copies the recording to `Config/PsoCache.mdfb` <Source path="Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h" />. `Saved/` is per developer and ignored by git; `Config/` is committed. So what a build ships is a choice someone made, not whichever machine last played the game.
-3. **Ship.** `mbt package` copies `Config/PsoCache.mdfb` into the package as `Cache/PsoCache.mdfb` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />. Server packages skip it, because they create no pipelines.
-4. **Prewarm.** After the level loads and before the scene renderer builds its pipelines, the packaged game creates every recorded pipeline in parallel on the job workers. The window keeps presenting its startup frame meanwhile, and the log records `[Runtime] PSO prewarm: N pipelines in M ms` <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />.
+3. **Ship.** `mbt package` copies `Config/PsoCache.mdfb` into the package as `Cache/PsoCache.mdfb`. Server packages skip it, because they create no pipelines.
+4. **Prewarm.** After the level loads and before the scene renderer builds its pipelines, the packaged game creates every recorded pipeline in parallel on the job workers. The window keeps presenting its startup frame meanwhile, and the log records `[Runtime] PSO prewarm: N pipelines in M ms`.
 
 ## Record and promote a cache
 
@@ -45,7 +40,7 @@ From the command line:
 
 The promote runs before packaging and fails the command when there is no recording yet.
 
-Or in the editor: open **Build > Package Project…** and right-click the profile header. It shows the size and age of your recording next to the committed file, and **Promote Recorded PSO Cache** stays disabled until a recording exists <Source path="Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp" />.
+Or in the editor: open **Build > Package Project…** and right-click the profile header. It shows the size and age of your recording next to the committed file, and **Promote Recorded PSO Cache** stays disabled until a recording exists.
 
 <Screenshot id="shipping-pso-cache-section" alt="The packaging window with the profile header's context menu open, showing the Recording line for Saved/PsoCache/PsoCache.mdfb with its size and age, the Ships line for Config/PsoCache.mdfb, and the enabled Promote Recorded PSO Cache item." />
 
@@ -67,7 +62,7 @@ A recording covers only what somebody played. A material used only by a skinned 
 ./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject --gather-pso
 ```
 
-Before packaging, it runs a `dev` or `debug` `MowoGame` over your project. The game loads every material the asset registry knows and starts every pipeline variant each one can need: static, skinned, instanced, meshlet, shadow, velocity and forward, plus the decal variant of each material a decal in your levels uses. The records merge into the committed `Config/PsoCache.mdfb` <Source path="Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp" />. It needs a GPU and a `dev` or `debug` `MowoGame` build. Commit the result.
+Before packaging, it runs a `dev` or `debug` `MowoGame` over your project. The game loads every material the asset registry knows and starts every pipeline variant each one can need: static, skinned, instanced, meshlet, shadow, velocity and forward, plus the decal variant of each material a decal in your levels uses. The records merge into the committed `Config/PsoCache.mdfb`. It needs a GPU and a `dev` or `debug` `MowoGame` build. Commit the result.
 
 ## Console variables
 
@@ -84,7 +79,7 @@ The packaged game looks for `Cache/PsoCache.mdfb` under its game root, then rela
 
 ## Test a first launch
 
-A development machine has a warm driver shader cache, which hides exactly the cost a new player pays. On D3D12, start the game with `--cold-shader-cache` to reproduce a first launch: it disables the driver's shader cache for that process and bypasses the engine's pipeline library <Source path="Engine/Source/Runtime/D3D12RHI/Private/D3D12RHI/D3D12Context.cpp" />. Disabling the driver cache needs Windows Developer Mode.
+A development machine has a warm driver shader cache, which hides exactly the cost a new player pays. On D3D12, start the game with `--cold-shader-cache` to reproduce a first launch: it disables the driver's shader cache for that process and bypasses the engine's pipeline library. Disabling the driver cache needs Windows Developer Mode.
 
 ## Notes
 
@@ -93,5 +88,4 @@ A development machine has a warm driver shader cache, which hides exactly the co
 
 ## Related
 
-- [`FPsoCache`](/docs/api/rhi/)
 - [Package a game](/docs/shipping/package-a-game/)

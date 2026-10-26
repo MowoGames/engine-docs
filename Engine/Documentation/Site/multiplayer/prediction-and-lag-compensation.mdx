@@ -5,20 +5,15 @@ description: How the client predicts its own pawn and reconciles with the host, 
 order: 4
 sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/CharacterNetDriver.h
-  - Engine/Source/Runtime/Networking/Private/CharacterNetDriver.cpp
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/CharacterPrediction.h
   - Engine/Source/Runtime/Networking/Public/Networking/Components/NetMovementStateComponent.h
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
-  - Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationPackets.h
   - Engine/Source/Runtime/Physics/Public/Physics/CustomMovementMode.h
   - Engine/Source/Runtime/Physics/Public/Physics/RootMotionSource.h
-  - Engine/Source/Runtime/Physics/Private/CharacterMovementSystem.cpp
   - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterMovementComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MCharacterMovementComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/AbilitySystemStateComponent.h
-  - Engine/Plugins/Combat/Private/WeaponSystem.cpp
-  - Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -98,9 +93,9 @@ When a client fires, it aims at ghosts that are drawn about 100 ms in the past, 
 - The host captures one pose set per **server tick**, which runs at 30 Hz by default and is separate from the snapshot rate.
 - It keeps **15 entries**, so the window is 500 ms at 30 Hz <Source symbol="ReplicationManager::RewindTo" />. `SetLagCompHistoryTicks` changes the count.
 - A frame hitch advances at most four ticks, so a stall cannot fill the history with copies of one pose.
-- A rewind older than the window clamps to the oldest entry rather than refusing the shot <Source path="Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp" />.
+- A rewind older than the window clamps to the oldest entry rather than refusing the shot.
 
-On a dedicated server the tick follows `--tickrate` <Source path="Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp" />. The history length in ticks stays 15, so the window in milliseconds scales with the tick rate.
+On a dedicated server the tick follows `--tickrate`. The history length in ticks stays 15, so the window in milliseconds scales with the tick rate.
 
 ### Which tick to rewind to
 
@@ -133,7 +128,7 @@ static bool HitTestAtViewTick(Mowo::ReplicationManager& replication, uint32_t vi
 Rewinding is not thread-safe and only makes sense on the host, between physics steps. Always pair `RewindTo` with `RestorePresent`; a second `RewindTo` before the restore is refused.
 </Callout>
 
-The Combat plugin's weapons use exactly this path: the client sends its view tick with the fire request, and the host wraps each hitscan in a rewind <Source path="Engine/Plugins/Combat/Private/WeaponSystem.cpp" />.
+The Combat plugin's weapons use exactly this path: the client sends its view tick with the fire request, and the host wraps each hitscan in a rewind.
 
 ## Related
 

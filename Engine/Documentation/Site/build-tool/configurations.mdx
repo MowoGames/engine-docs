@@ -2,21 +2,10 @@
 title: Build configurations
 description: What debug, debuggame, dev, profile and release change, which definitions they set, and which one to use for each job.
 order: 3
-sources:
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Targets/TargetDefines.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/ClangClDriver.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/Pgo.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleOptimization.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
 verifiedAt: 7f8f31f8d
 ---
 
-A build configuration decides how the code is compiled: optimized or not, with asserts or without, with editor code or stripped for a player. `mbt build` takes it with `-c` (case-insensitive) and builds `dev` when you pass none <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs" />. `mbt package` defaults to `release`.
+A build configuration decides how the code is compiled: optimized or not, with asserts or without, with editor code or stripped for a player. `mbt build` takes it with `-c` (case-insensitive) and builds `dev` when you pass none. `mbt package` defaults to `release`.
 
 ## At a glance
 
@@ -28,7 +17,7 @@ A build configuration decides how the code is compiled: optimized or not, with a
 | `profile` | yes | no | no | ThinLTO | no | Profiling the code a player runs |
 | `release` | yes | no | no | ThinLTO | no | What players receive |
 
-<Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs" /> defines each property.
+ defines each property.
 
 The names that came from Unreal Engine are gone. An old name fails with a message that names its replacement, for example `'Shipping' is no longer a configuration: use 'release'`:
 
@@ -43,18 +32,22 @@ The names that came from Unreal Engine are gone. An old name fails with a messag
 
 - **Working in the editor:** `dev`. It is optimized and keeps every engine assert.
 - **Debugging engine code:** `debug`.
-- **Debugging your game module:** `debuggame`. The engine compiles as in `dev`; the game's own modules compile unoptimized, so you can step through gameplay without running the renderer at debug speed. A module can opt in or out with `OptimizeCode` in its rules <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleOptimization.cs" />.
+- **Debugging your game module:** `debuggame`. The engine compiles as in `dev`; the game's own modules compile unoptimized, so you can step through gameplay without running the renderer at debug speed. A module can opt in or out with `OptimizeCode` in its rules.
 - **Measuring performance with tools:** `dev`.
 - **Measuring the code a player runs:** `profile`. It is the `release` code generation, with the log and the console's stat commands kept; GPU timers are available through `r.GpuTimings`.
 - **Shipping a game:** `release`, through `mbt package`.
 
 The editor target builds in `debug`, `debuggame` and `dev` only; it is refused in `profile` and `release`.
 
-Each configuration builds into its own folder, `Engine/Binaries/<platform>/<config>/`, so switching configurations never overwrites another one's binaries. See [Output layout](/docs/build-tool/output-layout/).
+Each configuration builds into its own folder, so switching configurations never overwrites another one's binaries.
+
+<Callout type="note">
+In the installed editor build the engine is prebuilt in one configuration, `dev`. Your modules always build in that configuration, and `mbt` corrects another `-c` with a log line.
+</Callout>
 
 ## Definitions every module sees
 
-On top of a target's own definitions, every module of a build gets <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Targets/TargetDefines.cs" />:
+On top of a target's own definitions, every module of a build gets:
 
 | Configuration | Definitions |
 |---|---|
@@ -70,21 +63,20 @@ Code that a player build must not contain tests `MOWO_BUILD_RELEASE`, which `pro
 
 ## Symbols and the C runtime
 
-Every configuration emits debug symbols, `release` included. They stay beside the binaries in `Engine/Binaries/<platform>/<config>/`, and packaging never stages them, so the crash server can symbolicate a retail dump without a player ever receiving a symbol file.
+Every configuration emits debug symbols, `release` included. They stay beside the binaries, and packaging never stages them, so the crash server can symbolicate a retail dump without a player ever receiving a symbol file.
 
-Every configuration, `debug` included, compiles against the release dynamic C runtime, because the vendored third-party libraries exist only as release builds <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/ClangClDriver.cs" />.
+Every configuration, `debug` included, compiles against the release dynamic C runtime, because the vendored third-party libraries exist only as release builds.
 
 Optimized configurations other than `debuggame` build deterministically: the same source gives the same bytes, with no link timestamp and no build-machine path in the image. That keeps patches and store uploads small.
 
 ## Link mode follows the configuration
 
-`debug`, `debuggame` and `dev` build modular: one shared library per module. `release` and `profile` game and server builds link monolithic by default: one executable with the engine linked in <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagingSettings.cs" />. A build whose link mode is not its configuration's default goes to its own folder, `<config>-monolithic/` or `<config>-modular/`, so the two never overwrite each other <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />. See [Targets and link modes](/docs/shipping/targets-and-modes/).
+`debug`, `debuggame` and `dev` build modular: one shared library per module. `release` and `profile` game and server builds link monolithic by default: one executable with the engine linked in. A build whose link mode is not its configuration's default goes to its own folder, `<config>-monolithic/` or `<config>-modular/`, so the two never overwrite each other. See [Targets and link modes](/docs/shipping/targets-and-modes/).
 
 ## Profile-guided optimization
 
-`mbt package --pgo instrument` builds `release` or `profile` binaries that write raw profiles when you run them; `--pgo optimize` merges those profiles into `Engine/Build/PGO/<platform>/Engine.profdata` and compiles with it, where `<platform>` is the platform id (`win-x64`, `linux-x64`, `osx-arm64`); an instrumented run writes its raw profiles to `build/PGO/<platform>/Raw/` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/Pgo.cs" />. Record on the same machine that built the instrumented package, because the profile path is compiled in.
+`mbt package --pgo instrument` builds `release` or `profile` binaries that write raw profiles when you run them; `--pgo optimize` merges those profiles into `Engine/Build/PGO/<platform>/Engine.profdata` and compiles with it, where `<platform>` is the platform id (`win-x64`, `linux-x64`, `osx-arm64`); an instrumented run writes its raw profiles to `build/PGO/<platform>/Raw/`. Record on the same machine that built the instrumented package, because the profile path is compiled in.
 
 ## Related
 
-- [Output layout](/docs/build-tool/output-layout/)
 - [Packaging and shipping](/docs/shipping/)

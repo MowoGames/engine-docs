@@ -3,15 +3,8 @@ title: Multi-user editing
 description: Edit one level with several people at once - host or join a session, see each other's cameras and selections, and run a dedicated multi-user server.
 order: 11
 sources:
-  - Engine/Source/Editor/MowoEditor/Private/MultiUser/MultiUserSession.cpp
-  - Engine/Source/Editor/MowoEditor/Private/MultiUser/MultiUserSessionDialog.cpp
-  - Engine/Source/Editor/MowoEditor/Private/MultiUser/MultiUserSessionPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
   - Engine/Source/Editor/MultiUserServer/Public/MultiUser/MultiUserServer.h
-  - Engine/Source/Editor/MultiUserServer/Private/MultiUserServer.cpp
-  - Engine/Source/Programs/MowoMultiUserServer/Private/MowoMultiUserServer.cpp
-verifiedAt: 5922e6e5e
+verifiedAt: 3f3a08d31
 ---
 
 Several editors can work on one level at the same time. One editor (or a dedicated server) hosts the session, the others join it, and every placement, move, property edit, rename, reparent and delete one person makes appears in every other editor a frame or two later. Each person sees where the others are looking and what they have selected.
@@ -20,7 +13,7 @@ Several editors can work on one level at the same time. One editor (or a dedicat
 
 ## Starting a session
 
-**Tools ▸ Multi-User Editing ▸ Host Session…** or **Join Session…** opens the session dialog; a switch at the top moves between the two <Source path="Engine/Source/Editor/MowoEditor/Private/MultiUser/MultiUserSessionDialog.cpp" />.
+**Tools ▸ Multi-User Editing ▸ Host Session…** or **Join Session…** opens the session dialog; a switch at the top moves between the two.
 
 <Tabs>
 <Tab label="Host">
@@ -51,7 +44,7 @@ Before the host's level replaces yours, the open level's unsaved changes are sta
 
 Your choices, except the password, are kept in **Editor Preferences ▸ Multi-User Editing** for next time. **Leave Session** disconnects; **Who Is Here** lists the others and their selections.
 
-Hosting editors announce themselves once a second on UDP port 52811 <Source path="Engine/Source/Editor/MultiUserServer/Public/MultiUser/MultiUserServer.h" />; a session that has gone silent for a few seconds drops off the Join list.
+Hosting editors announce themselves once a second on UDP port 52811; a session that has gone silent for a few seconds drops off the Join list.
 
 ### From the command line
 
@@ -63,7 +56,7 @@ Hosting editors announce themselves once a second on UDP port 52811 <Source path
 
 ## While a session runs
 
-The **Session** tab opens beside Place actors <Source path="Engine/Source/Editor/MowoEditor/Private/MultiUser/MultiUserSessionPanel.cpp" />. It shows the session's name, host and address, how long you have been in it, and each participant: their colour, name, what they are doing (the actor they are editing, the actor they have selected, or flying the camera) and their round-trip time to the host. **Leave** leaves; **End session**, for the host, ends it for everyone.
+The **Session** tab opens beside Place actors. It shows the session's name, host and address, how long you have been in it, and each participant: their colour, name, what they are doing (the actor they are editing, the actor they have selected, or flying the camera) and their round-trip time to the host. **Leave** leaves; **End session**, for the host, ends it for everyone.
 
 - The viewport outlines every user's selection in their colour with a name tag, and draws each other user's camera as a frustum.
 - The Outliner shows a lock in the holder's colour on actors another user has selected, with their name.
@@ -81,7 +74,7 @@ Play in editor is local: while you play, your editor neither sends nor shows edi
 
 ## Security
 
-The session password authenticates both ends and encrypts all traffic <Source path="Engine/Source/Editor/MultiUserServer/Private/MultiUserServer.cpp" />. An editor without the password cannot join, and nothing on the network can read the level or inject an edit. A password a person chose can be guessed offline from a recorded handshake; the proposed random one cannot. The host closes any connection that sends malformed messages or exceeds size limits, and refuses edits that name network share paths. Hosting listens on loopback unless **Who can join** is Same network.
+The session password authenticates both ends and encrypts all traffic. An editor without the password cannot join, and nothing on the network can read the level or inject an edit. A password a person chose can be guessed offline from a recorded handshake; the proposed random one cannot. The host closes any connection that sends malformed messages or exceeds size limits, and refuses edits that name network share paths. Hosting listens on loopback unless **Who can join** is Same network.
 
 <Callout type="warning">
 The password is the only gate. Everyone who has it can edit and delete any actor. Locks keep collaborators from overwriting each other; they are not a permission system.
@@ -95,7 +88,7 @@ The password is the only gate. Everyone who has it can edit and delete any actor
 
 ## Dedicated server
 
-`MowoMultiUserServer` hosts a session without an editor, so nobody has to keep one open <Source path="Engine/Source/Programs/MowoMultiUserServer/Private/MowoMultiUserServer.cpp" />. Editors join it exactly as they join an editor host, and it appears under **On this network**.
+`MowoMultiUserServer` hosts a session without an editor, so nobody has to keep one open. Editors join it exactly as they join an editor host, and it appears under **On this network**.
 
 ```bash
 ./mbt.cmd build -t MowoMultiUserServer
@@ -116,4 +109,4 @@ MowoMultiUserServer --name="Level art" --port=52810 --session-dir=D:/MultiUser/L
 
 The server has no level until an editor gives it one: the first editor to join an empty server sends its open level, and later joiners receive that level plus every actor edited since. With `--session-dir`, the folder holds `Level.mmap` (the seeded level), `Session.json` (the actor store, written a few seconds after the last edit and on shutdown) and `OpLog.jsonl` (an append-only audit trail of accepted edits). Saving the level is still an editor's job.
 
-The edit log grows for the life of a session and every joiner replays it. To compact it, save the level from an editor and restart the server with an empty `--session-dir`. The server code is the `MultiUserServer` module ([API](/docs/api/multiuserserver/)), <Source symbol="FMultiUserServer" />.
+The edit log grows for the life of a session and every joiner replays it. To compact it, save the level from an editor and restart the server with an empty `--session-dir`.

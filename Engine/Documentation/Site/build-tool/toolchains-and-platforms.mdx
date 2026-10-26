@@ -1,99 +1,53 @@
 ---
 title: Toolchains and platforms
-description: Clang on every platform, the versions Engine/Config/Toolchains.ini pins, how mbt finds a toolchain, how to cross-compile, and where each platform stands.
+description: The clang toolchain a game module compiles with, the versions Engine/Config/Toolchains.ini pins, how mbt finds it, and where each platform stands.
 order: 4
 sources:
   - Engine/Config/Toolchains.ini
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Platform/ToolchainsConfig.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Platform/ClangToolchainDetector.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Platform/MsvcToolchainDetector.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Platform/EnvironmentChecker.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/ClangClDriver.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/ClangDriver.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/CrossToolchain.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/TargetPlatform.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderTarget.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/ThirdPartyCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs
-  - Engine/Documentation/ROADMAP.md
-verifiedAt: 7f8f31f8d
+verifiedAt: 3f3a08d31
 ---
 
-`mbt` compiles C++ with Clang on every platform. On Windows that is clang-cl, lld-link and llvm-lib, building against the Microsoft C++ standard library, C runtime and Windows SDK; `cl.exe` and `link.exe` never run. On Linux it is clang and lld, and on macOS Xcode's clang <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/ClangClDriver.cs" />. Every build targets one platform, the host by default.
+`mbt` compiles your C++ modules with Clang. On Windows that is clang-cl, lld-link and llvm-lib, building against the Microsoft C++ standard library, C runtime and Windows SDK; `cl.exe` and `link.exe` never run. The engine's own modules come prebuilt with the install, so the toolchain only has to match them.
 
 ## Platform status
 
 | Platform | `--platform` | Architecture | Status |
 |---|---|---|---|
-| Windows | `win-x64` | x64 | The primary platform. Builds, runs and packages |
-| macOS | `osx-arm64` | arm64 | <Status /> Builds on a Mac. Packages are signed ad hoc and not notarized, so they do not open on another person's Mac <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs" /> |
-| Linux | `linux-x64` | x64 | <Status /> The toolchain is wired, but the third-party libraries `mbt thirdparty` builds from source (SDL3, Jolt, FreeType and others) have no Linux builds committed yet, so the engine does not link <Source path="Engine/Documentation/ROADMAP.md" /> |
-| Android, iOS | `android-arm64`, `ios-arm64` | arm64 | Experimental; not product platforms. Always monolithic |
+| Windows | `win-x64` | x64 | The platform the installed editor build runs on. Builds, runs and packages |
+| macOS | `osx-arm64` | arm64 | <Status /> No installed build yet |
+| Linux | `linux-x64` | x64 | <Status /> No installed build yet; the engine does not link on Linux |
 
-The [reference section](/docs/reference/) has the platforms page with the graphics API each platform uses.
+The [platforms page](/docs/reference/platforms/) lists the graphics API each platform uses.
 
 ## Pinned versions
 
-`Engine/Config/Toolchains.ini` pins the versions the tree is built and tested with <Source path="Engine/Config/Toolchains.ini" />:
+`Engine/Config/Toolchains.ini` in the install pins the versions the engine was built with <Source path="Engine/Config/Toolchains.ini" />:
 
 | Section | What it pins | Minimum | Preferred |
 |---|---|---|---|
-| `[LLVM]` | clang-cl and lld-link on Windows, clang and lld on Linux | 20.1 | 23 |
-| `[AppleClang]` | Xcode's clang on macOS | 16.0 | 17 |
+| `[LLVM]` | clang-cl and lld-link | 20.1 | 23 |
 | `[MsvcToolset]` | The Visual C++ standard library, C runtime and libraries clang-cl compiles against (not the compiler) | 14.38 | 14.51 |
 | `[WindowsSdk]` | The Windows SDK | 10.0.22621.0 | 10.0.26100.0 |
-| `[WiX]` | The WiX Toolset `mbt package-launcher` builds the launcher's MSI with | 5.0 | 5.0.2 |
 
 Below the minimum is an error and the build refuses it. Between the minimum and the preferred version builds with a warning. A preferred version given as a prefix (`23`) matches every version under it. A section can also list `+BannedVersions` with a reason, which is an error even above the minimum.
 
 ## How mbt finds a toolchain
 
-LLVM is searched in this order: the `Path` in `[LLVM]` or the `LLVM_PATH` environment variable, the LLVM bundled with each Visual Studio installation, `Program Files\LLVM` (`/usr/lib/llvm-*` or Homebrew elsewhere), then `PATH` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Platform/ClangToolchainDetector.cs" />. When several installations qualify, the preferred version wins over a newer one. A pinned path is used as given; if it does not hold a complete LLVM, the build fails instead of falling back to another compiler.
+LLVM is searched in this order: the `Path` in `[LLVM]` or the `LLVM_PATH` environment variable, the LLVM bundled with each Visual Studio installation, `Program Files\LLVM`, then `PATH`. When several installations qualify, the preferred version wins over a newer one. A pinned path is used as given; if it does not hold a complete LLVM, the build fails instead of falling back to another compiler.
 
-On Windows, the Visual C++ toolset and the Windows SDK are found through `vswhere` and the Windows Kits folders, and the pinned versions are picked <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Platform/MsvcToolchainDetector.cs" />. You need Visual Studio or the Build Tools with the C++ workload for those libraries, plus LLVM (the copy Visual Studio can install works).
+The Visual C++ toolset and the Windows SDK are found through `vswhere` and the Windows Kits folders, and the pinned versions are picked. Install Visual Studio or the Build Tools with the **Desktop development with C++** workload for those libraries, plus LLVM (the copy Visual Studio can install works).
 
-`mbt doctor` checks every installation it finds against the pins, and also reports DXC, spirv-cross, the Android NDK, the iOS SDK, the WiX tool and the .NET SDK <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Platform/EnvironmentChecker.cs" />.
-
-## Cross-compiling
-
-`--platform` other than the host cross-compiles with the host's Clang, given the target's system files <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/CrossToolchain.cs" />:
-
-| Target | Needs |
-|---|---|
-| Linux | `MOWO_LINUX_SYSROOT`, a glibc and GCC sysroot |
-| macOS | `SDKROOT`, a `MacOSX.sdk` (with osxcross); `MACOSX_DEPLOYMENT_TARGET` optional |
-| iOS | `MOWO_IOS_SDKROOT`, or Xcode on a Mac |
-| Android | The NDK's own Clang. `mbt build -p android-arm64` installs the pinned NDK into `Engine/Source/ThirdParty/AndroidNDK/` when none is found; `ANDROID_NDK_ROOT` points at another |
-
-A missing variable stops the build with a message that names it.
-
-```powershell
-$env:MOWO_LINUX_SYSROOT = "D:/sysroots/x86_64-linux-gnu"
-./mbt.cmd build -p linux-x64 -c dev
-```
-
-Some steps need the real host regardless: Metal libraries (`mbt shaders --metallib`), code signing and disk images on macOS, and PE import checks on Windows.
-
-## Third-party libraries
-
-Third-party code is vendored under `Engine/Source/ThirdParty/<Lib>/`: headers, the library's `.Build.cs`, its license and prebuilt static or import libraries in `Lib/<platform>/`. Runtime files and tools (DLLs, DXC, spirv-cross, astcenc, dump_syms, sentry-cli) live in `Engine/Binaries/ThirdParty/<Lib>/<platform>/`. `mbt thirdparty` rebuilds the libraries from source at the versions the vendored headers pin, for a platform (`-p`) and a subset (`--libs`) <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/ThirdPartyCommand.cs" />.
-
-## Shader formats per platform
-
-`mbt shaders` compiles the formats each platform's graphics APIs load: SPIR-V, DXIL and DXBC on Windows; SPIR-V and MSL on macOS; SPIR-V on Linux <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderTarget.cs" />. DXC and spirv-cross are vendored, so no Vulkan SDK is needed. See [Shaders and cook](/docs/build-tool/shaders-and-cook/).
+`mbt doctor` checks every installation it finds against the pins and reports the optional tools it can use.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
 | A toolchain below the minimum, or none found | Install the pinned LLVM, or set `LLVM_PATH`; run `mbt doctor` |
-| `Cross-compiling to Linux needs a glibc sysroot` | Set `MOWO_LINUX_SYSROOT`, or build on Linux |
-| `Cross-compiling to macOS needs the Apple SDK` | Set `SDKROOT`, or build on a Mac |
-| Link fails on Linux for SDL3, Jolt or FreeType | The Linux third-party libraries are missing; run `mbt thirdparty -p linux-x64` on a Linux host |
-| `Unknown --platform` | Use `win-x64`, `linux-x64`, `osx-arm64`, `android-arm64` or `ios-arm64` (the older `win64`, `linux`, `macos-arm64`, `android` and `ios` still work) |
+| The Visual C++ libraries or the Windows SDK are missing | Add the C++ workload in the Visual Studio installer |
+| `Unknown --platform` | Use `win-x64` |
 
 ## Related
 
+- [Install Mowo](/docs/getting-started/installing/)
 - [Build configurations](/docs/build-tool/configurations/)
-- [Output layout](/docs/build-tool/output-layout/)
-- [Getting started](/docs/getting-started/)

@@ -3,19 +3,7 @@ title: Working with C++
 description: Add C++ classes to your project's game module, rebuild and hot reload it or patch it with Live Coding, browse classes, and open sources in your IDE.
 order: 13
 sources:
-  - Engine/Source/Editor/MowoEditor/Private/Scripting/NewClassDialog.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Scripting/IdeLauncher.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/DetailsPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/ClassViewerPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Shell/LiveCodingStatus.cpp
-  - Engine/Source/Runtime/EngineLoop/Private/Core/LiveCoding.h
   - Engine/Source/Runtime/Game/Public/Game/HotReload.h
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/FrozenEngineGuard.cs
 verifiedAt: 5922e6e5e
 ---
 
@@ -27,10 +15,10 @@ Gameplay code in Mowo is C++ in your project's **game module**, a DLL built from
 
 <Steps>
 <Step title="Open the wizard">
-Choose **Tools ▸ New C++ Class…** <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp" />, or **New C++ Class…** in the C++ Classes root of the Content Browser.
+Choose **Tools ▸ New C++ Class…**, or **New C++ Class…** in the C++ Classes root of the Content Browser.
 </Step>
 <Step title="Pick a parent">
-Choose **Actor** (a placeable object with components, a transform and Tick), **Actor Component** (reusable behavior that ticks with its owner) or **Empty Class** (plain C++, no reflection) <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/NewClassDialog.cpp" />. The list also offers existing reflected actor classes, such as the engine's pawns and characters, when their header can be found.
+Choose **Actor** (a placeable object with components, a transform and Tick), **Actor Component** (reusable behavior that ticks with its owner) or **Empty Class** (plain C++, no reflection). The list also offers existing reflected actor classes, such as the engine's pawns and characters, when their header can be found.
 </Step>
 <Step title="Name it">
 Type the class name. The dialog previews the file paths and rejects invalid names.
@@ -42,14 +30,14 @@ Type the class name. The dialog previews the file paths and rejects invalid name
 
 <Screenshot id="editor-cpp-new-class-dialog" alt="The New C++ Class dialog: parent list with Actor selected, Actor Component and Empty Class below it followed by engine classes such as APawn, the class name field filled with ADoorActor, the path preview underneath, and Create and Create & Build buttons." />
 
-The wizard runs `mbt newclass` for you <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/NewClassDialog.cpp" />. The first time, it also scaffolds the module itself. A class lands in two files:
+The wizard runs `mbt newclass` for you. The first time, it also scaffolds the module itself. A class lands in two files:
 
 ```text
 <Project>/Source/<Module>/Public/<Module>/<ClassName>.h
 <Project>/Source/<Module>/Private/<ClassName>.cpp
 ```
 
-An **Actor** parent produces this header <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Scaffold/SourceScaffold.cs" />:
+An **Actor** parent produces this header:
 
 ```cpp title="ADoorActor.h" nocompile
 #pragma once
@@ -102,7 +90,7 @@ See [Gameplay](/docs/gameplay/) for what to put in the class, and the [Game API]
 
 ## Rebuilding and hot reloading
 
-**Build ▸ Compile Game Module** rebuilds your module while the editor keeps running and swaps it into the live session <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngine.cpp" />. It runs this build in the background <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp" />:
+**Build ▸ Compile Game Module** rebuilds your module while the editor keeps running and swaps it into the live session. It runs this build in the background:
 
 ```bash
 mbt build -t <Module> --hot-reload --frozen-engine --extra-source <Project>/Source
@@ -111,7 +99,7 @@ mbt build -t <Module> --hot-reload --frozen-engine --extra-source <Project>/Sour
 - `--frozen-engine` builds only your module and links it against the engine binaries already on disk. The editor has the engine DLLs loaded and locked, so relinking them would fail.
 - `--hot-reload` emits a versioned DLL that can be loaded next to the old one.
 
-Notifications report the start, the success, or a failure with a short detail taken from the build output <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp" />. The command is disabled while a compile is running and during Play. If a compile finishes during Play, the swap waits and happens on the first frame after you stop <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp" />.
+Notifications report the start, the success, or a failure with a short detail taken from the build output. The command is disabled while a compile is running and during Play. If a compile finishes during Play, the swap waits and happens on the first frame after you stop.
 
 ### What the swap does
 
@@ -131,16 +119,16 @@ Fields whose bytes hide a heap pointer, such as a struct containing a `std::stri
 
 ### When you must restart
 
-If your module needs something the engine binaries on disk do not export (for example, after pulling engine changes), the frozen-engine link fails with a message telling you the engine binaries are older than the engine source <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/FrozenEngineGuard.cs" />. Close the editor, run `mbt build` from a terminal, and reopen the project.
+If your module needs something the engine binaries on disk do not export (for example, after pulling engine changes), the frozen-engine link fails with a message telling you the engine binaries are older than the engine source. Close the editor, run `mbt build` from a terminal, and reopen the project.
 
 ## Live Coding
 
-Live Coding patches changed function bodies into the running editor without unloading anything, so all state stays as it is <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/LiveCoding.h" />. Edit a `.cpp`, then press <Kbd>Ctrl+Alt+F11</Kbd>, click **Live Coding** on the toolbar, choose **Tools ▸ Live Coding**, or type `LiveCoding` in the console.
+Live Coding patches changed function bodies into the running editor without unloading anything, so all state stays as it is. Edit a `.cpp`, then press <Kbd>Ctrl+Alt+F11</Kbd>, click **Live Coding** on the toolbar, choose **Tools ▸ Live Coding**, or type `LiveCoding` in the console.
 
 1. `mbt livecoding` recompiles the `.cpp` files newer than the running binaries, with their modules' own flags.
 2. The editor links each new object into the process and redirects the old functions to the new bodies, between frames.
 
-The toolbar button and the status bar item follow the compile: ready, compiling with a file count, patched with how many functions were replaced, failed with an error count, or **restart required** <Source path="Engine/Source/Editor/MowoEditor/Private/Shell/LiveCodingStatus.cpp" />. Click the status item for the files in flight, the last patch and an **Open log** link.
+The toolbar button and the status bar item follow the compile: ready, compiling with a file count, patched with how many functions were replaced, failed with an error count, or **restart required**. Click the status item for the files in flight, the last patch and an **Open log** link.
 
 <Callout type="note">
 Live Coding refuses a file whose headers changed, because a class layout or inline change cannot be patched in. You get a **Save all and restart** prompt instead; use **Compile Game Module** or restart. Live Coding is available on Windows only, and only in an editor that runs from a source tree; the button appears when the project has a game module.
@@ -148,7 +136,7 @@ Live Coding refuses a file whose headers changed, because a class layout or inli
 
 ## The Class Viewer
 
-**Window ▸ Class Viewer** answers "what types exist and what do they derive from" across every registered class: C++ classes, Visual Scripting classes and, optionally, reflected components <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ClassViewerPanel.cpp" />. It opens as a picker card over the editor; the same list is also a dock tab.
+**Window ▸ Class Viewer** answers "what types exist and what do they derive from" across every registered class: C++ classes, Visual Scripting classes and, optionally, reflected components. It opens as a picker card over the editor; the same list is also a dock tab.
 
 <Screenshot id="editor-class-viewer" alt="The Class Viewer picker over the editor with 'door' typed in the search field: Actors only and Visual Script classes toggles on, a Visual Scripting door class shown under greyed ancestor rows Object, Actor and Pawn, its second line reading 'Visual Scripting · /Content/Gameplay', and the count banner under the list." />
 
@@ -168,20 +156,20 @@ Search filters by name. A match keeps its ancestors on screen as greyed context,
 When your project has a `Source/` folder, the Content Browser shows a **C++ Classes** root that mirrors it and lists source files only. It is browse-only:
 
 - **New C++ Class…** is the only create action.
-- Rename, delete, duplicate and drag-to-viewport are refused with a notification pointing you to the wizard and your IDE <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp" />.
+- Rename, delete, duplicate and drag-to-viewport are refused with a notification pointing you to the wizard and your IDE.
 - **Copy Path**, **Show in Explorer** and **Open in IDE** work as usual.
 
 ## Opening code in your IDE
 
-Double-click a source file, or use **Open in IDE**, to open it with your project's solution loaded. **Tools ▸ Open IDE** opens the solution alone. To jump from the level to code, select an actor and use **Edit in C++** in the Details header <Source path="Engine/Source/Editor/MowoEditor/Private/Panels/DetailsPanel.cpp" /> or the Outliner row menu; the editor finds the class's header, preferring your project over the engine.
+Double-click a source file, or use **Open in IDE**, to open it with your project's solution loaded. **Tools ▸ Open IDE** opens the solution alone. To jump from the level to code, select an actor and use **Edit in C++** in the Details header or the Outliner row menu; the editor finds the class's header, preferring your project over the engine.
 
-**Tools ▸ Source Code Editor** chooses between Visual Studio, Rider and VS Code. Undetected IDEs are greyed out. Your choice is stored per user as `ide.preferred` <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/IdeLauncher.cpp" />; without one, the first IDE found wins.
+**Tools ▸ Source Code Editor** chooses between Visual Studio, Rider and VS Code. Undetected IDEs are greyed out. Your choice is stored per user as `ide.preferred`; without one, the first IDE found wins.
 
 ### The project solution
 
 The solution lives in your project folder as `<ProjectName>.slnx` and contains your game module, not the engine. Engine headers are on the include path, so IntelliSense and go-to-definition work without building the engine. Building from the IDE runs the same frozen-engine `mbt build`, and debugging launches `MowoEditor.exe --project <Project>.mproject` from the build output folder.
 
-If the solution is missing or older than a file under `Source/`, the editor runs `mbt generate vs --project <Project>.mproject` in the background first and opens the IDE when it finishes <Source path="Engine/Source/Editor/MowoEditor/Private/Scripting/IdeLauncher.cpp" />. A project without a `Source/` module has nothing to open; add a C++ class first.
+If the solution is missing or older than a file under `Source/`, the editor runs `mbt generate vs --project <Project>.mproject` in the background first and opens the IDE when it finishes. A project without a `Source/` module has nothing to open; add a C++ class first.
 
 ## Related
 

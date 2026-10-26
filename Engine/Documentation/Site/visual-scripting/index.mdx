@@ -7,19 +7,12 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptGraph.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassRegistry.h
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptClassRegistry.cpp
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassIndex.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptNodeCatalog.h
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
-  - Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp
-  - Engine/Source/Runtime/Game/Private/AVisualScriptActor.cpp
   - Engine/Source/Runtime/Game/Public/Game/FVisualScriptRuntimeLoader.h
   - Engine/Source/Runtime/Game/Public/Game/PieHotReload.h
-  - Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp
-  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Pie/PieMultiplayerSession.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -50,7 +43,7 @@ In code and on disk, the runtime is the `MowoEngine.VisualScripting` module, a c
 
 1. **The file.** Each class lives in one `.vscript` file under the project's `Content/` folder. It holds the parent class, event graphs, variables, functions, macros, dispatchers, interfaces and component slots. See [The .vscript file format](/docs/visual-scripting/visual-script-file-format/).
 2. **Registration.** The class registry resolves the parent, inlines every macro, runs the load validator and builds a synthetic `MClass` <Source symbol="VisualScriptClassRegistry" />. From then on, `MClassRegistry::FindByName` and `MWorld::SpawnActorByClass` treat it like a native class.
-3. **The backing class.** The Visual Scripting module sits below the gameplay layer, so it cannot see `AActor`. The gameplay layer registers one native backing class per base, and every instance spawns as the backing class for its nearest native parent <Source path="Engine/Source/Runtime/Game/Private/AVisualScriptActor.cpp" />:
+3. **The backing class.** The Visual Scripting module sits below the gameplay layer, so it cannot see `AActor`. The gameplay layer registers one native backing class per base, and every instance spawns as the backing class for its nearest native parent:
 
 | Parent, or anything derived from it | Spawns as |
 | --- | --- |
@@ -73,7 +66,7 @@ There is no native back end: a packaged game runs every visual class on the same
 
 ## Hot reload
 
-When you compile a class without errors, the editor pushes it live. The registry keeps the same `MClass` object and swaps the definition behind it. Each running instance notices the swap on its next graph run and rebinds without being respawned <Source path="Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp" />:
+When you compile a class without errors, the editor pushes it live. The registry keeps the same `MClass` object and swaps the definition behind it. Each running instance notices the swap on its next graph run and rebinds without being respawned:
 
 - Variables you changed on the instance keep their values.
 - Variables still equal to the old class default take the new default. This is how raising a default reaches every placed instance that never touched it.
@@ -86,7 +79,7 @@ In a multiplayer Play-In-Editor session, the server and the extra clients are se
 
 ## Lifecycle events
 
-Name an event graph after one of these events and the instance runs it when the event fires. A class with no graph of that name pays nothing for it: an instance with no `OnHit` graph never subscribes to contacts, and one with no `InputAction.` graph never polls input <Source path="Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp" />.
+Name an event graph after one of these events and the instance runs it when the event fires. A class with no graph of that name pays nothing for it: an instance with no `OnHit` graph never subscribes to contacts, and one with no `InputAction.` graph never polls input.
 
 | Graph name | Runs when | Values set for the graph |
 | --- | --- | --- |
@@ -97,7 +90,7 @@ Name an event graph after one of these events and the instance runs it when the 
 | `Destroyed` | An explicit destroy, before `EndPlay`. | |
 | `AnyDamage` | The actor takes damage. | `DamageAmount`, `DamageInstigator` |
 | `OnHit` | A physics contact begins on the actor or one of its placed slots. | `PinPayload` (other actor), `HitLocation`, `HitNormal`, `HitImpulse` |
-| `OnTriggerEnter`, `OnTriggerExit` | Something enters or leaves the class's `Trigger` component slot <Source path="Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp" />. | `PinPayload` (other actor) |
+| `OnTriggerEnter`, `OnTriggerExit` | Something enters or leaves the class's `Trigger` component slot. | `PinPayload` (other actor) |
 | `InputAction.<Name>` | The input action started this frame. Add `.Released` or `.Held` for completion or every triggered frame. | `InputActionValue` |
 
 A class opts into death by declaring a Bool variable named `IsDead`.

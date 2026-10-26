@@ -8,16 +8,7 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptExpression.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptDapServer.h
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptDapServer.cpp
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptDapSession.cpp
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptTextView.cpp
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp
-  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp
-  - Engine/Source/Runtime/Arc/Private/Widgets/AGraphEditor.cpp
-  - Engine/Source/Programs/IdeTooling/VSCode/package.json
-  - Engine/Source/Programs/IdeTooling/VSCode/README.md
-verifiedAt: 7f8f31f8d
+verifiedAt: 3f3a08d31
 ---
 
 You debug a graph the way you debug code: breakpoints, a call stack, stepping and live values. There are two front ends, the Visual Scripting editor and any IDE that speaks the Debug Adapter Protocol (DAP). Both drive the same debugger in the engine.
@@ -45,7 +36,7 @@ These map to `VisualScriptDebugger::RequestContinue`, `RequestStepOver`, `Reques
 
 ## Breakpoints, conditions and logpoints
 
-Select a node and press <Kbd>F9</Kbd>, or right-click it, to toggle a breakpoint. Only nodes with an exec input take one. The context menu also offers <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp" />:
+Select a node and press <Kbd>F9</Kbd>, or right-click it, to toggle a breakpoint. Only nodes with an exec input take one. The context menu also offers:
 
 - **Add Conditional Breakpoint...** / **Edit Condition...**: the breakpoint stops only when an expression is true, for example `Health < 50 && bIsAlerted`. Names resolve to the paused function's parameters and locals first, then the instance's variables. A name that is not a variable is an error, not a silent zero, and a condition that cannot be evaluated stops anyway and logs why.
 - **Add Logpoint...** / **Make Logpoint...** / **Edit Log Message...**: the node prints a message instead of stopping. `{expr}` placeholders are evaluated in the frame, as in `hp={Health} ratio={Health / 100}`. The line goes to the log and to every attached IDE's console. A logpoint may also have a condition. **Make Breakpoint (Stop Here)** turns it back into a stop.
@@ -102,8 +93,8 @@ The same debugger is available to any IDE that speaks DAP. Start the editor or a
 .\MyGame.exe --visual-script-dap=4711
 ```
 
-- Bare `--visual-script-dap` uses port **4711** <Source symbol="VisualScriptDapServer::kDefaultPort" />.
-- The server binds the loopback address only, `127.0.0.1`, because a debug adapter reachable from the network would be a remote-code-execution surface <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptDapServer.cpp" />.
+- Bare `--visual-script-dap` uses port **4711**.
+- The server binds the loopback address only, `127.0.0.1`, because a debug adapter reachable from the network would be a remote-code-execution surface.
 - It accepts one client at a time.
 - Without the switch nothing starts: no thread, no socket.
 
@@ -115,7 +106,7 @@ When it starts, the log shows:
 
 <Callout type="danger">
 
-The DAP server is compiled out of `release` and `profile` builds. The `--visual-script-dap` check sits inside `#if !MOWO_BUILD_RELEASE`, so a retail game cannot be made to open a debug port, however it is launched <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" />.
+The DAP server is compiled out of `release` and `profile` builds. The `--visual-script-dap` check sits inside `#if !MOWO_BUILD_RELEASE`, so a retail game cannot be made to open a debug port, however it is launched.
 
 </Callout>
 
@@ -123,12 +114,16 @@ Socket reads run on a worker thread that only parses frames and queues them. Eve
 
 ## Attach VS Code
 
-The extension lives in `Engine/Source/Programs/IdeTooling/VSCode`. VS Code connects straight to the engine's socket, with no adapter process in between.
+VS Code connects straight to the engine's socket through the `mowo-visual-script` debug extension, with no adapter process in between.
+
+<Callout type="warning">
+The VS Code extension is not part of the installed editor build yet, so the steps below need a copy of it from the Mowo team.
+</Callout>
 
 <Steps>
 <Step title="Build the extension">
 
-In `Engine/Source/Programs/IdeTooling/VSCode`, run `npm install`, then `npm run compile`.
+In the extension's folder, run `npm install`, then `npm run compile`.
 
 </Step>
 <Step title="Load it">
@@ -158,7 +153,7 @@ Add the configuration below to `.vscode/launch.json` and start it.
 }
 ```
 
-The attach configuration also accepts `stopOnEntry`, to break on the first node after attaching <Source path="Engine/Source/Programs/IdeTooling/VSCode/package.json" />. While attached, **Run and Debug > Visual Script Graphs** lists every registered class. Click one to open its listing and set breakpoints, conditions and logpoints in the gutter.
+The attach configuration also accepts `stopOnEntry`, to break on the first node after attaching. While attached, **Run and Debug > Visual Script Graphs** lists every registered class. Click one to open its listing and set breakpoints, conditions and logpoints in the gutter.
 
 <Screenshot id="visual-script-debugging-vscode" alt="VS Code attached to Mowo Editor through the mowo-visual-script debug type: the Visual Script Graphs view in the Run and Debug sidebar lists BP_Door and BP_SlidingDoor, the BP_Door listing is open read-only with a red breakpoint on the line '  1: Branch -> 4 else 6', the Call Stack shows 'BP_Door.event:OnInteract', and the Variables pane shows Locals, Instance variables and Pin values scopes" caption="VS Code paused on a breakpoint." />
 
@@ -195,7 +190,7 @@ end
 - `-> N` is the next exec node, `else N` the second exec output, `[i]-> N` a list output.
 - A breakpoint on a header, blank or `end` line moves forward to the next node line, and the adapter reports the adjusted line.
 
-The listing is served through the DAP `source` request with MIME type `text/x-vscript`. Source objects carry no `path` on purpose: the line numbers of the raw `.vscript` file describe the MDF document, not the graph <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptDapSession.cpp" />.
+The listing is served through the DAP `source` request with MIME type `text/x-vscript`. Source objects carry no `path` on purpose: the line numbers of the raw `.vscript` file describe the MDF document, not the graph.
 
 ## Supported DAP requests
 

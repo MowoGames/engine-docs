@@ -8,13 +8,7 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVarSync.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptSpawnParams.h
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptSpawnParams.cpp
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp
-  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
-  - Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorDocument.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -34,7 +28,7 @@ Every value in flight is a `VisualScriptValue`: a tagged value that uses the ref
 | `Object` | A weak reference to an `MObject` | Reads back as null once the object is gone. |
 | `Custom` | A struct instance | Named by its struct type. See [Struct values](#struct-values). |
 
-When a node calls a reflected C++ function, the VM converts each input to the parameter's declared type first, so a float wired into an `int32_t` parameter is converted, not reinterpreted <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />.
+When a node calls a reflected C++ function, the VM converts each input to the parameter's declared type first, so a float wired into an `int32_t` parameter is converted, not reinterpreted.
 
 Some C++ types ride a pin that already exists, converted inside the generated thunk: enums and narrow integers as Int, `FName` and gameplay tags as String, `FRotator` as a Vec3 of pitch, yaw and roll in degrees, a `TSoftObjectPtr` as its asset path, and an `MClass*` as its class name.
 
@@ -45,7 +39,7 @@ A class variable lives on the instance and survives across every event graph.
 <Steps>
 <Step title="Add it">
 
-In the **Variables** section of **My Visual Script**, pick a type (Bool, Int, Float or String), type a name in **Add variable...** and press Enter <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp" />.
+In the **Variables** section of **My Visual Script**, pick a type (Bool, Int, Float or String), type a name in **Add variable...** and press Enter.
 
 </Step>
 <Step title="Set its default">
@@ -61,12 +55,12 @@ Drag the variable onto the canvas and choose **Get** or **Set**. **Get Variable*
 </Steps>
 
 - **Rename** rewrites every node that names the variable, across event graphs, functions and macros.
-- **Retype** resets the default and every unlinked Set literal to the new type's default. When the new type cannot replicate, the Replicated flag and its RepNotify are cleared with it <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorDocument.cpp" />.
+- **Retype** resets the default and every unlinked Set literal to the new type's default. When the new type cannot replicate, the Replicated flag and its RepNotify are cleared with it.
 - **Delete** is refused while any node still names the variable, and the editor lists those nodes.
 
 <Callout type="note">
 
-The editor picker covers the four scalar types. The file format also accepts `Vec3`, `Object`, the integer widths and `Double` for a variable default <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp" />, and a variable becomes a container when a container write node first fills it.
+The editor picker covers the four scalar types. The file format also accepts `Vec3`, `Object`, the integer widths and `Double` for a variable default, and a variable becomes a container when a container write node first fills it.
 
 </Callout>
 
@@ -90,7 +84,7 @@ A container cannot be passed to or returned from a reflected C++ function: it ha
 
 ## Struct values
 
-A struct parameter or return value on a reflected function travels as a `Custom` value that holds a real, constructed instance of the struct. The VM looks the struct up by name in `FMStructRegistry`, so the thunk receives exactly the C++ type it expects <Source symbol="FMStructRegistry" />. Every copyable `MSTRUCT` is registered by the header tool, and `FTransform` is registered by Core. A struct type that is not registered is refused at the call with an error, never half-run.
+A struct parameter or return value on a reflected function travels as a `Custom` value that holds a real, constructed instance of the struct. The VM looks the struct up by name in `FMStructRegistry`, so the thunk receives exactly the C++ type it expects. Every copyable `MSTRUCT` is registered by the header tool, and `FTransform` is registered by Core. A struct type that is not registered is refused at the call with an error, never half-run.
 
 Transform values have their Make and Break functions in `MMathStatics`. For `Vec3`, use **Make Vector** and **Break Vector**.
 
@@ -124,14 +118,14 @@ A placed instance may override the class default from the level's Details panel,
 
 The variable becomes an extra input pin on any node that spawns this class by name. The value is written onto the new instance after its defaults are seeded and **before** its `OnConstruct` and `BeginPlay` run, which a Set node placed after the spawn cannot do <Source symbol="FVisualScriptSpawnScope" />.
 
-A reflected function counts as a spawn function when its name starts with `Spawn`, it returns an object and its first parameter is a string class name <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptSpawnParams.cpp" />. `MGameplayStatics::SpawnActorByClass` is the built-in one, and a game function such as `SpawnFromCatalog(className, ...)` gets the pins with no engine change. The pins follow whatever class the class pin names: a typed name or a **Class Reference** node.
+A reflected function counts as a spawn function when its name starts with `Spawn`, it returns an object and its first parameter is a string class name. `MGameplayStatics::SpawnActorByClass` is the built-in one, and a game function such as `SpawnFromCatalog(className, ...)` gets the pins with no engine change. The pins follow whatever class the class pin names: a typed name or a **Class Reference** node.
 
 ### Replicated
 
 The authority sends the variable to every client whenever it changes:
 
-- A client's own write to a replicated variable is refused with an error. Route the change through a `Server` RPC <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />.
-- Only changes travel, paced at 20 updates a second, and updates are reliable <Source path="Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp" />. A peer that joins mid-session gets the whole set.
+- A client's own write to a replicated variable is refused with an error. Route the change through a `Server` RPC.
+- Only changes travel, paced at 20 updates a second, and updates are reliable. A peer that joins mid-session gets the whole set.
 - Containers and object references have no wire form and cannot replicate. The checkbox reads **Not replicable** for them <Source symbol="FVisualScriptVarSync" />.
 - **RepNotify** names a parameterless function of the class. The receiver runs it after an update changed the value.
 

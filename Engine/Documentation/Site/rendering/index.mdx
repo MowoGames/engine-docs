@@ -5,9 +5,6 @@ order: 3
 icon: Sun
 sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/SceneRenderer.h
-  - Engine/Source/Runtime/SceneRenderer/Private/SceneRenderer.cpp
-  - Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp
-  - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
   - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
   - Engine/Source/Runtime/RHI/Public/RHI/RHIFactory.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
@@ -25,12 +22,12 @@ Rendering code is split into layers. You mostly work with the top one.
 | Layer | Module | What it owns |
 |---|---|---|
 | Scene components | SceneTypes, Game | Lights, sky, reflection captures, mesh, splat and volume components and their actors |
-| Scene renderer | SceneRenderer | The deferred pipeline, Global Illumination, shadows, post-processing, quality tiers (<Source symbol="SceneRenderer" />) |
+| Scene renderer | SceneRenderer | The deferred pipeline, Global Illumination, shadows, post-processing, quality tiers () |
 | Renderer data | Renderer | Materials, meshes, light structs and per-frame data (`RenderFrameData`, `ScenePostProcess`) |
 | RHI | RHI plus `D3D12RHI`, `VulkanRHI`, `MetalRHI`, `D3D11RHI` | The abstract GPU API, the render graph, upscaler and frame-generation interfaces. The RHI module holds no backend code. |
 
 <Callout type="engine">
-Each backend registers a factory when its module loads, and the abstract `Create()` calls dispatch through it. Capability gating has two axes: <Source symbol="FRHIApiCeiling" /> says what an API can ever do, and the live `RendererCapabilities` say what this device can do now. The editor hides a control the API can never support and greys one the device lacks.
+Each backend registers a factory when its module loads, and the abstract `Create()` calls dispatch through it. Capability gating has two axes: says what an API can ever do, and the live `RendererCapabilities` say what this device can do now. The editor hides a control the API can never support and greys one the device lacks.
 </Callout>
 
 ## How a frame is drawn, in short
@@ -43,7 +40,7 @@ Read [Frame pipeline](/docs/rendering/frame-pipeline/) for every stage in order.
 
 ## What you get at each tier
 
-There are five tiers: Low, Medium, High, Epic and Cinematic (<Source symbol="EQualityPreset" />). High is the code default; when you do not pick one, the engine picks a tier for the machine at launch.
+There are five tiers: Low, Medium, High, Epic and Cinematic (). High is the code default; when you do not pick one, the engine picks a tier for the machine at launch.
 
 | Tier | What it adds |
 |---|---|
@@ -53,7 +50,7 @@ There are five tiers: Low, Medium, High, Epic and Cinematic (<Source symbol="EQu
 | Epic | Virtual shadow maps for sun and local lights, MegaLights, ray-traced reflections and AO, the ray-traced GI gather, volumetric fog and clouds, the meshlet G-Buffer. |
 | Cinematic | Ray-traced sun shadows, larger budgets everywhere, no small-object or occlusion culling, native resolution. |
 
-The rows come from <Source path="Engine/Source/Runtime/SceneRenderer/Private/ScalabilityTiers.cpp" />. Ray-traced features need a GPU and backend with ray query; without one they fall back to their raster or screen-space versions each frame.
+The rows come from. Ray-traced features need a GPU and backend with ray query; without one they fall back to their raster or screen-space versions each frame.
 
 <Callout type="note">
 The editor viewport always renders at native resolution with a temporal AA resolve, whatever the tier's upscaler says, so you never judge reconstructed pixels. The shipped game keeps the tier's upscaling.
@@ -76,7 +73,6 @@ See [Backends](/docs/rendering/backends/) for how to switch and what each API su
 <CardGrid>
   <Card title="Frame pipeline" href="/docs/rendering/frame-pipeline/" icon="Workflow">Every pass in order, and what it does.</Card>
   <Card title="Backends" href="/docs/rendering/backends/" icon="Layers">Pick D3D12, Vulkan, Metal or D3D11, and see what each API can do.</Card>
-  <Card title="RHI programming" href="/docs/rendering/rhi/" icon="Braces">Resources, pipelines, the render graph and async compute.</Card>
   <Card title="Quality tiers" href="/docs/rendering/quality-tiers/" icon="LayoutDashboard">The five tiers, the auto-tier, scalability groups and Scalability.ini.</Card>
   <Card title="Display and HDR" href="/docs/rendering/display-and-hdr/" icon="PanelsTopLeft">Window modes, VSync, frame-rate cap and HDR output.</Card>
   <Card title="Lights" href="/docs/rendering/lights/" icon="Sun">Light types, physical units, area lights, light functions and channels.</Card>
@@ -87,7 +83,6 @@ See [Backends](/docs/rendering/backends/) for how to switch and what each API su
   <Card title="Upscaling and anti-aliasing" href="/docs/rendering/upscaling-and-anti-aliasing/" icon="Layers">TAA, TSR, FSR, DLSS, XeSS, MetalFX, frame generation and low latency.</Card>
   <Card title="Post-processing and volumes" href="/docs/rendering/post-processing-and-volumes/" icon="PanelsTopLeft">Tonemapping, exposure, bloom, grading and blend volumes.</Card>
   <Card title="Materials" href="/docs/rendering/materials/" icon="Braces">The material graph, domains, shading models and Substrate.</Card>
-  <Card title="Shaders" href="/docs/rendering/shaders/" icon="FileText">One HLSL source for four targets, virtual paths and hot reload.</Card>
   <Card title="Virtual texturing" href="/docs/rendering/virtual-texturing/" icon="Layers">Page streaming and the terrain virtual texture.</Card>
   <Card title="Gaussian splats" href="/docs/rendering/gaussian-splats/" icon="Boxes">Captured splat scenes as level assets.</Card>
   <Card title="Extend the renderer" href="/docs/rendering/extending-the-renderer/" icon="Workflow">Add your own passes at fixed points of the frame.</Card>
@@ -99,6 +94,5 @@ See [Backends](/docs/rendering/backends/) for how to switch and what each API su
 
 - [SceneRenderer module](/docs/api/scenerenderer/): `SceneRenderer`, `EQualityPreset`, `FQualityAutoTier`, `FRenderPassExtensions`
 - [Renderer module](/docs/api/renderer/): `Material`, `ScenePostProcess`, `RenderFrameData`
-- [RHI module](/docs/api/rhi/): `RendererAPI`, `FRHIApiCeiling`, `IUpscaler`, `RenderGraph`
 - [Volumes module](/docs/api/volumes/): `VolumeManager`, `VolumeProfile`
 - [Console variables](/docs/reference/console-variables/)

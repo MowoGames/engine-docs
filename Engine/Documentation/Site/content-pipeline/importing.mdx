@@ -4,8 +4,6 @@ sidebarTitle: Importing
 description: Import models, textures and audio into asset packages, choose import options, save presets, and reimport when the source changes.
 order: 6
 sources:
-  - Engine/Source/Editor/MowoEditor/Private/Shell/ImportDialog.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Panels/ContentBrowserPanel.cpp
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/AssetPackageTypes.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MaudioImportSidecar.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/ExrDecode.h
@@ -14,11 +12,7 @@ sources:
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/TextureImportSidecar.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-  - Engine/Source/Runtime/Core/Private/FileTypes.cpp
-  - Engine/Source/Runtime/ML/Private/OnnxSession.cpp
   - Engine/Source/Runtime/ML/Public/ML/OnnxSession.h
-  - Engine/Source/ThirdParty/OnnxRuntimeWebGpu/BUILD.md
-  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -36,7 +30,7 @@ Keep source files outside `Content/`, in a `SourceArt/` folder beside it at the 
 | Texture | `.png`, `.jpg`, `.jpeg`, `.tga`, `.bmp`, `.hdr`, `.exr` | Texture (`.tex`) |
 | Audio | `.wav`, `.ogg`, `.mp3`, `.flac` | Sound Wave (`.sound`) |
 
-The model list comes from the file-type table <Source symbol="FModelFormats" />. An `.exr` is decoded by the engine's own reader and treated like `.hdr`: linear, HDR group, BC6H. Deep and multi-part EXR files are refused with a message asking for a single-part export.
+The model list comes from the file-type table. An `.exr` is decoded by the engine's own reader and treated like `.hdr`: linear, HDR group, BC6H. Deep and multi-part EXR files are refused with a message asking for a single-part export.
 
 ## Import a file
 
@@ -61,7 +55,7 @@ Your last-used options for each kind are saved per user in `Saved/Config/Editor/
 
 ## What a model import writes
 
-For a model named `Rock` imported into a folder, the import writes <Source symbol="FAssetPackageTypes" />:
+For a model named `Rock` imported into a folder, the import writes:
 
 | Package | Holds |
 |---|---|
@@ -117,7 +111,7 @@ You can change every setting after import in the Texture Editor (double-click th
 
 ### Textures recognized by name
 
-A texture with no import settings yet (for example a loose file copied into `Content/` by hand) is classified by the end of its file name, case-insensitively <Source symbol="FTextureImportSidecar" />:
+A texture with no import settings yet (for example a loose file copied into `Content/` by hand) is classified by the end of its file name, case-insensitively:
 
 | Suffix examples | Group |
 |---|---|
@@ -131,7 +125,7 @@ The rule only applies while nothing has set the group, so a rescan never overrid
 
 A PNG, JPEG, TGA or BMP texture can be upscaled and given generated normal, roughness and height maps by bundled models that run on your machine. Use the **AI enhance** section of the import dialog, or right-click textures in the Content Browser and choose **AI Enhance**. The work runs in the background with a progress toast. A texture that asks for enhancement at import takes the loose-file path described in [Sidecars and UUIDs](/docs/content-pipeline/sidecars-and-uuids/), because the enhancement reimports it in place.
 
-The models run through ONNX Runtime. Where the machine has a GPU, enhancement runs there through ONNX Runtime's WebGPU execution provider, which drives D3D12 on Windows, Vulkan on Linux and Metal on macOS, so it works on any vendor's GPU <Source symbol="FOnnxSession" />. If the provider is missing, refuses to register, or finds no usable GPU, inference runs on the CPU and the log says why. Pick the device in **Project Settings ▸ Performance ▸ On-device inference ▸ Inference Device** (Auto, GPU or CPU), or with the `ml.ExecutionProvider` console variable (`auto`, `gpu`, `cpu`). The change applies to models loaded from then on. See [Project Settings](/docs/editor/project-settings/).
+The models run through ONNX Runtime. Where the machine has a GPU, enhancement runs there through ONNX Runtime's WebGPU execution provider, which drives D3D12 on Windows, Vulkan on Linux and Metal on macOS, so it works on any vendor's GPU. If the provider is missing, refuses to register, or finds no usable GPU, inference runs on the CPU and the log says why. Pick the device in **Project Settings ▸ Performance ▸ On-device inference ▸ Inference Device** (Auto, GPU or CPU), or with the `ml.ExecutionProvider` console variable (`auto`, `gpu`, `cpu`). The change applies to models loaded from then on. See [Project Settings](/docs/editor/project-settings/).
 
 Measured on an NVIDIA GeForce RTX 3050 against the CPU provider on an AMD Ryzen 9 7900X, with identical output on both:
 
@@ -187,7 +181,7 @@ When a source changes after import, the asset tile shows that it changed on disk
 
 ## Move an older project's sources out of Content
 
-Projects created before packages kept sources and `.mdfmeta` sidecars in `Content/`. `mbt asset migrate <project> --source-art` moves every texture, model and sound source to `SourceArt/` at the same relative path and imports each into a package where it was <Source symbol="FAssetPackageMigration::MigrateSourceArt" />. A texture, model or sound keeps its sidecar's id, the old path redirects to the package, and references under `Content/` are rewritten. A `.gltf` or `.obj` moves with the files it names. Add `--report-only` to see the plan first.
+Projects created before packages kept sources and `.mdfmeta` sidecars in `Content/`. `mbt asset migrate <project> --source-art` moves every texture, model and sound source to `SourceArt/` at the same relative path and imports each into a package where it was. A texture, model or sound keeps its sidecar's id, the old path redirects to the package, and references under `Content/` are rewritten. A `.gltf` or `.obj` moves with the files it names. Add `--report-only` to see the plan first.
 
 ## The loose-file path
 
@@ -198,4 +192,3 @@ Setting `editor.ImportModelsAsPackages 0` (models) or `editor.ImportAsPackages 0
 - [Asset formats](/docs/content-pipeline/asset-formats/) for what a package holds.
 - [Cooking](/docs/content-pipeline/cooking/) for how packages are built for a target.
 - [Content Browser](/docs/editor/content-browser/) for importing, moving and renaming assets in the editor.
-- API: [`FAssetPackageTypes`](/docs/api/assetformats/fassetpackagetypes/), [`FMaudioImportSidecar`](/docs/api/assetformats/fmaudioimportsidecar/), [`FTextureImportSidecar`](/docs/api/assetsystem/ftextureimportsidecar/).

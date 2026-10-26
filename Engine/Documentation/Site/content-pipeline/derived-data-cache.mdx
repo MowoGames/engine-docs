@@ -4,17 +4,6 @@ description: Where Mowo caches built textures, meshes and audio, how entries are
 order: 11
 sources:
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/DerivedDataCache.h
-  - Engine/Source/Runtime/Filesystem/Private/DerivedDataCache.cpp
-  - Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp
-  - Engine/Source/Runtime/AssetSystem/Private/ImageDecode.cpp
-  - Engine/Source/Runtime/AssetSystem/Private/ModelResource.cpp
-  - Engine/Source/Runtime/AssetFormats/Private/MaudioBuilder.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
-  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.h
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DdcCommand.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CookCommand.cs
-  - Engine/Source/Programs/MowoDDC/Private/MowoDDC.cpp
-  - Engine/Source/Runtime/Http/Private/HttpDerivedDataBackend.cpp
 verifiedAt: 5922e6e5e
 ---
 
@@ -22,15 +11,15 @@ The Derived Data Cache (DDC) stores the expensive results of processing an asset
 
 ## How an entry is keyed
 
-Every entry's key folds in everything that affects its bytes <Source symbol="FDerivedDataCache" />:
+Every entry's key folds in everything that affects its bytes:
 
 - the type of data, such as a texture cook or an audio decode;
 - a hash of the source file's content;
 - a fingerprint of the import settings;
 - the producer's version, which the engine bumps when its output changes;
-- a build scope of the form `<major>.<minor>.<patch>/<platform>/d<N>`, where `d<N>` is the cache's own format revision <Source path="Engine/Source/Runtime/Filesystem/Private/DerivedDataCache.cpp" />.
+- a build scope of the form `<major>.<minor>.<patch>/<platform>/d<N>`, where `d<N>` is the cache's own format revision.
 
-A stale entry is therefore never returned. It simply has a different key. The platform is part of the scope because a BC7 texture and an ASTC texture of the same source are different bytes. The git commit is deliberately left out, so an ordinary engine update does not throw the whole cache away <Source symbol="FDerivedDataCache" />.
+A stale entry is therefore never returned. It simply has a different key. The platform is part of the scope because a BC7 texture and an ASTC texture of the same source are different bytes. The git commit is deliberately left out, so an ordinary engine update does not throw the whole cache away.
 
 <Flow steps={["Load asset", "Build key", "Local cache", "Shared cache", "Produce and store"]} highlight={2} caption="A hit at any tier skips the work. A miss produces the data and writes it to the local cache." branch={{ from: "Shared cache", label: "a shared hit is copied into the local cache" }} />
 
@@ -38,19 +27,19 @@ A stale entry is therefore never returned. It simply has a different key. The pl
 
 | Data | Console variable | Default | Settings label |
 |---|---|---|---|
-| Texture sources cooked to `.mtex` mip chains | `ddc.TextureCook` | On <Source path="Engine/Source/Runtime/AssetSystem/Private/ImageDecode.cpp" /> | Cache Texture Cooks |
-| Models built from source | `ddc.MeshCook` | On <Source path="Engine/Source/Runtime/AssetSystem/Private/ModelResource.cpp" /> | Cache Mesh Imports |
-| Audio decoded to `.maudio` | `ddc.AudioCook` | On <Source path="Engine/Source/Runtime/AssetFormats/Private/MaudioBuilder.cpp" /> | Cache Audio Decodes |
+| Texture sources cooked to `.mtex` mip chains | `ddc.TextureCook` | On | Cache Texture Cooks |
+| Models built from source | `ddc.MeshCook` | On | Cache Mesh Imports |
+| Audio decoded to `.maudio` | `ddc.AudioCook` | On | Cache Audio Decodes |
 
 Each variable takes `-1` for the code default, `0` for off and `1` for on. With the texture cache on, the editor shows a texture from its cooked mip chain, so the max size and compression you set are what you see in the viewport. The first open of a project pays each texture's encode once.
 
-With the mesh cache on, a warm load of an unchanged model skips the translation and the build <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp" />. Mesh distance fields and GI cards baked after a model loads are cached too.
+With the mesh cache on, a warm load of an unchanged model skips the translation and the build. Mesh distance fields and GI cards baked after a model loads are cached too.
 
-Baked reflection probes are also stored in the DDC, and `mbt cook` copies them next to the cooked archive so a packaged game loads them <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CookCommand.cs" />.
+Baked reflection probes are also stored in the DDC, and `mbt cook` copies them next to the cooked archive so a packaged game loads them.
 
 ## Cache tiers
 
-The cache reads from up to four roots, in this order <Source symbol="FDerivedDataCache" />:
+The cache reads from up to four roots, in this order:
 
 | Tier | Configured by | Written? |
 |---|---|---|
@@ -99,15 +88,15 @@ After three failed requests in a row, a client skips the server for a minute, so
 
 ## Size cap and eviction
 
-The cache is capped at 4096 MB by default. Set `ddc.MaxSizeMB` to change it, or `0` for no cap <Source path="Engine/Source/Runtime/Filesystem/Private/DerivedDataCache.cpp" />. The cap is read when a project opens and enforced after every write.
+The cache is capped at 4096 MB by default. Set `ddc.MaxSizeMB` to change it, or `0` for no cap. The cap is read when a project opens and enforced after every write.
 
-Past the cap, the least recently used entries are removed first, down to 85% of the budget, so one sweep makes room for many writes <Source path="Engine/Source/Runtime/Filesystem/Private/DerivedDataCache.cpp" />. An entry's age is its file time. A cache hit refreshes it, at most once every ten minutes, so reading a hot entry is not a disk write every time <Source symbol="FDerivedDataCache" />.
+Past the cap, the least recently used entries are removed first, down to 85% of the budget, so one sweep makes room for many writes. An entry's age is its file time. A cache hit refreshes it, at most once every ten minutes, so reading a hot entry is not a disk write every time.
 
 Eviction and purge only touch the local tier. The shared and server tiers belong to the team, and the bundled tier ships with the game.
 
 ## Manage the cache in the editor
 
-Open **Project Settings > Engine > Content & Import** and scroll to **DERIVED DATA CACHE** <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp" />. The section holds the three cache toggles, **Bake Mesh Distance Fields**, **Maximum Cache Size** in MB, and a **Clear Cache** button that shows the current size and entry count.
+Open **Project Settings > Engine > Content & Import** and scroll to **DERIVED DATA CACHE**. The section holds the three cache toggles, **Bake Mesh Distance Fields**, **Maximum Cache Size** in MB, and a **Clear Cache** button that shows the current size and entry count.
 
 <Screenshot id="content-pipeline-ddc-settings" alt="Project Settings window with Engine > Content & Import selected in the left list, scrolled to the DERIVED DATA CACHE section showing Cache Mesh Imports, Cache Texture Cooks, Cache Audio Decodes, Bake Mesh Distance Fields, Maximum Cache Size set to 4096 MB, and the Clear Derived Data Cache row with its Clear Cache button and current size" caption="Cache settings live with the other content and import settings." />
 
@@ -125,15 +114,15 @@ Clearing the cache costs the next load the work it would have skipped. Nothing e
 | Command | What it does |
 |---|---|
 | `ddc info` | Prints the cache path, entry count, total size and the largest entries. `--top` sets how many, default 10 |
-| `ddc prune` | Removes least recently used entries until the cache fits `--max-size` MB, default 4096 <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DdcCommand.cs" /> |
+| `ddc prune` | Removes least recently used entries until the cache fits `--max-size` MB, default 4096 |
 | `ddc purge` | Deletes every entry |
 | `ddc serve` | Serves a cache folder over HTTP (see above) |
 
-All of them take `--project` with a project folder or `.mproject` file. Without it, `mbt` walks up from the working directory to find one. `prune` uses the same order as the engine's own cap, so pruning here and capping in the editor remove the same entries. `mbt clean` does not touch the DDC, because it cleans the engine tree and the cache belongs to a project <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DdcCommand.cs" />.
+All of them take `--project` with a project folder or `.mproject` file. Without it, `mbt` walks up from the working directory to find one. `prune` uses the same order as the engine's own cap, so pruning here and capping in the editor remove the same entries. `mbt clean` does not touch the DDC, because it cleans the engine tree and the cache belongs to a project.
 
 ## Integrity
 
-Each entry has a small `.chk` record beside it with the payload's size and FNV-1a hash. A read that does not match is discarded and counts as a miss, so the next build replaces it <Source path="Engine/Source/Runtime/Filesystem/Private/DerivedDataCache.cpp" />. A zero-length entry is never a hit, because it can only be a write that died partway <Source symbol="FDerivedDataCache" />.
+Each entry has a small `.chk` record beside it with the payload's size and FNV-1a hash. A read that does not match is discarded and counts as a miss, so the next build replaces it. A zero-length entry is never a hit, because it can only be a write that died partway.
 
 <Callout type="tip">
 If you suspect a bad cache entry, run `./mbt.cmd ddc purge` or click **Clear Cache**, then reopen the project. The cache rebuilds whatever it needs.
