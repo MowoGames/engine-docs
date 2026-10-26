@@ -9,10 +9,10 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/Constants.h
   - Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h
   - Engine/Config/CrashReporting.example.ini
-verifiedAt: 7f8f31f8d
+verifiedAt: 8510fff13
 ---
 
-When a packaged game crashes, Mowo writes a report to disk and shows the player a crash dialog. With the player's consent the report goes to a Sentry-compatible server, and with the build's symbols uploaded too, the server turns the raw dump into a readable call stack.
+When a packaged game crashes, Mowo writes a report to disk and shows the player a crash dialog. With the player's consent the report goes to your own Sentry project, and with the build's symbols uploaded too, Sentry turns the raw dump into a readable call stack. A game that names no Sentry project keeps its reports on the player's disk.
 
 This page follows a crash from the fault to the server, then covers what you configure before a release.
 
@@ -64,35 +64,41 @@ The player-facing switches `--no-crash-reporter` and `--silent` suppress the dia
 
 ## Endpoint and consent
 
-A game's crash settings live in the `[CrashReportClient]` section of the project's `Config/Engine.ini`, as in Unreal <Source path="Engine/Source/Runtime/Core/Public/Core/CrashReportClientSettings.h" />:
+A game's crash reports go to its own Sentry project, and to nowhere until you name one: a game without a DSN writes its reports to the player's disk and sends nothing. Set it in **Project Settings › Crash Reporting**, which writes the `[CrashReportClient]` section of the project's `Config/Engine.ini`, as in Unreal <Source path="Engine/Source/Runtime/Core/Public/Core/CrashReportClientSettings.h" />:
 
 ```ini title="Config/Engine.ini"
 [CrashReportClient]
 bEnabled=True
-Dsn=https://<public-key>@<your-sentry-host>/<project-id>
+Dsn=https://<public-key>@o<org-id>.ingest.de.sentry.io/<project-id>
 bAgreeToCrashUpload=False
 bSendUnattendedBugReports=False
+SentryOrg=<your-org-slug>
+SentryProject=<your-project-slug>
 ```
 
 | Key | Meaning |
 |---|---|
 | `bEnabled` | `False` keeps reports on disk; nothing is sent |
-| `Dsn` | Your Sentry project's DSN |
+| `Dsn` | Your Sentry project's DSN, from its **Client Keys (DSN)** settings. Empty (the default) keeps reports on disk |
 | `bAgreeToCrashUpload` | The player already consented, for example in your EULA or an options toggle: the next launch sends reports without asking |
 | `bSendUnattendedBugReports` | Send with no reporter window, for servers and kiosks. Needs `bAgreeToCrashUpload` |
+| `SentryOrg`, `SentryProject` | Where `mbt package` uploads the build's symbols (see [Symbols](#symbols)). Not shipped |
 
-`mbt package` copies the section into `BuildInfo.json` as `crashReporter.*`. Priority for the DSN: `mbt package --crash-dsn <dsn>`, then `Config/Engine.ini`, then the legacy `crashReporter.dsn` block in the `.mproject`, then the DSN compiled into the engine. `--no-crash-reporter` writes `enabled: false` and an empty DSN.
+A DSN from any Sentry region or a self-hosted Sentry works: the report goes to the host the DSN names, at `/api/<project-id>/minidump/` (or `/envelope/` when the player kept the minidump back).
+
+`mbt package` copies the section into `BuildInfo.json` as `crashReporter.*`. Priority for the DSN: `mbt package --crash-dsn <dsn>`, then `Config/Engine.ini`, then the legacy `crashReporter.dsn` block in the `.mproject`. With none of them the package has no DSN. `--no-crash-reporter` writes `enabled: false` and an empty DSN.
 
 The game applies the manifest before engine initialization, and every report carries the game's DSN and consent in its `.txt`. That decides what leaves the machine:
 
+- **With no `Dsn`**, reports stay on disk and the dialog has nothing to send.
 - **With `bAgreeToCrashUpload=False`** (the default), nothing is sent until the player presses a **Send** button in the dialog.
 - **With consent given**, the next launch uploads pending reports. `Engine::Initialize` calls `SentryCrashUploader::FlushPending()`, which posts each dump with its text report and log and deletes it on success. A failed upload stays on disk for the next try.
 - **With `bEnabled=False`**, reports stay on disk, and the dialog says sending is disabled.
 
 Reports are never uploaded from the crashing process, whose heap may be corrupt. See [`SentryCrashUploader`](/docs/api/http/) for the API.
 
-<Callout type="danger" title="Set your own DSN before you release">
-Without your own `Dsn`, a game's reports go to the engine team's Sentry project, not yours.
+<Callout type="info" title="The editor reports to the engine team">
+Crashes of Mowo Editor, Mowo Project Launcher and their crash reporter go to the engine team's Sentry project. A game in its own process never does: standalone or packaged, it uses the DSN you set, or none. Play-In-Editor runs inside the editor, so a crash there is an editor crash.
 </Callout>
 
 ## Symbols
@@ -103,7 +109,9 @@ A minidump holds addresses, not function names. For the server to show a readabl
 
 1. It copies every shipped binary and its symbol file into `<Product>-symbols/<buildId>/` beside the package, so the next build cannot overwrite the only copy.
 2. It converts each one to a smaller Breakpad `.sym` with `dump_syms`, falling back to the raw file when a conversion fails, and uploads them with `sentry-cli debug-files upload`.
-3. For `release`, it waits until the server has processed the files, and **an upload that was attempted and failed fails the package**: a build whose crashes cannot be read should not ship. Retry with `mbt symbols <archive> --wait`, or package with `--no-symbols`.
+3. For `release`, it waits until the server has processed the files, and **an upload that was attempted and failed fails the package**: a build whose crashes cannot be read should not ship. Retry with `mbt symbols <archive> --org <org> --project <project> --wait`, or package with `--no-symbols`.
+
+The symbols go to the game's own project: `--sentry-org` / `--sentry-project` on `mbt package`, else `SentryOrg` / `SentryProject` in `[CrashReportClient]`, else `crashReporter.sentryOrg` / `crashReporter.sentryProject` in the `.mproject`, else `SENTRY_ORG` / `SENTRY_PROJECT`. A game that names no project skips the upload with a warning; its symbols are never sent to the engine team's project.
 
 A machine without `sentry-cli` or an auth token skips the upload with a warning and keeps the archive.
 
@@ -118,21 +126,21 @@ To upload separately, use `mbt symbols`:
 
 Without paths it scans `Engine/Binaries/<platform>/<config>`, and `-c` picks which configuration's folder. Standalone `mbt symbols` fails when it cannot upload.
 
-Point the upload at your own server:
+Point the upload at your own project:
 
 | Setting | Purpose |
 |---|---|
-| `SENTRY_AUTH_TOKEN` (environment) | Required. A token with upload rights. It is a secret; keep it in your CI secret store or shell, never in a file in the repository |
-| `SENTRY_URL`, `SENTRY_ORG`, `SENTRY_PROJECT` (environment) | Your server, organization and project |
-| `--url`, `--org`, `--project` | The same, on the `mbt symbols` command line |
+| `SENTRY_AUTH_TOKEN` (environment) | Required. A token with upload rights. It is a secret; keep it in your CI secret store or shell, never in a file in the repository. mbt never logs it |
+| `SENTRY_URL`, `SENTRY_ORG`, `SENTRY_PROJECT` (environment) | Your Sentry's web address, organization and project |
+| `--url`, `--org` / `--sentry-org`, `--project` / `--sentry-project` | The same, on the `mbt symbols` command line |
 | `Engine/Config/CrashReporting.ini`, section `[CrashReporting]`, keys `Url`, `Org`, `Project` | A developer machine's defaults. Gitignored; copy `CrashReporting.example.ini`. An auth token in this file is ignored |
 
-Options win over environment variables, which win over the file. The built-in defaults point at the engine team's server, so set all of them for your own project.
+Options win over environment variables, which win over the file. The URL is the Sentry web address, not the ingest host in a DSN: `https://de.sentry.io` for the EU region (the default), `https://sentry.io` for the US region, or your self-hosted server. Without an organization or project, standalone `mbt symbols` uploads to the engine team's project, so name yours.
 
 ## Before a release
 
-- Set your own `Dsn` in `[CrashReportClient]` and decide on `bAgreeToCrashUpload`.
-- Set `SENTRY_AUTH_TOKEN`, `SENTRY_URL`, `SENTRY_ORG` and `SENTRY_PROJECT` on the build machine, and check the package log for the symbol line.
+- Set your own `Dsn` in **Project Settings › Crash Reporting** and decide on `bAgreeToCrashUpload`.
+- Set `SentryOrg` and `SentryProject` there, `SENTRY_AUTH_TOKEN` (and `SENTRY_URL` outside the EU region) on the build machine, and check the package log for the symbol line.
 - Keep the `<Product>-symbols/` archive of every build you release.
 - Crash a test build on purpose, send the report, and confirm it arrives with a readable stack.
 

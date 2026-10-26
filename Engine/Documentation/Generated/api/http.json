@@ -512,8 +512,8 @@
 							"name": "FlushPending",
 							"signature": "static int FlushPending()",
 							"static": true,
-							"doc": "Scan the crash dir for *.dmp, POST each (with its .txt sidecar) to the\nSentry minidump endpoint, and delete on success. No-op (returns 0) if\nno DSN is configured or no dumps exist. Failed uploads are LEFT on\ndisk for the next run, so it's safe to call when offline.\n\nDSN resolution, per report: the report_dsn line its .txt carries (the\ngame's [CrashReportClient] Dsn), else explicit SetDsn(), else the DSN\ncompiled into SentryCrashUploader.cpp. A report its game disabled, or\none `mode` may not send without asking, is left on disk.\nReturns the number of reports successfully uploaded.\n\nSynchronous, but the common case (no pending dumps) is just a cheap\ndirectory scan. Only does network I/O when a crash actually happened.",
-							"line": 55
+							"doc": "Scan the crash dir for *.dmp, POST each (with its .txt sidecar) to the\nSentry minidump endpoint, and delete on success. No-op (returns 0) if\nno DSN is configured or no dumps exist. Failed uploads are LEFT on\ndisk for the next run, so it's safe to call when offline.\n\nDSN resolution, per report: the report_dsn line its .txt carries (the\ngame's [CrashReportClient] Dsn), else explicit SetDsn(), else the DSN\ncompiled into SentryCrashUploader.cpp (the engine's mowo-editor\nproject). A report its game disabled or gave no DSN, or one `mode` may\nnot send without asking, is left on disk.\nReturns the number of reports successfully uploaded.\n\nSynchronous, but the common case (no pending dumps) is just a cheap\ndirectory scan. Only does network I/O when a crash actually happened.",
+							"line": 56
 						},
 						{
 							"kind": "method",
@@ -521,7 +521,7 @@
 							"signature": "static int FlushPending(ECrashFlushMode mode, const std::string& onlyBasePath = std::string())",
 							"static": true,
 							"doc": "`onlyBasePath` (a report path without extension) limits the flush to\nthat one report — what the reporter's Send button consents to.",
-							"line": 59
+							"line": 60
 						},
 						{
 							"kind": "method",
@@ -529,7 +529,15 @@
 							"signature": "static void SetDsn(const std::string& dsn)",
 							"static": true,
 							"doc": "Provide the fallback DSN explicitly (overrides the compiled one) for\nreports that carry none. Empty restores the compiled one.",
-							"line": 63
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "SetEngineDsnAllowed",
+							"signature": "static void SetEngineDsnAllowed(bool allowed)",
+							"static": true,
+							"doc": "A game host passes false: the compiled DSN is the engine's own project\n(editor and launchers), so a report of a game's that carries no DSN —\none written before the game's settings were read — stays on disk rather\nthan landing there.",
+							"line": 70
 						},
 						{
 							"kind": "method",
@@ -537,7 +545,7 @@
 							"signature": "static std::string GetLastEndpoint()",
 							"static": true,
 							"doc": "The minidump endpoint the last FlushPending() on THIS thread posted to\n(or would have, had it not been backing off). Empty when it tried none.",
-							"line": 67
+							"line": 74
 						},
 						{
 							"kind": "method",
@@ -545,14 +553,14 @@
 							"signature": "static int32_t GetLastWithheldCount()",
 							"static": true,
 							"doc": "Reports the last FlushPending() on THIS thread left on disk because\ntheir game's settings did not allow sending them in that mode.",
-							"line": 71
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "HasDsn",
 							"signature": "static bool HasDsn()",
 							"static": true,
-							"line": 73
+							"line": 80
 						},
 						{
 							"kind": "method",
@@ -560,7 +568,7 @@
 							"signature": "static void SetCrashDir(const std::string& absDir)",
 							"static": true,
 							"doc": "Override the scan dir (default <state root>/<Product>/Saved/Crashes).",
-							"line": 76
+							"line": 83
 						},
 						{
 							"kind": "method",
@@ -568,7 +576,7 @@
 							"signature": "static std::string GetLastError()",
 							"static": true,
 							"doc": "Human-readable reason the last FlushPending() on THIS thread failed to\nupload a report (HTTP status + server body, or the transport error).\nEmpty when every report went through.",
-							"line": 81
+							"line": 88
 						},
 						{
 							"kind": "method",
@@ -576,7 +584,7 @@
 							"signature": "static bool AreRetriesSuppressed()",
 							"static": true,
 							"doc": "True when the last FlushPending() on THIS thread stopped retrying the\nconfigured endpoint because its host has not resolved for several runs.\nA UI that promises \"retried on the next launch\" must not say so then —\nnothing will be retried until the DSN is corrected or a day passes.",
-							"line": 87
+							"line": 94
 						},
 						{
 							"kind": "method",
@@ -584,7 +592,7 @@
 							"signature": "static FCrashUploadQueueStatus GetQueueStatus()",
 							"static": true,
 							"doc": "The queue in the crash dir against the endpoint reports without a DSN\nof their own go to. Reports stay queued until an upload succeeds.",
-							"line": 91
+							"line": 98
 						},
 						{
 							"kind": "method",
@@ -592,7 +600,7 @@
 							"signature": "static std::string DescribeQueueStatus(const FCrashUploadQueueStatus& status)",
 							"static": true,
 							"doc": "One sentence for a person: how many reports wait and why, or empty when\nnothing is queued.",
-							"line": 95
+							"line": 102
 						}
 					]
 				}
