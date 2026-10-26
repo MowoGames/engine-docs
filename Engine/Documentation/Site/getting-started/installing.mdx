@@ -1,43 +1,60 @@
 ---
 title: Install Mowo
 sidebarTitle: Install
-description: Install the Mowo editor build, add the C++ toolchain a game module needs, check your machine with mbt doctor and open the Project Launcher.
+description: Download and run the Mowo Engine installer, add the C++ toolchain a game module needs, check your machine with mbt doctor, and uninstall.
 order: 2
 sources:
   - Engine/Config/Toolchains.ini
-verifiedAt: 3f3a08d31
+verifiedAt: 8d1b1b974
 ---
 
-Mowo ships as an installed editor build: Mowo Editor, the Mowo Project Launcher, the build tool `mbt` and the headers and libraries a game's C++ module compiles against. You do not build the engine. You install it, sign in, and create projects.
+Mowo ships as an installed engine: Mowo Editor, the Mowo Project Launcher, the build tool `mbt`, the prebuilt engine libraries your game is packaged with, and the headers and libraries a game's C++ module compiles against. You do not build the engine. You install it, sign in, and create projects.
 
 ## What you need
 
-- **Windows 10 or 11, 64-bit.** The installed build is Windows-only for now.
+- **Windows 10 or 11, 64-bit.** A macOS (Apple silicon) download is in preparation.
 - **A GPU with Direct3D 12 or Vulkan.** See [Platforms and graphics APIs](/docs/reference/platforms/).
 - **A Mowo ID and the free Personal (Beta) license.** See [Sign in and activate your license](/docs/getting-started/sign-in-and-license/).
-- **For C++ only: a clang toolchain.** Projects that use only Visual Scripting and content do not compile anything. A project with a C++ game module needs the toolchain described below.
+- **About 2 GB of disk space** for one installed version (the download is about 700 MB).
+- **For C++ only: a clang toolchain.** Projects that use only Visual Scripting and content compile nothing and need no toolchain, also when you package them. A project with a C++ game module needs the toolchain described below.
+
+The installer brings everything else it needs: the Visual C++ runtime sits next to every program it installs, and the Direct3D 12 Agility SDK next to the editor. Nothing is installed system-wide and no administrator prompt appears.
 
 ## Install the editor
 
 <Steps>
 <Step title="Download">
-Download the installer for the current release from the download page on mowoengine.com.
+Download `MowoEngineSetup-<version>-win-x64.exe` from the download page on mowoengine.com. The same page offers the bare `MowoEngine-<version>-win-x64.msi` for managed deployments.
 </Step>
 <Step title="Run the installer">
-The installer is a per-user MSI. It installs into `%LOCALAPPDATA%\Programs\MowoEditor` without an administrator prompt and adds **Mowo Project Launcher** and **Mowo Editor** to the Start Menu. A newer version upgrades the installed one in place.
+Accept the Personal (Beta) terms. **Options** changes the install folder; the default is `%LOCALAPPDATA%\Programs\Mowo Games\Mowo Engine 0.3`. The installer adds a **Mowo Engine 0.3** folder to the Start menu with **Mowo Project Launcher** and **Mowo Editor**, a **Mowo Project Launcher 0.3** desktop shortcut, opens `.mproject` files with the engine each project names, and registers the version with the Project Launcher.
 </Step>
 <Step title="Start the Project Launcher">
-Open **Mowo Project Launcher** from the Start Menu, sign in on its **Account** page and activate the computer. Then create a project from a template ([Create a project](/docs/getting-started/create-a-project/)).
+Open **Mowo Project Launcher** from the Start menu, sign in on its **Account** page and activate the computer. Then create a project from a template ([Create a project](/docs/getting-started/create-a-project/)).
 </Step>
 </Steps>
 
+<Screenshot id="getting-started-installer-welcome" alt="The Mowo Engine Setup window on Windows: the Mowo mark, the product name with its version, the license link and the Install and Options buttons." />
+
 <Screenshot id="getting-started-launcher-first-run" alt="Mowo Project Launcher on first start after installing: the sidebar with the Sign in row at the bottom, and the template wizard in the main area." />
 
-Keep the per-user install location. Building a game module writes intermediate files under the install, which a read-only Program Files install would refuse.
+Keep the install in your user profile. Building a game module and packaging a game write into the install folder, which a read-only Program Files location would refuse.
+
+### Versions side by side
+
+Each minor version installs into its own folder, so Mowo Engine 0.3 and 0.4 live side by side and the Project Launcher lists both. Installing a patch of the same minor version, 0.3.1 over 0.3.0 for example, replaces it in place. A project opens in the version its `.mproject` names; **Switch engine version...** in a project file's right-click menu points it at another.
+
+### Silent install
+
+The MSI installs without UI for scripted setups:
+
+```powershell
+msiexec /i MowoEngine-0.3.0-beta-win-x64.msi /qn INSTALLFOLDER="D:\Mowo\Mowo Engine 0.3" DESKTOPSHORTCUT=0
+```
 
 ## Install the C++ toolchain
 
-A game module is compiled with clang against the Microsoft C++ runtime and the Windows SDK. Install:
+A game module is compiled with clang against the Microsoft C++ runtime and the Windows SDK. The installer does not bring them. Install:
 
 | Component | Version | Where to get it |
 | --- | --- | --- |
@@ -52,7 +69,7 @@ The minimum and preferred versions are read from `Engine/Config/Toolchains.ini` 
 Run `mbt doctor` from the install folder. It reports each toolchain component it found, its version against the pinned range, and what is missing:
 
 ```powershell
-cd "$env:LOCALAPPDATA\Programs\MowoEditor"
+cd "$env:LOCALAPPDATA\Programs\Mowo Games\Mowo Engine 0.3"
 ./mbt.cmd doctor
 ```
 
@@ -61,10 +78,46 @@ cd "$env:LOCALAPPDATA\Programs\MowoEditor"
 The engine's modules come prebuilt, so `mbt` only compiles your project's modules:
 
 - **Name your module.** `mbt build -t MyGame --extra-source D:/Projects/MyGame/Source` builds the `MyGame` module; a bare `mbt build` is refused.
-- **The configuration is fixed.** A game module builds in the configuration the engine shipped as, because C runtime flavors cannot mix across the engine's DLLs. Another `-c` is corrected, with a log line.
+- **The editor configuration is fixed.** A game module you build for the editor builds in the configuration the editor ships as (`dev`). Another `-c` is corrected, with a log line.
+- **Packages are release or profile.** `mbt package -c release` (or `-c profile`) compiles your modules against the prebuilt release or profile game libraries the install ships and packages the game. See [Package from the installed build](#package-from-the-installed-build).
 - **Reflection code still generates.** The header tool runs inside `mbt` for every module that uses `MCLASS` and the other markup.
 
 Most of the time you do not call `mbt` yourself: the editor compiles and hot-reloads the game module ([Working with C++](/docs/editor/working-with-cpp/)). [Your first build](/docs/getting-started/first-build/) walks through both ways.
+
+### Package from the installed build
+
+```powershell
+./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject -c release
+./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject -c release --target Server
+```
+
+What differs from a package made from engine sources:
+
+- **The player is modular.** The engine's libraries ship as DLLs beside the game's executable, the way the install carries them. A single-executable (monolithic) player needs a build from engine sources; `--monolithic` is ignored with a log line.
+- **Your `<Project>.Target.cs` does not relink the host.** The package uses the prebuilt game host under your product name and loads your modules beside it. Target-level settings in that file other than the module list have no effect.
+- **The dedicated server** packages in release only.
+- **Auto-subtitles** ship without the speech model, which the install does not carry.
+
+A project without C++ packages with no compiler at all. Material graphs compile into a `MaterialShaders.meaf` beside the game, with the shader compiler the install carries.
+
+### What the install contains
+
+The engine ships built, not as source: the editor and game libraries, the engine's shaders compiled into `Shaders.meaf`, plugins as built modules with their manifests, content and public headers, and only the headers and import libraries a game module compiles and links against. There are no engine `.cpp` files, `.Build.cs` files, static libraries or HLSL sources in the install. A game module may depend on the modules listed in the [scripting API](/docs/api/) and on plugin modules; depending on an engine-internal module such as `RHI` fails with a message that lists what you can use.
+
+## Uninstalling
+
+Uninstalling removes one version. Your projects are never touched; keep them outside the install folder, because the whole install folder goes, including game modules and packages that were built into it.
+
+Choose one of:
+
+- **Start menu:** **Mowo Engine 0.3 > Uninstall Mowo Engine 0.3**.
+- **Project Launcher:** on the **Engine installs** page, open the version's **...** menu and choose **Uninstall...**. The launcher asks first, says so when it runs from that very version, and offers **Uninstall and remove caches and settings**.
+- **Settings > Apps > Installed apps:** **Mowo Engine 0.3.0-beta**, then **Uninstall**. Running the setup file again offers **Repair** and **Uninstall** too.
+- **Scripts:** `MowoEngineSetup-0.3.0-beta-win-x64.exe /uninstall /quiet`, or `msiexec /x <ProductCode> /qn` for an MSI install.
+
+The uninstaller removes the files, the Start menu folder, the desktop shortcut, the `.mproject` association and the version's entry in the Project Launcher's list.
+
+Your caches and settings in `%LOCALAPPDATA%\MowoEngine` (derived data, logs, crash reports, user settings and the license lease) stay, so a reinstall finds you signed in and activated. To remove them as well, choose **Uninstall and remove caches and settings** in the Project Launcher, or add `REMOVEUSERDATA=1` (`RemoveUserData=1` for the setup file); that also signs this computer out of Mowo ID.
 
 ## Troubleshooting
 
@@ -74,9 +127,11 @@ Most of the time you do not call `mbt` yourself: the editor compiles and hot-rel
 | `mbt doctor` reports no clang | Install LLVM, or set `LLVM_PATH` to its folder. |
 | `mbt doctor` reports no MSVC toolset or Windows SDK | Add the **Desktop development with C++** workload in the Visual Studio installer. |
 | A build fails with permission denied on a DLL | A running editor or game holds the file. Close it and build again. |
+| `mbt package` says the install ships no game libraries for a configuration | Package in `release` or `profile`; `dev` and `debug` packages need a build from engine sources. |
 
 ## Next steps
 
 - [Create a project](/docs/getting-started/create-a-project/)
 - [Your first scene](/docs/getting-started/first-scene/)
 - [Your first build](/docs/getting-started/first-build/)
+- [Package a game](/docs/shipping/package-a-game/)
