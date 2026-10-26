@@ -11,7 +11,12 @@ sources:
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs
   - Engine/Config/Toolchains.ini
-verifiedAt: 7f8f31f8d
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildOptions.cs
+  - Engine/Source/Editor/MowoLicensing/MowoLicensing.Build.cs
+  - Engine/Source/Editor/MowoLicensing/Private/Licensing.cpp
+  - Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Core/MLauncherEngine.cpp
+verifiedAt: f694867c9
 ---
 
 `mbt package-editor` builds Mowo's counterpart to Unreal's Installed Build: an installable bundle with **Mowo Editor**, the **Mowo Project Launcher** and a game-module SDK <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageEditorCommand.cs" />. Developers on your team install it, create projects from templates, and compile their game's C++ modules against the prebuilt engine, without cloning or building the engine repository.
@@ -36,9 +41,28 @@ Run it from a full engine checkout on Windows:
 | `--zip` | off | Also write `MowoEditor-<version>-<config>.zip` |
 | `--installer` | on | Write an installer (see below) |
 | `--sign` | none | Code-sign the executables and engine DLLs; falls back to `MOWO_SIGN_CERT` |
-| `--skip-build`, `--skip-shaders` | off | Reuse the binaries in `Engine/Binaries/<platform>/<config>` and the build tree's shader archive |
+| `--skip-build`, `--skip-shaders` | off | Reuse the binaries in `Engine/Binaries/<platform>/<config>-installed` and the build tree's shader archive |
 
 The command builds the engine, stages the binaries, compiles the editor's shader set, stages the SDK, the templates and the build toolchain, then builds the distributables. It refuses to run on a non-Windows host, and from inside an installed build.
+
+## License check
+
+An installed build checks the user's license; a build from source does not. `package-editor` builds with the `MOWO_LICENSE_ENFORCED` build option set, and options change where binaries go, so the enforced build lands in `Engine/Binaries/<platform>/<config>-installed/` and never overwrites your everyday `dev` folder <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />. In the bundle the folder is `Engine/Binaries/<platform>/<config>/` again.
+
+With the option set, Mowo Editor refuses to start on a computer without a valid license lease (it exits with code `3`), and the Project Launcher sends the user to its **Account** page instead of opening a project <Source path="Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp" /> <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Core/MLauncherEngine.cpp" />. [Sign in and activate your license](/docs/getting-started/sign-in-and-license/) describes what users see.
+
+To try the check without packaging, build the two programs with the option yourself:
+
+```powershell
+./mbt.cmd build -o MOWO_LICENSE_ENFORCED -t MowoEditor -c dev
+./mbt.cmd build -o MOWO_LICENSE_ENFORCED -t MowoProjectLauncher -c dev
+```
+
+Add `-o MOWO_LICENSE_DEV` to test against a local copy of the site. It embeds the development signing key (`dev-1`) next to the production one, and reads the site and Mowo ID addresses from the `MOWO_LICENSE_API_URL` and `MOWO_LICENSE_ID_URL` environment variables, or from `ApiUrl` and `IdentityUrl` under `[Licensing]` in the user `Engine.ini` <Source path="Engine/Source/Editor/MowoLicensing/Private/Licensing.cpp" />. Never ship a `MOWO_LICENSE_DEV` build: anyone with the development key can sign a lease for it.
+
+<Callout type="warning">
+The production public key (`prod-1`) is still a placeholder of zeros, and the engine skips it. Until the real key is embedded, an installed build made without `MOWO_LICENSE_DEV` accepts no lease at all, so its editor never starts <Source path="Engine/Source/Editor/MowoLicensing/Private/Licensing.cpp" />.
+</Callout>
 
 ## What is inside
 
@@ -64,7 +88,7 @@ MowoEditor/
 └── Samples/StarterContent/**        the optional starter pack a new project can add
 ```
 
-The binaries come from one configuration's folder, `Engine/Binaries/<platform>/<config>`, and keep that folder in the bundle <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />. No PDBs ship.
+The binaries come from the enforced build folder of one configuration, `Engine/Binaries/<platform>/<config>-installed`, and land in `Engine/Binaries/<platform>/<config>` in the bundle <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />. No PDBs ship.
 
 The third-party slice is not hand-picked. The packager resolves the canonical game module (`MowoSandbox`, the same shape every template uses) and stages exactly the include folders and libraries its closure references <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/EditorPackager.cs" />. Programs ship their rules only.
 

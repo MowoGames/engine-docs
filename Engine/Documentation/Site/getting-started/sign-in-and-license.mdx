@@ -1,0 +1,99 @@
+---
+title: Sign in and activate your license
+sidebarTitle: Sign in and license
+description: Sign in with your Mowo ID in the Project Launcher, get the free Personal (Beta) license and activate up to three computers for the installed editor.
+order: 9
+status: in-development
+sources:
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherAccount.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/UI/LauncherUi.cpp
+  - Engine/Source/Editor/MowoProjectLauncher/Private/Core/MLauncherEngine.cpp
+  - Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp
+  - Engine/Source/Editor/MowoLicensing/Public/MowoLicensing/LicenseService.h
+  - Engine/Source/Editor/MowoLicensing/Private/LicenseService.cpp
+  - Engine/Source/Editor/MowoLicensing/Private/LicenseStore.cpp
+  - Engine/Source/Editor/MowoLicensing/Private/Licensing.cpp
+  - Engine/Source/Runtime/MowoId/Private/MowoIdClient.cpp
+verifiedAt: f694867c9
+---
+
+The installed Mowo Editor, the one you get from mowoengine.com, starts only on a computer that is signed in with a Mowo ID and activated under a license. During the beta the license is **Personal (Beta)** and costs nothing. You sign in and activate once, in the Mowo Project Launcher; after that the editor starts online or offline.
+
+Builds you compile from source do not check a license at all. See [What happens without a license](#what-happens-without-a-license).
+
+<Callout type="warning">
+Licensing is new in this beta. The production signing key is not embedded in the engine yet, so a public installed build cannot verify a lease until it is <Source path="Engine/Source/Editor/MowoLicensing/Private/Licensing.cpp" />.
+</Callout>
+
+## Sign in
+
+The account row sits at the bottom of the launcher's sidebar. Signed out, it reads **Sign in**; click it to open the **Account** page <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/UI/LauncherUi.cpp" />.
+
+<Steps>
+<Step title="Sign in with your browser">
+Click **Sign in with browser**. Your browser opens the Mowo ID sign-in page. Sign in there (or create a Mowo ID), then come back to the launcher. If the browser tab was closed, **Open the browser again** reopens it; **Cancel** stops waiting.
+</Step>
+<Step title="Or use a code">
+If the browser cannot reach the launcher, click **Use a code instead**. The launcher shows a short code and a web address. Open the address on this or any other device, sign in and enter the code. **Open sign-in page** opens the address with the code filled in. The page shows how many minutes the code has left.
+</Step>
+</Steps>
+
+Once you are signed in, the account row shows your handle and a license chip. The launcher keeps you signed in: your Mowo ID session is stored in the operating system's credential store under **Mowo Engine**, and the installed editor reads the same session <Source symbol="FLicenseService" />.
+
+<Screenshot id="getting-started-launcher-account-signed-out" alt="Mowo Project Launcher, Account page selected in the sidebar while signed out: the Sign in to Mowo Engine card with the Sign in with browser and Use a code instead buttons, and the Beta chip next to Launcher in the title bar." caption="The Account page before you sign in." />
+
+## Get the Personal (Beta) license
+
+A new Mowo ID has no license. The **License** card says **None**, the chip reads **No license**, and **Get a license** opens [mowoengine.com/account/license/](https://mowoengine.com/account/license/). Accept the Personal (Beta) terms there, return to the launcher and click **Refresh**.
+
+## Activate this computer
+
+Click **Activate this computer**. The launcher sends a hash of this computer's ID together with its name, operating system and engine version, and receives a signed lease that it stores on disk. Only the hash leaves the computer; the name and OS are what you see in your device list <Source symbol="FLicenseService::Device" />.
+
+When it works, **This computer** reads **Activated** and the chip shows **Personal (Beta)**. The card also shows **Works offline until** (the date the lease runs out) and how many computers are in use.
+
+<Screenshot id="getting-started-launcher-account-activated" alt="Mowo Project Launcher Account page while signed in and activated: the License card with the green Personal (Beta) chip, rows License, This computer: Activated, Works offline until and Computers 1 of 3 in use, and the Manage devices and Refresh buttons; the Sign out card below it." caption="An activated computer." />
+
+### Up to three computers
+
+A license can be active on three computers at once. A fourth activation fails with a message that names the limit and a **Manage devices** link to [mowoengine.com/account/devices/](https://mowoengine.com/account/devices/), where you remove a computer you no longer use <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Model/LauncherAccount.cpp" />. Then activate again. A computer you removed there can be activated again later; it counts as a new one.
+
+### Messages you may see
+
+| Chip or message | What to do |
+|---|---|
+| **Activate** | Signed in, but this computer has no lease yet. Click **Activate this computer**. |
+| **No license** | Get the license at mowoengine.com, then **Refresh** and activate. |
+| **Accept terms** | The license terms changed. Accept the new ones on your license page. |
+| Already active on 3 computers | Remove a computer under **Manage devices**, then activate. |
+| **Offline** | The launcher could not reach mowoengine.com and there is no valid lease yet. Connect and click **Refresh**. |
+| mowoengine.com is under maintenance | Wait. A lease you already have keeps working until it expires. |
+| **Expiring in N days** | The lease is close to its end and has not been renewed. Go online; it renews by itself. |
+
+## Working offline and renewal
+
+A lease is valid for 14 days from the moment it is issued. The launcher and the editor renew it silently whenever it is more than a day old and they are online: the launcher after you sign in and then every hour while it is open, the editor once in the background after it starts <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Core/MLauncherEngine.cpp" /> <Source path="Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp" />. So a computer can stay offline for up to 14 days.
+
+When fewer than three days are left and renewal is not possible, the editor shows a notification: "Your license lease expires in N days. Connect to the internet to renew it." It never closes a running session; the check happens only when the editor starts <Source symbol="FLicenseService::kWarnBelowSeconds" />.
+
+The lease is the file `License.lease` in the engine's user config folder, `%LOCALAPPDATA%\MowoEngine\Config` on Windows. The launcher and the editor read and write the same file <Source path="Engine/Source/Editor/MowoLicensing/Private/LicenseStore.cpp" />. It is bound to your Mowo ID, to this computer and to the engine's major version: copying it to another computer or using it with another account does not work.
+
+## What happens without a license
+
+Only an installed build checks the license. It is built with the `MOWO_LICENSE_ENFORCED` option (see [Installed editor build](/docs/shipping/installed-editor-build/)); a build from source is not, so it starts without signing in and the launcher never blocks it. The **Account** page still works there, and says that the build does not check licenses.
+
+In an installed build:
+
+- **The launcher** opens the **Account** page with an explanation instead of opening a project, creating one or launching an engine version, until this computer has a valid lease <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Core/MLauncherEngine.cpp" />.
+- **The editor** checks the lease before it shows its splash screen. When the lease is missing or no longer valid and it is signed in, it tries to renew online for up to ten seconds. If that fails it shows a message with **Open Project Launcher**, **Get a license** and **Close**, and exits with code `3` without loading the engine <Source path="Engine/Source/Editor/MowoEditor/Private/MowoEditor.cpp" />.
+
+<Screenshot id="getting-started-editor-license-required" alt="The Mowo Editor message box on Windows shown when an installed editor starts on a computer that is not activated: the text This computer is not activated for Mowo Engine and the buttons Open Project Launcher, Get a license and Close." caption="The installed editor on a computer that is not activated." />
+
+## Sign out
+
+On the **Account** page, click **Sign out…** and confirm. The launcher first removes this computer from your account, which frees its slot, and then signs you out. If the computer cannot be removed (for example because you are offline), you are still signed out, and the launcher links to **Manage devices** so you can remove it on the website <Source path="Engine/Source/Editor/MowoProjectLauncher/Private/Core/MLauncherEngine.cpp" />. After you sign out, the installed editor does not start on this computer until you sign in and activate it again.
+
+## Related
+
+- [Installing Mowo](/docs/getting-started/installing/)
+- [Installed editor build](/docs/shipping/installed-editor-build/)
