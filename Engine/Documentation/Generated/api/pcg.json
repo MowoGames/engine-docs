@@ -16,7 +16,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Loom's PCG controls: regenerate every volume (optionally on a new seed —\na fresh world each run), and read back what the volumes placed.",
+					"doc": "Visual Scripting's PCG controls: regenerate every volume (optionally on a new seed —\na fresh world each run), and read back what the volumes placed.",
 					"line": 17,
 					"members": [
 						{
@@ -124,58 +124,70 @@
 						},
 						{
 							"kind": "field",
+							"name": "partitioned",
+							"signature": "bool partitioned = false",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "partitionCellSize",
+							"signature": "float partitionCellSize = 64.0f",
+							"line": 67
+						},
+						{
+							"kind": "field",
 							"name": "maxMeshActors",
 							"signature": "int32_t maxMeshActors = 2000",
-							"line": 62
+							"line": 74
 						},
 						{
 							"kind": "field",
 							"name": "generatedLevels",
 							"signature": "std::string generatedLevels",
 							"doc": "What the last run placed as Level Instances, one \"name|map\" per line, so\nthe next run (or a reload) can take them away first.",
-							"line": 70
+							"line": 82
 						},
 						{
 							"kind": "field",
 							"name": "builtFingerprint",
 							"signature": "std::string builtFingerprint",
-							"line": 74
+							"line": 86
 						},
 						{
 							"kind": "field",
 							"name": "lastPointCount",
 							"signature": "uint32_t lastPointCount = 0",
-							"line": 75
+							"line": 87
 						},
 						{
 							"kind": "field",
 							"name": "lastFoliageCount",
 							"signature": "uint32_t lastFoliageCount = 0",
-							"line": 76
+							"line": 88
 						},
 						{
 							"kind": "field",
 							"name": "lastMeshCount",
 							"signature": "uint32_t lastMeshCount = 0",
-							"line": 77
+							"line": 89
 						},
 						{
 							"kind": "field",
 							"name": "lastLevelCount",
 							"signature": "uint32_t lastLevelCount = 0",
-							"line": 78
+							"line": 90
 						},
 						{
 							"kind": "field",
 							"name": "lastHash",
 							"signature": "uint64_t lastHash = 0",
-							"line": 79
+							"line": 91
 						},
 						{
 							"kind": "field",
 							"name": "lastError",
 							"signature": "std::string lastError",
-							"line": 80
+							"line": 92
 						}
 					]
 				}
@@ -191,56 +203,56 @@
 					"kind": "struct",
 					"name": "FPcgPoint",
 					"namespace": "Mowo",
-					"line": 21,
+					"line": 24,
 					"members": [
 						{
 							"kind": "field",
 							"name": "position",
 							"signature": "Vec3 position = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 22
+							"line": 25
 						},
 						{
 							"kind": "field",
 							"name": "normal",
 							"signature": "Vec3 normal = Vec3(0.0f, 1.0f, 0.0f)",
-							"line": 23
+							"line": 26
 						},
 						{
 							"kind": "field",
 							"name": "density",
 							"signature": "float density = 1.0f",
-							"line": 24
+							"line": 27
 						},
 						{
 							"kind": "field",
 							"name": "yaw",
 							"signature": "float yaw = 0.0f",
-							"line": 25
+							"line": 28
 						},
 						{
 							"kind": "field",
 							"name": "scale",
 							"signature": "float scale = 1.0f",
-							"line": 26
+							"line": 29
 						},
 						{
 							"kind": "field",
 							"name": "seed",
 							"signature": "uint32_t seed = 0",
-							"line": 27
+							"line": 30
 						},
 						{
 							"kind": "field",
 							"name": "attributes",
 							"signature": "float attributes[kPcgMaxAttributes] =",
 							"doc": "Slot i holds the attribute FPcgResult::attributeNames[i]; a bit in the\nmask says the point has a value there (unset reads as 0).",
-							"line": 30
+							"line": 33
 						},
 						{
 							"kind": "field",
 							"name": "attributeMask",
 							"signature": "uint8_t attributeMask = 0",
-							"line": 31
+							"line": 34
 						}
 					]
 				},
@@ -249,25 +261,25 @@
 					"name": "FPcgSpline",
 					"namespace": "Mowo",
 					"doc": "A curve the graph can sample or measure against, as a dense world-space\npolyline (the generation step tessellates the scene's splines).",
-					"line": 36,
+					"line": 39,
 					"members": [
 						{
 							"kind": "field",
 							"name": "name",
 							"signature": "std::string name",
-							"line": 37
+							"line": 40
 						},
 						{
 							"kind": "field",
 							"name": "points",
 							"signature": "std::vector<Vec3> points",
-							"line": 38
+							"line": 41
 						},
 						{
 							"kind": "field",
 							"name": "closed",
 							"signature": "bool closed = false",
-							"line": 39
+							"line": 42
 						}
 					]
 				},
@@ -276,25 +288,31 @@
 					"name": "IPcgLandscape",
 					"namespace": "Mowo",
 					"doc": "The ground a graph samples. The PCG system hands over the scene's terrain;\na test hands over any heightfield.",
-					"line": 44,
+					"line": 47,
 					"members": [
 						{
 							"kind": "method",
 							"name": "~IPcgLandscape",
 							"signature": "virtual ~IPcgLandscape() = default",
-							"line": 46
+							"line": 49
 						},
 						{
 							"kind": "method",
 							"name": "Sample",
 							"signature": "virtual bool Sample(float x, float z, float& outHeight, Vec3& outNormal) const = 0",
-							"line": 48
+							"line": 51
 						},
 						{
 							"kind": "method",
 							"name": "Bounds",
 							"signature": "virtual void Bounds(Vec3& outMin, Vec3& outMax) const = 0",
-							"line": 49
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "ContentKey",
+							"signature": "virtual uint64_t ContentKey() const",
+							"line": 54
 						}
 					]
 				},
@@ -304,25 +322,31 @@
 					"namespace": "Mowo",
 					"bases": "public IPcgLandscape",
 					"doc": "A terrain heightmap centred on `origin`, `worldSize` metres across.",
-					"line": 53,
+					"line": 60,
 					"members": [
 						{
 							"kind": "method",
 							"name": "FPcgHeightfieldLandscape",
 							"signature": "FPcgHeightfieldLandscape(const FHeightmap& heightmap, float worldSize, const Vec3& origin)",
-							"line": 55
+							"line": 62
 						},
 						{
 							"kind": "method",
 							"name": "Sample",
 							"signature": "bool Sample(float x, float z, float& outHeight, Vec3& outNormal) const override",
-							"line": 57
+							"line": 64
 						},
 						{
 							"kind": "method",
 							"name": "Bounds",
 							"signature": "void Bounds(Vec3& outMin, Vec3& outMax) const override",
-							"line": 58
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "ContentKey",
+							"signature": "uint64_t ContentKey() const override",
+							"line": 66
 						}
 					]
 				},
@@ -330,53 +354,77 @@
 					"kind": "struct",
 					"name": "FPcgContext",
 					"namespace": "Mowo",
-					"line": 66,
+					"line": 79,
 					"members": [
 						{
 							"kind": "field",
 							"name": "seed",
 							"signature": "int32_t seed = 0",
 							"doc": "The component's own seed, mixed with the graph's and each node's id.",
-							"line": 68
+							"line": 81
 						},
 						{
 							"kind": "field",
 							"name": "center",
 							"signature": "Vec3 center = Vec3(0.0f, 0.0f, 0.0f)",
 							"doc": "The volume the graph works in (world space); a zero extent means the\nwhole landscape.",
-							"line": 71
+							"line": 84
 						},
 						{
 							"kind": "field",
 							"name": "extents",
 							"signature": "Vec3 extents = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 72
+							"line": 85
 						},
 						{
 							"kind": "field",
 							"name": "landscape",
 							"signature": "const IPcgLandscape* landscape = nullptr",
-							"line": 73
+							"line": 86
 						},
 						{
 							"kind": "field",
 							"name": "maxPoints",
 							"signature": "uint32_t maxPoints = 200000",
-							"line": 74
+							"line": 87
 						},
 						{
 							"kind": "field",
 							"name": "splines",
 							"signature": "std::vector<FPcgSpline> splines",
 							"doc": "Curves for the spline sampler and distance filter.",
-							"line": 77
+							"line": 90
 						},
 						{
 							"kind": "field",
 							"name": "loadGraph",
 							"signature": "std::function<bool(const std::string& path, FPcgGraph& out)> loadGraph",
 							"doc": "Reads a .pcg for Subgraph nodes; without it a Subgraph node warns and\npasses its input through.",
-							"line": 81
+							"line": 94
+						},
+						{
+							"kind": "field",
+							"name": "cache",
+							"signature": "FPcgCache* cache = nullptr",
+							"line": 96
+						},
+						{
+							"kind": "field",
+							"name": "clipToCell",
+							"signature": "bool clipToCell = false",
+							"line": 98
+						},
+						{
+							"kind": "field",
+							"name": "cellMin",
+							"signature": "Vec3 cellMin = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 99
+						},
+						{
+							"kind": "field",
+							"name": "cellMax",
+							"signature": "Vec3 cellMax = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 100
 						}
 					]
 				},
@@ -384,51 +432,51 @@
 					"kind": "struct",
 					"name": "FPcgSpawnOutput",
 					"namespace": "Mowo",
-					"line": 84,
+					"line": 103,
 					"members": [
 						{
 							"kind": "field",
 							"name": "nodeId",
 							"signature": "std::string nodeId",
-							"line": 85
+							"line": 104
 						},
 						{
 							"kind": "field",
 							"name": "kind",
 							"signature": "std::string kind",
 							"doc": "\"foliage\", \"mesh\", \"level\" or \"actor\" (asset = the actor class name).",
-							"line": 87
+							"line": 106
 						},
 						{
 							"kind": "field",
 							"name": "asset",
 							"signature": "std::string asset",
 							"doc": "The mesh or map it places; for \"mesh\" an empty asset with a primitive name in meshType.",
-							"line": 89
+							"line": 108
 						},
 						{
 							"kind": "field",
 							"name": "meshType",
 							"signature": "std::string meshType",
-							"line": 90
+							"line": 109
 						},
 						{
 							"kind": "field",
 							"name": "cullDistance",
 							"signature": "float cullDistance = 0.0f",
-							"line": 91
+							"line": 110
 						},
 						{
 							"kind": "field",
 							"name": "alignToNormal",
 							"signature": "float alignToNormal = 0.0f",
-							"line": 92
+							"line": 111
 						},
 						{
 							"kind": "field",
 							"name": "points",
 							"signature": "std::vector<FPcgPoint> points",
-							"line": 93
+							"line": 112
 						}
 					]
 				},
@@ -436,44 +484,238 @@
 					"kind": "struct",
 					"name": "FPcgResult",
 					"namespace": "Mowo",
-					"line": 96,
+					"line": 115,
 					"members": [
 						{
 							"kind": "field",
 							"name": "spawns",
 							"signature": "std::vector<FPcgSpawnOutput> spawns",
-							"line": 97
+							"line": 116
 						},
 						{
 							"kind": "field",
 							"name": "attributeNames",
 							"signature": "std::vector<std::string> attributeNames",
 							"doc": "Attribute name per point slot, in the order nodes first wrote them.",
-							"line": 99
+							"line": 118
 						},
 						{
 							"kind": "field",
 							"name": "nodePointCounts",
 							"signature": "std::map<std::string, uint32_t> nodePointCounts",
-							"line": 100
+							"line": 119
 						},
 						{
 							"kind": "field",
 							"name": "warnings",
 							"signature": "std::vector<std::string> warnings",
-							"line": 101
+							"line": 120
 						},
 						{
 							"kind": "field",
 							"name": "hash",
 							"signature": "uint64_t hash = 0",
-							"line": 102
+							"line": 121
 						},
 						{
 							"kind": "method",
 							"name": "CountKind",
 							"signature": "uint32_t CountKind(const std::string& kind) const",
-							"line": 104
+							"line": 123
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgCellResult",
+					"namespace": "Mowo",
+					"line": 126,
+					"members": [
+						{
+							"kind": "field",
+							"name": "x",
+							"signature": "int32_t x = 0",
+							"line": 127
+						},
+						{
+							"kind": "field",
+							"name": "z",
+							"signature": "int32_t z = 0",
+							"line": 128
+						},
+						{
+							"kind": "field",
+							"name": "boundsMin",
+							"signature": "Vec3 boundsMin = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 129
+						},
+						{
+							"kind": "field",
+							"name": "boundsMax",
+							"signature": "Vec3 boundsMax = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 130
+						},
+						{
+							"kind": "field",
+							"name": "succeeded",
+							"signature": "bool succeeded = false",
+							"line": 131
+						},
+						{
+							"kind": "field",
+							"name": "result",
+							"signature": "FPcgResult result",
+							"line": 132
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgCacheStats",
+					"namespace": "Mowo",
+					"line": 135,
+					"members": [
+						{
+							"kind": "field",
+							"name": "hits",
+							"signature": "uint64_t hits = 0",
+							"line": 136
+						},
+						{
+							"kind": "field",
+							"name": "misses",
+							"signature": "uint64_t misses = 0",
+							"line": 137
+						},
+						{
+							"kind": "field",
+							"name": "stores",
+							"signature": "uint64_t stores = 0",
+							"line": 138
+						},
+						{
+							"kind": "field",
+							"name": "evictions",
+							"signature": "uint64_t evictions = 0",
+							"line": 139
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPcgCache",
+					"namespace": "Mowo",
+					"line": 142,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FPcgCache",
+							"signature": "FPcgCache()",
+							"line": 152
+						},
+						{
+							"kind": "method",
+							"name": "~FPcgCache",
+							"signature": "~FPcgCache()",
+							"line": 153
+						},
+						{
+							"kind": "method",
+							"name": "FPcgCache",
+							"signature": "FPcgCache(const FPcgCache&) = delete",
+							"line": 154
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FPcgCache& operator=(const FPcgCache&) = delete",
+							"line": 155
+						},
+						{
+							"kind": "method",
+							"name": "SetMaxEntries",
+							"signature": "void SetMaxEntries(size_t entries)",
+							"line": 157
+						},
+						{
+							"kind": "method",
+							"name": "GetMaxEntries",
+							"signature": "size_t GetMaxEntries() const",
+							"line": 158
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "bool Find(uint64_t key, FEntry& out)",
+							"line": 160
+						},
+						{
+							"kind": "method",
+							"name": "Store",
+							"signature": "void Store(uint64_t key, FEntry entry)",
+							"line": 161
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 162
+						},
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "size_t Size() const",
+							"line": 164
+						},
+						{
+							"kind": "method",
+							"name": "GetStats",
+							"signature": "FPcgCacheStats GetStats() const",
+							"line": 165
+						},
+						{
+							"kind": "method",
+							"name": "ResetStats",
+							"signature": "void ResetStats()",
+							"line": 166
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPcgCache::FEntry",
+					"namespace": "Mowo",
+					"line": 144,
+					"members": [
+						{
+							"kind": "field",
+							"name": "points",
+							"signature": "std::vector<FPcgPoint> points",
+							"line": 145
+						},
+						{
+							"kind": "field",
+							"name": "spawns",
+							"signature": "std::vector<FPcgSpawnOutput> spawns",
+							"line": 146
+						},
+						{
+							"kind": "field",
+							"name": "warnings",
+							"signature": "std::vector<std::string> warnings",
+							"line": 147
+						},
+						{
+							"kind": "field",
+							"name": "attributeNames",
+							"signature": "std::vector<std::string> attributeNames",
+							"line": 148
+						},
+						{
+							"kind": "field",
+							"name": "lastUse",
+							"signature": "uint64_t lastUse = 0",
+							"line": 149
 						}
 					]
 				},
@@ -482,14 +724,49 @@
 					"name": "FPcgExecutor",
 					"namespace": "Mowo",
 					"doc": "Runs a graph: nodes in dependency order, each reading its input point sets\nand producing one. Same graph, same context, same result — bit for bit on\none machine, and every random choice comes from integer hashing, so across\nmachines too.",
-					"line": 111,
+					"line": 182,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Execute",
 							"signature": "static bool Execute(const FPcgGraph& graph, const FPcgContext& context, FPcgResult& outResult, std::string* error = nullptr)",
 							"static": true,
-							"line": 113
+							"line": 184
+						},
+						{
+							"kind": "method",
+							"name": "ExecutePartitioned",
+							"signature": "static bool ExecutePartitioned(const FPcgGraph& graph, const FPcgContext& context, float cellSize, bool parallel, FPcgResult& outResult, std::string* error = nullptr, std::vector<FPcgCellResult>* outCells = nullptr)",
+							"static": true,
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "PartitionCells",
+							"signature": "static void PartitionCells(const FPcgContext& context, float cellSize, std::vector<FPcgCellResult>& outCells)",
+							"static": true,
+							"line": 187
+						},
+						{
+							"kind": "method",
+							"name": "MergeResults",
+							"signature": "static void MergeResults(const std::vector<const FPcgResult*>& parts, FPcgResult& outResult)",
+							"static": true,
+							"line": 188
+						},
+						{
+							"kind": "method",
+							"name": "HashResult",
+							"signature": "static uint64_t HashResult(const FPcgResult& result)",
+							"static": true,
+							"line": 189
+						},
+						{
+							"kind": "method",
+							"name": "HashSplines",
+							"signature": "static uint64_t HashSplines(const std::vector<FPcgSpline>& splines)",
+							"static": true,
+							"line": 190
 						},
 						{
 							"kind": "method",
@@ -497,7 +774,7 @@
 							"signature": "static float Noise(float x, float z, uint32_t seed, int32_t octaves)",
 							"static": true,
 							"doc": "Deterministic 2D value noise in [0, 1] (fBm over `octaves`).",
-							"line": 116
+							"line": 193
 						},
 						{
 							"kind": "method",
@@ -505,7 +782,7 @@
 							"signature": "static uint64_t HashPoints(const std::vector<FPcgPoint>& points)",
 							"static": true,
 							"doc": "FNV-1a over the result's points: two runs agree exactly when it does.",
-							"line": 119
+							"line": 196
 						},
 						{
 							"kind": "method",
@@ -513,7 +790,7 @@
 							"signature": "static bool GetValue(const FPcgResult& result, const FPcgPoint& point, const std::string& name, float& out)",
 							"static": true,
 							"doc": "A named value of a point: the fixed fields under \"density\", \"scale\",\n\"yaw\", \"height\", \"x\", \"z\", \"slope\" (degrees, read-only) and \"seed\"\n(read-only), else the attribute of that name. False when unset.",
-							"line": 124
+							"line": 201
 						},
 						{
 							"kind": "method",
@@ -521,7 +798,7 @@
 							"signature": "static bool SetValue(FPcgResult& result, FPcgPoint& point, const std::string& name, float value)",
 							"static": true,
 							"doc": "Writes a fixed field or the attribute (allocating its slot; false when\nall kPcgMaxAttributes slots are taken).",
-							"line": 127
+							"line": 204
 						},
 						{
 							"kind": "field",
@@ -529,7 +806,7 @@
 							"signature": "static constexpr int32_t kMaxSubgraphDepth = 8",
 							"static": true,
 							"doc": "Subgraphs nest at most this deep; deeper is reported, not recursed.",
-							"line": 130
+							"line": 207
 						}
 					]
 				}
@@ -541,7 +818,7 @@
 					"signature": "static constexpr uint32_t kPcgMaxAttributes = 8",
 					"static": true,
 					"doc": "Named per-point attributes a graph may carry beside the fixed fields.",
-					"line": 19
+					"line": 22
 				}
 			]
 		},
@@ -634,6 +911,13 @@
 							"signature": "static uint32_t RegenerateRevision()",
 							"static": true,
 							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "SharedCache",
+							"signature": "static FPcgCache& SharedCache()",
+							"static": true,
+							"line": 41
 						}
 					]
 				}

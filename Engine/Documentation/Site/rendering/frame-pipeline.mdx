@@ -12,7 +12,9 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/RenderPassExtension.h
   - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
   - Engine/Source/Runtime/RHI/Public/RHI/RenderGraph.h
-verifiedAt: 1a346c1c5
+  - Engine/Shaders/Private/PostProcess/GTAO.hlsl
+  - Engine/Shaders/Private/GI/DdgiSample.hlsl
+verifiedAt: 5922e6e5e
 ---
 
 `SceneRenderer` is a deferred renderer. Opaque geometry writes a G-Buffer, lighting runs once per pixel over it, translucent surfaces are drawn forward afterward, and post-processing finishes the frame. It records a whole frame in `SceneRenderer::RenderFrame`, after the host has called `BeginScene`, submitted its draws and called `EndScene`. This page walks through that function in the order the passes run. Use it to find where an effect happens, what it depends on, and what replaces it on another tier.
@@ -56,7 +58,7 @@ The six [render-pass extension](/docs/rendering/extending-the-renderer/) points 
 | Velocity | Writes motion vectors for moving objects whenever a temporal resolve or a per-effect temporal filter needs them. |
 | VSM | Virtual shadow maps: page marking, page raster and resolve. Epic and up. |
 | Decals | Box-projected deferred decals, written over the G-Buffer before AO and lighting read it. |
-| GTAO | Ground-truth AO. Ray-traced AO fills this slot when `r.RTAO` is active. Off at Low. |
+| GTAO | Ground-truth AO. Writes the AO term and a bent normal, the average unoccluded direction, which the Global Illumination composite uses for cone occlusion. Ray-traced AO fills this slot when `r.RTAO` is active. Off at Low. |
 | Capsule shadows | Soft shadows from skinned meshes that have capsule shadows turned on (`r.CapsuleShadows`). |
 | Hi-Z | Builds the depth pyramid that the next frame's occlusion cull reads. |
 
@@ -78,7 +80,7 @@ The six [render-pass extension](/docs/rendering/extending-the-renderer/) points 
 - **Ray-traced sun shadow** cone-samples the sun disc through the scene's acceleration structure before lighting reads it. See [Shadows](/docs/rendering/shadows/).
 - **MegaLights** shades the shadow-casting local lights that missed the atlas budget, stochastically. The deferred pass skips those lights so nothing counts twice.
 - **Deferred lighting** resolves direct light for every G-Buffer pixel: sun, clustered local lights, area lights, sky lighting and contact shadows. See [Lights](/docs/rendering/lights/).
-- **Global Illumination** gathers indirect diffuse, traces SDF reflections, denoises and composites onto the HDR image. See [Global Illumination](/docs/rendering/global-illumination/).
+- **Global Illumination** gathers indirect diffuse, traces SDF reflections, denoises and composites onto the HDR image. The composite weights the indirect light by the non-metal part of the albedo, so metals take no diffuse fill. See [Global Illumination](/docs/rendering/global-illumination/).
 - **SSGI** is a screen-space one-bounce term. No tier enables it; `r.SSGI 1` forces it.
 - **SSS** blurs diffuse light on subsurface pixels once direct and indirect light are both in the HDR target.
 - **`AfterLighting`** extension point.

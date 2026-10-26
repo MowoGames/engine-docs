@@ -14,7 +14,7 @@ sources:
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Graph/BuildCache.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/BuildLock.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/ProgressReporter.cs
-verifiedAt: 08e26df3d
+verifiedAt: 7f8f31f8d
 ---
 
 **MowoBuildTool**, run as `mbt`, is the engine's build system, modeled on Unreal Build Tool. It is a C# program on .NET 10 that lives in `Engine/Source/Programs/MowoBuildTool/`. It compiles the engine and your game, compiles shaders, cooks and packs content, generates IDE projects, scaffolds projects, classes and programs, runs the tests and packages builds. There is no CMake and no separate configure step.
@@ -45,7 +45,7 @@ Run `mbt` through the wrapper at the engine root: `mbt.cmd` on Windows, `mbt.sh`
 ```powershell
 ./mbt.cmd doctor
 ./mbt.cmd build
-./mbt.cmd build -t MowoEditor -c Development
+./mbt.cmd build -t MowoEditor -c dev
 ./mbt.cmd info
 ```
 
@@ -66,7 +66,7 @@ Every command takes these <Source path="Engine/Source/Programs/MowoBuildTool/src
 <Flow steps={["Compile rules", "Resolve modules", "Header tool", "Compile", "Link", "Pack archives"]} highlight={3} caption="One mbt build. Shaders compile beside the C++ build, from its start." />
 
 1. **Compile rules.** Every `.Build.cs` and `.Target.cs` in scope, or the cached assembly.
-2. **Resolve modules.** `-t <name>` names a target first and a module second. A target builds its launch module, its `ExtraModuleNames` and, for game, editor and server targets, the enabled plugins. Without `-t`, `mbt build` builds every module. A module that links one its target type or configuration rules out fails the build: an editor module in a game, a developer module in Shipping.
+2. **Resolve modules.** `-t <name>` names a target first and a module second. A target builds its launch module, its `ExtraModuleNames` and, for game, editor and server targets, the enabled plugins. Without `-t`, `mbt build` builds every module. A module that links one its target type or configuration rules out fails the build: an editor module in a game, a developer module in `release`.
 3. **Header tool.** For every module with `bUseHeaderTool`, the reflection code generator runs in process and writes the generated code the module compiles with.
 4. **Compile.** Each translation unit is fingerprinted from its source, its flags and the headers it included last time, and only changed units recompile <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Graph/BuildCache.cs" />. The fingerprints live in `.mbt-cache/`.
 5. **Link** each module into a shared library (or a static one in a monolithic build) and each target into an executable.
@@ -78,14 +78,14 @@ Only one build runs per checkout at a time: a second `mbt` waits for the first, 
 
 ## Where output goes
 
-Binaries land in `Engine/Binaries/<Platform>/`, with the configuration in the file name: `MowoEditor.exe` in Development, `MowoEditor-Win64-Debug.exe` in Debug. Objects and generated code go to `Engine/Intermediate/Build/`. Every binary finds the engine from its own location, so the working directory does not matter. [Output layout](/docs/build-tool/output-layout/) has the details.
+Binaries land in `Engine/Binaries/<platform>/<config>/`, one folder per configuration, and file names carry only the name: `Engine/Binaries/win-x64/dev/MowoEditor.exe`, `Engine/Binaries/win-x64/debug/MowoEditor.exe`. Objects and generated code go to `Engine/Intermediate/Build/`. Every binary finds the engine from its own location, so the working directory does not matter. [Output layout](/docs/build-tool/output-layout/) has the details.
 
 ## In this section
 
 <CardGrid>
   <Card title="Commands" href="/docs/build-tool/commands/" icon="Hammer">What each mbt command is for, by task.</Card>
   <Card title="Modules and targets" href="/docs/build-tool/modules-and-targets/" icon="Boxes">Write .Build.cs and .Target.cs rules.</Card>
-  <Card title="Build configurations" href="/docs/build-tool/configurations/" icon="Layers">Debug, DebugGame, Development, Release, Test and Shipping.</Card>
+  <Card title="Build configurations" href="/docs/build-tool/configurations/" icon="Layers">debug, debuggame, dev, profile and release.</Card>
   <Card title="Toolchains and platforms" href="/docs/build-tool/toolchains-and-platforms/" icon="Workflow">Clang everywhere, pinned versions, cross-compiling.</Card>
   <Card title="Output layout" href="/docs/build-tool/output-layout/" icon="FolderInput">Binary names, variant folders, intermediates.</Card>
   <Card title="Shaders and cook" href="/docs/build-tool/shaders-and-cook/" icon="Sun">mbt shaders, shader roots, workers and the shader cache.</Card>

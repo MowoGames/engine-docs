@@ -29,10 +29,10 @@ with those names.
 
 ## Names
 
-Use the public names in prose, titles and headings: **Global Illumination** (not
-"Umbra"), **Visual Scripting** (not "Loom"). Code identifiers stay literal and in
-backticks where the reader has to type or search them: the `MowoEngine.Loom`
-module, `.loom` files, class names, console variables such as `r.GI.BakedSdf`.
+Use the public names in prose, titles and headings: **Global Illumination** and
+**Visual Scripting**; no internal codenames. Code identifiers stay literal and in
+backticks where the reader has to type or search them: the `MowoEngine.VisualScripting`
+module, `.vscript` files, class names, console variables such as `r.GI.BakedSdf`.
 
 ## Frontmatter
 

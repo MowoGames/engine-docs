@@ -22,12 +22,12 @@ sources:
   - Engine/Source/Runtime/MowoGame/Private/MowoGame.cpp
   - Engine/Source/Programs/MeafBuilder/Private/main.cpp
   - Engine/Source/Editor/MowoEditor/Private/Settings/CryptoSettingsPage.cpp
-verifiedAt: 6caf55861
+verifiedAt: 7f8f31f8d
 ---
 
 Every archive in a package is a **MEAF** file (`.meaf`). MEAF compresses each entry, and can also encrypt the archive's table of contents and payloads and sign the whole archive. With the same signing key, the packager also signs every module the game loads. Encryption keeps casual extraction tools out of your content. Signing lets the game refuse an archive or a DLL someone has swapped or modified.
 
-A Shipping package does both by default, from keys your project commits. This page explains the keys, what the packager and the game do with them, and what the protection does not cover.
+A `release` package does both by default, from keys your project commits. This page explains the keys, what the packager and the game do with them, and what the protection does not cover.
 
 ## The project's keys
 
@@ -42,7 +42,7 @@ EncryptionKey=<64 hex digits>
 SigningPublicKey=<64 hex digits>
 ```
 
-The file holds the XChaCha20 encryption key and the EdDSA signing **public** key. The signing **private** key is never in it. That key signs everything a Shipping game trusts (its archives, its modules, trusted mods and live-ops config), so anyone who could read the repository could sign a trojan with it. It lives in one of two places:
+The file holds the XChaCha20 encryption key and the EdDSA signing **public** key. The signing **private** key is never in it. That key signs everything a release game trusts (its archives, its modules, trusted mods and live-ops config), so anyone who could read the repository could sign a trojan with it. It lives in one of two places:
 
 | Where | For |
 |---|---|
@@ -89,13 +89,13 @@ On a build machine, set `MOWO_SIGNING_PRIVATE_KEY` instead.
 A build made with new keys cannot open archives an older build shipped, and the reverse. Patches and DLC for a released build must be made with that build's keys. Regenerate only before your first release, or when a key was exposed.
 </Callout>
 
-A project whose `DefaultCrypto.ini` still carries a `SigningPrivateKey=` line (the layout before 2026-10-13) must move it out: `mbt crypto migrate` moves the key into your store and rewrites the file. Until then, other configurations warn and Shipping refuses to package. The key stays in the repository's history, so treat it as exposed and make a new pair with `mbt crypto generate --signing --force` if anyone outside the team ever had read access.
+A project whose `DefaultCrypto.ini` still carries a `SigningPrivateKey=` line (the layout before 2026-10-13) must move it out: `mbt crypto migrate` moves the key into your store and rewrites the file. Until then, other configurations warn and `release` refuses to package. The key stays in the repository's history, so treat it as exposed and make a new pair with `mbt crypto generate --signing --force` if anyone outside the team ever had read access.
 
 ## What `mbt package` does with the keys
 
 | Configuration | Keys present | Keys missing |
 |---|---|---|
-| Shipping | Encrypts and signs | Refuses to package, and names the button and the command that make the keys |
+| `release` | Encrypts and signs | Refuses to package, and names the button and the command that make the keys |
 | Any other | Encrypts and signs | Packages plaintext and unsigned |
 
 `--unprotected` packages plaintext, unsigned content and unsigned modules on purpose, even when keys exist. `--crypto-config <file>` packages with a crypto INI outside the project, which may hold the private key inline <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />.
@@ -104,7 +104,7 @@ With keys, the package gets:
 
 - **Encrypted content.** The content paks, their chunks and DLC archives. The engine pak and the shader paks stay unencrypted, because the player reads them during startup, but they are signed <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs" />.
 - **Signed archives.** Every archive in `Content/Paks/`.
-- **Signed modules.** Every module in `Binaries/<Platform>/` gets a detached `<file>.mowosig` signature made with the same key <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ModuleSigner.cs" />.
+- **Signed modules.** Every module in `Binaries/<platform>/` gets a detached `<file>.mowosig` signature made with the same key <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ModuleSigner.cs" />.
 - **Keys inside the host.** The game host reserves a key block, and the packager writes the encryption key and the signing public key into the **staged** copy of the host. Each key is split into two random shares under a position mask <Source path="Engine/Source/Runtime/Filesystem/Public/Filesystem/EmbeddedCryptoKeys.h" />. `DefaultCrypto.ini` itself is never staged, and the build tree under `Engine/Binaries` never carries a project's keys <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ConfigIniStager.cs" />.
 
 The log's `Content protection:` line says what was applied: the key id it encrypted with and the start of the signing public key.
@@ -145,7 +145,7 @@ The engine pak, the shader paks and the pak of baked derived data (the reflectio
 
 ## MeafBuilder
 
-`MeafBuilder` is the archive tool the packager runs. You can run it yourself from `Engine/Binaries/<Platform>/` to inspect a package <Source path="Engine/Source/Programs/MeafBuilder/Private/main.cpp" />:
+`MeafBuilder` is the archive tool the packager runs. You can run it yourself from `Engine/Binaries/<platform>/<config>/` to inspect a package <Source path="Engine/Source/Programs/MeafBuilder/Private/main.cpp" />:
 
 | Command | Use |
 |---|---|

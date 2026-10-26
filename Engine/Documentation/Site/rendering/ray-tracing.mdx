@@ -15,7 +15,7 @@ sources:
   - Engine/Source/Editor/MowoEditor/Private/Panels/ViewportPanel.cpp
   - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
   - Engine/Shaders/Private/PostProcess/PathTrace.comp.hlsl
-verifiedAt: 1a346c1c5
+verifiedAt: 7f8f31f8d
 ---
 
 Mowo uses hardware ray tracing to improve four real-time effects: reflections, ambient occlusion, sun shadows and the Global Illumination gather. MegaLights also traces its shadow rays against the same scene. Every one is optional: when the device has no ray query, or the ray-tracing scene is not ready, each falls back to its raster or screen-space version for that frame. A progressive path tracer uses the same scene as a reference.
@@ -76,7 +76,11 @@ Ray-traced reflections share the screen-space reflections' inputs, output and de
 
 Ray-traced AO runs in the AO slot in place of GTAO and writes the same target. It casts `r.RTAO.Rays` rays per pixel (2 at Epic, 3 at Cinematic) and accumulates them over about 25 frames on a still pixel (`r.RTAO.TemporalAlpha`, default 0.96). It falls back to GTAO when the ray-tracing scene is unavailable.
 
-GTAO and ray-traced AO read the shared AO radius differently, so ray-traced AO multiplies it (`r.RTAO.RadiusScale`, default 12, or set `r.RTAO.Radius` directly) and applies a gain (`r.RTAO.Calibration`, default 1.32) to match GTAO's average darkening.
+GTAO and ray-traced AO read the shared AO radius differently: GTAO marches it in screen space, ray-traced AO uses it as a world-space ray length. So ray-traced AO multiplies it (`r.RTAO.RadiusScale`, default 4.2, which turns the default 0.5 radius into a 2.1 m ray) and applies a gain (`r.RTAO.Calibration`, default 1.32). With both defaults, the scene keeps the same average darkening when a tier change swaps GTAO for ray-traced AO. `r.RTAO.Radius` sets the ray length directly and overrides the product. The rays, radius scale, calibration and history are also in **Project Settings > Engine > Global Illumination**, under **Ambient Occlusion**.
+
+<Callout type="note">
+Leave `r.RTAO.RadiusScale` at its default unless you are matching a different look. A longer ray adds occlusion, but with two or three rays a pixel it also adds noise; `r.RTAO.Calibration` changes the average darkening without that cost. The default was 12 in earlier versions; a project that sets the scale in its own config keeps its value, and only 4.2 is fitted to GTAO.
+</Callout>
 
 ## Sun shadows and the GI gather
 
@@ -140,7 +144,7 @@ For a reference frame without the editor, render with a static camera and write 
 MowoGame.exe --project=MyGame.mproject --scene=Content/Maps/MyMap.mmap --screenshot=out.png --screenshot-frame=96 --cvar=r.PathTracer.Enable=1
 ```
 
-This needs a development build, because Shipping drops `--cvar=` and `--scene`.
+This needs a `dev` or `debug` build, because a `release` build drops `--cvar=` and `--scene`.
 
 ### Path tracer limits
 

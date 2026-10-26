@@ -225,7 +225,7 @@
 							"kind": "method",
 							"name": "InstallVfsPathResolver",
 							"signature": "void InstallVfsPathResolver()",
-							"doc": "Convenience installers so every host mounts identically. The VFS path\nresolver maps \"Content/UI/x.ui\" to a native path; the bridge focus\nsink drives CArcMowoBridge's input processor; the world binding resolver\nwires FArcUIBindingLibrary reflection paths against the host's live\nWorld + entity-name lookup (customHook is the Loom seam).",
+							"doc": "Convenience installers so every host mounts identically. The VFS path\nresolver maps \"Content/UI/x.ui\" to a native path; the bridge focus\nsink drives CArcMowoBridge's input processor; the world binding resolver\nwires FArcUIBindingLibrary reflection paths against the host's live\nWorld + entity-name lookup (customHook is the Visual Script seam).",
 							"line": 124
 						},
 						{
@@ -405,8 +405,8 @@
 						},
 						{
 							"kind": "method",
-							"name": "DispatchLoomAction",
-							"signature": "bool DispatchLoomAction(const std::string& assetPath, const std::string& widgetName, const std::string& action)",
+							"name": "DispatchVisualScriptAction",
+							"signature": "bool DispatchVisualScriptAction(const std::string& assetPath, const std::string& widgetName, const std::string& action)",
 							"line": 219
 						},
 						{
@@ -436,26 +436,26 @@
 						},
 						{
 							"kind": "method",
-							"name": "SetLoomBindingText",
-							"signature": "void SetLoomBindingText(const std::string& name, const std::string& text)",
+							"name": "SetVisualScriptBindingText",
+							"signature": "void SetVisualScriptBindingText(const std::string& name, const std::string& text)",
 							"line": 229
 						},
 						{
 							"kind": "method",
-							"name": "SetLoomBindingNumber",
-							"signature": "void SetLoomBindingNumber(const std::string& name, double number)",
+							"name": "SetVisualScriptBindingNumber",
+							"signature": "void SetVisualScriptBindingNumber(const std::string& name, double number)",
 							"line": 230
 						},
 						{
 							"kind": "method",
-							"name": "InLoomBindingEval",
-							"signature": "bool InLoomBindingEval() const",
+							"name": "InVisualScriptBindingEval",
+							"signature": "bool InVisualScriptBindingEval() const",
 							"line": 232
 						},
 						{
 							"kind": "method",
-							"name": "LoomEvalsLastTick",
-							"signature": "uint32_t LoomEvalsLastTick() const",
+							"name": "VisualScriptEvalsLastTick",
+							"signature": "uint32_t VisualScriptEvalsLastTick() const",
 							"line": 235
 						},
 						{
@@ -1314,7 +1314,7 @@
 					"kind": "struct",
 					"name": "FArcUIBinding",
 					"namespace": "Mowo",
-					"doc": "One property → gameplay/Loom binding on a widget. Property is the widget\nfield driven every frame (e.g. \"percent\", \"text\"); Source is a gameplay\nproperty path or a Loom expression (e.g. \"Health / MaxHealth\").",
+					"doc": "One property → gameplay/Visual Script binding on a widget. Property is the widget\nfield driven every frame (e.g. \"percent\", \"text\"); Source is a gameplay\nproperty path or a Visual Script expression (e.g. \"Health / MaxHealth\").",
 					"line": 67,
 					"members": [
 						{
@@ -1380,7 +1380,7 @@
 					"kind": "struct",
 					"name": "FArcUIEvent",
 					"namespace": "Mowo",
-					"doc": "One widget event → host action wiring. Event names the widget delegate\n(\"clicked\", \"changed\", \"committed\"); Action is an opaque string the host's\nevent sink dispatches — a C++ handler name today, a Loom function later.\nThe screen stack intercepts the built-in verbs PlayAnim:/PlayAnimReverse:/\nStopAnim: before the host sink sees them.",
+					"doc": "One widget event → host action wiring. Event names the widget delegate\n(\"clicked\", \"changed\", \"committed\"); Action is an opaque string the host's\nevent sink dispatches — a C++ handler name today, a Visual Script function later.\nThe screen stack intercepts the built-in verbs PlayAnim:/PlayAnimReverse:/\nStopAnim: before the host sink sees them.",
 					"line": 92,
 					"members": [
 						{
@@ -1928,7 +1928,7 @@
 					"kind": "class",
 					"name": "FArcUIBindingLibrary",
 					"namespace": "Mowo",
-					"doc": "Resolves .ui binding sources against live gameplay state. Two source\nforms are understood:\n- numeric literals (\"0.75\") — constant values, mostly for authoring tests;\n- reflection property paths (\"Entity.Component.Property[.x|.y|.z|.w]\") —\nthe entity is looked up by scene name through the injected lookup, the\ncomponent by ReflectionRegistry display/type name, the property by its\nserialized or display name via the PropertyInfo tables. Vec2/3/4 and\nQuat properties take an optional trailing swizzle component.\nA custom hook runs before both. \"loom.Class.Function\" sources are resolved\nby CArcUIScreenStack itself (shared per-class evaluation instances, per-tick\nresult caching) before this library is consulted.",
+					"doc": "Resolves .ui binding sources against live gameplay state. Two source\nforms are understood:\n- numeric literals (\"0.75\") — constant values, mostly for authoring tests;\n- reflection property paths (\"Entity.Component.Property[.x|.y|.z|.w]\") —\nthe entity is looked up by scene name through the injected lookup, the\ncomponent by ReflectionRegistry display/type name, the property by its\nserialized or display name via the PropertyInfo tables. Vec2/3/4 and\nQuat properties take an optional trailing swizzle component.\nA custom hook runs before both. \"visualscript.Class.Function\" sources are resolved\nby CArcUIScreenStack itself (shared per-class evaluation instances, per-tick\nresult caching) before this library is consulted.",
 					"line": 26,
 					"members": [
 						{
@@ -2027,7 +2027,7 @@
 					"kind": "struct",
 					"name": "FArcUIModalInputGate",
 					"namespace": "Mowo",
-					"doc": "\"A modal screen takes the input mode to UIOnly and gives it back when it\npops\" — documented behaviour that only half existed. It lived on\nMGameEngine::PushUIScreen, so a screen pushed through MUIStatics (which is\nhow Loom and most gameplay code push one) never triggered it, and the editor\nmounts its own stack and never had it at all: a modal in Play-in-editor kept\nfeeding gameplay while the packaged player did not.\n\nSo it is a per-tick RECONCILE against the stack's own answer rather than an\nedge fired from one push site. Every path that can raise a modal goes\nthrough the same rule, and both hosts share this one copy of it.",
+					"doc": "\"A modal screen takes the input mode to UIOnly and gives it back when it\npops\" — documented behaviour that only half existed. It lived on\nMGameEngine::PushUIScreen, so a screen pushed through MUIStatics (which is\nhow Visual Scripting and most gameplay code push one) never triggered it, and the editor\nmounts its own stack and never had it at all: a modal in Play-in-editor kept\nfeeding gameplay while the packaged player did not.\n\nSo it is a per-tick RECONCILE against the stack's own answer rather than an\nedge fired from one push site. Every path that can raise a modal goes\nthrough the same rule, and both hosts share this one copy of it.",
 					"line": 18,
 					"members": [
 						{
@@ -2830,14 +2830,14 @@
 					"kind": "alias",
 					"name": "FArcUIBindingResolver",
 					"signature": "using FArcUIBindingResolver = std::function<FArcUIBindingValue(const std::string& source)>",
-					"doc": "Host contract for data binding: given a binding source (a gameplay property\npath or Loom expression authored in the editor), return its current value.\nThe screen stack passes this into Build so bound widgets pick up host state\nat instantiation, then re-resolves it every Tick to keep them live.",
+					"doc": "Host contract for data binding: given a binding source (a gameplay property\npath or Visual Script expression authored in the editor), return its current value.\nThe screen stack passes this into Build so bound widgets pick up host state\nat instantiation, then re-resolves it every Tick to keep them live.",
 					"line": 44
 				},
 				{
 					"kind": "alias",
 					"name": "FArcUIEventSink",
 					"signature": "using FArcUIEventSink = std::function<void(const std::string& widgetName, const std::string& eventName, const std::string& action)>",
-					"doc": "Host contract for widget events: the factory wires each authored\nEvents { On { event, action } } entry on a node to the widget's matching\ndelegate; firing calls the sink with the widget's name, the event name and\nthe authored action string. The host decides what an action means — the\ngame logs/dispatches to C++ handlers today, and a Loom-backed sink that\ninvokes a graph function by name attaches through the same signature later.",
+					"doc": "Host contract for widget events: the factory wires each authored\nEvents { On { event, action } } entry on a node to the widget's matching\ndelegate; firing calls the sink with the widget's name, the event name and\nthe authored action string. The host decides what an action means — the\ngame logs/dispatches to C++ handlers today, and a visual-script-backed sink that\ninvokes a graph function by name attaches through the same signature later.",
 					"line": 52
 				},
 				{
@@ -4553,7 +4553,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "The input-remapping surface for a game that builds its own controls\nscreen in Loom or ArcUI instead of using the stock rebind screen: list\nevery action with its keyboard and gamepad binding, start listening for a\nnew one, feed it the first key, button or stick the player touches\n(PollRebindCapture each frame while listening), show conflicts, reset and\nsave to the player's own tier. One model shared by every caller, the same\nFArcRebindModel the stock screen drives. Device: 0 keyboard/mouse, 1 pad.",
+					"doc": "The input-remapping surface for a game that builds its own controls\nscreen in Visual Scripting or ArcUI instead of using the stock rebind screen: list\nevery action with its keyboard and gamepad binding, start listening for a\nnew one, feed it the first key, button or stick the player touches\n(PollRebindCapture each frame while listening), show conflicts, reset and\nsave to the player's own tier. One model shared by every caller, the same\nFArcRebindModel the stock screen drives. Device: 0 keyboard/mouse, 1 pad.",
 					"line": 24,
 					"members": [
 						{
@@ -5883,7 +5883,7 @@
 					"name": "AVideoPlayer",
 					"namespace": "Arcf",
 					"bases": "public ACompoundWidget",
-					"doc": "UMG's MediaPlayer + Image pairing in one node: binds a .media asset, owns\nthe playback controls Loom reaches through MUIStatics, and shows the\ndecoded frame through a hosted AImage so the picture takes the same\nbrush path every other image on the screen does. The decode itself lives\nbehind IArcUIMediaSource; without a source factory installed the widget\nbuilds, holds its settings and paints its backdrop, so a headless build\nof the screen still reports the node.",
+					"doc": "UMG's MediaPlayer + Image pairing in one node: binds a .media asset, owns\nthe playback controls Visual Script reaches through MUIStatics, and shows the\ndecoded frame through a hosted AImage so the picture takes the same\nbrush path every other image on the screen does. The decode itself lives\nbehind IArcUIMediaSource; without a source factory installed the widget\nbuilds, holds its settings and paints its backdrop, so a headless build\nof the screen still reports the node.",
 					"line": 25,
 					"members": [
 						{

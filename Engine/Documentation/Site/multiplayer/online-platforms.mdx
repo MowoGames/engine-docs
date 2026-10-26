@@ -27,7 +27,7 @@ sources:
   - Engine/Source/Runtime/MowoServer/Private/ServerEngine.cpp
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs
   - Engine/Documentation/ROADMAP.md
-verifiedAt: 08e26df3d
+verifiedAt: 7f8f31f8d
 ---
 
 Steam, Discord and Mowo Online are not built into the engine. Each lives in its own plugin, and all three are **off by default** for a project (`"enabledByDefault": false`). When a plugin loads, it registers an `IOnlineService` with the engine, and engine code talks only to that interface <Source symbol="IOnlineService" />. No engine module includes a platform SDK header. A build without the plugins still hosts and joins over ENet with a direct address.
@@ -44,8 +44,8 @@ Each plugin builds unless its MBT build option is off. All three default to on <
 
 | Option | Plugin | Also needs |
 |---|---|---|
-| `MOWO_ENABLE_STEAM` | SteamPlatform | The vendored Steamworks SDK for the platform (Win64, Linux, macOS). Never on mobile. |
-| `MOWO_ENABLE_DISCORD` | DiscordPlatform | The vendored Discord Social SDK (Win64, Linux, macOS). Never on mobile. |
+| `MOWO_ENABLE_STEAM` | SteamPlatform | The vendored Steamworks SDK for the platform (`win-x64`, `linux-x64`, `osx-arm64`). Never on mobile. |
+| `MOWO_ENABLE_DISCORD` | DiscordPlatform | The vendored Discord Social SDK (`win-x64`, `linux-x64`, `osx-arm64`). Never on mobile. |
 | `MOWO_ENABLE_MOWO_ONLINE` | MowoOnlinePlatform | Nothing; the MOS SDK is built from source. Never on mobile. |
 
 Build with `-o MOWO_ENABLE_STEAM=false` (and so on) to leave a platform out entirely. See the [mbt CLI reference](/docs/reference/mbt-cli/).
@@ -102,11 +102,11 @@ Discord's Ask to Join and a Mowo Online join request whose connect string is a S
 
 ### Relay hosting
 
-The Steam plugin initializes Steam Datagram Relay network access at startup, so the first connection does not wait for the relay configuration. A Shipping listen server with Steam running hosts through the relay only and does not expose the host's IP. See [Hosting on both](/docs/multiplayer/transport-and-encryption/#hosting-on-both) for the `net.ShipExposeEnetHost` override.
+The Steam plugin initializes Steam Datagram Relay network access at startup, so the first connection does not wait for the relay configuration. A `release` or `profile` listen server with Steam running hosts through the relay only and does not expose the host's IP. See [Hosting on both](/docs/multiplayer/transport-and-encryption/#hosting-on-both) for the `net.ShipExposeEnetHost` override.
 
 ## Presence, stats and achievements from code
 
-`MPlatformSubsystem` <Source symbol="MPlatformSubsystem" /> is a reflected engine subsystem over the platform layer, so its functions are callable from C++ and from Loom graphs. Every call is a safe no-op, or returns `false`, when the platform is missing or disabled.
+`MPlatformSubsystem` <Source symbol="MPlatformSubsystem" /> is a reflected engine subsystem over the platform layer, so its functions are callable from C++ and from Visual Scripting graphs. Every call is a safe no-op, or returns `false`, when the platform is missing or disabled.
 
 ```cpp title="PlatformCalls.cpp"
 #include "Core/Platform.h"
@@ -138,7 +138,7 @@ The service comes up only when the project enables it and the launcher started t
 
 While running, the plugin ticks the SDK every frame, places the launcher overlay over the game window, points cloud saves at the game's SaveGames folder (unless the game chose another), and quits the engine when the launcher asks it to. Through `IOnlineService` it provides presence, session adverts, achievements (stats set achievement progress), the overlay callback, cloud files and a Mowo ID access token as the session ticket. It never becomes the transport identity: Steam keeps lobbies, P2P and ticket authentication.
 
-`MMowoOnlineStatics` <Source path="Engine/Plugins/MowoOnlinePlatform/Public/MowoOnlinePlatform/MMowoOnlineStatics.h" /> exposes the rest to C++ and Loom. Every function answers `false` or empty when the game was not started by the launcher:
+`MMowoOnlineStatics` <Source path="Engine/Plugins/MowoOnlinePlatform/Public/MowoOnlinePlatform/MMowoOnlineStatics.h" /> exposes the rest to C++ and Visual Scripting. Every function answers `false` or empty when the game was not started by the launcher:
 
 | Functions | Area |
 |---|---|

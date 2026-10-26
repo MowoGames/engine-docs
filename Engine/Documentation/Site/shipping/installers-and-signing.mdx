@@ -18,7 +18,7 @@ sources:
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/ThirdParty/ThirdPartyCatalog.cs
   - Engine/Content/Branding/Windows/mowo-player.ico
   - Engine/Documentation/ROADMAP.md
-verifiedAt: 6caf55861
+verifiedAt: 7f8f31f8d
 ---
 
 The last step of `mbt package` turns the staged folder into what you hand out: signed executables, a zip, an installer. Each of these rewrites or hashes shipped files, so they run in a fixed order. Each one is skipped, with a log line, when its tool is missing, so a plain `mbt package` still produces a runnable folder.
@@ -36,7 +36,7 @@ Steps may be skipped, but never reordered or repeated.
 
 ## The launcher, version info and icon
 
-The file a player double-clicks is `<Product>.exe` at the package root: a thin launcher that sets the working directory to the package root, starts `Binaries/<Platform>/<Product>-<Platform>-<Config>.exe`, forwards the command line and returns the game's exit code. The packager compiles it at package time with the detected clang-cl and lld-link <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherBuilder.cs" />. A server package gets a console launcher.
+The file a player double-clicks is `<Product>.exe` at the package root: a thin launcher that sets the working directory to the package root, starts `Binaries/<platform>/<Product>.exe`, forwards the command line and returns the game's exit code. The packager compiles it at package time with the detected clang-cl and lld-link <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherBuilder.cs" />. A server package gets a console launcher.
 
 On Windows, the packager stamps a `VS_VERSION_INFO` resource into the launcher: company, description, version, copyright, product name and the package's build id <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VersionInfoStamper.cs" />. The values come from `player.*` and `project.version` in your `.mproject`.
 
@@ -56,7 +56,7 @@ The icon comes from `--icon`, then the manifest's `player.iconPath` (absolute or
 |---|---|
 | Windows host, WiX `candle` and `light` on `PATH` | `<Product>-<version>-<config>.msi` |
 | No WiX | `Install-<Product>.ps1`, a self-extracting PowerShell installer that unpacks the zip |
-| macOS host, `-p macos-arm64` | `<Product>-<version>-<config>.dmg` with a self-contained `.app` |
+| macOS host, `-p osx-arm64` | `<Product>-<version>-<config>.dmg` with a self-contained `.app` |
 
 ### The WiX MSI
 
@@ -130,11 +130,11 @@ The wrap needs:
 - a Steam account name from `--steam-user` or `MOWO_STEAM_USER`. The password is never an option: log in once with `steamcmd +login <user>` so `steamcmd` caches it;
 - `steamcmd`, found through `MOWO_STEAMCMD`, `PATH` or a conventional install location.
 
-It wraps `Binaries/Win64/<Product>-Win64-<Config>.exe` in place. If `steamcmd` fails or writes no output, the original executable is restored and the package ships unwrapped, with a warning.
+It wraps `Binaries/win-x64/<Product>.exe` in place. If `steamcmd` fails or writes no output, the original executable is restored and the package ships unwrapped, with a warning.
 
 ## License notices
 
-Every package carries `Engine/Legal/ThirdPartyNotices.txt`: each bundled third-party library with its version, license, copyright holder and the license texts its folder carries. A game package lists only the libraries it actually ships; build-only tools are left out <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/ThirdParty/ThirdPartyCatalog.cs" />.
+Every package carries `Engine/Legal/ThirdPartyNotices.txt`: each bundled third-party library with its version, license, copyright holder and the license texts its folder carries. A game package lists only the libraries it actually ships; build-only tools are left out <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/ThirdParty/ThirdPartyCatalog.cs" />. A package that ships auto-subtitles therefore lists ONNX Runtime and the ONNX Runtime WebGPU execution provider, whose entry carries the provider's MIT license, Dawn's BSD-3-Clause license and the license texts of the DXC that ships beside it on Windows.
 
 ## The file manifest
 

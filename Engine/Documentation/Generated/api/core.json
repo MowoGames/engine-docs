@@ -80,11 +80,19 @@
 						},
 						{
 							"kind": "method",
+							"name": "SetSavedDirOverride",
+							"signature": "static void SetSavedDirOverride(const std::filesystem::path& dir)",
+							"static": true,
+							"doc": "Replaces GetSavedDir for this process; empty restores the per-user root.\nFor a host whose writes must never reach the user's own tree (the test\nexecutables): a report left in the user's Saved/Crashes is uploaded by\nthe next real launch as a real crash.",
+							"line": 59
+						},
+						{
+							"kind": "method",
 							"name": "GetCacheDir",
 							"signature": "static std::filesystem::path GetCacheDir()",
 							"static": true,
 							"doc": "<cache root>/<Product>/Cache — regenerable data (GPU pipeline caches).",
-							"line": 56
+							"line": 62
 						},
 						{
 							"kind": "method",
@@ -92,7 +100,7 @@
 							"signature": "static std::filesystem::path GetLegacyBaseDir()",
 							"static": true,
 							"doc": "The pre-split root (<roaming root>/MowoEngine) — migration source only.",
-							"line": 59
+							"line": 65
 						},
 						{
 							"kind": "method",
@@ -100,7 +108,7 @@
 							"signature": "static bool MigrateFile(const std::filesystem::path& oldPath, const std::filesystem::path& newPath)",
 							"static": true,
 							"doc": "Moves oldPath to newPath when newPath does not exist yet. Falls back to\ncopy+delete across volumes. Returns true only when a move happened.",
-							"line": 63
+							"line": 69
 						},
 						{
 							"kind": "method",
@@ -108,7 +116,7 @@
 							"signature": "static std::filesystem::path GetBundleResourcesPath()",
 							"static": true,
 							"doc": "macOS: Contents/Resources/ inside the app bundle.\nOther platforms: the directory containing the executable.",
-							"line": 67
+							"line": 73
 						}
 					]
 				}
@@ -452,6 +460,146 @@
 					"line": 297
 				}
 			]
+		},
+		{
+			"path": "Engine/Source/Runtime/Core/Public/Core/BuildManifest.h",
+			"include": "Core/BuildManifest.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FBuildManifestImage",
+					"namespace": "Mowo",
+					"line": 32,
+					"members": [
+						{
+							"kind": "field",
+							"name": "File",
+							"signature": "std::string File",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "BuildId",
+							"signature": "std::string BuildId",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "Module",
+							"signature": "std::string Module",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "Target",
+							"signature": "std::string Target",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "Requires",
+							"signature": "std::vector<std::pair<std::string, std::string>> Requires",
+							"line": 37
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FBuildManifest",
+					"namespace": "Mowo",
+					"line": 40,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kImageBuildIdSymbol",
+							"signature": "static constexpr const char* kImageBuildIdSymbol = \"MowoImageBuildId\"",
+							"static": true,
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "kRefusedExitCode",
+							"signature": "static constexpr int32_t kRefusedExitCode = 78",
+							"static": true,
+							"doc": "The exit code of a process the gate refused (sysexits' EX_CONFIG).",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "FileName",
+							"signature": "static std::string FileName()",
+							"static": true,
+							"doc": "\"MowoEngine.modules\": every binaries folder holds one build, so the\nmanifest needs no name of its own.",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "LoadFromDirectory",
+							"signature": "bool LoadFromDirectory(const std::string& directory, std::string& outError)",
+							"doc": "False with an empty error when the folder has no manifest of this build's\nname, false with the reason when it has one that does not parse.",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "Parse",
+							"signature": "bool Parse(const std::string& text, const std::string& path, std::string& outError)",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "const FBuildManifestImage* Find(const std::string& fileName) const",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Path",
+							"signature": "const std::string& Path() const",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "RequiresProblem",
+							"signature": "std::string RequiresProblem(const std::string& fileName, const std::string& fallbackTarget) const",
+							"doc": "Why the image `fileName` may not run with the images it was built\nagainst, or empty: it is not in the manifest, or a module it requires is\nmissing from it or carries another id now. Needs nothing mapped.",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "StampProblem",
+							"signature": "std::string StampProblem(const std::string& fileName, const char* embeddedId, const std::string& fallbackTarget) const",
+							"doc": "Why the file is not the one the manifest describes: `embeddedId` is the\nid the mapped image exports, null when it exports none.",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "RebuildCommand",
+							"signature": "static std::string RebuildCommand(const std::string& target)",
+							"static": true,
+							"doc": "\"./mbt.cmd build -t MowoEditor -c dev\" (./mbt.sh off Windows).",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "CheckProcess",
+							"signature": "static std::string CheckProcess()",
+							"static": true,
+							"doc": "The executable's own check of itself and of every module of its folder\nit has mapped; empty when the process may run. Core runs it from its\nstatic initialisation, before any other engine module is used.",
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "ProcessTarget",
+							"signature": "static std::string ProcessTarget()",
+							"static": true,
+							"doc": "The target to rebuild for this process: what the manifest records for\nthe executable, else the executable's file name without extension.",
+							"line": 82
+						}
+					]
+				}
+			],
+			"free": []
 		},
 		{
 			"path": "Engine/Source/Runtime/Core/Public/Core/Config.h",
@@ -1081,7 +1229,7 @@
 							"name": "LoadProjectEngineConfig",
 							"signature": "static bool LoadProjectEngineConfig(const std::filesystem::path& projectConfigDir, Config& out)",
 							"static": true,
-							"doc": "A project's engine settings for a reader that runs without the\nproject-open overlay — the backend choice inside Engine::Initialize, the\nShipping logger, a packaged game whose manifest comes from a pak: the\nConfig/Engine.ini (converted from a legacy Engine.mdf on first touch)\nwith the Engine INI hierarchy over it, so DefaultEngine.ini wins. False when\nneither exists.",
+							"doc": "A project's engine settings for a reader that runs without the\nproject-open overlay — the backend choice inside Engine::Initialize, the\nrelease logger, a packaged game whose manifest comes from a pak: the\nConfig/Engine.ini (converted from a legacy Engine.mdf on first touch)\nwith the Engine INI hierarchy over it, so DefaultEngine.ini wins. False when\nneither exists.",
 							"line": 190
 						}
 					]
@@ -3274,7 +3422,7 @@
 							"name": "SetReportClientSettings",
 							"signature": "static void SetReportClientSettings(const FCrashReportClientSettings& settings)",
 							"static": true,
-							"doc": "The game's crash settings (Config/Engine.ini [CrashReportClient], or\nShipping.json crashReporter.* in a package). Every later report carries\nthem in its .txt header and the watchdog reads them from the IPC block,\nso the uploader sends each report to the DSN of the game that wrote it.",
+							"doc": "The game's crash settings (Config/Engine.ini [CrashReportClient], or\nBuildInfo.json crashReporter.* in a package). Every later report carries\nthem in its .txt header and the watchdog reads them from the IPC block,\nso the uploader sends each report to the DSN of the game that wrote it.",
 							"line": 53
 						},
 						{
@@ -3312,7 +3460,7 @@
 							"name": "SetCrashReporterPath",
 							"signature": "static void SetCrashReporterPath(const std::string& absPath)",
 							"static": true,
-							"doc": "Absolute path of the crash reporter executable. Packaged games carry\nit as Binaries/<Platform>/<Product>CrashReporter.exe and publish the\nname from Shipping.json's crashReporter.executable; empty (the\ndefault) falls back to MowoCrashReporter.exe next to the host exe.",
+							"doc": "Absolute path of the crash reporter executable. Packaged games carry\nit as Binaries/<platform>/<Product>CrashReporter.exe and publish the\nname from BuildInfo.json's crashReporter.executable; empty (the\ndefault) falls back to MowoCrashReporter.exe next to the host exe.",
 							"line": 72
 						},
 						{
@@ -5479,7 +5627,7 @@
 							"name": "EngineDir",
 							"signature": "static const std::string& EngineDir()",
 							"static": true,
-							"doc": "Root of the engine checkout or install — the directory holding\nEngine/EngineManifest.json, with Templates/ and Samples/ beside Engine/.\nWalks up from the program path (Engine/Binaries/<Platform>/), then from\nthe working directory; the working directory itself when neither finds it.",
+							"doc": "Root of the engine checkout or install — the directory holding\nEngine/EngineManifest.json, with Templates/ and Samples/ beside Engine/.\nWalks up from the program path (Engine/Binaries/<platform>/<config>/), then from\nthe working directory; the working directory itself when neither finds it.",
 							"line": 26
 						},
 						{
@@ -5543,16 +5691,16 @@
 							"name": "EngineBinariesDir",
 							"signature": "static std::string EngineBinariesDir()",
 							"static": true,
-							"doc": "Engine/Binaries/<Platform> — every executable and module library the\nbuild produced, the configuration in each file name (FBinaryNames).",
-							"line": 53
+							"doc": "Engine/Binaries/<platform>/<config> — the default build of this\nbinary's configuration (a variant build such as dev-server or\ndebug-asan links into a sibling folder; ExecutableDir names that one).",
+							"line": 54
 						},
 						{
 							"kind": "method",
 							"name": "EngineThirdPartyBinariesDir",
 							"signature": "static std::string EngineThirdPartyBinariesDir(std::string_view library)",
 							"static": true,
-							"doc": "Engine/Binaries/ThirdParty/<Library>/<Platform> — a vendored library's\nruntime files and tools (astcenc, DXC, the D3D12 Agility SDK).",
-							"line": 57
+							"doc": "Engine/Binaries/ThirdParty/<Library>/<platform> — a vendored library's\nruntime files and tools (astcenc, DXC, the D3D12 Agility SDK).",
+							"line": 58
 						},
 						{
 							"kind": "method",
@@ -5560,7 +5708,7 @@
 							"signature": "static std::string ThirdPartyToolExecutable(std::string_view library, std::string_view tool)",
 							"static": true,
 							"doc": "A vendored tool's executable in that folder, the platform's extension\nadded: EngineThirdPartyBinariesDir(\"astcenc\") + \"/astcenc.exe\" on Windows.",
-							"line": 61
+							"line": 62
 						},
 						{
 							"kind": "method",
@@ -5568,7 +5716,7 @@
 							"signature": "static std::string EngineIntermediateDir()",
 							"static": true,
 							"doc": "Engine/Intermediate — disposable build output (objects, generated code).",
-							"line": 64
+							"line": 65
 						},
 						{
 							"kind": "method",
@@ -5576,7 +5724,7 @@
 							"signature": "static std::string BuildToolExecutable()",
 							"static": true,
 							"doc": "Engine/Source/Programs/MowoBuildTool/publish/mbt[.exe] — the published\nbuild tool every editor-driven build, cook and package runs.",
-							"line": 68
+							"line": 69
 						},
 						{
 							"kind": "method",
@@ -5584,7 +5732,7 @@
 							"signature": "static std::string TemplatesDir()",
 							"static": true,
 							"doc": "Templates/ beside Engine/ — the project templates and TemplateResources/.",
-							"line": 71
+							"line": 72
 						},
 						{
 							"kind": "method",
@@ -5592,7 +5740,7 @@
 							"signature": "static std::string SamplesDir()",
 							"static": true,
 							"doc": "Samples/ beside Engine/.",
-							"line": 74
+							"line": 75
 						},
 						{
 							"kind": "method",
@@ -5600,7 +5748,7 @@
 							"signature": "static std::string SampleProjectFile()",
 							"static": true,
 							"doc": "Samples/SampleProject/SampleProject.mproject — the clean example project.",
-							"line": 77
+							"line": 78
 						},
 						{
 							"kind": "method",
@@ -5608,7 +5756,7 @@
 							"signature": "static std::string StarterContentDir()",
 							"static": true,
 							"doc": "Samples/StarterContent — the optional CC0 pack a new project can add.",
-							"line": 80
+							"line": 81
 						},
 						{
 							"kind": "method",
@@ -5616,7 +5764,7 @@
 							"signature": "static std::string TestProjectFile()",
 							"static": true,
 							"doc": "Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/TestProject.mproject\n— the project the smokes, benches and test rows open: every test scene,\ngolden material sidecar and design fixture lives there, not in the sample.",
-							"line": 85
+							"line": 86
 						},
 						{
 							"kind": "method",
@@ -5624,23 +5772,23 @@
 							"signature": "static const std::string& ExecutableDir()",
 							"static": true,
 							"doc": "Directory holding the running executable. Unlike everything else\nhere it never consults the working directory, so it is the right\nanchor for a packaged game's own files — those must resolve however\nthe player launched the exe.",
-							"line": 91
+							"line": 92
 						},
 						{
 							"kind": "method",
 							"name": "GameRootDir",
 							"signature": "static const std::string& GameRootDir()",
 							"static": true,
-							"doc": "Root of a packaged game bundle — the directory holding Game.mproject\n(or the legacy game.mproject). Probes the working directory, the\nexecutable dir, and up to two parents of the executable dir (the\npackaged host lives in <root>/Binaries/<Platform>/). Empty when no\npackaged root is found (dev tree, editor).",
-							"line": 98
+							"doc": "Root of a packaged game bundle — the directory holding Game.mproject\n(or the legacy game.mproject). Probes the working directory, the\nexecutable dir, and up to two parents of the executable dir (the\npackaged host lives in <root>/Binaries/<platform>/). Empty when no\npackaged root is found (dev tree, editor).",
+							"line": 99
 						},
 						{
 							"kind": "method",
 							"name": "IsPackagedRun",
 							"signature": "static bool IsPackagedRun()",
 							"static": true,
-							"doc": "True when this process runs out of a packaged bundle whose root is\nnot meant to be written (Shipping.json present, or the root is not\nwritable — e.g. Program Files). Saved/ + derived data then route to\nthe per-user product dirs instead of the install dir.",
-							"line": 104
+							"doc": "True when this process runs out of a packaged bundle whose root is\nnot meant to be written (BuildInfo.json present, or the root is not\nwritable — e.g. Program Files). Saved/ + derived data then route to\nthe per-user product dirs instead of the install dir.",
+							"line": 105
 						},
 						{
 							"kind": "method",
@@ -5648,7 +5796,7 @@
 							"signature": "static void SetPackagedRun(bool packaged)",
 							"static": true,
 							"doc": "Set by the runtime host once the shipping manifest / writability\nprobe has run.",
-							"line": 108
+							"line": 109
 						},
 						{
 							"kind": "method",
@@ -5656,14 +5804,14 @@
 							"signature": "static std::string UserConfigScratchDir()",
 							"static": true,
 							"doc": "A private per-process directory standing in for every per-user config\nlocation while user config is ignored (--no-user-config, or a host that\nasked through SetIgnoreUserConfig); empty when user config is honoured.\nA test run reads the same defaults on every machine and writes nothing\nthe next run, or the user, will pick up.",
-							"line": 115
+							"line": 116
 						},
 						{
 							"kind": "method",
 							"name": "SetIgnoreUserConfig",
 							"signature": "static void SetIgnoreUserConfig(bool ignore)",
 							"static": true,
-							"line": 116
+							"line": 117
 						},
 						{
 							"kind": "method",
@@ -5671,7 +5819,7 @@
 							"signature": "static const std::string& ProjectDir()",
 							"static": true,
 							"doc": "Current project root — the directory containing the .mproject file\nloaded at startup. Empty when no project is loaded (--no-project /\nLauncher-only mode).",
-							"line": 121
+							"line": 122
 						},
 						{
 							"kind": "method",
@@ -5679,7 +5827,7 @@
 							"signature": "static std::string ProjectContentDir()",
 							"static": true,
 							"doc": "Project/Content — game asset source files.",
-							"line": 124
+							"line": 125
 						},
 						{
 							"kind": "method",
@@ -5687,7 +5835,7 @@
 							"signature": "static std::string ProjectConfigDir()",
 							"static": true,
 							"doc": "Project/Config — the project tier of the tiered config.",
-							"line": 127
+							"line": 128
 						},
 						{
 							"kind": "method",
@@ -5695,7 +5843,7 @@
 							"signature": "static std::string ProjectSourceDir()",
 							"static": true,
 							"doc": "Project/Source — the project's C++ game module.",
-							"line": 130
+							"line": 131
 						},
 						{
 							"kind": "method",
@@ -5703,7 +5851,7 @@
 							"signature": "static std::string ProjectSavedDir()",
 							"static": true,
 							"doc": "Project/Saved — runtime-written stuff that's NOT in source\ncontrol. Logs, crashes, autosaves, savegames, screenshots.",
-							"line": 134
+							"line": 135
 						},
 						{
 							"kind": "method",
@@ -5711,7 +5859,7 @@
 							"signature": "static std::string ProjectLogsDir()",
 							"static": true,
 							"doc": "Project/Saved/Logs — engine writes mowo_engine.log here.",
-							"line": 137
+							"line": 138
 						},
 						{
 							"kind": "method",
@@ -5719,7 +5867,7 @@
 							"signature": "static std::string ProjectCrashesDir()",
 							"static": true,
 							"doc": "Project/Saved/Crashes — minidumps + Sentry upload queue.",
-							"line": 140
+							"line": 141
 						},
 						{
 							"kind": "method",
@@ -5727,7 +5875,7 @@
 							"signature": "static std::string ProjectAutosavesDir()",
 							"static": true,
 							"doc": "Project/Saved/Autosaves",
-							"line": 143
+							"line": 144
 						},
 						{
 							"kind": "method",
@@ -5735,7 +5883,7 @@
 							"signature": "static std::string ProjectSaveGamesDir()",
 							"static": true,
 							"doc": "Project/Saved/SaveGames",
-							"line": 146
+							"line": 147
 						},
 						{
 							"kind": "method",
@@ -5743,7 +5891,7 @@
 							"signature": "static std::string ProjectScreenshotsDir()",
 							"static": true,
 							"doc": "Project/Saved/Screenshots",
-							"line": 149
+							"line": 150
 						},
 						{
 							"kind": "method",
@@ -5751,7 +5899,7 @@
 							"signature": "static std::string ProjectIntermediateDir()",
 							"static": true,
 							"doc": "Project/Intermediate — disposable derived output (DDC, thumbnail\ncache, generated code). Safe to delete at any time.",
-							"line": 153
+							"line": 154
 						},
 						{
 							"kind": "method",
@@ -5759,7 +5907,7 @@
 							"signature": "static std::string UserDir()",
 							"static": true,
 							"doc": "Per-user, per-product state root (%LOCALAPPDATA%/<Product> on Windows,\nXDG state dir elsewhere) — for data that follows the user across\nprojects. Re-resolves when AppDataPath::SetProductName changes.",
-							"line": 158
+							"line": 159
 						},
 						{
 							"kind": "method",
@@ -5767,7 +5915,7 @@
 							"signature": "static std::string UserSaveGamesDir()",
 							"static": true,
 							"doc": "Per-user savegame root: <Product>/Saved/SaveGames under the state\nroot. A packaged game writes here directly; the editor/PIE adds a\nper-project subdirectory (see SaveGameManager::GetSaveDir).",
-							"line": 163
+							"line": 164
 						},
 						{
 							"kind": "method",
@@ -5775,7 +5923,7 @@
 							"signature": "static std::string UserPipelineCacheDir()",
 							"static": true,
 							"doc": "Per-user, per-product GPU pipeline-cache directory\n(<Product>/Cache under the cache root) — two games never share one\ncache blob.",
-							"line": 168
+							"line": 169
 						},
 						{
 							"kind": "method",
@@ -5783,7 +5931,7 @@
 							"signature": "static std::string Combine(std::string_view a, std::string_view b)",
 							"static": true,
 							"doc": "Single forward-slash separator, no trailing slash on the result.",
-							"line": 171
+							"line": 172
 						},
 						{
 							"kind": "method",
@@ -5791,7 +5939,7 @@
 							"signature": "static std::string StripExtension(std::string_view path)",
 							"static": true,
 							"doc": "Drops everything from the last '.'; returns the input unchanged when\nthere is no '.'.",
-							"line": 175
+							"line": 176
 						},
 						{
 							"kind": "method",
@@ -5799,7 +5947,7 @@
 							"signature": "static std::string GetExtension(std::string_view path)",
 							"static": true,
 							"doc": "The extension including the leading dot (\".png\"); empty when the clean\nfilename has no '.'. A '.' in a parent directory is ignored.",
-							"line": 179
+							"line": 180
 						},
 						{
 							"kind": "method",
@@ -5807,7 +5955,7 @@
 							"signature": "static std::string GetLowerExtension(std::string_view path)",
 							"static": true,
 							"doc": "GetExtension folded to ASCII lower case, for matching against the\nfile-type table.",
-							"line": 183
+							"line": 184
 						},
 						{
 							"kind": "method",
@@ -5815,7 +5963,7 @@
 							"signature": "static std::string GetStem(std::string_view path)",
 							"static": true,
 							"doc": "The clean filename with its extension dropped (\"Textures/foo.png\" ->\n\"foo\").",
-							"line": 187
+							"line": 188
 						},
 						{
 							"kind": "method",
@@ -5823,7 +5971,7 @@
 							"signature": "static std::string GetCleanFilename(std::string_view path)",
 							"static": true,
 							"doc": "The part after the last slash.",
-							"line": 190
+							"line": 191
 						},
 						{
 							"kind": "method",
@@ -5831,7 +5979,7 @@
 							"signature": "static std::string GetPath(std::string_view path)",
 							"static": true,
 							"doc": "The part before the last slash.",
-							"line": 193
+							"line": 194
 						},
 						{
 							"kind": "method",
@@ -5839,7 +5987,7 @@
 							"signature": "static std::string NormalizeSeparators(std::string path)",
 							"static": true,
 							"doc": "Every '\\' becomes '/'. A path that came back from std::filesystem on\nWindows carries the host separator, and a path used as a MAP KEY — the\nasset registry's path index, a redirect's old path — then fails to\nmatch the same path spelled the engine's way.",
-							"line": 199
+							"line": 200
 						},
 						{
 							"kind": "method",
@@ -5847,7 +5995,7 @@
 							"signature": "static void SetProjectDir(std::string absoluteDir)",
 							"static": true,
 							"doc": "Pass an absolute path; every Project*Dir call afterwards derives from\nit. Empty string resets to \"no project loaded\".",
-							"line": 203
+							"line": 204
 						}
 					]
 				}
@@ -7463,8 +7611,8 @@
 						},
 						{
 							"kind": "enumerator",
-							"name": "Loom",
-							"signature": "Loom",
+							"name": "VisualScript",
+							"signature": "VisualScript",
 							"line": 34
 						},
 						{
@@ -8589,7 +8737,7 @@
 							"name": "GitAttributesBlock",
 							"signature": "static std::string GitAttributesBlock()",
 							"static": true,
-							"doc": "The .gitattributes block the table implies, between GitAttributesBegin\nand GitAttributesEnd: MDF text types LF and merged by property, Loom by\nnode id, binary bulk types in LFS with a lock. Byte for byte what MBT's\nFileTypes.GitAttributesBlock() returns — the engine repo commits it, a\nnew project is scaffolded with it, and opening a project refreshes it.",
+							"doc": "The .gitattributes block the table implies, between GitAttributesBegin\nand GitAttributesEnd: MDF text types LF and merged by property, Visual Scripting by\nnode id, binary bulk types in LFS with a lock. Byte for byte what MBT's\nFileTypes.GitAttributesBlock() returns — the engine repo commits it, a\nnew project is scaffolded with it, and opening a project refreshes it.",
 							"line": 279
 						},
 						{
@@ -9034,7 +9182,7 @@
 							"kind": "enumerator",
 							"name": "Cheat",
 							"signature": "Cheat = 1u << 0,",
-							"doc": "A debug view that shows what a player should not see (physics shapes\nthrough walls, AI state): refused from the console and the command line\nwhenever cheats are off, which is the default in Shipping.",
+							"doc": "A debug view that shows what a player should not see (physics shapes\nthrough walls, AI state): refused from the console and the command line\nwhenever cheats are off, which is the default in release.",
 							"line": 43
 						},
 						{
@@ -9150,7 +9298,7 @@
 							"name": "SetCheatsAllowed",
 							"signature": "static void SetCheatsAllowed(bool allowed)",
 							"static": true,
-							"doc": "Off in Shipping, on everywhere else. A game can turn cheats on for a\nlocal session or an admin; the test harness turns them off to check the\nrefusal on a build that is not Shipping.",
+							"doc": "Off in release, on everywhere else. A game can turn cheats on for a\nlocal session or an admin; the test harness turns them off to check the\nrefusal on a build that is not release.",
 							"line": 104
 						},
 						{
@@ -10164,7 +10312,7 @@
 							"kind": "method",
 							"name": "RegisterNamed",
 							"signature": "bool RegisterNamed(FName name, MClass* cls)",
-							"doc": "Data-driven classes have no C++ type, so no std::type_index to key\non — Loom builds an MClass at runtime from a .loom asset and registers\nit BY NAME here so SpawnActorByClass / FindByName resolve it like any\ncodegen class. The registry does NOT own the MClass (the caller, e.g.\nLoomClassRegistry, owns the storage). FindByName searches these too.\nFails on a name already taken (by a codegen or another named class).",
+							"doc": "Data-driven classes have no C++ type, so no std::type_index to key\non — Visual Script builds an MClass at runtime from a .vscript asset and registers\nit BY NAME here so SpawnActorByClass / FindByName resolve it like any\ncodegen class. The registry does NOT own the MClass (the caller, e.g.\nVisualScriptClassRegistry, owns the storage). FindByName searches these too.\nFails on a name already taken (by a codegen or another named class).",
 							"line": 56
 						},
 						{
@@ -10219,7 +10367,7 @@
 							"kind": "method",
 							"name": "Revision",
 							"signature": "uint32_t Revision() const",
-							"doc": "Moves on every change to the set of classes (register, unregister, a\nmodule dropping its classes). A caller caching name lookups — Loom\nresolves a reflected call by name on every invocation — keys its cache\non this, because a hot-reloaded module frees the FMFunctionInfo a stale\nentry would still point at.",
+							"doc": "Moves on every change to the set of classes (register, unregister, a\nmodule dropping its classes). A caller caching name lookups — Visual Scripting\nresolves a reflected call by name on every invocation — keys its cache\non this, because a hot-reloaded module frees the FMFunctionInfo a stale\nentry would still point at.",
 							"line": 98
 						},
 						{
@@ -10240,7 +10388,7 @@
 							"kind": "alias",
 							"name": "FNameResolver",
 							"signature": "using FNameResolver = MClass* (*)(FName name)",
-							"doc": "Classes that exist on disk but are registered only when first needed\n(Loom: the class index knows the file, nothing has parsed it). A\nFindByName miss gives the resolver one chance to register the name;\nGetAllClasses first asks for every pending class, because a caller\nenumerating classes (a palette, a node catalogue) must see them all.\nNeither hook re-enters itself on the same thread.",
+							"doc": "Classes that exist on disk but are registered only when first needed\n(Visual Scripting: the class index knows the file, nothing has parsed it). A\nFindByName miss gives the resolver one chance to register the name;\nGetAllClasses first asks for every pending class, because a caller\nenumerating classes (a palette, a node catalogue) must see them all.\nNeither hook re-enters itself on the same thread.",
 							"line": 120
 						},
 						{
@@ -10375,7 +10523,7 @@
 					"name": "EMPropertyKind",
 					"namespace": "Mowo",
 					"bases": "uint8_t",
-					"doc": "The semantic shape of an MPROPERTY field, resolved once by\nMowoHeaderTool from the field's spelling. Consumers switch on this\ninstead of re-parsing cxxType — four hand-maintained spelling\nwhitelists had already drifted apart, which is how actor tags stopped\nsurviving hot reload and Loom lost every string property.",
+					"doc": "The semantic shape of an MPROPERTY field, resolved once by\nMowoHeaderTool from the field's spelling. Consumers switch on this\ninstead of re-parsing cxxType — four hand-maintained spelling\nwhitelists had already drifted apart, which is how actor tags stopped\nsurviving hot reload and Visual Script lost every string property.",
 					"line": 168,
 					"members": [
 						{
@@ -11299,7 +11447,7 @@
 							"kind": "field",
 							"name": "userData",
 							"signature": "void* userData = nullptr",
-							"doc": "Subsystem extension slot — opaque per-class data a higher layer can\nattach without Core knowing the type. Loom uses it to point a synthetic\n(data-driven) MClass back at its LoomClass definition (the source of the\nBeginPlay/Tick graphs). Codegen never sets it: aggregate brace-init of a\ngenerated MClass omits trailing fields, leaving this value-initialised —\ntrailing placement keeps the layout ABI-additive.",
+							"doc": "Subsystem extension slot — opaque per-class data a higher layer can\nattach without Core knowing the type. Visual Scripting uses it to point a synthetic\n(data-driven) MClass back at its VisualScriptClass definition (the source of the\nBeginPlay/Tick graphs). Codegen never sets it: aggregate brace-init of a\ngenerated MClass omits trailing fields, leaving this value-initialised —\ntrailing placement keeps the layout ABI-additive.",
 							"line": 591
 						},
 						{
@@ -11930,7 +12078,7 @@
 							"kind": "field",
 							"name": "Config",
 							"signature": "std::string Config",
-							"doc": "The build configuration the number was measured in. A Debug run is two\nto four times a Release run on the same code, so a store that mixes them\nreports whichever configuration ran last as a regression against the\nother. Empty on a record written before this was carried: unknown, and\nexcluded from every comparison rather than averaged into one.",
+							"doc": "The build configuration the number was measured in. A debug run is two\nto four times a dev run on the same code, so a store that mixes them\nreports whichever configuration ran last as a regression against the\nother. Empty on a record written before this was carried: unknown, and\nexcluded from every comparison rather than averaged into one.",
 							"line": 34
 						}
 					]
@@ -13724,10 +13872,10 @@
 						},
 						{
 							"kind": "field",
-							"name": "LoomClassIndex",
-							"signature": "static constexpr const char* LoomClassIndex = \"Intermediate/LoomClassIndex.mdfb\"",
+							"name": "VisualScriptClassIndex",
+							"signature": "static constexpr const char* VisualScriptClassIndex = \"Intermediate/VisualScriptClassIndex.mdfb\"",
 							"static": true,
-							"doc": "Which file declares which Loom class (FLoomClassIndex): the editor\nregisters a class on first use instead of parsing every one at open.",
+							"doc": "Which file declares which Visual Script class (FVisualScriptClassIndex): the editor\nregisters a class on first use instead of parsing every one at open.",
 							"line": 84
 						},
 						{

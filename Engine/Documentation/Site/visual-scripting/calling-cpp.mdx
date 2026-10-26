@@ -8,19 +8,19 @@ sources:
   - Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs
   - Engine/Source/Runtime/Core/Public/Core/MObject.h
   - Engine/Source/Runtime/Core/Public/Core/MClassRegistry.h
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomNodeCatalog.h
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomValue.h
-  - Engine/Source/Runtime/Loom/Private/LoomVM.cpp
-  - Engine/Source/Runtime/Loom/Private/LoomRpc.cpp
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptNodeCatalog.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptValue.h
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptRpc.cpp
   - Engine/Source/Programs/MowoHeaderTool/Emit/ReflSourceEmitter.cs
   - Engine/Source/Runtime/Game/Public/Game/AActor.h
-  - Engine/Source/Runtime/Game/Public/Game/ALoomActor.h
-  - Engine/Source/Runtime/Game/Public/Game/LoomRuntime.h
+  - Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h
+  - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
   - Engine/Source/Runtime/Game/Public/Game/MGameplayStatics.h
   - Engine/Source/Runtime/Game/Public/Game/MTimerStatics.h
   - Templates/TP_FirstPerson/Source/TP_FirstPerson/TP_FirstPerson.Build.cs
-verifiedAt: 1a346c1c5
+verifiedAt: c1d08db53
 ---
 
 Visual Scripting and C++ meet through reflection. Mark a C++ function with `MFUNCTION` and it becomes a node; nothing else is needed. In the other direction, C++ can spawn a visual class by name, call its functions, fire its input pins and read its variables.
@@ -32,7 +32,7 @@ Visual Scripting and C++ meet through reflection. Mark a C++ function with `MFUN
 1. You annotate a class with `MCLASS()` and its methods with `MFUNCTION()`.
 2. During the build, MowoHeaderTool (MHT) reads the header and generates a descriptor with a thunk per function. The [Reflection](/docs/programming/) guide covers the macros, specifiers and header rules.
 3. The descriptor lists each function's name, parameter names and types, return type, flags and an invoke pointer <Source symbol="FMFunctionInfo" />.
-4. The node catalogue walks every registered class and flattens its functions <Source symbol="LoomNodeCatalog" />.
+4. The node catalogue walks every registered class and flattens its functions <Source symbol="VisualScriptNodeCatalog" />.
 5. At run time the VM resolves the node's function name, converts each argument to the parameter type, and calls the thunk.
 
 ## Expose a function
@@ -102,7 +102,7 @@ What a graph sees for this class:
 
 ## How the VM resolves a call
 
-A **Call Function** node stores a function name. The VM resolves it like this <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />:
+A **Call Function** node stores a function name. The VM resolves it like this <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />:
 
 1. **Qualified name.** If the name has the form `Class::Function`, the VM finds that class and calls the function on its default object, or with no instance if the function is static. This is how the **Library** nodes such as `MGameplayStatics::SpawnActorByClass` work from any graph.
 2. **The running class.** Otherwise it walks the running instance's native class chain and takes the first match. `AActor` exposes functions such as `GetActorLocation`, `SetActorLocation`, `GetActorName` and `GetComponentByClass` this way <Source symbol="AActor" />. A Character class reaches `ACharacter`'s functions the same way.
@@ -132,22 +132,22 @@ The VM checks the argument count strictly: a node that supplies the wrong number
 
 ### RPC specifiers
 
-`MFUNCTION(Server)`, `MFUNCTION(Client)` and `MFUNCTION(Multicast)`, optionally with `Reliable`, declare a network RPC <Source path="Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs" />. A call to one routes over the session instead of running locally. An RPC must be a non-static, non-const method that returns `void`; the VM refuses anything else at the call, and the editor flags it as a compile error. The receiving side re-checks the direction against where the packet came from <Source path="Engine/Source/Runtime/Loom/Private/LoomRpc.cpp" />, so a peer cannot run a non-RPC or wrong-direction function by naming it.
+`MFUNCTION(Server)`, `MFUNCTION(Client)` and `MFUNCTION(Multicast)`, optionally with `Reliable`, declare a network RPC <Source path="Engine/Source/Programs/MowoHeaderTool/Specifiers/MemberSpecifiers.cs" />. A call to one routes over the session instead of running locally. An RPC must be a non-static, non-const method that returns `void`; the VM refuses anything else at the call, and the editor flags it as a compile error. The receiving side re-checks the direction against where the packet came from <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptRpc.cpp" />, so a peer cannot run a non-RPC or wrong-direction function by naming it.
 
 ## Call a visual class from C++
 
-Every backing class implements `ILoomHost`, and its `FLoomRuntime` is the visual side of the object. Through `ALoomActor` (or `FLoomRuntime::Of` for any backing class), C++ can <Source symbol="ALoomActor" />:
+Every backing class implements `IVisualScriptHost`, and its `FVisualScriptRuntime` is the visual side of the object. Through `AVisualScriptActor` (or `FVisualScriptRuntime::Of` for any backing class), C++ can <Source symbol="AVisualScriptActor" />:
 
 - spawn a class by name, with `MWorld::SpawnActorByClass` or `MGameplayStatics::SpawnActorByClass`;
-- run one of the class's functions with `CallLoomFunction`;
+- run one of the class's functions with `CallVisualScriptFunction`;
 - run any event graph as an input pin with `ReceivePin`, passing a payload that lands in `PinPayload`;
 - read and write the instance's variables with `FindVar` and `SetVar`.
 
 ```cpp title="Source/MyGame/Private/DoorControl.cpp"
 #include "Core/MClassRegistry.h"
-#include "Game/ALoomActor.h"
+#include "Game/AVisualScriptActor.h"
 #include "Game/MWorld.h"
-#include "Loom/LoomValue.h"
+#include "VisualScripting/VisualScriptValue.h"
 
 #include <vector>
 
@@ -158,23 +158,23 @@ static bool OpenDoorFromCpp(Mowo::MWorld* world)
 		return false;
 	}
 
-	auto* door = dynamic_cast<Mowo::ALoomActor*>(world->SpawnActorByClass(doorClass));
+	auto* door = dynamic_cast<Mowo::AVisualScriptActor*>(world->SpawnActorByClass(doorClass));
 	if (!door) {
 		return false;
 	}
 
-	std::vector<Mowo::LoomValue> args = { Mowo::LoomValue::MakeFloat(2.0f) };
-	door->CallLoomFunction("OpenDoor", args, nullptr);
+	std::vector<Mowo::VisualScriptValue> args = { Mowo::VisualScriptValue::MakeFloat(2.0f) };
+	door->CallVisualScriptFunction("OpenDoor", args, nullptr);
 
-	door->ReceivePin("OnInteract", Mowo::LoomValue::FromObject(door));
+	door->ReceivePin("OnInteract", Mowo::VisualScriptValue::FromObject(door));
 
-	const Mowo::LoomValue* isOpen = door->FindVar("IsOpen");
+	const Mowo::VisualScriptValue* isOpen = door->FindVar("IsOpen");
 
 	return isOpen && isOpen->AsBoolean();
 }
 ```
 
-`BP_Door`, `OpenDoor`, `OnInteract` and `IsOpen` come from the sample class shown on [The .loom file format](/docs/visual-scripting/loom-file-format/).
+`BP_Door`, `OpenDoor`, `OnInteract` and `IsOpen` come from the sample class shown on [The .vscript file format](/docs/visual-scripting/visual-script-file-format/).
 
 ### Timers and level wiring
 

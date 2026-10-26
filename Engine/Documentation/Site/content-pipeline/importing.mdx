@@ -15,7 +15,11 @@ sources:
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
   - Engine/Source/Runtime/Core/Private/FileTypes.cpp
-verifiedAt: 08e26df3d
+  - Engine/Source/Runtime/ML/Private/OnnxSession.cpp
+  - Engine/Source/Runtime/ML/Public/ML/OnnxSession.h
+  - Engine/Source/ThirdParty/OnnxRuntimeWebGpu/BUILD.md
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
+verifiedAt: 5922e6e5e
 ---
 
 Importing turns a file from a content tool into a project asset. The editor builds the file, from where it lies, into [asset packages](/docs/content-pipeline/asset-formats/) in the `Content/` folder you import into: a model into mesh, skeleton, animation, texture and material packages, a texture into a `.tex`, a sound into a `.sound`. Each package records its source and the options you chose, so a reimport replays them.
@@ -126,6 +130,20 @@ The rule only applies while nothing has set the group, so a rescan never overrid
 ### AI enhancement
 
 A PNG, JPEG, TGA or BMP texture can be upscaled and given generated normal, roughness and height maps by bundled models that run on your machine. Use the **AI enhance** section of the import dialog, or right-click textures in the Content Browser and choose **AI Enhance**. The work runs in the background with a progress toast. A texture that asks for enhancement at import takes the loose-file path described in [Sidecars and UUIDs](/docs/content-pipeline/sidecars-and-uuids/), because the enhancement reimports it in place.
+
+The models run through ONNX Runtime. Where the machine has a GPU, enhancement runs there through ONNX Runtime's WebGPU execution provider, which drives D3D12 on Windows, Vulkan on Linux and Metal on macOS, so it works on any vendor's GPU <Source symbol="FOnnxSession" />. If the provider is missing, refuses to register, or finds no usable GPU, inference runs on the CPU and the log says why. Pick the device in **Project Settings ▸ Performance ▸ On-device inference ▸ Inference Device** (Auto, GPU or CPU), or with the `ml.ExecutionProvider` console variable (`auto`, `gpu`, `cpu`). The change applies to models loaded from then on. See [Project Settings](/docs/editor/project-settings/).
+
+Measured on an NVIDIA GeForce RTX 3050 against the CPU provider on an AMD Ryzen 9 7900X, with identical output on both:
+
+| Model | Input | GPU | CPU | Speed-up |
+|---|---|---|---|---|
+| Upscale, Fast 4× | 256×256 | 248 ms | 415 ms | 1.7× |
+| Upscale, Quality 4× | 256×256 | 3842 ms | 13236 ms | 3.4× |
+| Normal map | 512×512 | 940 ms | 3366 ms | 3.6× |
+| Roughness map | 512×512 | 938 ms | 2180 ms | 2.3× |
+| Height map | 512×512 | 864 ms | 1709 ms | 2.0× |
+
+The first GPU model a process loads takes longer, because the GPU device and the driver's shader cache start cold.
 
 ## Audio options
 

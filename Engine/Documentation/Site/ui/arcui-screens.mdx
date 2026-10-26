@@ -20,9 +20,9 @@ sources:
   - Engine/Source/Runtime/GameHost/Public/GameHost/MGameEngine.h
   - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
   - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/MainMenu.ui
-  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/LoomDemo.ui
+  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/VisualScriptDemo.ui
   - Engine/Source/Runtime/Core/Private/FileTypes.cpp
-verifiedAt: 08e26df3d
+verifiedAt: c1d08db53
 ---
 
 A game screen in Mowo is a `.ui` asset: an MDF document holding a widget tree, data bindings, event wiring and animations. At run time the **screen stack** (`CArcUIScreenStack`) builds the asset into Arc widgets, mounts it over the game view, and keeps it in sync with gameplay every tick.
@@ -103,7 +103,7 @@ ArcUI "Widget" {
 | `schema_version` | Written on every save; currently `1` <Source symbol="FArcUIAsset" /> |
 | `design_width`, `design_height` | The resolution the numbers in the tree are authored in. The root canvas scales the screen to the viewport. |
 | `theme` | Optional `.theme` for color, font and metric tokens. See [Arc styling](/docs/ui/arc-styling/#game-themes-theme). |
-| `loom_class` | Optional Visual Scripting class (`.loom`) that acts as the screen's controller. See [Controller classes](#controller-classes). |
+| `visual_script_class` | Optional Visual Scripting class (`.vscript`) that acts as the screen's controller. See [Controller classes](#controller-classes). |
 
 ### Node properties
 
@@ -208,11 +208,11 @@ The input-mode rule is re-checked every tick against the stack's own `HasModalSc
 
 A `Bind` entry drives one widget property from a source every tick. The widget is written only when the value changes.
 
-```mdf title="Content/UI/LoomDemo.ui (excerpt)"
+```mdf title="Content/UI/VisualScriptDemo.ui (excerpt)"
 Bindings {
     Bind {
         property: "text"
-        source: "loom.UiDemoController.GetStatus"
+        source: "visualscript.UiDemoController.GetStatus"
     }
 }
 ```
@@ -238,7 +238,7 @@ Bindings {
 An exact name published with `MUIStatics::SetBindingValue` or `SetBindingNumber`. This is how a controller pushes values to the screen.
 </Step>
 <Step title="Controller functions">
-`loom.<Class>.<Function>` calls a function on the screen's controller class. See below.
+`visualscript.<Class>.<Function>` calls a function on the screen's controller class. See below.
 </Step>
 <Step title="The host resolver">
 A custom hook first, then numeric literals (`"0.75"`), then reflection paths `Entity.Component.Property[.x|.y|.z|.w]`. The entity is found by scene name and the component by its reflected name <Source symbol="FArcUIBindingLibrary" />.
@@ -261,7 +261,7 @@ An `On` entry wires a widget event to an action string. Several entries for the 
 Actions are resolved in this order:
 
 1. Built-in animation verbs: `PlayAnim:Name`, `PlayAnimReverse:Name`, `StopAnim:Name` <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
-2. `Loom:<Class>.<Event>[:payload]`, which runs an event graph on the controller class <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
+2. `VisualScript:<Class>.<Event>[:payload]`, which runs an event graph on the controller class <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
 3. Anything else goes to the host's event sink. In a game, that is the `RegisterUIAction` table.
 
 ## Animations
@@ -272,10 +272,10 @@ An `Anim` is a named timeline. Each `Track` animates one property of one named n
 
 ## Controller classes
 
-A screen can be driven entirely from [Visual Scripting](/docs/visual-scripting/). Set `loom_class` at the root to a `.loom` class, then:
+A screen can be driven entirely from [Visual Scripting](/docs/visual-scripting/). Set `visual_script_class` at the root to a `.vscript` class, then:
 
-- **Pull values** with `loom.<Class>.<Function>` bindings. The stack keeps one shared instance per class and caches each source's result per tick. Evaluation runs under a 50,000-step budget, so a runaway loop warns and yields nothing <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
-- **Push events** with `Loom:<Class>.<Event>` actions. Before the graph runs, the stack sets the variables `WidgetName`, `EventName`, `PinPayload`, `ScreenPath` and `OwnerEntity` <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
+- **Pull values** with `visualscript.<Class>.<Function>` bindings. The stack keeps one shared instance per class and caches each source's result per tick. Evaluation runs under a 50,000-step budget, so a runaway loop warns and yields nothing <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
+- **Push events** with `VisualScript:<Class>.<Event>` actions. Before the graph runs, the stack sets the variables `WidgetName`, `EventName`, `PinPayload`, `ScreenPath` and `OwnerEntity` <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
 - **React to the screen**: the controller receives `OnScreenShown`, `OnScreenHidden`, and `OnUIEvent` for every widget event on the screen <Source path="Engine/Source/Runtime/ArcUI/Private/CArcUIScreenStack.cpp" />.
 - **Reach back** with the `MUIStatics` functions: `SetWidgetText`, `SetWidgetVisible`, `SetProgress`, `PlayWidgetAnim`, `StopWidgetAnim`, `PushScreen`, `PopScreen`, `SetBindingValue`, `SetBindingNumber` and the video controls <Source symbol="MUIStatics" />.
 
@@ -283,7 +283,7 @@ A screen can be driven entirely from [Visual Scripting](/docs/visual-scripting/)
 UI graphs run with no actor behind them. Calls that need a target actor do nothing and log an error; go through `MUIStatics` or gameplay events instead. Pushing or popping screens during a binding evaluation is refused, so a binding can never rebuild the screen it is drawing.
 </Callout>
 
-The test project pairs `Content/UI/LoomDemo.ui` with `Content/UI/UiDemoController.loom`. For graph authoring, see [Functions, macros and dispatchers](/docs/visual-scripting/functions-macros-dispatchers/) and [Calling C++](/docs/visual-scripting/calling-cpp/).
+The test project pairs `Content/UI/VisualScriptDemo.ui` with `Content/UI/UiDemoController.vscript`. For graph authoring, see [Functions, macros and dispatchers](/docs/visual-scripting/functions-macros-dispatchers/) and [Calling C++](/docs/visual-scripting/calling-cpp/).
 
 ## Localization and hot reload
 

@@ -7,14 +7,16 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
   - Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/RpcDispatcher.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/NetBlobChannel.h
+  - Engine/Source/Runtime/Networking/Private/NetBlobChannel.cpp
   - Engine/Source/Runtime/Networking/Public/Networking/Session/FNetSession.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetEventCodec.h
   - Engine/Source/Runtime/Networking/Private/NetSession.cpp
   - Engine/Source/Developer/MowoSandbox/Public/Sandbox/NetShooterComponent.h
   - Engine/Source/Developer/MowoSandbox/Private/SandboxNetGame.cpp
-  - Engine/Source/Runtime/Game/Public/Game/ALoomActor.h
-verifiedAt: 1a346c1c5
+  - Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h
+verifiedAt: 5922e6e5e
 ---
 
 Replication keeps state in sync. RPCs and events carry the other kind of traffic: "this happened". A client asks the host to fire, the host checks the request, and the host tells every peer. RPCs and gameplay events ride the same packet type, so they share one authority gate and one set of rate limits.
@@ -154,6 +156,20 @@ The default bucket suits actions a player triggers by hand. A continuously swept
 | `net.rpc_rate_limit_high` | `200` | The same, for `HighRate` methods |
 | `net.input_rate_limit` | `120` | Client input packets accepted per peer per second |
 
+## Large RPCs
+
+An RPC whose arguments reach 64 KiB does not fit the normal RPC packet. It goes through the **blob lane** instead: the packet is cut into 1 KiB chunks and sent on the reliable unordered channel, the receiver acknowledges them, and the sender keeps at most a window of unacknowledged chunks in flight at a set byte rate per peer <Source symbol="FNetBlobChannel" />. A large payload therefore neither stalls the ordered reliable channel nor floods the link. When the last chunk arrives, the receiver handles the RPC exactly as if it had come in one packet, so a client RPC still passes the [authority gate](#the-authority-gate).
+
+A blob is not ordered against the rest of the reliable stream. That is why smaller RPCs stay on their own channel by default; set `net.RpcBlobThreshold` to route every RPC packet above that many bytes through the lane as well. A client paces its blob lane to at most half the host's incoming byte budget, so the host's flood guard does not drop a large client RPC chunk by chunk <Source path="Engine/Source/Runtime/Networking/Private/ReplicationManager.cpp" />.
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `net.RpcBlobThreshold` | `0` | RPC packets larger than this many bytes take the blob lane. `0` sends only arguments of 64 KiB or more there. |
+| `net.BlobBytesPerSecond` | `32768` | Bytes per second the lane sends to one peer. `0` is unlimited; the window still bounds what is in flight. |
+| `net.BlobWindowChunks` | `32` | Unacknowledged 1 KiB chunks a sender may have per peer. |
+| `net.MaxBlobBytes` | `4194304` | Largest RPC the lane sends (4 MiB), and the largest a client accepts from the host. |
+| `net.MaxClientBlobBytes` | `262144` | Largest blob the host reassembles from one client (256 KiB). A larger announcement is refused before any memory is reserved. |
+
 ## Gameplay events
 
 Events are a lighter layer on the same packet for actions that are not tied to a component method. You pick a 16-bit id at or above `0x8000`; ids from `0xFF00` up are reserved for the join protocol <Source symbol="FNetSessionEventIds" />. Payloads use `FNetEventWriter` and `FNetEventReader`, which bounds-check every read and latch a failure flag.
@@ -199,9 +215,9 @@ static void ReportDoorOpened(Mowo::FNetSession& session, uint32_t doorId) {
 `LeaveSession` clears every handler and client event policy you installed, because they usually live in a hot-reloadable game module. Install them each time you start a session, not once per process <Source symbol="FNetSession::ClearGameCallbacks" />.
 </Callout>
 
-## RPCs from Loom graphs
+## RPCs from Visual Scripting graphs
 
-Actor functions can carry the same annotations. When a Loom graph calls an `MFUNCTION(Server, Reliable)` or a `Multicast` function on an actor, the call is routed through the session to where it should run instead of executing locally <Source symbol="ALoomActor" />.
+Actor functions can carry the same annotations. When a Visual Scripting graph calls an `MFUNCTION(Server, Reliable)` or a `Multicast` function on an actor, the call is routed through the session to where it should run instead of executing locally <Source symbol="AVisualScriptActor" />.
 
 ## Related
 

@@ -6,13 +6,13 @@ order: 10
 sources:
   - Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp
   - Engine/Source/Runtime/Game/Public/Game/MTriggerComponent.h
-  - Engine/Source/Runtime/Game/Private/LoomRuntime.cpp
+  - Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp
   - Engine/Source/Runtime/Game/Public/Game/AActor.h
-  - Engine/Source/Runtime/Loom/Private/LoomVM.cpp
-  - Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp
-  - Templates/TP_FirstPerson/Content/Blueprints/BP_SlidingDoor.loom
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp
-verifiedAt: 08e26df3d
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp
+  - Templates/TP_FirstPerson/Content/Blueprints/BP_SlidingDoor.vscript
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp
+verifiedAt: 5922e6e5e
 ---
 
 This guide builds a door that slides open when the player walks into a trigger, and slides shut when they leave. You will use a component slot, the `OnTriggerEnter` and `OnTriggerExit` events, functions, and a call from one visual class into another.
@@ -39,7 +39,7 @@ You need a project open in Mowo Editor with a level that has a player character.
 <Steps>
 <Step title="Create the class">
 
-In the Content Browser, right-click a folder and choose **Loom Class > Actor**. Name it `BP_SlidingDoor` and double-click it.
+In the Content Browser, right-click a folder and choose **Visual Script Class > Actor**. Name it `BP_SlidingDoor` and double-click it.
 
 </Step>
 <Step title="Add a variable">
@@ -49,7 +49,7 @@ In **Variables**, add `IsOpen` of type Bool. Leave its default at `false`.
 </Step>
 <Step title="Give it a mesh">
 
-Click **+** in the **My Loom** header and add a **MeshRenderer** component. The editor switches to the class layout. Select the slot, set its mesh, and save. See [Component slots](/docs/visual-scripting/classes-and-inheritance/#component-slots).
+Click **+** in the **My Visual Script** header and add a **MeshRenderer** component. The editor switches to the class layout. Select the slot, set its mesh, and save. See [Component slots](/docs/visual-scripting/classes-and-inheritance/#component-slots).
 
 </Step>
 <Step title="Write OpenDoor">
@@ -73,14 +73,14 @@ Click **Compile**, then **Save**.
 </Step>
 </Steps>
 
-The FirstPerson template's `BP_SlidingDoor.loom` uses the same `SetActorLocation` pattern, driven by an `OnInteract` graph <Source path="Templates/TP_FirstPerson/Content/Blueprints/BP_SlidingDoor.loom" />.
+The FirstPerson template's `BP_SlidingDoor.vscript` uses the same `SetActorLocation` pattern, driven by an `OnInteract` graph <Source path="Templates/TP_FirstPerson/Content/Blueprints/BP_SlidingDoor.vscript" />.
 
 ## Part 2: the trigger
 
 <Steps>
 <Step title="Create the class">
 
-Create another class with **Loom Class > Actor**, named `BP_DoorTrigger`.
+Create another class with **Visual Script Class > Actor**, named `BP_DoorTrigger`.
 
 </Step>
 <Step title="Add the door tag variable">
@@ -92,7 +92,7 @@ Add a String variable `DoorTag` with the default `FrontDoor`. Turn on **Instance
 
 Add a **Trigger** component the same way. Set its shape to Sphere and its radius to cover the doorway. Save.
 
-A class with a `Trigger` slot gets a live trigger component when it spawns, and stays in the tick schedule so the overlap check runs <Source path="Engine/Source/Runtime/Game/Private/LoomRuntime.cpp" />. The trigger's shape can be Box, with half extents, or Sphere, with a radius <Source symbol="MTriggerComponent" />.
+A class with a `Trigger` slot gets a live trigger component when it spawns, and stays in the tick schedule so the overlap check runs <Source path="Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp" />. The trigger's shape can be Box, with half extents, or Sphere, with a radius <Source symbol="MTriggerComponent" />.
 
 </Step>
 <Step title="Handle OnTriggerEnter">
@@ -116,16 +116,16 @@ Compile, then save.
 </Step>
 </Steps>
 
-When the trigger fires, `OnTriggerEnter` runs with the overlapping actor in `PinPayload` <Source path="Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp" />. **Call On Target** finds no reflected `OpenDoor` on the door's class, so it runs the door's visual function in the door's own context, where `IsOpen` lives <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />.
+When the trigger fires, `OnTriggerEnter` runs with the overlapping actor in `PinPayload` <Source path="Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp" />. **Call On Target** finds no reflected `OpenDoor` on the door's class, so it runs the door's visual function in the door's own context, where `IsOpen` lives <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />.
 
-<Screenshot id="loom-howto-door-trigger-graph" alt="Visual Scripting editor with BP_DoorTrigger open on the OnTriggerEnter graph: an Event OnTriggerEnter node wired to a Call On Target node whose details show function OpenDoor; a Get Variable DoorTag node feeds a Get Actor By Tag node whose output feeds the Target pin" caption="The trigger's OnTriggerEnter graph." />
+<Screenshot id="visual-script-howto-door-trigger-graph" alt="Visual Scripting editor with BP_DoorTrigger open on the OnTriggerEnter graph: an Event OnTriggerEnter node wired to a Call On Target node whose details show function OpenDoor; a Get Variable DoorTag node feeds a Get Actor By Tag node whose output feeds the Target pin" caption="The trigger's OnTriggerEnter graph." />
 
 ### What the trigger class looks like on disk
 
-Saved, `BP_DoorTrigger.loom` has this shape. Defaults are written only when they differ from the built-in default, which is why `execElse` does not appear <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />.
+Saved, `BP_DoorTrigger.vscript` has this shape. Defaults are written only when they differ from the built-in default, which is why `execElse` does not appear <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp" />.
 
-```mdf title="Content/Blueprints/BP_DoorTrigger.loom"
-LoomClass {
+```mdf title="Content/Blueprints/BP_DoorTrigger.vscript"
+VisualScriptClass {
     schema: 9
     class: "BP_DoorTrigger"
     parent: "AActor"

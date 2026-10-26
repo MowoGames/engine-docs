@@ -13,7 +13,7 @@ sources:
   - Engine/Source/Editor/MowoEditor/Private/Scripting/ModuleCompiler.cpp
   - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
   - Templates/TP_FirstPerson/Source/TP_FirstPerson.Target.cs
-verifiedAt: 6caf55861
+verifiedAt: 7f8f31f8d
 ---
 
 Your game's C++ code lives in a **game module**: a shared library the editor and the player load at run time. This page builds that module from the command line and from the editor, then packages the whole project into a folder you can hand to someone else.
@@ -67,7 +67,7 @@ Pass your project's target to `-t` and its `Source/` folder to `--extra-source`,
 .\mbt.cmd build -t MyGame --extra-source D:\Projects\MyGame\Source
 ```
 
-The target is named after your project, both for `mbt init` projects and for templates (the launcher renames a template's `TP_<Name>` module and targets after your project). `-t MyGame` builds the module and the game host `MyGame` into `Engine/Binaries/<Platform>/`. Use the same `-c` configuration as the editor you run.
+The target is named after your project, both for `mbt init` projects and for templates (the launcher renames a template's `TP_<Name>` module and targets after your project). `-t MyGame` builds the module and the game host `MyGame` into `Engine/Binaries/<platform>/<config>/`. Use the same `-c` configuration as the editor you run.
 
 When the editor opens a project, it loads each game module it finds at `Source/<Module>/<Module>.Build.cs` whose binary exists. A module that is not built yet is skipped with a log line <Source path="Engine/Source/Runtime/AssetSystem/Private/ProjectManager.cpp" />.
 
@@ -103,17 +103,17 @@ Use **Tools › New C++ Class…** in the editor, or the command line:
 
 ## Package the project
 
-`mbt package` builds the engine and your module, compiles shaders, cooks content and lays out a runnable folder. Start with a Development package:
+`mbt package` builds the engine and your module, compiles shaders, cooks content and lays out a runnable folder. Start with a `dev` package:
 
 ```powershell
-.\mbt.cmd package --project D:\Projects\MyGame\MyGame.mproject -c Development
+.\mbt.cmd package --project D:\Projects\MyGame\MyGame.mproject -c dev
 ```
 
 <Flow steps={["Build C++", "Compile shaders", "Validate and cook assets", "Stage runtime files", "Zip"]} highlight={2} caption="mbt package, in order." />
 
 | Default | Value |
 |---|---|
-| Configuration | Shipping, when you pass no `-c` |
+| Configuration | `release`, when you pass no `-c` |
 | Product name | `--name`, else `build.outputName` from the manifest, else the manifest's file name |
 | Output folder | `Config/Packaging.ini` if it sets one, else `Saved/Packaged/<Product>/` in the project <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" /> |
 | Zip | On: `<Product>-<version>-<config>.zip` |
@@ -123,7 +123,7 @@ The package looks like this <Source path="Engine/Source/Programs/MowoBuildTool/s
 ```text
 MyGame/
   MyGame.exe              thin launcher; run this
-  Binaries/Win64/         the real host executable, its libraries and enabled plugins
+  Binaries/win-x64/       the real host MyGame.exe, its libraries and enabled plugins
   Content/Paks/           packed content archives
   Config/                 the project's shipped INI files
   Engine/Config/          the engine's INI layer
@@ -133,7 +133,7 @@ MyGame/
 Double-click `MyGame.exe` to test it.
 
 <Callout type="note">
-A Shipping package encrypts and signs content with the keys in the project's `Config/DefaultCrypto.ini`, and refuses to package without them. Create keys with `mbt crypto generate --project <manifest>`, or pass `--unprotected` for a test build. Other configurations do not need keys. Shipping also links the engine statically and builds with link-time optimization, which is the slowest build. See [Shipping](/docs/shipping/).
+A `release` package encrypts and signs content with the keys in the project's `Config/DefaultCrypto.ini`, and refuses to package without them. Create keys with `mbt crypto generate --project <manifest>`, or pass `--unprotected` for a test build. Other configurations do not need keys. `release` also links the engine statically and builds with link-time optimization, which is the slowest build. See [Shipping](/docs/shipping/).
 </Callout>
 
 When you only changed content, `--skip-build` and `--skip-shaders` reuse the binaries and shaders you already have. The same flow is in the editor under **Build › Package Project…**.

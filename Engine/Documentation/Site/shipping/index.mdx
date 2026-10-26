@@ -1,7 +1,7 @@
 ---
 title: Packaging and shipping
 sidebarTitle: Packaging & Shipping
-description: How mbt package turns a project into a self-contained folder a player can run, what Shipping strips out, and where the output lands.
+description: How mbt package turns a project into a self-contained folder a player can run, what a release build strips out, and where the output lands.
 order: 9
 icon: PackageCheck
 sources:
@@ -19,7 +19,10 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/FPaths.h
   - Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp
   - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp
-verifiedAt: 6caf55861
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ShipCondition.cs
+  - Engine/Source/ThirdParty/OnnxRuntime/OnnxRuntime.Build.cs
+  - Engine/Source/ThirdParty/OnnxRuntimeWebGpu/OnnxRuntimeWebGpu.Build.cs
+verifiedAt: 7f8f31f8d
 ---
 
 A package is the folder a player downloads and runs. It holds the game, its cooked content and every runtime file it needs, and nothing else: no editor, no engine checkout, no developer tools. One command, `mbt package`, produces it from your project.
@@ -34,33 +37,33 @@ This page explains what that command does and what ends up in the folder. The ot
 
 | Step | What happens |
 |---|---|
-| Build C++ | Builds the game host and its modules in the chosen configuration, plus the archive builder and the crash reporter. `--skip-build` reuses the binaries already in `Engine/Binaries/<Platform>`. |
+| Build C++ | Builds the game host and its modules in the chosen configuration, plus the archive builder and the crash reporter. `--skip-build` reuses the binaries already in `Engine/Binaries/<platform>/<config>`. |
 | Compile shaders | Compiles the engine's HLSL for the target platform's graphics APIs, plus the compiled material graphs in your `Content/`. `--skip-shaders` reuses the build tree's `Shaders.meaf`. |
 | Cook content | Runs the asset-validation gate, then cooks `Content/` and the enabled plugins' content into archives, and packs the baked reflection probes. See [Content pipeline](/docs/content-pipeline/). |
 | Stage runtime | Copies the host executable, the modules and vendor libraries its dependency closure needs, the enabled plugins, the engine content and the committed PSO cache. Writes the project's content keys into the staged host. |
 | Finalize | Copies the project manifest and the asset registry, stages the allowlisted config files, bundles the Visual C++ runtime and, for a monolithic build, checks the host's import table. |
-| Distributables | Writes `Shipping.json`, folds loose files into paks, builds the launcher, stamps version info and the icon, optionally wraps for Steam DRM, code-signs, signs modules, uploads symbols, writes the license notices and the file manifest, then builds the zip and the installer. |
+| Distributables | Writes `BuildInfo.json`, folds loose files into paks, builds the launcher, stamps version info and the icon, optionally wraps for Steam DRM, code-signs, signs modules, uploads symbols, writes the license notices and the file manifest, then builds the zip and the installer. |
 
-A hard error in any step fails the run: a missing host executable, a cook that fails, a missing content key for a Shipping package. Optional tools do the opposite. When `signtool`, WiX, `steamcmd` or `sentry-cli` is missing, that part is skipped with a log line and the package still completes.
+A hard error in any step fails the run: a missing host executable, a cook that fails, a missing content key for a `release` package. Optional tools do the opposite. When `signtool`, WiX, `steamcmd` or `sentry-cli` is missing, that part is skipped with a log line and the package still completes.
 
 <Callout type="tip">
 Every option of `mbt package` is listed in the [mbt command reference](/docs/reference/mbt-cli/). This section explains the options in context.
 </Callout>
 
-## Shipping is the default
+## Release is the default
 
-`mbt package` builds the **Shipping** configuration unless you pass `-c`. Shipping and its profilable twin **Test** are the configurations a player receives: ThinLTO code generation, editor code compiled out, and `MOWO_SHIPPING=1` and `WITH_EDITOR=0` defined for every module <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Targets/TargetDefines.cs" />. Test adds `MOWO_TEST_BUILD=1`, which keeps the log and the console's stat commands so you can profile the shipped code <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs" />.
+`mbt package` builds the `release` configuration unless you pass `-c`. `release` and its profilable twin `profile` are the configurations a player receives: ThinLTO code generation, editor code compiled out, and `MOWO_BUILD_RELEASE=1` and `WITH_EDITOR=0` defined for every module <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Targets/TargetDefines.cs" />. `profile` adds `MOWO_BUILD_PROFILE=1`, which keeps the log and the console's stat commands, with GPU timers available through `r.GpuTimings`, so you can profile the shipped code <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs" />.
 
 What this removes from the binary itself, not just from the folder:
 
 - Editor-only code and reflection metadata (`WITH_EDITOR=0`).
-- Engine asserts (`MOWO_WITH_ASSERTS` is defined only in Debug, DebugGame and Development).
-- Author-side tools in the player, and every command-line switch that is not on the player allowlist. The command-line switches page of the [reference](/docs/reference/) lists what a Shipping game keeps.
+- Engine asserts (`MOWO_WITH_ASSERTS` is defined only in `debug`, `debuggame` and `dev`).
+- Author-side tools in the player, and every command-line switch that is not on the player allowlist. The command-line switches page of the [reference](/docs/reference/) lists what a release game keeps.
 
-Logging also changes. A Shipping build logs at Warning level and writes no log file unless the player passes `--log` or the shipped `Config/Engine.ini` sets `logging.enabled` <Source path="Engine/Source/Runtime/Logging/Private/Logger.cpp" />. `--log-floor info|warning|error` compiles log lines below a level out of a Shipping build altogether, format strings included.
+Logging also changes. A release build logs at Warning level and writes no log file unless the player passes `--log` or the shipped `Config/Engine.ini` sets `logging.enabled` <Source path="Engine/Source/Runtime/Logging/Private/Logger.cpp" />. `--log-floor info|warning|error` compiles log lines below a level out of a release build altogether, format strings included.
 
 <Callout type="engine">
-No product executable carries test code, so a Shipping build cannot report on itself. Judge a package from outside: launch it, read its log, check its exit code.
+No product executable carries test code, so a release build cannot report on itself. Judge a package from outside: launch it, read its log, check its exit code.
 </Callout>
 
 ## Where the output goes
@@ -75,10 +78,10 @@ A Windows game package looks like this:
 Saved/Packaged/
 ├── MyGame/                                the package: this is what ships
 │   ├── MyGame.exe                         thin launcher (icon + version info)
-│   ├── Binaries/Win64/
-│   │   ├── MyGame-Win64-Shipping.exe      the real game host
+│   ├── Binaries/win-x64/
+│   │   ├── MyGame.exe                     the real game host
 │   │   ├── MyGameCrashReporter.exe        the crash reporter
-│   │   ├── MowoEditor-*-Win64-Shipping.dll engine and plugin modules, modular packages only
+│   │   ├── MowoEngine.*.dll               engine and plugin modules, modular packages only
 │   │   ├── *.mowosig                      module signatures, protected packages only
 │   │   ├── SDL3.dll, ...                  vendor libraries the closure needs
 │   │   ├── vcruntime140.dll, ...          app-local Visual C++ runtime
@@ -90,7 +93,7 @@ Saved/Packaged/
 │   ├── Cache/PsoCache.mdfb                bundled pipeline cache
 │   ├── installscript.vdf                  Steam install script for the VC++ redist
 │   └── _CommonRedist/vcredist/2022/       VC_redist.x64.exe fallback
-├── MyGame-1.0.0-Shipping.zip              distributable zip
+├── MyGame-1.0.0-release.zip               distributable zip
 ├── MyGame-chunks.json                     content report (not shipped)
 ├── MyGame-Manifest.txt                    sha256 + size of every shipped file (not shipped)
 └── MyGame-symbols/<buildId>/              archived symbols (not shipped)
@@ -98,7 +101,7 @@ Saved/Packaged/
 
 <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackageLayout.cs" /> is the one place every packaged path is defined.
 
-`Game.mproject`, `Shipping.json`, the asset registry and the list of shipped plugins do not sit loose at the root. They travel inside the engine pak, which the player reads before any file system is mounted <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs" />.
+`Game.mproject`, `BuildInfo.json`, the asset registry and the list of shipped plugins do not sit loose at the root. They travel inside the engine pak, which the player reads before any file system is mounted <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/PackagePakStager.cs" />.
 
 ### Why the paks have hash names
 
@@ -122,27 +125,29 @@ A few things ship only when your project asks for them:
 |---|---|
 | `platform.steamEnabled` is `true` in the `.mproject` | Steam runtime libraries |
 | `platform.discordEnabled` is `true` | Discord runtime library |
-| `graphics.upscalers` is `true` or a non-empty list | DLSS, FSR and XeSS runtimes, in `Binaries/<Platform>/Upscalers/` |
+| `graphics.upscalers` is `true` or a non-empty list | DLSS, FSR and XeSS runtimes, in `Binaries/<platform>/Upscalers/` |
 | The plugin is enabled in `Config/Plugins.ini`, or on by default and not switched off | That plugin's module |
-| The project turns on auto-subtitles | The speech recognizer, its runtime and model |
+| The project turns on auto-subtitles | The speech recognizer, its model, ONNX Runtime and the ONNX Runtime WebGPU execution provider (on Windows with the engine's DXC beside it) |
+
+The WebGPU provider is what lets inference run on the GPU. It adds 10.4 MiB on Windows plus 31.9 MB for `dxcompiler.dll` and `dxil.dll`, 15.7 MiB on Linux and 14.3 MiB on macOS. On Windows the package carries the engine's own DXC 1.9, not the DXC 1.8 the provider's package comes with: under the engine's D3D12 Agility SDK, DXC 1.8 failed to compile the provider's pipelines. On Linux the provider needs the system's Vulkan loader, `libvulkan.so.1`, at run time; without it inference stays on the CPU <Source path="Engine/Source/ThirdParty/OnnxRuntimeWebGpu/OnnxRuntimeWebGpu.Build.cs" />.
 
 From the project's `Config/` folder, `Engine.ini`, `Input.ini` and `Redirects.ini` ship, plus the `Default*.ini` layers and the target platform's folder; editor INIs and `DefaultCrypto.ini` stay behind <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ConfigIniStager.cs" />.
 
-Before the file manifest is written, the packager fails the run when the package carries, or a shipped binary imports, a runtime no player has: the debug C runtime or a sanitizer runtime. A Debug or ASan build cannot reach a player by accident <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ForbiddenRuntimeCheck.cs" />.
+Before the file manifest is written, the packager fails the run when the package carries, or a shipped binary imports, a runtime no player has: the debug C runtime or a sanitizer runtime. A `debug` or `debug-asan` build cannot reach a player by accident <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ForbiddenRuntimeCheck.cs" />.
 
 ## Packaged mode
 
-When the player finds `Shipping.json`, or when its install folder is not writable, it runs in packaged mode. Saves, logs, crash reports and derived caches then go to the per-user product folder instead of the install folder, so a game installed under Program Files works without admin rights <Source path="Engine/Source/Runtime/Core/Public/Core/FPaths.h" />.
+When the player finds `BuildInfo.json`, or when its install folder is not writable, it runs in packaged mode. Saves, logs, crash reports and derived caches then go to the per-user product folder instead of the install folder, so a game installed under Program Files works without admin rights <Source path="Engine/Source/Runtime/Core/Public/Core/FPaths.h" />.
 
 ## Packaging from the editor
 
 **Build > Package Project…** opens the packaging window, and **Build > Cook Content…** opens it in cook mode <Source path="Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineMenus.cpp" />. It is a front end over the command line: it runs `mbt package` or `mbt cook` as a child process and shows its steps and log <Source path="Engine/Source/Editor/MowoEditor/Private/Packaging/PackagingWindow.cpp" />.
 
-<Screenshot id="shipping-package-project-window" alt="Mowo Editor with a project open, Build > Package Project… clicked. The packaging window shows its toolbar (Windows selected, Linux and Console disabled, Shipping selected, the Package button), the profile rows Maps, Cook, Monolithic, Compress and Archive to, and the pipeline with Build, Cook, Stage, Package and Archive." caption="The packaging window. Its rows map onto mbt package options." />
+<Screenshot id="shipping-package-project-window" alt="Mowo Editor with a project open, Build > Package Project… clicked. The packaging window shows its toolbar (Windows selected, Linux and Console disabled, Release selected, the Package button), the profile rows Maps, Cook, Monolithic, Compress and Archive to, and the pipeline with Build, Cook, Stage, Package and Archive." caption="The packaging window. Its rows map onto mbt package options." />
 
 | Window control | `mbt package` option |
 |---|---|
-| **Shipping** / **Development** on the toolbar | `-c` |
+| **Release** / **Dev** on the toolbar | `-c` |
 | **Cook** row: By the book, Skip C++ build, Skip C++ and shaders | none, `--skip-build`, `--skip-build --skip-shaders` |
 | **Monolithic** row | `--monolithic`, or `--modular` when disabled |
 | **Compress** row | `--compression` |

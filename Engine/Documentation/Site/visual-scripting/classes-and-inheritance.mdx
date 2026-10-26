@@ -3,45 +3,45 @@ title: Classes and inheritance
 description: Parents and backing classes, how members resolve through a parent chain, how class defaults reach instances, and how component slots work.
 order: 6
 sources:
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomClass.h
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomClassRegistry.h
-  - Engine/Source/Runtime/Loom/Private/LoomClassRegistry.cpp
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomClassValidator.h
-  - Engine/Source/Runtime/Game/Public/Game/LoomRuntime.h
-  - Engine/Source/Runtime/Game/Private/LoomRuntime.cpp
-  - Engine/Source/Runtime/Game/Private/ALoomActor.cpp
-  - Engine/Source/Runtime/Game/Public/Game/ALoomCharacter.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassRegistry.h
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptClassRegistry.cpp
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassValidator.h
+  - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
+  - Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp
+  - Engine/Source/Runtime/Game/Private/AVisualScriptActor.cpp
+  - Engine/Source/Runtime/Game/Public/Game/AVisualScriptCharacter.h
   - Engine/Source/Runtime/Game/Private/Game/ActorSerializer.cpp
   - Engine/Source/Runtime/Game/Private/Game/GameplayPlaceables.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp
   - Engine/Source/Editor/MowoEditor/Private/AssetEditors/ActorEditorPanel.cpp
-verifiedAt: 08e26df3d
+verifiedAt: 5922e6e5e
 ---
 
 Every visual class has a parent: a native C++ class or another visual class. The class inherits graphs, functions, variables and component slots from it. This page explains how that chain resolves, which native class actually runs an instance, where class defaults live, and how component slots give a class its mesh, light or trigger.
 
 ## The parent chain
 
-A class's parent defaults to `AActor` <Source symbol="LoomClass" />. When the class registers, the registry builds a synthetic `MClass` whose super class is the parent you named. A visual parent's own synthetic class chains down to the native root, so `IsA`, `IsChildOf` and `SpawnActorByClass` behave as they would for native classes.
+A class's parent defaults to `AActor` <Source symbol="VisualScriptClass" />. When the class registers, the registry builds a synthetic `MClass` whose super class is the parent you named. A visual parent's own synthetic class chains down to the native root, so `IsA`, `IsChildOf` and `SpawnActorByClass` behave as they would for native classes.
 
-<Flow steps={["BP_HeavyDoor (visual)", "BP_Door (visual)", "AActor (native)"]} caption="A visual class deriving from another visual class. Both spawn as ALoomActor." />
+<Flow steps={["BP_HeavyDoor (visual)", "BP_Door (visual)", "AActor (native)"]} caption="A visual class deriving from another visual class. Both spawn as AVisualScriptActor." />
 
 ### Backing classes
 
-An instance is always an object of a native **backing class**. The registry walks the declared parent's native chain and takes the first base with a registered backing <Source symbol="LoomClassRegistry::AddBackingClass" />:
+An instance is always an object of a native **backing class**. The registry walks the declared parent's native chain and takes the first base with a registered backing <Source symbol="VisualScriptClassRegistry::AddBackingClass" />:
 
 | Native parent, or anything derived from it | Backing class | What the class gets |
 | --- | --- | --- |
-| `ACharacter` | `ALoomCharacter` | Character movement, health and `ACharacter`'s functions on self |
-| `APawn` | `ALoomPawn` | Possession and the controller link |
-| `APlayerController` | `ALoomPlayerController` | Input routing and possession |
-| `AGameMode` | `ALoomGameMode` | Match rules and player spawning |
-| `AGameState` | `ALoomGameState` | Replicated match state |
-| `AActor` | `ALoomActor` | The actor surface |
+| `ACharacter` | `AVisualScriptCharacter` | Character movement, health and `ACharacter`'s functions on self |
+| `APawn` | `AVisualScriptPawn` | Possession and the controller link |
+| `APlayerController` | `AVisualScriptPlayerController` | Input routing and possession |
+| `AGameMode` | `AVisualScriptGameMode` | Match rules and player spawning |
+| `AGameState` | `AVisualScriptGameState` | Replicated match state |
+| `AActor` | `AVisualScriptActor` | The actor surface |
 
-So a class under your own `ACharacter` subclass is an `ALoomCharacter` too, and a visual child inherits its visual parent's backing. Every backing class owns one `FLoomRuntime` and forwards its lifecycle there after its native base's own, so a Character class behaves like an Actor class in the graph and a `Tick` graph reads where the character has already moved <Source symbol="FLoomRuntime" />. C++ that needs the visual state of any backed object asks `FLoomRuntime::Of(object)`.
+So a class under your own `ACharacter` subclass is an `AVisualScriptCharacter` too, and a visual child inherits its visual parent's backing. Every backing class owns one `FVisualScriptRuntime` and forwards its lifecycle there after its native base's own, so a Character class behaves like an Actor class in the graph and a `Tick` graph reads where the character has already moved <Source symbol="FVisualScriptRuntime" />. C++ that needs the visual state of any backed object asks `FVisualScriptRuntime::Of(object)`.
 
-A native parent that is not in the backing class's ancestry, such as a component class, is rejected: the class is reparented onto the backing class and an error is logged <Source path="Engine/Source/Runtime/Loom/Private/LoomClassRegistry.cpp" />. A parent name that does not resolve yet is left alone, because it may be a visual class that registers later. Classes register parents first, whatever the file order.
+A native parent that is not in the backing class's ancestry, such as a component class, is rejected: the class is reparented onto the backing class and an error is logged <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptClassRegistry.cpp" />. A parent name that does not resolve yet is left alone, because it may be a visual class that registers later. Classes register parents first, whatever the file order.
 
 ## How members resolve
 
@@ -64,13 +64,13 @@ A child's graph replaces the parent's graph of the same name. There is no automa
 
 ### The load validator
 
-When a class registers, a validator checks every graph against what it can actually call <Source symbol="FLoomClassValidator" />. A **blocking** issue is one that would abort the graph part-way: a call to a function that does not exist, an argument-count mismatch, a link past the end of the node table, a macro that survived expansion. A blocked graph does not start at all, instead of running until the broken node with half its side effects applied, and the log names the class, graph and node.
+When a class registers, a validator checks every graph against what it can actually call <Source symbol="FVisualScriptClassValidator" />. A **blocking** issue is one that would abort the graph part-way: a call to a function that does not exist, an argument-count mismatch, a link past the end of the node table, a macro that survived expansion. A blocked graph does not start at all, instead of running until the broken node with half its side effects applied, and the log names the class, graph and node.
 
 Blocking is per graph: a class with one broken event still runs its sound ones, and a blocked function is refused at the call site. Everything else is advisory: an undeclared variable read, an unknown dispatcher, a class reference or call whose owning class is not loaded yet (a plugin or game module may bring it later). A child inherits a block on a parent graph unless it overrides that graph. A hot reload that fixes the graph unblocks it.
 
 ## Class defaults
 
-Each variable's default is the class default. An instance keeps a copy of the defaults it was seeded with, and that copy decides what happens when the class changes <Source path="Engine/Source/Runtime/Game/Private/LoomRuntime.cpp" />:
+Each variable's default is the class default. An instance keeps a copy of the defaults it was seeded with, and that copy decides what happens when the class changes <Source path="Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp" />:
 
 <Steps>
 <Step title="You change a default and compile">
@@ -97,11 +97,11 @@ A value that differs is authored instance state. It survives the reload.
 
 ### Per-instance overrides in a level
 
-A placed instance can override variables marked **Instance Editable** in the level's Details panel. Only variables that differ from the class default are written to the scene, under `LoomVars` on the actor. Component slot overrides are written under `LoomSlotOverrides` as `<slot>.<property>`, and are read back before construction runs, so the class default cannot overwrite them <Source path="Engine/Source/Runtime/Game/Private/Game/ActorSerializer.cpp" />. Reset a row to its default and the delta disappears from the scene.
+A placed instance can override variables marked **Instance Editable** in the level's Details panel. Only variables that differ from the class default are written to the scene, under `VisualScriptVars` on the actor. Component slot overrides are written under `VisualScriptSlotOverrides` as `<slot>.<property>`, and are read back before construction runs, so the class default cannot overwrite them <Source path="Engine/Source/Runtime/Game/Private/Game/ActorSerializer.cpp" />. Reset a row to its default and the delta disappears from the scene.
 
 ## Component slots
 
-A component slot says "this actor carries component X with these defaults" <Source symbol="LoomComponentSlot" />. Slots are applied at `OnConstruct`, so every instance spawns with them attached.
+A component slot says "this actor carries component X with these defaults" <Source symbol="VisualScriptComponentSlot" />. Slots are applied at `OnConstruct`, so every instance spawns with them attached.
 
 Each slot has:
 
@@ -119,7 +119,7 @@ A slot of type `Trigger` gives the actor a live trigger component and keeps it t
 <Steps>
 <Step title="Add a component">
 
-In the Visual Scripting editor, click **+** in the **My Loom** header and pick a component, or use the **Components** panel once the class has one. A class with component slots opens in the class layout, with the **Components** panel and a **Viewport** tab that draws the slots <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp" />.
+In the Visual Scripting editor, click **+** in the **My Visual Script** header and pick a component, or use the **Components** panel once the class has one. A class with component slots opens in the class layout, with the **Components** panel and a **Viewport** tab that draws the slots <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp" />.
 
 </Step>
 <Step title="Set its defaults">
@@ -134,9 +134,9 @@ Save. The editor writes the class and re-registers it, so placed instances pick 
 </Step>
 </Steps>
 
-The standalone **Actor Editor** also edits a `.loom` class's slots, their attach hierarchy and property defaults. Open it with **Open With > Actor Editor** in the Content Browser <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ActorEditorPanel.cpp" />.
+The standalone **Actor Editor** also edits a `.vscript` class's slots, their attach hierarchy and property defaults. Open it with **Open With > Actor Editor** in the Content Browser <Source path="Engine/Source/Editor/MowoEditor/Private/AssetEditors/ActorEditorPanel.cpp" />.
 
-<Screenshot id="loom-actor-editor-slots" alt="Visual Scripting editor in the class layout on BP_DoorTrigger: the Components panel shows the actor root with a Trigger slot selected, Details on the right shows its shape set to Sphere and radius set to 3, and the Viewport tab shows the trigger's sphere" caption="Component slots in the class layout." />
+<Screenshot id="visual-script-actor-editor-slots" alt="Visual Scripting editor in the class layout on BP_DoorTrigger: the Components panel shows the actor root with a Trigger slot selected, Details on the right shows its shape set to Sphere and radius set to 3, and the Viewport tab shows the trigger's sphere" caption="Component slots in the class layout." />
 
 ## Interfaces
 
@@ -145,4 +145,4 @@ A class can list named interfaces it implements, in **Class settings**. **Implem
 ## Next
 
 - [Calling C++](/docs/visual-scripting/calling-cpp/): reach native code from a visual class and back.
-- [The .loom file format](/docs/visual-scripting/loom-file-format/): how all of this is stored.
+- [The .vscript file format](/docs/visual-scripting/visual-script-file-format/): how all of this is stored.

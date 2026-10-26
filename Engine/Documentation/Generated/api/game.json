@@ -384,14 +384,14 @@
 							"kind": "field",
 							"name": "canEverTick",
 							"signature": "bool canEverTick = true",
-							"doc": "UE's bCanEverTick: actors that opt out never enter the tick\nschedule at all — the dominant case for placed scenery. Defaults ON\nfor compatibility; subclasses (and the Loom bind, which knows whether\nany Tick graph or latent node exists in the chain) flip it off.",
+							"doc": "UE's bCanEverTick: actors that opt out never enter the tick\nschedule at all — the dominant case for placed scenery. Defaults ON\nfor compatibility; subclasses (and the Visual Script bind, which knows whether\nany Tick graph or latent node exists in the chain) flip it off.",
 							"line": 90
 						},
 						{
 							"kind": "field",
 							"name": "tickOnAnyThread",
 							"signature": "bool tickOnAnyThread = false",
-							"doc": "UE's bRunOnAnyThread: the world may run this actor's tick (its\ntickInterval pacing, the virtual Tick and the components it ticks) on a\ntask-graph worker, in parallel with the group's other such actors once\ntheir prerequisites have ticked. Off by default, and only for an actor\nwhose tick touches nothing but its own state — no spawning or\ndestroying, no structural ECS work, no Loom, no other actor's fields.\nComponents with a tickGroupOverride still tick on the game thread.",
+							"doc": "UE's bRunOnAnyThread: the world may run this actor's tick (its\ntickInterval pacing, the virtual Tick and the components it ticks) on a\ntask-graph worker, in parallel with the group's other such actors once\ntheir prerequisites have ticked. Off by default, and only for an actor\nwhose tick touches nothing but its own state — no spawning or\ndestroying, no structural ECS work, no Visual Scripting, no other actor's fields.\nComponents with a tickGroupOverride still tick on the game thread.",
 							"line": 99
 						},
 						{
@@ -1712,682 +1712,6 @@
 			"free": []
 		},
 		{
-			"path": "Engine/Source/Runtime/Game/Public/Game/ALoomActor.h",
-			"include": "Game/ALoomActor.h",
-			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
-			"types": [
-				{
-					"kind": "class",
-					"name": "ALoomActor",
-					"namespace": "Mowo",
-					"bases": "public AActor, public IDamageable, public ILoomHost",
-					"reflected": true,
-					"line": 34,
-					"members": [
-						{
-							"kind": "method",
-							"name": "ALoomActor",
-							"signature": "ALoomActor() : m_loom(this, \"ALoomActor\", true)",
-							"line": 37
-						},
-						{
-							"kind": "method",
-							"name": "GetLoomRuntime",
-							"signature": "FLoomRuntime& GetLoomRuntime() override",
-							"line": 42
-						},
-						{
-							"kind": "field",
-							"name": "score",
-							"signature": "int score = 0",
-							"doc": "State a Loom graph can read/drive (reflected)",
-							"line": 47
-						},
-						{
-							"kind": "field",
-							"name": "tickCount",
-							"signature": "int tickCount = 0",
-							"line": 49
-						},
-						{
-							"kind": "field",
-							"name": "stamp",
-							"signature": "uint64_t stamp = 0",
-							"line": 51
-						},
-						{
-							"kind": "method",
-							"name": "AddScore",
-							"signature": "void AddScore(int n)",
-							"line": 54
-						},
-						{
-							"kind": "method",
-							"name": "GetScore",
-							"signature": "int GetScore() const",
-							"line": 58
-						},
-						{
-							"kind": "method",
-							"name": "RecordTick",
-							"signature": "void RecordTick()",
-							"line": 62
-						},
-						{
-							"kind": "method",
-							"name": "GetTickCount",
-							"signature": "int GetTickCount() const",
-							"line": 66
-						},
-						{
-							"kind": "method",
-							"name": "GetScorePair",
-							"signature": "Vec2 GetScorePair() const",
-							"line": 70
-						},
-						{
-							"kind": "method",
-							"name": "ServerAddScore",
-							"signature": "void ServerAddScore(int32_t n)",
-							"doc": "RPC-annotated surface. A Loom graph calling these gets real routing:\nthe VM ships a Server call to the authority, a Client/Multicast call to\nits client(s), through FNetSession — never the LG6 execute-locally trap.\nConcrete bodies double as the routing fixtures the self-tests pin.",
-							"line": 79
-						},
-						{
-							"kind": "method",
-							"name": "ClientSetScore",
-							"signature": "void ClientSetScore(int32_t value)",
-							"line": 83
-						},
-						{
-							"kind": "method",
-							"name": "MulticastSetStamp",
-							"signature": "void MulticastSetStamp(uint64_t value)",
-							"line": 87
-						},
-						{
-							"kind": "method",
-							"name": "MulticastLoomVars",
-							"signature": "void MulticastLoomVars(const std::string& blob)",
-							"doc": "Loom variable replication (the receive half). The authority packs every\nreplicated Loom variable that changed into this blob and multicasts it;\nriding an RPC-flagged MFUNCTION is what gives the update the authority\nrule for free — FLoomRpcCodec refuses a Multicast that did not arrive\nfrom the server, so a client cannot push variable state at its peers.\nA variable whose value actually changed and that declares a RepNotify\nruns that function afterwards, on the receiver only.",
-							"line": 99
-						},
-						{
-							"kind": "method",
-							"name": "InstallLoomActorFactory",
-							"signature": "static void InstallLoomActorFactory()",
-							"static": true,
-							"doc": "Loom binding\nAdopt a synthetic class + its event graphs (called by the spawn path\nbefore BeginPlay). After this GetClass() reports `synthetic`.\nInstalls every backing class's factory into LoomClassRegistry, keyed by\nthe native base it stands in for, plus the runtime's hooks. Idempotent.",
-							"line": 109
-						},
-						{
-							"kind": "method",
-							"name": "BindLoomClass",
-							"signature": "void BindLoomClass(MClass* synthetic, LoomClass* def)",
-							"line": 111
-						},
-						{
-							"kind": "method",
-							"name": "TryBind",
-							"signature": "static void TryBind(AActor* actor, MClass* cls)",
-							"static": true,
-							"doc": "Spawn-path helper: bind iff `actor` is Loom-backed (any backing class)\nand `cls` is a Loom synthetic class (cls->userData set). A no-op for\nnative actors/classes.",
-							"line": 118
-						},
-						{
-							"kind": "method",
-							"name": "IsLoomBound",
-							"signature": "bool IsLoomBound() const",
-							"line": 120
-						},
-						{
-							"kind": "method",
-							"name": "GetClass",
-							"signature": "MClass* GetClass() const override",
-							"doc": "Report the synthetic Loom class when bound, else the native MClass.",
-							"line": 125
-						},
-						{
-							"kind": "method",
-							"name": "OnConstruct",
-							"signature": "void OnConstruct() override",
-							"line": 127
-						},
-						{
-							"kind": "method",
-							"name": "BeginPlay",
-							"signature": "void BeginPlay() override",
-							"line": 128
-						},
-						{
-							"kind": "method",
-							"name": "Tick",
-							"signature": "void Tick(float deltaSeconds) override",
-							"line": 129
-						},
-						{
-							"kind": "method",
-							"name": "EndPlay",
-							"signature": "void EndPlay() override",
-							"line": 130
-						},
-						{
-							"kind": "method",
-							"name": "Destroyed",
-							"signature": "void Destroyed() override",
-							"doc": "Self-events, the Blueprint set a graph can implement by naming an event\ngraph after them. Each one is looked up in the class chain and skipped\nwhen the class has no graph of that name:\n\"Destroyed\"            an explicit MWorld::Destroy, before EndPlay\n\"AnyDamage\"            TakeDamage; DamageAmount / DamageInstigator set\n\"OnHit\"                a physics contact begins on the backing entity or\na placed slot; PinPayload = the other actor,\nHitLocation / HitNormal / HitImpulse set\n\"InputAction.<Name>\"   the named input action Started this frame\n\"InputAction.<Name>.Released\"  ... Completed\n\"InputAction.<Name>.Held\"      ... Triggered (every firing frame)\n\"OnTriggerEnter\" / \"OnTriggerExit\"  a Trigger slot's overlaps (existing)\nInput graphs are polled from Tick against the process-wide action system,\nlike Blueprint's Auto Receive Input: no possession needed, and a later\npossession cannot wipe them the way a MPlayerInput binding would be.",
-							"line": 147
-						},
-						{
-							"kind": "method",
-							"name": "TakeDamage",
-							"signature": "float TakeDamage(float amount, AActor* instigator) override",
-							"line": 148
-						},
-						{
-							"kind": "method",
-							"name": "IsDead",
-							"signature": "bool IsDead() const override",
-							"doc": "A Loom class opts into death by declaring a Bool variable \"IsDead\";\nwithout one the actor is never dead.",
-							"line": 151
-						},
-						{
-							"kind": "method",
-							"name": "NotifyHit",
-							"signature": "void NotifyHit(AActor* other, const Vec3& location, const Vec3& normal, float impulse)",
-							"line": 152
-						},
-						{
-							"kind": "method",
-							"name": "CallLoomFunction",
-							"signature": "bool CallLoomFunction(const std::string& functionName, const std::vector<LoomValue>& args, LoomValue* ret)",
-							"doc": "Run one of this class's Loom functions in this actor's own context —\nwhat another actor's Call On Target lands on when the name is a Loom\nfunction rather than a reflected method. `ret` takes the return value.",
-							"line": 159
-						},
-						{
-							"kind": "method",
-							"name": "AdvanceLatents",
-							"signature": "void AdvanceLatents(float dt)",
-							"doc": "Advance any pending latent (Delay) graph runs by `dt` seconds, resuming\nthe ones whose timer elapses. Called from Tick; exposed for tests.",
-							"line": 165
-						},
-						{
-							"kind": "method",
-							"name": "HasPendingLatents",
-							"signature": "bool HasPendingLatents() const",
-							"line": 168
-						},
-						{
-							"kind": "method",
-							"name": "ReceivePin",
-							"signature": "void ReceivePin(const std::string& pin, const LoomValue& payload)",
-							"doc": "Input-pin entry: stores the payload in the \"PinPayload\" variable\nand runs `pin` as an event graph. Called by MWorld's wire routing.",
-							"line": 174
-						},
-						{
-							"kind": "method",
-							"name": "FindVar",
-							"signature": "const LoomValue* FindVar(const std::string& name) const",
-							"doc": "Read a per-instance Loom variable (inspector / tests). Nullptr when\nthe name isn't declared anywhere in the class chain.",
-							"line": 180
-						},
-						{
-							"kind": "method",
-							"name": "SetVar",
-							"signature": "void SetVar(const std::string& name, const LoomValue& value)",
-							"doc": "Set a per-instance Loom variable. The scene loader applies serialized\noverrides through here after BindLoomClass seeded the class defaults.",
-							"line": 186
-						},
-						{
-							"kind": "method",
-							"name": "FindVarType",
-							"signature": "bool FindVarType(const std::string& name, FMValueType& outType) const",
-							"doc": "The declared type of a variable anywhere in the class chain — false when\nthe name isn't a declared class variable. The loader types an override\nvalue with it.",
-							"line": 193
-						},
-						{
-							"kind": "method",
-							"name": "CollectVarOverrides",
-							"signature": "void CollectVarOverrides(std::vector<std::pair<std::string, LoomValue>>& out) const",
-							"doc": "Every variable whose current value differs from the class-declared\ndefault: the Loom analog of a CDO delta. Runtime-only keys (PinPayload)\nand anything not declared in the class chain are skipped, so only\nauthored variables round-trip through the scene.",
-							"line": 201
-						},
-						{
-							"kind": "method",
-							"name": "IsAuthoredOverride",
-							"signature": "static bool IsAuthoredOverride(const LoomValue& current, const LoomValue* seeded)",
-							"static": true,
-							"doc": "The CDO-propagation rule, as one decision: is `current` authored\ninstance state, or is it still the class default `seeded` handed this\ninstance? Only the first survives a class-default edit — the second has\nto follow the new default, which is what makes raising a default in the\nActor Editor reach every placed instance that never touched the field.\n`seeded` is null when the class did not declare the variable at bind\ntime, and a value nobody ever seeded is authored by definition.",
-							"line": 212
-						},
-						{
-							"kind": "method",
-							"name": "PushReplicatedVars",
-							"signature": "bool PushReplicatedVars(bool forceFull = false)",
-							"doc": "Ship every replicated variable whose value differs from what this actor\nlast got onto the wire. Authority-only — a remote instance returns false\nwithout touching the net layer. `forceFull` re-sends the whole set (a\npeer that just joined has none of it). Returns true when an update\nactually left. Public so a headless test can drive one update without a\nframe loop.",
-							"line": 222
-						},
-						{
-							"kind": "method",
-							"name": "SetComponentSlotOverride",
-							"signature": "void SetComponentSlotOverride(const std::string& slotName, const std::string& propertyName, const LoomValue& value)",
-							"doc": "Per-instance component-slot overrides — the placed-actor half of LG10.\nA key is \"<slot>.<property>\"; the value replaces the class default when\nApplyComponentSlots runs. Set before OnConstruct (the loader's job) or\ncall OnConstruct again after setting.",
-							"line": 230
-						},
-						{
-							"kind": "method",
-							"name": "CollectComponentSlotOverrides",
-							"signature": "void CollectComponentSlotOverrides(std::vector<std::pair<std::string, LoomValue>>& out) const",
-							"line": 233
-						},
-						{
-							"kind": "method",
-							"name": "FindComponentSlotOverride",
-							"signature": "const LoomValue* FindComponentSlotOverride(const std::string& slotName, const std::string& propertyName) const",
-							"line": 236
-						},
-						{
-							"kind": "method",
-							"name": "FindSlotEntity",
-							"signature": "EntityID FindSlotEntity(const std::string& slotName) const",
-							"doc": "Backing entity of a PLACED component slot (one that declared a transform\nor an attach parent), or INVALID_ENTITY. Tests and tooling resolve the\nchild entity a slot produced through this.",
-							"line": 243
-						}
-					]
-				}
-			],
-			"free": []
-		},
-		{
-			"path": "Engine/Source/Runtime/Game/Public/Game/ALoomCharacter.h",
-			"include": "Game/ALoomCharacter.h",
-			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
-			"types": [
-				{
-					"kind": "class",
-					"name": "ALoomCharacter",
-					"namespace": "Mowo",
-					"bases": "public ACharacter, public ILoomHost",
-					"reflected": true,
-					"line": 20,
-					"members": [
-						{
-							"kind": "method",
-							"name": "ALoomCharacter",
-							"signature": "ALoomCharacter() : m_loom(this, \"ALoomCharacter\", false)",
-							"line": 23
-						},
-						{
-							"kind": "method",
-							"name": "GetLoomRuntime",
-							"signature": "FLoomRuntime& GetLoomRuntime() override",
-							"line": 28
-						},
-						{
-							"kind": "method",
-							"name": "MulticastLoomVars",
-							"signature": "void MulticastLoomVars(const std::string& blob)",
-							"doc": "The receive half of Loom variable replication, as on ALoomActor.",
-							"line": 33
-						},
-						{
-							"kind": "method",
-							"name": "GetClass",
-							"signature": "MClass* GetClass() const override",
-							"line": 38
-						},
-						{
-							"kind": "method",
-							"name": "OnConstruct",
-							"signature": "void OnConstruct() override",
-							"line": 42
-						},
-						{
-							"kind": "method",
-							"name": "BeginPlay",
-							"signature": "void BeginPlay() override",
-							"line": 47
-						},
-						{
-							"kind": "method",
-							"name": "Tick",
-							"signature": "void Tick(float deltaSeconds) override",
-							"line": 52
-						},
-						{
-							"kind": "method",
-							"name": "EndPlay",
-							"signature": "void EndPlay() override",
-							"line": 57
-						},
-						{
-							"kind": "method",
-							"name": "Destroyed",
-							"signature": "void Destroyed() override",
-							"line": 62
-						},
-						{
-							"kind": "method",
-							"name": "TakeDamage",
-							"signature": "float TakeDamage(float amount, AActor* instigator) override",
-							"doc": "The graph hears the hit first, then the character's own health applies\nit; a class declaring a Bool \"IsDead\" can also call itself dead.",
-							"line": 69
-						},
-						{
-							"kind": "method",
-							"name": "IsDead",
-							"signature": "bool IsDead() const override",
-							"line": 75
-						}
-					]
-				}
-			],
-			"free": []
-		},
-		{
-			"path": "Engine/Source/Runtime/Game/Public/Game/ALoomGameMode.h",
-			"include": "Game/ALoomGameMode.h",
-			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
-			"types": [
-				{
-					"kind": "class",
-					"name": "ALoomGameMode",
-					"namespace": "Mowo",
-					"bases": "public AGameMode, public ILoomHost",
-					"reflected": true,
-					"line": 20,
-					"members": [
-						{
-							"kind": "method",
-							"name": "ALoomGameMode",
-							"signature": "ALoomGameMode() : m_loom(this, \"ALoomGameMode\", false)",
-							"line": 23
-						},
-						{
-							"kind": "method",
-							"name": "GetLoomRuntime",
-							"signature": "FLoomRuntime& GetLoomRuntime() override",
-							"line": 28
-						},
-						{
-							"kind": "method",
-							"name": "MulticastLoomVars",
-							"signature": "void MulticastLoomVars(const std::string& blob)",
-							"doc": "The receive half of Loom variable replication, as on ALoomActor.",
-							"line": 33
-						},
-						{
-							"kind": "method",
-							"name": "GetClass",
-							"signature": "MClass* GetClass() const override",
-							"line": 38
-						},
-						{
-							"kind": "method",
-							"name": "OnConstruct",
-							"signature": "void OnConstruct() override",
-							"line": 42
-						},
-						{
-							"kind": "method",
-							"name": "BeginPlay",
-							"signature": "void BeginPlay() override",
-							"line": 47
-						},
-						{
-							"kind": "method",
-							"name": "Tick",
-							"signature": "void Tick(float deltaSeconds) override",
-							"line": 52
-						},
-						{
-							"kind": "method",
-							"name": "EndPlay",
-							"signature": "void EndPlay() override",
-							"line": 57
-						},
-						{
-							"kind": "method",
-							"name": "Destroyed",
-							"signature": "void Destroyed() override",
-							"line": 62
-						}
-					]
-				}
-			],
-			"free": []
-		},
-		{
-			"path": "Engine/Source/Runtime/Game/Public/Game/ALoomGameState.h",
-			"include": "Game/ALoomGameState.h",
-			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
-			"types": [
-				{
-					"kind": "class",
-					"name": "ALoomGameState",
-					"namespace": "Mowo",
-					"bases": "public AGameState, public ILoomHost",
-					"reflected": true,
-					"line": 20,
-					"members": [
-						{
-							"kind": "method",
-							"name": "ALoomGameState",
-							"signature": "ALoomGameState() : m_loom(this, \"ALoomGameState\", false)",
-							"line": 23
-						},
-						{
-							"kind": "method",
-							"name": "GetLoomRuntime",
-							"signature": "FLoomRuntime& GetLoomRuntime() override",
-							"line": 28
-						},
-						{
-							"kind": "method",
-							"name": "MulticastLoomVars",
-							"signature": "void MulticastLoomVars(const std::string& blob)",
-							"doc": "The receive half of Loom variable replication, as on ALoomActor.",
-							"line": 33
-						},
-						{
-							"kind": "method",
-							"name": "GetClass",
-							"signature": "MClass* GetClass() const override",
-							"line": 38
-						},
-						{
-							"kind": "method",
-							"name": "OnConstruct",
-							"signature": "void OnConstruct() override",
-							"line": 42
-						},
-						{
-							"kind": "method",
-							"name": "BeginPlay",
-							"signature": "void BeginPlay() override",
-							"line": 47
-						},
-						{
-							"kind": "method",
-							"name": "Tick",
-							"signature": "void Tick(float deltaSeconds) override",
-							"line": 52
-						},
-						{
-							"kind": "method",
-							"name": "EndPlay",
-							"signature": "void EndPlay() override",
-							"line": 57
-						},
-						{
-							"kind": "method",
-							"name": "Destroyed",
-							"signature": "void Destroyed() override",
-							"line": 62
-						}
-					]
-				}
-			],
-			"free": []
-		},
-		{
-			"path": "Engine/Source/Runtime/Game/Public/Game/ALoomPawn.h",
-			"include": "Game/ALoomPawn.h",
-			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
-			"types": [
-				{
-					"kind": "class",
-					"name": "ALoomPawn",
-					"namespace": "Mowo",
-					"bases": "public APawn, public IDamageable, public ILoomHost",
-					"reflected": true,
-					"line": 20,
-					"members": [
-						{
-							"kind": "method",
-							"name": "ALoomPawn",
-							"signature": "ALoomPawn() : m_loom(this, \"ALoomPawn\", false)",
-							"line": 23
-						},
-						{
-							"kind": "method",
-							"name": "GetLoomRuntime",
-							"signature": "FLoomRuntime& GetLoomRuntime() override",
-							"line": 28
-						},
-						{
-							"kind": "method",
-							"name": "MulticastLoomVars",
-							"signature": "void MulticastLoomVars(const std::string& blob)",
-							"doc": "The receive half of Loom variable replication, as on ALoomActor.",
-							"line": 33
-						},
-						{
-							"kind": "method",
-							"name": "GetClass",
-							"signature": "MClass* GetClass() const override",
-							"line": 38
-						},
-						{
-							"kind": "method",
-							"name": "OnConstruct",
-							"signature": "void OnConstruct() override",
-							"line": 42
-						},
-						{
-							"kind": "method",
-							"name": "BeginPlay",
-							"signature": "void BeginPlay() override",
-							"line": 47
-						},
-						{
-							"kind": "method",
-							"name": "Tick",
-							"signature": "void Tick(float deltaSeconds) override",
-							"line": 52
-						},
-						{
-							"kind": "method",
-							"name": "EndPlay",
-							"signature": "void EndPlay() override",
-							"line": 57
-						},
-						{
-							"kind": "method",
-							"name": "Destroyed",
-							"signature": "void Destroyed() override",
-							"line": 62
-						},
-						{
-							"kind": "method",
-							"name": "TakeDamage",
-							"signature": "float TakeDamage(float amount, AActor* instigator) override",
-							"line": 67
-						},
-						{
-							"kind": "method",
-							"name": "IsDead",
-							"signature": "bool IsDead() const override",
-							"line": 73
-						}
-					]
-				}
-			],
-			"free": []
-		},
-		{
-			"path": "Engine/Source/Runtime/Game/Public/Game/ALoomPlayerController.h",
-			"include": "Game/ALoomPlayerController.h",
-			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
-			"types": [
-				{
-					"kind": "class",
-					"name": "ALoomPlayerController",
-					"namespace": "Mowo",
-					"bases": "public APlayerController, public ILoomHost",
-					"reflected": true,
-					"line": 20,
-					"members": [
-						{
-							"kind": "method",
-							"name": "ALoomPlayerController",
-							"signature": "ALoomPlayerController() : m_loom(this, \"ALoomPlayerController\", false)",
-							"line": 23
-						},
-						{
-							"kind": "method",
-							"name": "GetLoomRuntime",
-							"signature": "FLoomRuntime& GetLoomRuntime() override",
-							"line": 28
-						},
-						{
-							"kind": "method",
-							"name": "MulticastLoomVars",
-							"signature": "void MulticastLoomVars(const std::string& blob)",
-							"doc": "The receive half of Loom variable replication, as on ALoomActor.",
-							"line": 33
-						},
-						{
-							"kind": "method",
-							"name": "GetClass",
-							"signature": "MClass* GetClass() const override",
-							"line": 38
-						},
-						{
-							"kind": "method",
-							"name": "OnConstruct",
-							"signature": "void OnConstruct() override",
-							"line": 42
-						},
-						{
-							"kind": "method",
-							"name": "BeginPlay",
-							"signature": "void BeginPlay() override",
-							"line": 47
-						},
-						{
-							"kind": "method",
-							"name": "Tick",
-							"signature": "void Tick(float deltaSeconds) override",
-							"line": 52
-						},
-						{
-							"kind": "method",
-							"name": "EndPlay",
-							"signature": "void EndPlay() override",
-							"line": 57
-						},
-						{
-							"kind": "method",
-							"name": "Destroyed",
-							"signature": "void Destroyed() override",
-							"line": 62
-						}
-					]
-				}
-			],
-			"free": []
-		},
-		{
 			"path": "Engine/Source/Runtime/Game/Public/Game/AParticleEmitterActor.h",
 			"include": "Game/AParticleEmitterActor.h",
 			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
@@ -3402,6 +2726,682 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h",
+			"include": "Game/AVisualScriptActor.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "AVisualScriptActor",
+					"namespace": "Mowo",
+					"bases": "public AActor, public IDamageable, public IVisualScriptHost",
+					"reflected": true,
+					"line": 34,
+					"members": [
+						{
+							"kind": "method",
+							"name": "AVisualScriptActor",
+							"signature": "AVisualScriptActor() : m_visualScript(this, \"AVisualScriptActor\", true)",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "GetVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime& GetVisualScriptRuntime() override",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "score",
+							"signature": "int score = 0",
+							"doc": "State a Visual Script graph can read/drive (reflected)",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "tickCount",
+							"signature": "int tickCount = 0",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "stamp",
+							"signature": "uint64_t stamp = 0",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "AddScore",
+							"signature": "void AddScore(int n)",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "GetScore",
+							"signature": "int GetScore() const",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "RecordTick",
+							"signature": "void RecordTick()",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "GetTickCount",
+							"signature": "int GetTickCount() const",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "GetScorePair",
+							"signature": "Vec2 GetScorePair() const",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "ServerAddScore",
+							"signature": "void ServerAddScore(int32_t n)",
+							"doc": "RPC-annotated surface. A Visual Script graph calling these gets real routing:\nthe VM ships a Server call to the authority, a Client/Multicast call to\nits client(s), through FNetSession — never the LG6 execute-locally trap.\nConcrete bodies double as the routing fixtures the self-tests pin.",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "ClientSetScore",
+							"signature": "void ClientSetScore(int32_t value)",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "MulticastSetStamp",
+							"signature": "void MulticastSetStamp(uint64_t value)",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "MulticastVisualScriptVars",
+							"signature": "void MulticastVisualScriptVars(const std::string& blob)",
+							"doc": "Visual Script variable replication (the receive half). The authority packs every\nreplicated Visual Script variable that changed into this blob and multicasts it;\nriding an RPC-flagged MFUNCTION is what gives the update the authority\nrule for free — FVisualScriptRpcCodec refuses a Multicast that did not arrive\nfrom the server, so a client cannot push variable state at its peers.\nA variable whose value actually changed and that declares a RepNotify\nruns that function afterwards, on the receiver only.",
+							"line": 99
+						},
+						{
+							"kind": "method",
+							"name": "InstallVisualScriptActorFactory",
+							"signature": "static void InstallVisualScriptActorFactory()",
+							"static": true,
+							"doc": "Visual Script binding\nAdopt a synthetic class + its event graphs (called by the spawn path\nbefore BeginPlay). After this GetClass() reports `synthetic`.\nInstalls every backing class's factory into VisualScriptClassRegistry, keyed by\nthe native base it stands in for, plus the runtime's hooks. Idempotent.",
+							"line": 109
+						},
+						{
+							"kind": "method",
+							"name": "BindVisualScriptClass",
+							"signature": "void BindVisualScriptClass(MClass* synthetic, VisualScriptClass* def)",
+							"line": 111
+						},
+						{
+							"kind": "method",
+							"name": "TryBind",
+							"signature": "static void TryBind(AActor* actor, MClass* cls)",
+							"static": true,
+							"doc": "Spawn-path helper: bind iff `actor` is visual-script-backed (any backing class)\nand `cls` is a Visual Script synthetic class (cls->userData set). A no-op for\nnative actors/classes.",
+							"line": 118
+						},
+						{
+							"kind": "method",
+							"name": "IsVisualScriptBound",
+							"signature": "bool IsVisualScriptBound() const",
+							"line": 120
+						},
+						{
+							"kind": "method",
+							"name": "GetClass",
+							"signature": "MClass* GetClass() const override",
+							"doc": "Report the synthetic Visual Script class when bound, else the native MClass.",
+							"line": 125
+						},
+						{
+							"kind": "method",
+							"name": "OnConstruct",
+							"signature": "void OnConstruct() override",
+							"line": 127
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay() override",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds) override",
+							"line": 129
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay() override",
+							"line": 130
+						},
+						{
+							"kind": "method",
+							"name": "Destroyed",
+							"signature": "void Destroyed() override",
+							"doc": "Self-events, the Blueprint set a graph can implement by naming an event\ngraph after them. Each one is looked up in the class chain and skipped\nwhen the class has no graph of that name:\n\"Destroyed\"            an explicit MWorld::Destroy, before EndPlay\n\"AnyDamage\"            TakeDamage; DamageAmount / DamageInstigator set\n\"OnHit\"                a physics contact begins on the backing entity or\na placed slot; PinPayload = the other actor,\nHitLocation / HitNormal / HitImpulse set\n\"InputAction.<Name>\"   the named input action Started this frame\n\"InputAction.<Name>.Released\"  ... Completed\n\"InputAction.<Name>.Held\"      ... Triggered (every firing frame)\n\"OnTriggerEnter\" / \"OnTriggerExit\"  a Trigger slot's overlaps (existing)\nInput graphs are polled from Tick against the process-wide action system,\nlike Blueprint's Auto Receive Input: no possession needed, and a later\npossession cannot wipe them the way a MPlayerInput binding would be.",
+							"line": 147
+						},
+						{
+							"kind": "method",
+							"name": "TakeDamage",
+							"signature": "float TakeDamage(float amount, AActor* instigator) override",
+							"line": 148
+						},
+						{
+							"kind": "method",
+							"name": "IsDead",
+							"signature": "bool IsDead() const override",
+							"doc": "A Visual Script class opts into death by declaring a Bool variable \"IsDead\";\nwithout one the actor is never dead.",
+							"line": 151
+						},
+						{
+							"kind": "method",
+							"name": "NotifyHit",
+							"signature": "void NotifyHit(AActor* other, const Vec3& location, const Vec3& normal, float impulse)",
+							"line": 152
+						},
+						{
+							"kind": "method",
+							"name": "CallVisualScriptFunction",
+							"signature": "bool CallVisualScriptFunction(const std::string& functionName, const std::vector<VisualScriptValue>& args, VisualScriptValue* ret)",
+							"doc": "Run one of this class's Visual Script functions in this actor's own context —\nwhat another actor's Call On Target lands on when the name is a Visual Script\nfunction rather than a reflected method. `ret` takes the return value.",
+							"line": 159
+						},
+						{
+							"kind": "method",
+							"name": "AdvanceLatents",
+							"signature": "void AdvanceLatents(float dt)",
+							"doc": "Advance any pending latent (Delay) graph runs by `dt` seconds, resuming\nthe ones whose timer elapses. Called from Tick; exposed for tests.",
+							"line": 165
+						},
+						{
+							"kind": "method",
+							"name": "HasPendingLatents",
+							"signature": "bool HasPendingLatents() const",
+							"line": 168
+						},
+						{
+							"kind": "method",
+							"name": "ReceivePin",
+							"signature": "void ReceivePin(const std::string& pin, const VisualScriptValue& payload)",
+							"doc": "Input-pin entry: stores the payload in the \"PinPayload\" variable\nand runs `pin` as an event graph. Called by MWorld's wire routing.",
+							"line": 174
+						},
+						{
+							"kind": "method",
+							"name": "FindVar",
+							"signature": "const VisualScriptValue* FindVar(const std::string& name) const",
+							"doc": "Read a per-instance Visual Script variable (inspector / tests). Nullptr when\nthe name isn't declared anywhere in the class chain.",
+							"line": 180
+						},
+						{
+							"kind": "method",
+							"name": "SetVar",
+							"signature": "void SetVar(const std::string& name, const VisualScriptValue& value)",
+							"doc": "Set a per-instance Visual Script variable. The scene loader applies serialized\noverrides through here after BindVisualScriptClass seeded the class defaults.",
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "FindVarType",
+							"signature": "bool FindVarType(const std::string& name, FMValueType& outType) const",
+							"doc": "The declared type of a variable anywhere in the class chain — false when\nthe name isn't a declared class variable. The loader types an override\nvalue with it.",
+							"line": 193
+						},
+						{
+							"kind": "method",
+							"name": "CollectVarOverrides",
+							"signature": "void CollectVarOverrides(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
+							"doc": "Every variable whose current value differs from the class-declared\ndefault: the Visual Script analog of a CDO delta. Runtime-only keys (PinPayload)\nand anything not declared in the class chain are skipped, so only\nauthored variables round-trip through the scene.",
+							"line": 201
+						},
+						{
+							"kind": "method",
+							"name": "IsAuthoredOverride",
+							"signature": "static bool IsAuthoredOverride(const VisualScriptValue& current, const VisualScriptValue* seeded)",
+							"static": true,
+							"doc": "The CDO-propagation rule, as one decision: is `current` authored\ninstance state, or is it still the class default `seeded` handed this\ninstance? Only the first survives a class-default edit — the second has\nto follow the new default, which is what makes raising a default in the\nActor Editor reach every placed instance that never touched the field.\n`seeded` is null when the class did not declare the variable at bind\ntime, and a value nobody ever seeded is authored by definition.",
+							"line": 212
+						},
+						{
+							"kind": "method",
+							"name": "PushReplicatedVars",
+							"signature": "bool PushReplicatedVars(bool forceFull = false)",
+							"doc": "Ship every replicated variable whose value differs from what this actor\nlast got onto the wire. Authority-only — a remote instance returns false\nwithout touching the net layer. `forceFull` re-sends the whole set (a\npeer that just joined has none of it). Returns true when an update\nactually left. Public so a headless test can drive one update without a\nframe loop.",
+							"line": 222
+						},
+						{
+							"kind": "method",
+							"name": "SetComponentSlotOverride",
+							"signature": "void SetComponentSlotOverride(const std::string& slotName, const std::string& propertyName, const VisualScriptValue& value)",
+							"doc": "Per-instance component-slot overrides — the placed-actor half of LG10.\nA key is \"<slot>.<property>\"; the value replaces the class default when\nApplyComponentSlots runs. Set before OnConstruct (the loader's job) or\ncall OnConstruct again after setting.",
+							"line": 230
+						},
+						{
+							"kind": "method",
+							"name": "CollectComponentSlotOverrides",
+							"signature": "void CollectComponentSlotOverrides(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
+							"line": 233
+						},
+						{
+							"kind": "method",
+							"name": "FindComponentSlotOverride",
+							"signature": "const VisualScriptValue* FindComponentSlotOverride(const std::string& slotName, const std::string& propertyName) const",
+							"line": 236
+						},
+						{
+							"kind": "method",
+							"name": "FindSlotEntity",
+							"signature": "EntityID FindSlotEntity(const std::string& slotName) const",
+							"doc": "Backing entity of a PLACED component slot (one that declared a transform\nor an attach parent), or INVALID_ENTITY. Tests and tooling resolve the\nchild entity a slot produced through this.",
+							"line": 243
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/AVisualScriptCharacter.h",
+			"include": "Game/AVisualScriptCharacter.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "AVisualScriptCharacter",
+					"namespace": "Mowo",
+					"bases": "public ACharacter, public IVisualScriptHost",
+					"reflected": true,
+					"line": 20,
+					"members": [
+						{
+							"kind": "method",
+							"name": "AVisualScriptCharacter",
+							"signature": "AVisualScriptCharacter() : m_visualScript(this, \"AVisualScriptCharacter\", false)",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "GetVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime& GetVisualScriptRuntime() override",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "MulticastVisualScriptVars",
+							"signature": "void MulticastVisualScriptVars(const std::string& blob)",
+							"doc": "The receive half of Visual Script variable replication, as on AVisualScriptActor.",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "GetClass",
+							"signature": "MClass* GetClass() const override",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "OnConstruct",
+							"signature": "void OnConstruct() override",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay() override",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds) override",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay() override",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Destroyed",
+							"signature": "void Destroyed() override",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "TakeDamage",
+							"signature": "float TakeDamage(float amount, AActor* instigator) override",
+							"doc": "The graph hears the hit first, then the character's own health applies\nit; a class declaring a Bool \"IsDead\" can also call itself dead.",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "IsDead",
+							"signature": "bool IsDead() const override",
+							"line": 75
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/AVisualScriptGameMode.h",
+			"include": "Game/AVisualScriptGameMode.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "AVisualScriptGameMode",
+					"namespace": "Mowo",
+					"bases": "public AGameMode, public IVisualScriptHost",
+					"reflected": true,
+					"line": 20,
+					"members": [
+						{
+							"kind": "method",
+							"name": "AVisualScriptGameMode",
+							"signature": "AVisualScriptGameMode() : m_visualScript(this, \"AVisualScriptGameMode\", false)",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "GetVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime& GetVisualScriptRuntime() override",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "MulticastVisualScriptVars",
+							"signature": "void MulticastVisualScriptVars(const std::string& blob)",
+							"doc": "The receive half of Visual Script variable replication, as on AVisualScriptActor.",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "GetClass",
+							"signature": "MClass* GetClass() const override",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "OnConstruct",
+							"signature": "void OnConstruct() override",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay() override",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds) override",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay() override",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Destroyed",
+							"signature": "void Destroyed() override",
+							"line": 62
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/AVisualScriptGameState.h",
+			"include": "Game/AVisualScriptGameState.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "AVisualScriptGameState",
+					"namespace": "Mowo",
+					"bases": "public AGameState, public IVisualScriptHost",
+					"reflected": true,
+					"line": 20,
+					"members": [
+						{
+							"kind": "method",
+							"name": "AVisualScriptGameState",
+							"signature": "AVisualScriptGameState() : m_visualScript(this, \"AVisualScriptGameState\", false)",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "GetVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime& GetVisualScriptRuntime() override",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "MulticastVisualScriptVars",
+							"signature": "void MulticastVisualScriptVars(const std::string& blob)",
+							"doc": "The receive half of Visual Script variable replication, as on AVisualScriptActor.",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "GetClass",
+							"signature": "MClass* GetClass() const override",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "OnConstruct",
+							"signature": "void OnConstruct() override",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay() override",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds) override",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay() override",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Destroyed",
+							"signature": "void Destroyed() override",
+							"line": 62
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/AVisualScriptPawn.h",
+			"include": "Game/AVisualScriptPawn.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "AVisualScriptPawn",
+					"namespace": "Mowo",
+					"bases": "public APawn, public IDamageable, public IVisualScriptHost",
+					"reflected": true,
+					"line": 20,
+					"members": [
+						{
+							"kind": "method",
+							"name": "AVisualScriptPawn",
+							"signature": "AVisualScriptPawn() : m_visualScript(this, \"AVisualScriptPawn\", false)",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "GetVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime& GetVisualScriptRuntime() override",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "MulticastVisualScriptVars",
+							"signature": "void MulticastVisualScriptVars(const std::string& blob)",
+							"doc": "The receive half of Visual Script variable replication, as on AVisualScriptActor.",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "GetClass",
+							"signature": "MClass* GetClass() const override",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "OnConstruct",
+							"signature": "void OnConstruct() override",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay() override",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds) override",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay() override",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Destroyed",
+							"signature": "void Destroyed() override",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "TakeDamage",
+							"signature": "float TakeDamage(float amount, AActor* instigator) override",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "IsDead",
+							"signature": "bool IsDead() const override",
+							"line": 73
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/AVisualScriptPlayerController.h",
+			"include": "Game/AVisualScriptPlayerController.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "AVisualScriptPlayerController",
+					"namespace": "Mowo",
+					"bases": "public APlayerController, public IVisualScriptHost",
+					"reflected": true,
+					"line": 20,
+					"members": [
+						{
+							"kind": "method",
+							"name": "AVisualScriptPlayerController",
+							"signature": "AVisualScriptPlayerController() : m_visualScript(this, \"AVisualScriptPlayerController\", false)",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "GetVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime& GetVisualScriptRuntime() override",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "MulticastVisualScriptVars",
+							"signature": "void MulticastVisualScriptVars(const std::string& blob)",
+							"doc": "The receive half of Visual Script variable replication, as on AVisualScriptActor.",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "GetClass",
+							"signature": "MClass* GetClass() const override",
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "OnConstruct",
+							"signature": "void OnConstruct() override",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay() override",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds) override",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay() override",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Destroyed",
+							"signature": "void Destroyed() override",
+							"line": 62
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Game/Public/Game/AVolumeActor.h",
 			"include": "Game/AVolumeActor.h",
 			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
@@ -3640,7 +3640,7 @@
 							"name": "RemapActorReferences",
 							"signature": "static void RemapActorReferences(MDF::MdfNode& entityNode, const std::unordered_map<std::string, std::string>& uuidRemap)",
 							"static": true,
-							"doc": "The world-state journal's half: an `ActorState` child of `entityNode`\ncarrying the actor's and its named components' MPROPERTY(SaveGame)\nfields and, for a Loom actor, the value of every declared variable —\nfull values, not a delta, because the overlay lands on the authored\nlevel. Without it a placed actor's state (an opened door, a looted\nchest, any Loom variable) reverted on every sector reload and every\nsave. False, and nothing written, when there is nothing to keep.\nA pasted or duplicated set gets fresh entity uuids; its actor references\nstill named the originals, so a copied door pointed at the original's\nswitch instead of the copied one. Rewrites every \"actor:<uuid>\" and\n\"component:<uuid>/<name>\" under `entityNode`'s Actor node whose uuid is\na key of `uuidRemap` (old uuid string -> new); references outside the\nset keep naming what they named.",
+							"doc": "The world-state journal's half: an `ActorState` child of `entityNode`\ncarrying the actor's and its named components' MPROPERTY(SaveGame)\nfields and, for a Visual Script actor, the value of every declared variable —\nfull values, not a delta, because the overlay lands on the authored\nlevel. Without it a placed actor's state (an opened door, a looted\nchest, any Visual Script variable) reverted on every sector reload and every\nsave. False, and nothing written, when there is nothing to keep.\nA pasted or duplicated set gets fresh entity uuids; its actor references\nstill named the originals, so a copied door pointed at the original's\nswitch instead of the copied one. Rewrites every \"actor:<uuid>\" and\n\"component:<uuid>/<name>\" under `entityNode`'s Actor node whose uuid is\na key of `uuidRemap` (old uuid string -> new); references outside the\nset keep naming what they named.",
 							"line": 132
 						},
 						{
@@ -6899,55 +6899,73 @@
 					"namespace": "Mowo",
 					"reflected": true,
 					"doc": "Off-mesh connection — a manual traversal link between two points on\nthe nav mesh. Agents take it when its endpoints are on the planned\nroute; useful for jumps, teleports, ladders, drop-down ledges, doors\nthat aren't on the same polygon island.\n\nEndpoints are stored in world space (set them via the editor gizmo\nor from script: agent.SetDestination on the other side will route\nthrough the link automatically once it's part of the baked nav mesh).\n\nLifecycle: links are baked INTO the dtNavMesh — they're not runtime\ndynamic. Add the component, re-bake, and the connection appears in\npathfinding. To change a link, edit it and re-bake.",
-					"line": 26,
+					"line": 27,
 					"members": [
 						{
 							"kind": "field",
 							"name": "enabled",
 							"signature": "bool enabled = true",
-							"line": 27
+							"line": 28
 						},
 						{
 							"kind": "field",
 							"name": "endA",
 							"signature": "Vec3 endA = Vec3(0, 0, 0)",
-							"line": 31
+							"line": 32
 						},
 						{
 							"kind": "field",
 							"name": "endB",
 							"signature": "Vec3 endB = Vec3(1, 0, 0)",
-							"line": 35
+							"line": 36
 						},
 						{
 							"kind": "field",
 							"name": "radius",
 							"signature": "float radius = 0.5f",
-							"line": 39
+							"line": 40
 						},
 						{
 							"kind": "field",
 							"name": "bidirectional",
 							"signature": "bool bidirectional = true",
-							"line": 45
+							"line": 46
 						},
 						{
 							"kind": "field",
 							"name": "areaType",
 							"signature": "int32_t areaType = 0",
-							"line": 49
+							"line": 50
 						},
 						{
 							"kind": "field",
 							"name": "userFlag",
 							"signature": "int32_t userFlag = 0x01",
-							"line": 54
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "linkEnabled",
+							"signature": "bool linkEnabled = true",
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "smartLink",
+							"signature": "bool smartLink = false",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "traversalTag",
+							"signature": "std::string traversalTag",
+							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "NavMeshLinkComponent",
 							"signature": "NavMeshLinkComponent() = default",
-							"line": 59
+							"line": 72
 						}
 					]
 				}
@@ -7380,103 +7398,103 @@
 					"name": "ProjectileComponent",
 					"namespace": "Mowo",
 					"reflected": true,
-					"line": 16,
+					"line": 17,
 					"members": [
 						{
 							"kind": "field",
 							"name": "enabled",
 							"signature": "bool enabled = true",
-							"line": 17
+							"line": 18
 						},
 						{
 							"kind": "field",
 							"name": "velocity",
 							"signature": "Vec3 velocity = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 21
+							"line": 22
 						},
 						{
 							"kind": "field",
 							"name": "gravityScale",
 							"signature": "float gravityScale = 1.0f",
-							"line": 25
+							"line": 26
 						},
 						{
 							"kind": "field",
 							"name": "lifetime",
 							"signature": "float lifetime = 5.0f",
-							"line": 29
+							"line": 30
 						},
 						{
 							"kind": "field",
 							"name": "radius",
 							"signature": "float radius = 0.05f",
-							"line": 33
+							"line": 34
 						},
 						{
 							"kind": "field",
 							"name": "bouncesRemaining",
 							"signature": "int32_t bouncesRemaining = 0",
-							"line": 37
+							"line": 38
 						},
 						{
 							"kind": "field",
 							"name": "restitution",
 							"signature": "float restitution = 0.4f",
-							"line": 41
+							"line": 42
 						},
 						{
 							"kind": "field",
 							"name": "damage",
 							"signature": "float damage = 0.0f",
-							"line": 45
+							"line": 46
 						},
 						{
 							"kind": "field",
 							"name": "explodeOnImpact",
 							"signature": "bool explodeOnImpact = false",
-							"line": 49
+							"line": 50
 						},
 						{
 							"kind": "field",
 							"name": "explosionRadius",
 							"signature": "float explosionRadius = 0.0f",
-							"line": 53
+							"line": 54
 						},
 						{
 							"kind": "field",
 							"name": "explosionInnerRadius",
 							"signature": "float explosionInnerRadius = 0.0f",
-							"line": 57
+							"line": 58
 						},
 						{
 							"kind": "field",
 							"name": "explosionMinDamage",
 							"signature": "float explosionMinDamage = 0.0f",
-							"line": 61
+							"line": 62
 						},
 						{
 							"kind": "field",
 							"name": "damageTypeTag",
-							"signature": "std::string damageTypeTag = \"Damage.Physical.Bullet\"",
-							"line": 65
+							"signature": "FGameplayTag damageTypeTag = FGameplayTag::Get(\"Damage.Physical.Bullet\")",
+							"line": 66
 						},
 						{
 							"kind": "field",
 							"name": "impactTag",
 							"signature": "std::string impactTag",
-							"line": 69
+							"line": 70
 						},
 						{
 							"kind": "field",
 							"name": "age",
 							"signature": "float age = 0.0f",
-							"line": 73
+							"line": 74
 						},
 						{
 							"kind": "field",
 							"name": "instigator",
 							"signature": "EntityID instigator = INVALID_ENTITY",
-							"line": 74
+							"line": 75
 						}
 					]
 				}
@@ -7847,7 +7865,7 @@
 							"kind": "field",
 							"name": "captureEveryFrame",
 							"signature": "bool captureEveryFrame = true",
-							"doc": "Off = capture once on the first frame the component is seen, then only\nwhen captureRequested is raised (a Loom graph or C++ calling for a\nfresh frame). On = a full render every frame.",
+							"doc": "Off = capture once on the first frame the component is seen, then only\nwhen captureRequested is raised (a Visual Script graph or C++ calling for a\nfresh frame). On = a full render every frame.",
 							"line": 53
 						},
 						{
@@ -9722,13 +9740,13 @@
 			"free": []
 		},
 		{
-			"path": "Engine/Source/Runtime/Game/Public/Game/FLoomRuntimeLoader.h",
-			"include": "Game/FLoomRuntimeLoader.h",
+			"path": "Engine/Source/Runtime/Game/Public/Game/FVisualScriptRuntimeLoader.h",
+			"include": "Game/FVisualScriptRuntimeLoader.h",
 			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
 			"types": [
 				{
 					"kind": "class",
-					"name": "FLoomRuntimeLoader",
+					"name": "FVisualScriptRuntimeLoader",
 					"namespace": "Mowo",
 					"line": 10,
 					"members": [
@@ -10027,263 +10045,6 @@
 							"signature": "int32_t RecomputeLayout(uint32_t screenW, uint32_t screenH)",
 							"doc": "Retile the panes for the current player count and screen size, writing\neach player's rect. Does NOT touch cameras — the caller copies\nplayer.rect onto its CameraComponent. Returns the pane count.",
 							"line": 93
-						}
-					]
-				}
-			],
-			"free": []
-		},
-		{
-			"path": "Engine/Source/Runtime/Game/Public/Game/LoomRuntime.h",
-			"include": "Game/LoomRuntime.h",
-			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
-			"types": [
-				{
-					"kind": "class",
-					"name": "FLoomRuntime",
-					"namespace": "Mowo",
-					"line": 36,
-					"members": [
-						{
-							"kind": "method",
-							"name": "FLoomRuntime",
-							"signature": "FLoomRuntime(AActor* owner, const char* nativeClassName, bool gateTick)",
-							"doc": "`nativeClassName` is the backing class whose reflected functions a graph\ncalls on self. `gateTick` lets the runtime switch the owner's tick off when\nthe class has nothing to tick; a backing class whose native base ticks for\nits own reasons (character movement, a controller) passes false and the\nruntime only ever turns ticking on.",
-							"line": 43
-						},
-						{
-							"kind": "method",
-							"name": "FLoomRuntime",
-							"signature": "FLoomRuntime(const FLoomRuntime&) = delete",
-							"line": 45
-						},
-						{
-							"kind": "method",
-							"name": "operator=",
-							"signature": "FLoomRuntime& operator=(const FLoomRuntime&) = delete",
-							"line": 46
-						},
-						{
-							"kind": "method",
-							"name": "Of",
-							"signature": "static FLoomRuntime* Of(MObject* object)",
-							"static": true,
-							"doc": "The runtime of a Loom-backed object, or null for anything else.",
-							"line": 49
-						},
-						{
-							"kind": "method",
-							"name": "Of",
-							"signature": "static const FLoomRuntime* Of(const MObject* object)",
-							"static": true,
-							"line": 50
-						},
-						{
-							"kind": "method",
-							"name": "InstallHooks",
-							"signature": "static void InstallHooks()",
-							"static": true,
-							"doc": "Hooks the backing classes cannot do without: the RPC receive dispatch, the\nspawn-pin applier and the Loom-function RPC invoker. Idempotent.",
-							"line": 54
-						},
-						{
-							"kind": "method",
-							"name": "BindLoomClass",
-							"signature": "void BindLoomClass(MClass* synthetic, LoomClass* def)",
-							"line": 56
-						},
-						{
-							"kind": "method",
-							"name": "IsLoomBound",
-							"signature": "bool IsLoomBound() const",
-							"line": 57
-						},
-						{
-							"kind": "method",
-							"name": "SyntheticClass",
-							"signature": "MClass* SyntheticClass() const",
-							"line": 60
-						},
-						{
-							"kind": "method",
-							"name": "NativeClass",
-							"signature": "MClass* NativeClass() const",
-							"line": 63
-						},
-						{
-							"kind": "method",
-							"name": "Owner",
-							"signature": "AActor* Owner() const",
-							"line": 64
-						},
-						{
-							"kind": "method",
-							"name": "OnConstruct",
-							"signature": "void OnConstruct()",
-							"doc": "Lifecycle, called by the host after its native base's own.",
-							"line": 69
-						},
-						{
-							"kind": "method",
-							"name": "BeginPlay",
-							"signature": "void BeginPlay()",
-							"line": 70
-						},
-						{
-							"kind": "method",
-							"name": "Tick",
-							"signature": "void Tick(float deltaSeconds)",
-							"line": 71
-						},
-						{
-							"kind": "method",
-							"name": "EndPlay",
-							"signature": "void EndPlay()",
-							"line": 72
-						},
-						{
-							"kind": "method",
-							"name": "Destroyed",
-							"signature": "void Destroyed()",
-							"line": 73
-						},
-						{
-							"kind": "method",
-							"name": "OnDamage",
-							"signature": "void OnDamage(float amount, AActor* instigator)",
-							"line": 74
-						},
-						{
-							"kind": "method",
-							"name": "IsDead",
-							"signature": "bool IsDead() const",
-							"line": 75
-						},
-						{
-							"kind": "method",
-							"name": "NotifyHit",
-							"signature": "void NotifyHit(AActor* other, const Vec3& location, const Vec3& normal, float impulse)",
-							"line": 76
-						},
-						{
-							"kind": "method",
-							"name": "CallLoomFunction",
-							"signature": "bool CallLoomFunction(const std::string& functionName, const std::vector<LoomValue>& args, LoomValue* ret)",
-							"line": 78
-						},
-						{
-							"kind": "method",
-							"name": "AdvanceLatents",
-							"signature": "void AdvanceLatents(float dt)",
-							"line": 79
-						},
-						{
-							"kind": "method",
-							"name": "HasPendingLatents",
-							"signature": "bool HasPendingLatents() const",
-							"line": 80
-						},
-						{
-							"kind": "method",
-							"name": "ReceivePin",
-							"signature": "void ReceivePin(const std::string& pin, const LoomValue& payload)",
-							"line": 83
-						},
-						{
-							"kind": "method",
-							"name": "FindVar",
-							"signature": "const LoomValue* FindVar(const std::string& name) const",
-							"line": 85
-						},
-						{
-							"kind": "method",
-							"name": "SetVar",
-							"signature": "void SetVar(const std::string& name, const LoomValue& value)",
-							"line": 90
-						},
-						{
-							"kind": "method",
-							"name": "FindVarType",
-							"signature": "bool FindVarType(const std::string& name, FMValueType& outType) const",
-							"line": 93
-						},
-						{
-							"kind": "method",
-							"name": "CollectVarOverrides",
-							"signature": "void CollectVarOverrides(std::vector<std::pair<std::string, LoomValue>>& out) const",
-							"line": 94
-						},
-						{
-							"kind": "method",
-							"name": "CollectDeclaredVars",
-							"signature": "void CollectDeclaredVars(std::vector<std::pair<std::string, LoomValue>>& out) const",
-							"doc": "Every declared variable at its current value, overridden or not; the\nengine-fed scratch values (DamageAmount, HitLocation, ...) are left out.",
-							"line": 97
-						},
-						{
-							"kind": "method",
-							"name": "IsAuthoredOverride",
-							"signature": "static bool IsAuthoredOverride(const LoomValue& current, const LoomValue* seeded)",
-							"static": true,
-							"line": 98
-						},
-						{
-							"kind": "method",
-							"name": "PushReplicatedVars",
-							"signature": "bool PushReplicatedVars(bool forceFull = false)",
-							"line": 100
-						},
-						{
-							"kind": "method",
-							"name": "ApplyReplicatedVars",
-							"signature": "void ApplyReplicatedVars(const std::string& blob)",
-							"doc": "The body of every backing class's MulticastLoomVars.",
-							"line": 102
-						},
-						{
-							"kind": "method",
-							"name": "SetComponentSlotOverride",
-							"signature": "void SetComponentSlotOverride(const std::string& slotName, const std::string& propertyName, const LoomValue& value)",
-							"line": 104
-						},
-						{
-							"kind": "method",
-							"name": "CollectComponentSlotOverrides",
-							"signature": "void CollectComponentSlotOverrides(std::vector<std::pair<std::string, LoomValue>>& out) const",
-							"line": 105
-						},
-						{
-							"kind": "method",
-							"name": "FindComponentSlotOverride",
-							"signature": "const LoomValue* FindComponentSlotOverride(const std::string& slotName, const std::string& propertyName) const",
-							"line": 106
-						},
-						{
-							"kind": "method",
-							"name": "FindSlotEntity",
-							"signature": "EntityID FindSlotEntity(const std::string& slotName) const",
-							"line": 107
-						}
-					]
-				},
-				{
-					"kind": "class",
-					"name": "ILoomHost",
-					"namespace": "Mowo",
-					"doc": "Implemented by every class that can back a Loom class.",
-					"line": 159,
-					"members": [
-						{
-							"kind": "method",
-							"name": "~ILoomHost",
-							"signature": "virtual ~ILoomHost() = default",
-							"line": 161
-						},
-						{
-							"kind": "method",
-							"name": "GetLoomRuntime",
-							"signature": "virtual FLoomRuntime& GetLoomRuntime() = 0",
-							"line": 163
 						}
 					]
 				}
@@ -10619,7 +10380,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Loom's view of geometric acoustics: click and read the echoes back (an\necholocation mechanic is a click on a button, then what came back drawn or\nvoiced), ask how a path between two points sounds, and read the room the\nlistener stands in. Echoes are indexed nearest first; an index past the end\nreads zero.",
+					"doc": "Visual Scripting's view of geometric acoustics: click and read the echoes back (an\necholocation mechanic is a click on a button, then what came back drawn or\nvoiced), ask how a path between two points sounds, and read the room the\nlistener stands in. Echoes are indexed nearest first; an index past the end\nreads zero.",
 					"line": 21,
 					"members": [
 						{
@@ -10958,7 +10719,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Loom's view of Attention: read the stage and value on any machine (a\nclient shows what the host last sent), and on the host add to it or load\nthe profile.",
+					"doc": "Visual Scripting's view of Attention: read the stage and value on any machine (a\nclient shows what the host last sent), and on the host add to it or load\nthe profile.",
 					"line": 17,
 					"members": [
 						{
@@ -11645,7 +11406,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Blueprint's Print String and Draw Debug family for Loom and C++ gameplay.\nEvery call is a no-op in Shipping: the timed list is drained by the world\ntick, so a shape drawn for two seconds is re-issued to DebugDraw every\nframe until its time is up — DebugDraw itself keeps nothing across frames.",
+					"doc": "Blueprint's Print String and Draw Debug family for Visual Scripting and C++ gameplay.\nEvery call is a no-op in release and profile: the timed list is drained by the world\ntick, so a shape drawn for two seconds is re-issued to DebugDraw every\nframe until its time is up — DebugDraw itself keeps nothing across frames.",
 					"line": 21,
 					"members": [
 						{
@@ -12130,7 +11891,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "The one object that outlives every world: UE's UGameInstance. A scene load\nor a map travel tears the actor world down with everything in it, so a\nvalue that must cross that boundary — the chosen difficulty, the lobby\nthe party formed in, a run's seed — lives here, keyed by name. Created on\nfirst use and rooted for the process; a game subclasses nothing, it reads\nand writes the bag from C++ or from a Loom graph through\nMGameplayStatics::GetGameInstance.",
+					"doc": "The one object that outlives every world: UE's UGameInstance. A scene load\nor a map travel tears the actor world down with everything in it, so a\nvalue that must cross that boundary — the chosen difficulty, the lobby\nthe party formed in, a run's seed — lives here, keyed by name. Created on\nfirst use and rooted for the process; a game subclasses nothing, it reads\nand writes the bag from C++ or from a Visual Script graph through\nMGameplayStatics::GetGameInstance.",
 					"line": 25,
 					"members": [
 						{
@@ -12228,14 +11989,14 @@
 						{
 							"kind": "method",
 							"name": "Set",
-							"signature": "void Set(const std::string& key, const LoomValue& value)",
+							"signature": "void Set(const std::string& key, const VisualScriptValue& value)",
 							"doc": "Typed access for C++; a graph reaches the same store through the\nMFUNCTIONs above.",
 							"line": 76
 						},
 						{
 							"kind": "method",
 							"name": "Find",
-							"signature": "const LoomValue* Find(const std::string& key) const",
+							"signature": "const VisualScriptValue* Find(const std::string& key) const",
 							"line": 77
 						},
 						{
@@ -12381,7 +12142,7 @@
 							"kind": "method",
 							"name": "LineTraceByChannel",
 							"signature": "bool LineTraceByChannel(const Vec3& start, const Vec3& end)",
-							"doc": "The reflected two-arg form traces Visibility (Loom nodes and existing\ngraphs call it with exactly two inputs — the VM's arity check is strict,\nso the channel rides an unreflected overload instead of a third param).",
+							"doc": "The reflected two-arg form traces Visibility (Visual Script nodes and existing\ngraphs call it with exactly two inputs — the VM's arity check is strict,\nso the channel rides an unreflected overload instead of a third param).",
 							"line": 96
 						},
 						{
@@ -12842,7 +12603,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Input queries for scripting. The Loom node catalogue is built by walking\nMClassRegistry, so these MFUNCTIONs are the visual-scripting input surface\n— before this class existed, Loom graphs could not read input at all\n(InputActionSystem is plain C++, invisible to reflection). Everything\nroutes through the active enhanced-input contexts, so a graph sees exactly\nwhat MPlayerInput's C++ bindings see, rebinds included.",
+					"doc": "Input queries for scripting. The Visual Script node catalogue is built by walking\nMClassRegistry, so these MFUNCTIONs are the visual-scripting input surface\n— before this class existed, Visual Script graphs could not read input at all\n(InputActionSystem is plain C++, invisible to reflection). Everything\nroutes through the active enhanced-input contexts, so a graph sees exactly\nwhat MPlayerInput's C++ bindings see, rebinds included.",
 					"line": 20,
 					"members": [
 						{
@@ -13104,7 +12865,7 @@
 							"kind": "method",
 							"name": "SpawnActorAtTransform",
 							"signature": "AActor* SpawnActorAtTransform(const std::string& className, const Vec3& location, const Vec3& rotationDegrees, const Vec3& scale)",
-							"doc": "Spawn with a whole transform. Rotation is Euler degrees, matching the\nGetActorRotationEuler / SetActorRotationEuler pair. Spawn-shaped (the\nname, the Object return, the class name first), so a Loom class's\nExpose on Spawn variables ride as extra pins exactly as they do on\nSpawnActorByClass.",
+							"doc": "Spawn with a whole transform. Rotation is Euler degrees, matching the\nGetActorRotationEuler / SetActorRotationEuler pair. Spawn-shaped (the\nname, the Object return, the class name first), so a Visual Script class's\nExpose on Spawn variables ride as extra pins exactly as they do on\nSpawnActorByClass.",
 							"line": 105
 						},
 						{
@@ -13169,7 +12930,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Loom's live-ops: read remote-config values (defaults, the cached document\nor the fetched one, A/B variant values on top), ask which variant of an\nexperiment this player is in (recording the exposure once), record a\ntelemetry event, and fetch a fresh document.",
+					"doc": "Visual Scripting's live-ops: read remote-config values (defaults, the cached document\nor the fetched one, A/B variant values on top), ask which variant of an\nexperiment this player is in (recording the exposure once), record a\ntelemetry event, and fetch a fresh document.",
 					"line": 18,
 					"members": [
 						{
@@ -13476,7 +13237,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Loom's view of the mods: what loaded, in which order, what was refused and\nwhy, and the switches a mod menu needs (enable, reorder, apply).",
+					"doc": "Visual Scripting's view of the mods: what loaded, in which order, what was refused and\nwhy, and the switches a mod menu needs (enable, reorder, apply).",
 					"line": 16,
 					"members": [
 						{
@@ -14039,7 +13800,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "The replicated player records (PlayerStateComponent) for Loom and gameplay:\na scoreboard, a ready list, team colours. Reads work on every machine; the\nsetters run on the host only and return false elsewhere.",
+					"doc": "The replicated player records (PlayerStateComponent) for Visual Scripting and gameplay:\na scoreboard, a ready list, team colours. Reads work on every machine; the\nsetters run on the host only and return false elsewhere.",
 					"line": 19,
 					"members": [
 						{
@@ -14669,7 +14430,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Reflected façade over the renderer's backend selection, so Loom graphs can\nread the active graphics API and request a different one. A request never\nswitches the live device — it writes the persisted rendering.graphics_api\nproject setting and flags a restart, exactly like the editor's Project\nSettings ▸ Rendering selector. Stateless — a Loom graph can call these on\nany instance the VM hands it.",
+					"doc": "Reflected façade over the renderer's backend selection, so Visual Script graphs can\nread the active graphics API and request a different one. A request never\nswitches the live device — it writes the persisted rendering.graphics_api\nproject setting and flags a restart, exactly like the editor's Project\nSettings ▸ Rendering selector. Stateless — a Visual Script graph can call these on\nany instance the VM hands it.",
 					"line": 18,
 					"members": [
 						{
@@ -14709,7 +14470,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Loom's time rewind (game.Rewind): \"Rewind Seconds\" takes the world back\nthat far — to the newest captured moment at least that old — at the start\nof the next frame. False when rewind is off or nothing is held yet.",
+					"doc": "Visual Scripting's time rewind (game.Rewind): \"Rewind Seconds\" takes the world back\nthat far — to the newest captured moment at least that old — at the start\nof the next frame. False when rewind is off or nothing is held yet.",
 					"line": 18,
 					"members": [
 						{
@@ -14758,7 +14519,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Loom's view of rollback netcode (net.Rollback): feed this machine's input\neach frame, read the frame and the session's health. Inputs a rollback\nstep reads come from each player's RollbackPlayer component.",
+					"doc": "Visual Scripting's view of rollback netcode (net.Rollback): feed this machine's input\neach frame, read the frame and the session's health. Inputs a rollback\nstep reads come from each player's RollbackPlayer component.",
 					"line": 18,
 					"members": [
 						{
@@ -14814,7 +14575,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "UE's USaveGame: the player's progress, saved apart from the world. Unlocks,\na crew dossier, the trophy record, settings that follow a profile — what a\nworld-state slot has no place for, and what must survive a patch that\nchanges the level. A save object is written to a NAMED slot\n(SaveGameManager::SaveGameObject, `<name>.msavegame` in the save folder)\nand never carries the scene, so a patched level always loads from the\npackage.\n\nTwo ways to hold data. A Loom graph uses the named values (SetInt, GetInt,\n...) on the object MSaveStatics::GetSaveGame hands out. C++ subclasses\nMSaveGame and declares MPROPERTY fields: every supported field (bool, the\ninteger widths, float/double, Vec2-4, Quat, string, string array, enum by\nname) is written in full and read back by name, so a field added later\nkeeps its default on an older save and a removed one is ignored.",
+					"doc": "UE's USaveGame: the player's progress, saved apart from the world. Unlocks,\na crew dossier, the trophy record, settings that follow a profile — what a\nworld-state slot has no place for, and what must survive a patch that\nchanges the level. A save object is written to a NAMED slot\n(SaveGameManager::SaveGameObject, `<name>.msavegame` in the save folder)\nand never carries the scene, so a patched level always loads from the\npackage.\n\nTwo ways to hold data. A Visual Script graph uses the named values (SetInt, GetInt,\n...) on the object MSaveStatics::GetSaveGame hands out. C++ subclasses\nMSaveGame and declares MPROPERTY fields: every supported field (bool, the\ninteger widths, float/double, Vec2-4, Quat, string, string array, enum by\nname) is written in full and read back by name, so a field added later\nkeeps its default on an older save and a removed one is ignored.",
 					"line": 30,
 					"members": [
 						{
@@ -15330,7 +15091,7 @@
 							"kind": "method",
 							"name": "GetAnimCurveValue",
 							"signature": "float GetAnimCurveValue(const std::string& curveName) const",
-							"doc": "Named curve track value evaluated this frame (blend-weighted across\nthe playing clips). MFUNCTION so Loom graphs read curves directly.",
+							"doc": "Named curve track value evaluated this frame (blend-weighted across\nthe playing clips). MFUNCTION so Visual Script graphs read curves directly.",
 							"line": 95
 						},
 						{
@@ -16208,7 +15969,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "Blueprint's string library for Loom and C++ gameplay. Every function is a\npure, side-effect-free operation on std::string values (UTF-8 bytes; the\nindex-based ones count bytes, which is what a graph indexing ASCII text\nexpects). Concat and ToString are Pure ops already; this is the rest.",
+					"doc": "Blueprint's string library for Visual Scripting and C++ gameplay. Every function is a\npure, side-effect-free operation on std::string values (UTF-8 bytes; the\nindex-based ones count bytes, which is what a graph indexing ASCII text\nexpects). Concat and ToString are Pure ops already; this is the rest.",
 					"line": 20,
 					"members": [
 						{
@@ -16966,7 +16727,7 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"doc": "The water queries as Loom nodes and gameplay verbs. FWaterQuery is the C++\nsurface and stays authoritative; this is the reflected face of it, so a graph\nor an audio trigger can ask where the water is without a C++ module.\n\nThe node catalogue is built by walking MClassRegistry, so every MFUNCTION here\nbecomes a node on its own — nothing is hand-registered.",
+					"doc": "The water queries as Visual Script nodes and gameplay verbs. FWaterQuery is the C++\nsurface and stays authoritative; this is the reflected face of it, so a graph\nor an audio trigger can ask where the water is without a C++ module.\n\nThe node catalogue is built by walking MClassRegistry, so every MFUNCTION here\nbecomes a node on its own — nothing is hand-registered.",
 					"line": 23,
 					"members": [
 						{
@@ -17399,7 +17160,7 @@
 						{
 							"kind": "method",
 							"name": "FirePin",
-							"signature": "void FirePin(EntityID srcEntity, const std::string& pin, const struct LoomValue& payload)",
+							"signature": "void FirePin(EntityID srcEntity, const std::string& pin, const struct VisualScriptValue& payload)",
 							"line": 296
 						},
 						{
@@ -18040,8 +17801,8 @@
 						},
 						{
 							"kind": "enumerator",
-							"name": "Loom",
-							"signature": "Loom",
+							"name": "VisualScript",
+							"signature": "VisualScript",
 							"line": 29
 						},
 						{
@@ -18074,7 +17835,7 @@
 							"kind": "field",
 							"name": "Subject",
 							"signature": "std::string Subject",
-							"doc": "What changed hands: the Loom class name, or the material's path.",
+							"doc": "What changed hands: the Visual Script class name, or the material's path.",
 							"line": 37
 						},
 						{
@@ -18244,7 +18005,7 @@
 							"kind": "method",
 							"name": "RefreshUserClasses",
 							"signature": "void RefreshUserClasses()",
-							"doc": "A class the project itself declares — a Loom class saved from the Actor\nEditor, a `mbt newclass` C++ actor — becomes placeable by DERIVING from\none that already is. Neither MClass nor LoomClass carries placement\nmetadata of its own, so the nearest placeable ancestor supplies the\ncategory and the icon; the mesh type is deliberately not inherited,\nbecause a subclass builds its own geometry from its components.\n\nCalled for you by GetAll/FindByPlaceId/GetCategories whenever the class\ntables have moved; public so a caller that just compiled a class can\nforce it without waiting for the next read.",
+							"doc": "A class the project itself declares — a Visual Script class saved from the Actor\nEditor, a `mbt newclass` C++ actor — becomes placeable by DERIVING from\none that already is. Neither MClass nor VisualScriptClass carries placement\nmetadata of its own, so the nearest placeable ancestor supplies the\ncategory and the icon; the mesh type is deliberately not inherited,\nbecause a subclass builds its own geometry from its components.\n\nCalled for you by GetAll/FindByPlaceId/GetCategories whenever the class\ntables have moved; public so a caller that just compiled a class can\nforce it without waiting for the next read.",
 							"line": 62
 						},
 						{
@@ -18655,6 +18416,263 @@
 							"signature": "static const char* LayoutName(ESplitScreenLayout layout)",
 							"static": true,
 							"line": 51
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h",
+			"include": "Game/VisualScriptRuntime.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVisualScriptRuntime",
+					"namespace": "Mowo",
+					"line": 36,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime(AActor* owner, const char* nativeClassName, bool gateTick)",
+							"doc": "`nativeClassName` is the backing class whose reflected functions a graph\ncalls on self. `gateTick` lets the runtime switch the owner's tick off when\nthe class has nothing to tick; a backing class whose native base ticks for\nits own reasons (character movement, a controller) passes false and the\nruntime only ever turns ticking on.",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "FVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime(const FVisualScriptRuntime&) = delete",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FVisualScriptRuntime& operator=(const FVisualScriptRuntime&) = delete",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "Of",
+							"signature": "static FVisualScriptRuntime* Of(MObject* object)",
+							"static": true,
+							"doc": "The runtime of a visual-script-backed object, or null for anything else.",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "Of",
+							"signature": "static const FVisualScriptRuntime* Of(const MObject* object)",
+							"static": true,
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "InstallHooks",
+							"signature": "static void InstallHooks()",
+							"static": true,
+							"doc": "Hooks the backing classes cannot do without: the RPC receive dispatch, the\nspawn-pin applier and the visual-script-function RPC invoker. Idempotent.",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "BindVisualScriptClass",
+							"signature": "void BindVisualScriptClass(MClass* synthetic, VisualScriptClass* def)",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "IsVisualScriptBound",
+							"signature": "bool IsVisualScriptBound() const",
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "SyntheticClass",
+							"signature": "MClass* SyntheticClass() const",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "NativeClass",
+							"signature": "MClass* NativeClass() const",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "Owner",
+							"signature": "AActor* Owner() const",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "OnConstruct",
+							"signature": "void OnConstruct()",
+							"doc": "Lifecycle, called by the host after its native base's own.",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay()",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "Tick",
+							"signature": "void Tick(float deltaSeconds)",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay()",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "Destroyed",
+							"signature": "void Destroyed()",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "OnDamage",
+							"signature": "void OnDamage(float amount, AActor* instigator)",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "IsDead",
+							"signature": "bool IsDead() const",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "NotifyHit",
+							"signature": "void NotifyHit(AActor* other, const Vec3& location, const Vec3& normal, float impulse)",
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "CallVisualScriptFunction",
+							"signature": "bool CallVisualScriptFunction(const std::string& functionName, const std::vector<VisualScriptValue>& args, VisualScriptValue* ret)",
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "AdvanceLatents",
+							"signature": "void AdvanceLatents(float dt)",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "HasPendingLatents",
+							"signature": "bool HasPendingLatents() const",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "ReceivePin",
+							"signature": "void ReceivePin(const std::string& pin, const VisualScriptValue& payload)",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "FindVar",
+							"signature": "const VisualScriptValue* FindVar(const std::string& name) const",
+							"line": 85
+						},
+						{
+							"kind": "method",
+							"name": "SetVar",
+							"signature": "void SetVar(const std::string& name, const VisualScriptValue& value)",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "FindVarType",
+							"signature": "bool FindVarType(const std::string& name, FMValueType& outType) const",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "CollectVarOverrides",
+							"signature": "void CollectVarOverrides(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "CollectDeclaredVars",
+							"signature": "void CollectDeclaredVars(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
+							"doc": "Every declared variable at its current value, overridden or not; the\nengine-fed scratch values (DamageAmount, HitLocation, ...) are left out.",
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "IsAuthoredOverride",
+							"signature": "static bool IsAuthoredOverride(const VisualScriptValue& current, const VisualScriptValue* seeded)",
+							"static": true,
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "PushReplicatedVars",
+							"signature": "bool PushReplicatedVars(bool forceFull = false)",
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "ApplyReplicatedVars",
+							"signature": "void ApplyReplicatedVars(const std::string& blob)",
+							"doc": "The body of every backing class's MulticastVisualScriptVars.",
+							"line": 102
+						},
+						{
+							"kind": "method",
+							"name": "SetComponentSlotOverride",
+							"signature": "void SetComponentSlotOverride(const std::string& slotName, const std::string& propertyName, const VisualScriptValue& value)",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "CollectComponentSlotOverrides",
+							"signature": "void CollectComponentSlotOverrides(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "FindComponentSlotOverride",
+							"signature": "const VisualScriptValue* FindComponentSlotOverride(const std::string& slotName, const std::string& propertyName) const",
+							"line": 106
+						},
+						{
+							"kind": "method",
+							"name": "FindSlotEntity",
+							"signature": "EntityID FindSlotEntity(const std::string& slotName) const",
+							"line": 107
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "IVisualScriptHost",
+					"namespace": "Mowo",
+					"doc": "Implemented by every class that can back a Visual Script class.",
+					"line": 159,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IVisualScriptHost",
+							"signature": "virtual ~IVisualScriptHost() = default",
+							"line": 161
+						},
+						{
+							"kind": "method",
+							"name": "GetVisualScriptRuntime",
+							"signature": "virtual FVisualScriptRuntime& GetVisualScriptRuntime() = 0",
+							"line": 163
 						}
 					]
 				}
@@ -21303,7 +21321,7 @@
 					"kind": "class",
 					"name": "FInteractionDelegates",
 					"namespace": "Mowo",
-					"doc": "Broadcast synchronously when a pawn interacts with an actor — AFTER the\ninteractable's own reaction, BEFORE the Loom OnInteract pins (the order\nthe old direct QuestSystem call had). Consumers (quest objectives,\nanalytics) resolve their system through the world at call time instead\nof the InteractionSystem naming them, so they can live in plugins.\n\nDeliberately NOT the EventBus: DispatchImmediate runs handlers under the\nbus mutex, and an interact handler can cascade into Loom graphs that\npost events — a self-deadlock. This is a plain game-thread multicast\nwith captureless handlers (registration order = call order; never register\nper-world state). A handler lives as long as the module whose code it is:\nunloading that module removes it.",
+					"doc": "Broadcast synchronously when a pawn interacts with an actor — AFTER the\ninteractable's own reaction, BEFORE the Visual Script OnInteract pins (the order\nthe old direct QuestSystem call had). Consumers (quest objectives,\nanalytics) resolve their system through the world at call time instead\nof the InteractionSystem naming them, so they can live in plugins.\n\nDeliberately NOT the EventBus: DispatchImmediate runs handlers under the\nbus mutex, and an interact handler can cascade into Visual Script graphs that\npost events — a self-deadlock. This is a plain game-thread multicast\nwith captureless handlers (registration order = call order; never register\nper-world state). A handler lives as long as the module whose code it is:\nunloading that module removes it.",
 					"line": 25,
 					"members": [
 						{
@@ -25313,33 +25331,84 @@
 							"line": 298
 						},
 						{
+							"kind": "alias",
+							"name": "FGpuStoreReadbackFn",
+							"signature": "using FGpuStoreReadbackFn = bool (*)(void* gpuState, std::vector<FPointCloudSample>& out)",
+							"line": 300
+						},
+						{
+							"kind": "method",
+							"name": "SetGpuStoreReadbackHook",
+							"signature": "static void SetGpuStoreReadbackHook(FGpuStoreReadbackFn fn)",
+							"static": true,
+							"line": 301
+						},
+						{
+							"kind": "method",
+							"name": "GetGpuStoreReadbackHook",
+							"signature": "static FGpuStoreReadbackFn GetGpuStoreReadbackHook()",
+							"static": true,
+							"line": 302
+						},
+						{
+							"kind": "method",
+							"name": "DecodeGpuStoreSlot",
+							"signature": "static bool DecodeGpuStoreSlot(uint64_t key, const uint32_t record[4], FPointCloudSample& out)",
+							"static": true,
+							"line": 303
+						},
+						{
+							"kind": "method",
+							"name": "HoldsGpuStorePoints",
+							"signature": "bool HoldsGpuStorePoints(const void* gpuState) const",
+							"line": 305
+						},
+						{
+							"kind": "method",
+							"name": "CaptureSavePayloadWithGpuStore",
+							"signature": "bool CaptureSavePayloadWithGpuStore(void* gpuState, std::vector<uint8_t>& outCapture) const",
+							"line": 308
+						},
+						{
+							"kind": "method",
+							"name": "SaveToMemoryWithGpuStore",
+							"signature": "bool SaveToMemoryWithGpuStore(void* gpuState, std::vector<uint8_t>& outBytes) const",
+							"line": 309
+						},
+						{
+							"kind": "method",
+							"name": "GetLastGpuStoreReadbackCount",
+							"signature": "uint32_t GetLastGpuStoreReadbackCount() const",
+							"line": 310
+						},
+						{
 							"kind": "field",
 							"name": "kFileVersion",
 							"signature": "static constexpr uint32_t kFileVersion = 2",
 							"static": true,
 							"doc": "1 stored world-space float positions and an RGBA colour; it still loads,\nconverted on the way in.",
-							"line": 302
+							"line": 316
 						},
 						{
 							"kind": "field",
 							"name": "kLegacyWorldSpaceVersion",
 							"signature": "static constexpr uint32_t kLegacyWorldSpaceVersion = 1",
 							"static": true,
-							"line": 303
+							"line": 317
 						},
 						{
 							"kind": "method",
 							"name": "RankOf",
 							"signature": "uint32_t RankOf(const FPointCloudSector& sector, const PointCloudPoint& point) const",
 							"doc": "Rank of a point, from the dedup cell it occupies. Public because the\nserializer and the tests both need to agree with insertion about which\npoints a decimated chunk keeps.",
-							"line": 308
+							"line": 322
 						},
 						{
 							"kind": "method",
 							"name": "DedupCellQuanta",
 							"signature": "uint32_t DedupCellQuanta(uint32_t rangeBand = 0) const",
 							"doc": "The dedup cell edge in position quanta for a range band: the largest\nwhole number of quanta that does not exceed that band's step, so two\npoints one step apart never share a cell.",
-							"line": 313
+							"line": 327
 						},
 						{
 							"kind": "method",
@@ -25347,14 +25416,14 @@
 							"signature": "static Vec3 WorldPosition(const FPointCloudSector& sector, const PointCloudPoint& point)",
 							"static": true,
 							"doc": "World position of a record held by a chunk of `sector`.",
-							"line": 318
+							"line": 332
 						},
 						{
 							"kind": "method",
 							"name": "Encode",
 							"signature": "PointCloudPoint Encode(const FPointCloudSector& sector, const FPointCloudSample& sample) const",
 							"doc": "The record a sample becomes in `sector`'s chunk, stamped with this\naccumulator's current birth time.",
-							"line": 322
+							"line": 336
 						}
 					]
 				}
@@ -26840,7 +26909,7 @@
 					"name": "FRewindSystem",
 					"namespace": "Mowo",
 					"bases": "public System",
-					"doc": "The play session's time rewind (game.Rewind): the scene's ECS world and\nphysics scene are captured into a FRewindBuffer a few times a second, and a\nrewind asked for — from Loom, MRewindStatics::RewindSeconds — is applied at\nthe start of the next update, never in the middle of a frame something is\nstill iterating. Window, capture rate and memory budget are project\nsettings (game.Rewind.Seconds / CaptureHz / BudgetMB).\n\nPhysics comes back only while the set of bodies is the one the capture saw\n(a body spawned or destroyed since makes the restore fail and is counted);\nthe ECS world, transforms included, always comes back.",
+					"doc": "The play session's time rewind (game.Rewind): the scene's ECS world and\nphysics scene are captured into a FRewindBuffer a few times a second, and a\nrewind asked for — from Visual Scripting, MRewindStatics::RewindSeconds — is applied at\nthe start of the next update, never in the middle of a frame something is\nstill iterating. Window, capture rate and memory budget are project\nsettings (game.Rewind.Seconds / CaptureHz / BudgetMB).\n\nPhysics comes back only while the set of bodies is the one the capture saw\n(a body spawned or destroyed since makes the restore fail and is counted);\nthe ECS world, transforms included, always comes back.",
 					"line": 23,
 					"members": [
 						{
@@ -28036,7 +28105,7 @@
 							"kind": "alias",
 							"name": "FWorldAuthorityFn",
 							"signature": "using FWorldAuthorityFn = bool (*)()",
-							"doc": "Co-op: the world belongs to whoever is authoritative for it. A client\nthat autosaved its replicated copy of the host's world, or loaded one,\ndiverged from the host the moment it did — so SaveWorldState and\nLoadWorldState refuse off-authority, whatever called them (autosave,\ntravel, a checkpoint, a Loom graph). Personal progress belongs in a\nprogress object (SaveGameObject), which every player keeps. The default\nanswer is \"not a client of a net session\"; a game with other rules\n(a dedicated server's own policy) installs a provider.",
+							"doc": "Co-op: the world belongs to whoever is authoritative for it. A client\nthat autosaved its replicated copy of the host's world, or loaded one,\ndiverged from the host the moment it did — so SaveWorldState and\nLoadWorldState refuse off-authority, whatever called them (autosave,\ntravel, a checkpoint, a Visual Script graph). Personal progress belongs in a\nprogress object (SaveGameObject), which every player keeps. The default\nanswer is \"not a client of a net session\"; a game with other rules\n(a dedicated server's own policy) installs a provider.",
 							"line": 156
 						},
 						{
@@ -29923,7 +29992,7 @@
 							"kind": "field",
 							"name": "preservedActorNode",
 							"signature": "std::optional<MDF::MdfNode> preservedActorNode",
-							"doc": "The entity's `Actor` node when its class is not registered. Same\nloss one layer up — an actor that cannot respawn leaves nothing\nbehind for the writer, and the save strips the entity's class,\nits Loom graphs and its variables.",
+							"doc": "The entity's `Actor` node when its class is not registered. Same\nloss one layer up — an actor that cannot respawn leaves nothing\nbehind for the writer, and the save strips the entity's class,\nits Visual Script graphs and its variables.",
 							"line": 554
 						},
 						{

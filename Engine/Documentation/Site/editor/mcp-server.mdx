@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Editor/MowoEditor/Private/Shell/McpIndicator.cpp
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/McpServer.h
   - Engine/Source/Editor/EditorFramework/Private/McpServer.cpp
-verifiedAt: f5ba7fec2
+verifiedAt: c1d08db53
 ---
 
 The editor serves its own tools over the **Model Context Protocol** (MCP), so an AI agent such as Claude Code, or any MCP client, can work in the editor the way a person does: open and save levels, place and edit actors, read and write Visual Scripting graphs, start and stop Play, take screenshots and run tests. Every tool goes through an operation the editor already has, so an agent's edit is undoable and validated like a click <Source path="Engine/Source/Editor/MowoEditor/Private/Mcp/EditorMcpTools.cpp" />.
@@ -51,11 +51,11 @@ Each tool has an access level. A tool above the allowed level is left out of the
 
 | Access | Tools |
 | --- | --- |
-| Read | `editor_status`, `list_actors`, `get_property`, `select_actor`, `camera_set`, `screenshot`, `open_asset`, `loom_read`, `loom_nodes`, `multiuser_status` |
+| Read | `editor_status`, `list_actors`, `get_property`, `select_actor`, `camera_set`, `screenshot`, `open_asset`, `visual_script_read`, `visual_script_nodes`, `multiuser_status` |
 | Edit | `open_level`, `new_level`, `save_level`, `spawn_actor`, `set_property`, `set_cvar`, `import_asset`, `pie_start`, `pie_stop` |
-| Full | `delete_actor`, `console`, `run_script`, `run_tests`, `loom_write`, `editor_quit` |
+| Full | `delete_actor`, `console`, `run_script`, `run_tests`, `visual_script_write`, `editor_quit` |
 
-`run_script` runs an [editor script](/docs/editor/automation/). `loom_write` needs Full access because a Visual Scripting graph calls reflected functions and runs at the next Play: writing one is writing code.
+`run_script` runs an [editor script](/docs/editor/automation/). `visual_script_write` needs Full access because a Visual Scripting graph calls reflected functions and runs at the next Play: writing one is writing code.
 
 Tools run on the editor's main thread between frames. A tool that needs frames, such as starting Play or taking a screenshot after a change, answers later on the same connection without blocking the editor.
 
@@ -65,7 +65,7 @@ A tool that saves files and runs builds can execute code, so the server is locke
 
 - Every HTTP request must carry the session's bearer token. A request from a browser page (a foreign `Origin`) is refused even with the token.
 - Every path a tool takes must resolve inside the project, after following links. Network share paths are refused.
-- Each tool writes only its own file type: `screenshot` a `.png`, `save_level` a `.mmap`, `loom_write` a `.loom`.
+- Each tool writes only its own file type: `screenshot` a `.png`, `save_level` a `.mmap`, `visual_script_write` a `.vscript`.
 - `import_asset` from outside the project needs Full access.
 - `set_cvar` refuses security settings (such as `editor.mcp.*`, `net.encrypt`, `net.psk`) and anything the console itself may not set.
 - `run_tests` and the script `run` command start `mbt` without a shell, and the test filter accepts a test name only.

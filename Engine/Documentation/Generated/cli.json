@@ -86,8 +86,8 @@
 					],
 					"options": [
 						{
-							"name": "--loom",
-							"description": "The files are Loom graphs or classes (.loom): merge by node id",
+							"name": "--visual-script",
+							"description": "The files are Visual Script graphs or classes (.vscript): merge by node id",
 							"type": "bool"
 						}
 					],
@@ -159,16 +159,16 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Build configuration",
+					"description": "Build configuration: debug | dev | profile | release | debuggame (default: dev)",
 					"type": "BuildConfiguration",
-					"default": "Debug"
+					"default": "Dev"
 				},
 				{
 					"name": "--platform",
 					"aliases": [
 						"-p"
 					],
-					"description": "Target platform: win64 | linux | macos-arm64 | android | ios (default: host). Non-host targets cross-compile — set MOWO_LINUX_SYSROOT / SDKROOT / ANDROID_NDK_ROOT; ios needs a macOS host with Xcode.",
+					"description": "Target platform: win-x64 | linux-x64 | osx-arm64 | android-arm64 | ios-arm64 (default: host). Non-host targets cross-compile — set MOWO_LINUX_SYSROOT / SDKROOT / ANDROID_NDK_ROOT; ios needs a macOS host with Xcode.",
 					"type": "string"
 				},
 				{
@@ -364,7 +364,7 @@
 					"aliases": [
 						"-p"
 					],
-					"description": "Cook for a target platform: win64 | linux | macos-arm64 | android | ios. A mobile target cooks ASTC textures and Opus audio; the target's Shaders.meaf is built beside the archive; the default output goes to <cook dir>/<Platform>/. Default: the host, into <cook dir>/ as before",
+					"description": "Cook for a target platform: win-x64 | linux-x64 | osx-arm64 | android-arm64 | ios-arm64. A mobile target cooks ASTC textures and Opus audio; the target's Shaders.meaf is built beside the archive; the default output goes to <cook dir>/<Platform>/. Default: the host, into <cook dir>/ as before",
 					"type": "string"
 				},
 				{
@@ -394,7 +394,7 @@
 				},
 				{
 					"name": "--config",
-					"description": "Build of MowoGame/MeafBuilder/MdfTool/MaudioTool the cook runs (Debug, Development, Release). Default: Release, then Development, then Debug",
+					"description": "Build of MowoGame/MeafBuilder/MdfTool/MaudioTool the cook runs (default: dev, then debug): debug | dev | profile | release | debuggame",
 					"type": "BuildConfiguration"
 				}
 			],
@@ -854,9 +854,9 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Configuration of the running binaries",
+					"description": "Configuration of the running binaries: debug | dev | profile | release | debuggame (default: dev)",
 					"type": "BuildConfiguration",
-					"default": "Debug"
+					"default": "Dev"
 				},
 				{
 					"name": "--source",
@@ -1247,7 +1247,7 @@
 						},
 						{
 							"name": "--editor",
-							"description": "Editor executable (default: Engine/Binaries/<Platform>/MowoEditor[-<Platform>-<Config>] of this checkout or installed engine)",
+							"description": "Editor executable (default: Engine/Binaries/<platform>/<config>/MowoEditor of this checkout or installed engine)",
 							"type": "string"
 						},
 						{
@@ -1255,9 +1255,9 @@
 							"aliases": [
 								"-c"
 							],
-							"description": "Which build of the editor to look for",
-							"type": "string",
-							"default": "Debug"
+							"description": "Which build of the editor to look for: debug | dev | profile | release | debuggame (default: dev)",
+							"type": "BuildConfiguration",
+							"default": "Dev"
 						}
 					],
 					"subcommands": []
@@ -1390,9 +1390,9 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Build configuration",
+					"description": "Build configuration: debug | dev | profile | release | debuggame (default: release)",
 					"type": "BuildConfiguration",
-					"default": "Shipping"
+					"default": "Release"
 				},
 				{
 					"name": "--output",
@@ -1432,17 +1432,17 @@
 				},
 				{
 					"name": "--monolithic",
-					"description": "Link the engine statically into the game host (UE5 Shipping model); the package ships one exe + vendor DLLs. The default for a Shipping Game package",
+					"description": "Link the engine statically into the game host (UE5 Shipping model); the package ships one exe + vendor DLLs. The default for a release Game package",
 					"type": "bool"
 				},
 				{
 					"name": "--modular",
-					"description": "Ship the engine as per-module DLLs even in Shipping (the default for every other configuration)",
+					"description": "Ship the engine as per-module DLLs even in release (the default for every other configuration)",
 					"type": "bool"
 				},
 				{
 					"name": "--unprotected",
-					"description": "Ship plaintext, unsigned content and unsigned modules even when Config/DefaultCrypto.ini has keys. Shipping otherwise refuses to package without them.",
+					"description": "Ship plaintext, unsigned content and unsigned modules even when Config/DefaultCrypto.ini has keys. Release otherwise refuses to package without them.",
 					"type": "bool"
 				},
 				{
@@ -1565,12 +1565,12 @@
 				},
 				{
 					"name": "--log-floor",
-					"description": "Shipping only: compile out every log line below this level (info | warning | error), format strings included. Default keeps Info so a packaged build can still be judged with --log --loglevel=info",
+					"description": "Release only: compile out every log line below this level (info | warning | error), format strings included. Default keeps Info so a packaged build can still be judged with --log --loglevel=info",
 					"type": "string"
 				},
 				{
 					"name": "--pgo",
-					"description": "Profile-guided optimisation for Shipping/Test (clang): instrument = build binaries that write raw profiles to build/PGO/<Platform>/Raw when run, optimize = merge them into Engine/Build/PGO/<Platform>/Engine.profdata and compile with it",
+					"description": "Profile-guided optimisation for release/profile (clang): instrument = build binaries that write raw profiles to build/PGO/<Platform>/Raw when run, optimize = merge them into Engine/Build/PGO/<Platform>/Engine.profdata and compile with it",
 					"type": "string"
 				},
 				{
@@ -1585,7 +1585,7 @@
 				},
 				{
 					"name": "--gather-pso",
-					"description": "Before packaging, run MowoGame --gather-pso over the project: every material's pipeline variants (static, skinned, instanced, meshlet, shadow, velocity, forward) merge into the committed Config/PsoCache.mdfb, so coverage follows the content rather than what a recording session played. Needs a non-Shipping MowoGame build and a GPU. Commit the result.",
+					"description": "Before packaging, run MowoGame --gather-pso over the project: every material's pipeline variants (static, skinned, instanced, meshlet, shadow, velocity, forward) merge into the committed Config/PsoCache.mdfb, so coverage follows the content rather than what a recording session played. Needs a non-release MowoGame build and a GPU. Commit the result.",
 					"type": "bool"
 				},
 				{
@@ -1607,9 +1607,9 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Build configuration for the engine .so (third-party Android binaries are Release-only and mix fine)",
+					"description": "Build configuration for the engine .so (third-party Android binaries are release builds and mix fine): debug | dev | profile | release | debuggame (default: dev)",
 					"type": "BuildConfiguration",
-					"default": "Debug"
+					"default": "Dev"
 				},
 				{
 					"name": "--project",
@@ -1656,7 +1656,7 @@
 				},
 				{
 					"name": "--unprotected",
-					"description": "Ship plaintext, unsigned content even when Config/DefaultCrypto.ini has keys. Shipping otherwise refuses to package without them.",
+					"description": "Ship plaintext, unsigned content even when Config/DefaultCrypto.ini has keys. Release otherwise refuses to package without them.",
 					"type": "bool"
 				}
 			],
@@ -1673,9 +1673,9 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Build configuration the installed engine ships as",
+					"description": "Build configuration the installed engine ships as: debug | dev | profile | release | debuggame (default: dev)",
 					"type": "BuildConfiguration",
-					"default": "Release"
+					"default": "Dev"
 				},
 				{
 					"name": "--out",
@@ -1703,7 +1703,7 @@
 				},
 				{
 					"name": "--skip-build",
-					"description": "Skip the C++ build (use the existing Engine/Binaries/<Platform> binaries)",
+					"description": "Skip the C++ build (use the existing Engine/Binaries/<platform>/<config> binaries)",
 					"type": "bool"
 				},
 				{
@@ -1725,9 +1725,9 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Build configuration of the launcher",
+					"description": "Build configuration of the launcher: debug | dev | profile | release | debuggame (default: release)",
 					"type": "BuildConfiguration",
-					"default": "Shipping"
+					"default": "Release"
 				},
 				{
 					"name": "--out",
@@ -1912,9 +1912,9 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Configuration whose bin dir receives packed archives",
+					"description": "Configuration whose binaries folder receives packed archives: debug | dev | profile | release | debuggame (default: dev)",
 					"type": "BuildConfiguration",
-					"default": "Debug"
+					"default": "Dev"
 				},
 				{
 					"name": "--platform",
@@ -2069,7 +2069,7 @@
 			"arguments": [
 				{
 					"name": "paths",
-					"description": "Files or directories to scan for debug files (default: Engine/Binaries/<Platform>)",
+					"description": "Files or directories to scan for debug files (default: Engine/Binaries/<platform>/<config>)",
 					"type": "string[]"
 				}
 			],
@@ -2079,8 +2079,8 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Build configuration to upload symbols for: Debug, Release or Shipping (default: every configuration in Engine/Binaries/<Platform>)",
-					"type": "string"
+					"description": "Build configuration whose folder to upload symbols from (default: every folder in Engine/Binaries/<platform>): debug | dev | profile | release | debuggame",
+					"type": "BuildConfiguration"
 				},
 				{
 					"name": "--url",
@@ -2108,7 +2108,7 @@
 		{
 			"name": "test",
 			"path": "mbt test",
-			"description": "Build the Test targets (CoreTests, RuntimeTests, NetTests, ProgramsTests, RendererTests, MowoEditorTests), run every doctest case in a process of its own with junit output, then MBT's C# unit tests and the Shipping rows judged from outside",
+			"description": "Build the Test targets (CoreTests, RuntimeTests, NetTests, ProgramsTests, RendererTests, MowoEditorTests), run every doctest case in a process of its own with junit output, then MBT's C# unit tests and the release rows judged from outside",
 			"arguments": [],
 			"options": [
 				{
@@ -2124,7 +2124,7 @@
 					"aliases": [
 						"-t"
 					],
-					"description": "Only run cases carrying every one of these tags (core, runtime, renderer, net, programs, editor, gpu, packaged, arc, loom, …); repeatable",
+					"description": "Only run cases carrying every one of these tags (core, runtime, renderer, net, programs, editor, gpu, packaged, arc, visual-script, …); repeatable",
 					"type": "string[]"
 				},
 				{
@@ -2167,8 +2167,8 @@
 					"aliases": [
 						"-c"
 					],
-					"description": "Build config to test (Debug/Release)",
-					"type": "string",
+					"description": "Build configuration to test: debug | dev | profile | release | debuggame (default: debug)",
+					"type": "BuildConfiguration",
 					"default": "Debug"
 				},
 				{
@@ -2250,9 +2250,9 @@
 						},
 						{
 							"name": "--config",
-							"description": "Build config to record",
+							"description": "Build configuration to record",
 							"type": "string",
-							"default": "Shipping"
+							"default": "release"
 						},
 						{
 							"name": "--platform",
@@ -2344,7 +2344,7 @@
 					"name": "--visibility",
 					"description": "0 public, 1 friends only, 2 private (default), 3 unlisted",
 					"type": "int",
-					"default": "2"
+					"default": "logical CPU count"
 				},
 				{
 					"name": "--username",

@@ -15,16 +15,16 @@ sources:
   - Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h
   - Engine/Source/Runtime/Http/Private/SentryCrashUploader.cpp
   - Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp
-  - Engine/Source/Runtime/EngineLoop/Private/Core/ShippingManifest.cpp
+  - Engine/Source/Runtime/EngineLoop/Private/Core/BuildInfoManifest.cpp
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/SymbolsCommand.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SymbolUploader.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SymbolArchive.cs
-  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ShippingInfo.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/BuildInfo.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DebugInfoSplitter.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs
   - Engine/Config/CrashReporting.example.ini
-verifiedAt: 6caf55861
+verifiedAt: 7f8f31f8d
 ---
 
 When a packaged game crashes, Mowo writes a report to disk and shows the player a crash dialog. With the player's consent the report goes to a Sentry-compatible server, and with the build's symbols uploaded too, the server turns the raw dump into a readable call stack.
@@ -73,7 +73,7 @@ After a crash the player sees the reporter window, headed "`<Product>` closed un
 
 <Screenshot id="shipping-crash-reporter-dialog" alt="The crash reporter window after a deliberate crash of a packaged game: headline 'MyGame closed unexpectedly', the 'What were you doing? Optional' field with a typed comment, Attach log and Attach minidump checked with their sizes, the Technical details section expanded on the Callstack tab, and the Close without sending, Send and close and Send and restart buttons." />
 
-The reporter ships as `Binaries/<Platform>/<Product>CrashReporter.exe` in both link modes, and `Shipping.json` tells the game where it is. Dedicated server packages do not include it.
+The reporter ships as `Binaries/<platform>/<Product>CrashReporter.exe` in both link modes, and `BuildInfo.json` tells the game where it is. Dedicated server packages do not include it.
 
 The player-facing switches `--no-crash-reporter` and `--silent` suppress the dialog. The environment variable `MOWO_NO_CRASH_REPORTER=1` does the same for automated runs. None of them stop the dump from being written <Source path="Engine/Source/Runtime/Core/Private/FCrashHandler.cpp" />.
 
@@ -96,9 +96,9 @@ bSendUnattendedBugReports=False
 | `bAgreeToCrashUpload` | The player already consented, for example in your EULA or an options toggle: the next launch sends reports without asking |
 | `bSendUnattendedBugReports` | Send with no reporter window, for servers and kiosks. Needs `bAgreeToCrashUpload` |
 
-`mbt package` copies the section into `Shipping.json` as `crashReporter.*` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/ShippingInfo.cs" />. Priority for the DSN: `mbt package --crash-dsn <dsn>`, then `Config/Engine.ini`, then the legacy `crashReporter.dsn` block in the `.mproject`, then the DSN compiled into the engine. `--no-crash-reporter` writes `enabled: false` and an empty DSN.
+`mbt package` copies the section into `BuildInfo.json` as `crashReporter.*` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/BuildInfo.cs" />. Priority for the DSN: `mbt package --crash-dsn <dsn>`, then `Config/Engine.ini`, then the legacy `crashReporter.dsn` block in the `.mproject`, then the DSN compiled into the engine. `--no-crash-reporter` writes `enabled: false` and an empty DSN.
 
-The game applies the manifest before engine initialization, and every report carries the game's DSN and consent in its `.txt` <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/ShippingManifest.cpp" />. That decides what leaves the machine:
+The game applies the manifest before engine initialization, and every report carries the game's DSN and consent in its `.txt` <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/BuildInfoManifest.cpp" />. That decides what leaves the machine:
 
 - **With `bAgreeToCrashUpload=False`** (the default), nothing is sent until the player presses a **Send** button in the dialog.
 - **With consent given**, the next launch uploads pending reports. `Engine::Initialize` calls `SentryCrashUploader::FlushPending()`, which posts each dump with its text report and log and deletes it on success <Source path="Engine/Source/Runtime/EngineLoop/Private/Core/Engine.cpp" />. A failed upload stays on disk for the next try.
@@ -112,26 +112,26 @@ Without your own `Dsn`, a game's reports go to the engine team's Sentry project,
 
 ## Symbols
 
-A minidump holds addresses, not function names. For the server to show a readable stack, it needs the build's symbols. Every configuration emits them, Shipping included, and they stay beside the binaries in `Engine/Binaries/<Platform>/`; they never ship in a package <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs" />.
+A minidump holds addresses, not function names. For the server to show a readable stack, it needs the build's symbols. Every configuration emits them, `release` included, and they stay beside the binaries in `Engine/Binaries/<platform>/<config>/`; they never ship in a package <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/BuildConfiguration.cs" />.
 
 `mbt package` handles symbols as its symbol step <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />:
 
 1. It copies every shipped binary and its symbol file into `<Product>-symbols/<buildId>/` beside the package, so the next build cannot overwrite the only copy <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SymbolArchive.cs" />.
 2. It converts each one to a smaller Breakpad `.sym` with `dump_syms`, falling back to the raw file when a conversion fails, and uploads them with `sentry-cli debug-files upload` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SymbolUploader.cs" />.
-3. For Shipping, it waits until the server has processed the files, and **an upload that was attempted and failed fails the package**: a build whose crashes cannot be read should not ship. Retry with `mbt symbols <archive> --wait`, or package with `--no-symbols`.
+3. For `release`, it waits until the server has processed the files, and **an upload that was attempted and failed fails the package**: a build whose crashes cannot be read should not ship. Retry with `mbt symbols <archive> --wait`, or package with `--no-symbols`.
 
 A machine without `sentry-cli` or an auth token skips the upload with a warning and keeps the archive.
 
-On Linux and macOS, Shipping and Test packages first split debug information out of each shipped image into `<binary>.debug` or `<binary>.dSYM` beside the build, and those are what the archive and the upload pick up <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DebugInfoSplitter.cs" />. This path has not run on a POSIX host yet.
+On Linux and macOS, `release` and `profile` packages first split debug information out of each shipped image into `<binary>.debug` or `<binary>.dSYM` beside the build, and those are what the archive and the upload pick up <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/DebugInfoSplitter.cs" />. This path has not run on a POSIX host yet.
 
 To upload separately, use `mbt symbols`:
 
 ```powershell
-./mbt.cmd symbols -c Shipping
+./mbt.cmd symbols -c release
 ./mbt.cmd symbols D:/Projects/MyGame/Saved/Packaged/MyGame-symbols/<buildId> --wait
 ```
 
-Without paths it scans `Engine/Binaries/<Platform>`, and `-c` picks one configuration's files by their name suffix <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/SymbolsCommand.cs" />. Standalone `mbt symbols` fails when it cannot upload.
+Without paths it scans `Engine/Binaries/<platform>/<config>`, and `-c` picks which configuration's folder <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/SymbolsCommand.cs" />. Standalone `mbt symbols` fails when it cannot upload.
 
 Point the upload at your own server:
 

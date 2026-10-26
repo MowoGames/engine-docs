@@ -20,7 +20,8 @@ sources:
   - Engine/Source/Editor/MowoEditor/Private/Settings/LayersSettingsPage.cpp
   - Engine/Source/Editor/MowoEditor/Private/Settings/ScalabilitySettingsPage.cpp
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-verifiedAt: 08e26df3d
+  - Engine/Source/Runtime/ML/Private/OnnxSession.cpp
+verifiedAt: 5922e6e5e
 ---
 
 Two windows hold every setting you can change from the editor:
@@ -102,6 +103,7 @@ All Engine pages write `Config/Engine.ini`.
 | --- | --- |
 | Rendering | Graphics API and dynamic GI method (both need a restart) |
 | Scalability | The active quality preset (`r.Quality`) and per-category overrides <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/ScalabilitySettingsPage.cpp" /> |
+| Performance | Parallel command recording, async compute, pipeline deduplication, variable rate shading, and **Inference Device** under **On-device inference** |
 | Physics | Maximum substeps, distance LOD, physics debug drawing |
 | Input | Stick and trigger dead zones, per-gamepad overrides, and a gamepad slot table |
 | Networking | Encryption and pre-shared key, RPC rate limits, replication budgets, character prediction |
@@ -111,6 +113,18 @@ All Engine pages write `Config/Engine.ini`.
 <Callout type="note">
 The Input page's gamepad slot table is per user: which physical pad is Player 2 belongs to one machine, so it is written to your `Saved/Config/` rather than the project config <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/InputSettingsPage.cpp" />.
 </Callout>
+
+### On-device inference
+
+The **On-device inference** section of the Performance page has one row, **Inference Device** (`ml.ExecutionProvider`, default **Auto**). It chooses where AI texture enhancement and the auto-subtitle speech recognizer run <Source path="Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp" />:
+
+| Choice | Value | Effect |
+| --- | --- | --- |
+| **Auto** | `auto` | Texture enhancement runs on the GPU through ONNX Runtime's WebGPU provider (D3D12, Vulkan or Metal), or on the CPU where there is none. The speech recognizer stays on the CPU: it is as fast there and leaves the game's frame alone |
+| **GPU** | `gpu` | Both run on the GPU, with a warning in the log when one has to fall back to the CPU |
+| **CPU** | `cpu` | Inference never touches the GPU |
+
+The choice applies to models loaded from then on. Once a model has started ONNX Runtime, the row's description also names the GPU it found, or says why there is none. On a platform without ONNX Runtime the row is greyed out. See [Importing](/docs/content-pipeline/importing/) for AI enhancement and its measured speed-ups.
 
 Plugins have their own window, not a settings page; see [Plugins and extensions](/docs/editor/plugins/).
 

@@ -27,7 +27,7 @@ sources:
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMsi.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMacApp.cs
   - Engine/Config/Toolchains.ini
-verifiedAt: 08e26df3d
+verifiedAt: 7f8f31f8d
 ---
 
 **Mowo Games Launcher** (`MowoGamesLauncher`) is the launcher players use for Mowo games. They sign in with a Mowo ID, see their library, install, update and play games, sync cloud saves, talk to friends and use an in-game overlay. Games built with Mowo talk to it through Mowo Online Services. It is not the **Mowo Project Launcher**, which opens engine projects for developers.
@@ -40,8 +40,8 @@ The first part of this page describes the launcher as a player meets it. The las
 
 The launcher installs per user, under `%LOCALAPPDATA%\Programs\Mowo Games\Launcher` on Windows, so it needs no administrator rights <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Setup/LauncherSetup.cpp" />. There are two downloads for Windows:
 
-- **`MowoGamesLauncherSetup-<version>-Win64.exe`.** The launcher itself, which runs its own installer screens when its file name contains "Setup". It downloads the newest launcher build, installs the Visual C++ runtime when it is missing, and registers the Apps & features entry, the launcher's URL schemes and the Start menu and desktop shortcuts.
-- **`MowoGamesLauncher-<version>-Win64.msi`.** A per-user Windows Installer package that installs to the same folder with the same shortcuts and URL schemes, for managed deployment <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMsi.cs" />.
+- **`MowoGamesLauncherSetup-<version>-win-x64.exe`.** The launcher itself, which runs its own installer screens when its file name contains "Setup". It downloads the newest launcher build, installs the Visual C++ runtime when it is missing, and registers the Apps & features entry, the launcher's URL schemes and the Start menu and desktop shortcuts.
+- **`MowoGamesLauncher-<version>-win-x64.msi`.** A per-user Windows Installer package that installs to the same folder with the same shortcuts and URL schemes, for managed deployment <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMsi.cs" />.
 
 Every install carries `MowoGamesLauncherUninstall.exe` beside the launcher, which Apps & features runs. Uninstalling signs the player out on that PC, removes the shortcuts, URL schemes and caches, optionally deletes installed games, and removes the install folder. The setup also takes switches for scripted installs:
 
@@ -50,7 +50,7 @@ Every install carries `MowoGamesLauncherUninstall.exe` beside the launcher, whic
 | `--setup [--dir=<path>] [--quiet] [--no-desktop-shortcut] [--no-launch]` | Install; `--quiet` runs without a window |
 | `--uninstall [--quiet] [--delete-games]` | Uninstall |
 
-On macOS the download is `MowoGamesLauncher-<version>-Mac.dmg` holding **Mowo Games Launcher.app** <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMacApp.cs" />.
+On macOS the download is `MowoGamesLauncher-<version>-osx-arm64.dmg` holding **Mowo Games Launcher.app** <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherMacApp.cs" />.
 
 An installed launcher updates itself: it downloads a newer build in the background and applies it on the next start <Source path="Engine/Source/Programs/MowoGamesLauncher/Private/Client/LauncherSelfUpdate.cpp" />.
 
@@ -108,15 +108,15 @@ The launcher is a Program target that links monolithic in its own output tree, w
 
 ```powershell
 ./mbt.cmd package-launcher
-./mbt.cmd package-launcher -c Shipping --sign D:/Secrets/MyStudio.pfx
+./mbt.cmd package-launcher -c release --sign D:/Secrets/MyStudio.pfx
 ```
 
 `mbt package-launcher` builds the target twice, because each link embeds the archives the previous build packed, then stages the executable, the app-local Visual C++ runtime and a `Manifest.txt`. It refuses a build whose closure still needs a DLL or a runtime folder <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/LauncherPackager.cs" />. Beside the folder it writes a zip and the download:
 
 | Host | Download |
 |---|---|
-| Windows | `MowoGamesLauncherSetup-<version>-Win64.exe` and the per-user MSI. `--no-msi` skips the MSI. |
-| macOS | `MowoGamesLauncher-<version>-Mac.dmg`. `--no-dmg` skips it. |
+| Windows | `MowoGamesLauncherSetup-<version>-win-x64.exe` and the per-user MSI. `--no-msi` skips the MSI. |
+| macOS | `MowoGamesLauncher-<version>-osx-arm64.dmg`. `--no-dmg` skips it. |
 
 The MSI is built with the WiX Toolset 5 that `Engine/Config/Toolchains.ini` pins, run as a local .NET tool; `dotnet tool restore` in `Engine/Source/Programs/MowoBuildTool/Installer/` installs it <Source path="Engine/Config/Toolchains.ini" />.
 

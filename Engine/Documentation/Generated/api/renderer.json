@@ -4261,6 +4261,25 @@
 							"signature": "uint64_t sourceKey = 0",
 							"doc": "original Material's stable id — DS-cache key across frames (0 = no material)",
 							"line": 1359
+						},
+						{
+							"kind": "field",
+							"name": "sourceVersion",
+							"signature": "uint64_t sourceVersion = 0",
+							"doc": "FMaterialRenderProxyCache bookkeeping, read and written by the game\nthread only (the render thread reads the fields above). They live on the\nproxy so a holder that kept one across frames can prove it is still the\ncache's current snapshot without a map lookup (Revalidate).",
+							"line": 1365
+						},
+						{
+							"kind": "field",
+							"name": "lastUsedPacket",
+							"signature": "uint32_t lastUsedPacket = 0",
+							"line": 1366
+						},
+						{
+							"kind": "field",
+							"name": "retired",
+							"signature": "bool retired = false",
+							"line": 1367
 						}
 					]
 				}
@@ -4344,42 +4363,49 @@
 						},
 						{
 							"kind": "method",
+							"name": "Revalidate",
+							"signature": "bool Revalidate(const Material* material, FMaterialRenderProxy* proxy)",
+							"doc": "Whether `proxy`, kept from an earlier packet, is what Get(material)\nwould return in this one — the same identity and state version down the\nwhole parent chain, and none of the chain replaced or evicted since —\nand if so marks the chain used in this packet. Pointer walks only: a\nholder that keeps a snapshot per primitive (the persistent mesh draw\ncommands) pays no lookup for a material nobody edited. False while\nreuse is off, so that mode still snapshots once per packet.",
+							"line": 38
+						},
+						{
+							"kind": "method",
 							"name": "EndFrame",
 							"signature": "void EndFrame()",
 							"doc": "Drops snapshots no packet asked for in kIdleFrames. Keyed by address,\nso an entry outliving its material is harmless (the identity check\nrefuses it), but it pins that material's textures until it ages out.",
-							"line": 34
+							"line": 43
 						},
 						{
 							"kind": "method",
 							"name": "Clear",
 							"signature": "void Clear()",
-							"line": 36
+							"line": 45
 						},
 						{
 							"kind": "method",
 							"name": "SetReuseEnabled",
 							"signature": "void SetReuseEnabled(bool enabled)",
 							"doc": "Off = snapshot every material every packet, the behaviour before the\nstate version existed. Kept for A/B and as the escape hatch if a writer\nthat bypasses the setters ever turns up.",
-							"line": 41
+							"line": 50
 						},
 						{
 							"kind": "method",
 							"name": "GetCachedCount",
 							"signature": "size_t GetCachedCount() const",
-							"line": 45
+							"line": 54
 						},
 						{
 							"kind": "method",
 							"name": "GetSnapshotCount",
 							"signature": "uint64_t GetSnapshotCount() const",
-							"line": 48
+							"line": 57
 						},
 						{
 							"kind": "field",
 							"name": "kIdleFrames",
 							"signature": "static constexpr uint32_t kIdleFrames = 8",
 							"static": true,
-							"line": 52
+							"line": 61
 						}
 					]
 				}
@@ -5661,29 +5687,71 @@
 					"kind": "class",
 					"name": "FPrimitiveGeometry",
 					"namespace": "Mowo",
-					"doc": "CPU geometry of the built-in shapes that are not a single analytic surface:\nthe wedge, the stairs and the scale mannequin. Kept apart from GPUMesh so a\ntest can measure the triangles without a device. Every face is wound so the\ncross product of its first two edges points out of the solid, the same rule\nGPUMesh::CreateLitCube follows, and every solid is closed.",
-					"line": 18,
+					"doc": "CPU geometry of the built-in shapes GPUMesh uploads. Kept apart from GPUMesh\nso a test can measure the triangles without a device. Every face is wound so\nthe cross product of its first two edges points out of the solid, the same\nrule GPUMesh::CreateLitCube follows; the sphere, cylinder, capsule and torus\nwere once wound the other way round and drew inside-out, their far inner\nhalf showing through with its normals facing away from the camera.",
+					"line": 19,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Wedge",
 							"signature": "static void Wedge(std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
 							"static": true,
-							"line": 20
+							"line": 21
 						},
 						{
 							"kind": "method",
 							"name": "Stairs",
 							"signature": "static void Stairs(uint32_t steps, std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
 							"static": true,
-							"line": 21
+							"line": 22
 						},
 						{
 							"kind": "method",
 							"name": "Mannequin",
 							"signature": "static void Mannequin(std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
 							"static": true,
-							"line": 22
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "Sphere",
+							"signature": "static void Sphere(float radius, uint32_t segments, uint32_t rings, std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
+							"static": true,
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Cylinder",
+							"signature": "static void Cylinder(float radius, float height, uint32_t segments, std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
+							"static": true,
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "Capsule",
+							"signature": "static void Capsule(float radius, float height, uint32_t segments, uint32_t rings, std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
+							"static": true,
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "Torus",
+							"signature": "static void Torus(float majorRadius, float minorRadius, uint32_t majorSegments, uint32_t minorSegments, std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
+							"static": true,
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "Cone",
+							"signature": "static void Cone(float radius, float height, uint32_t segments, std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
+							"static": true,
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "Quad",
+							"signature": "static void Quad(float width, float height, std::vector<LitVertex>& verts, std::vector<uint32_t>& indices)",
+							"static": true,
+							"line": 29
 						},
 						{
 							"kind": "field",
@@ -5691,7 +5759,7 @@
 							"signature": "static constexpr float kMannequinHeight = 1.8f",
 							"static": true,
 							"doc": "Mannequin height in metres: the 1.8 m reference UE's grey figure gives.",
-							"line": 25
+							"line": 32
 						},
 						{
 							"kind": "method",
@@ -5699,28 +5767,28 @@
 							"signature": "static void AddQuad(std::vector<LitVertex>& verts, std::vector<uint32_t>& indices, const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d, const Vec3& outward)",
 							"static": true,
 							"doc": "A planar quad or triangle with a flat normal. Corners may come in either\norder: the winding is flipped when it disagrees with `outward`.",
-							"line": 29
+							"line": 36
 						},
 						{
 							"kind": "method",
 							"name": "AddTriangle",
 							"signature": "static void AddTriangle(std::vector<LitVertex>& verts, std::vector<uint32_t>& indices, const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& outward)",
 							"static": true,
-							"line": 30
+							"line": 37
 						},
 						{
 							"kind": "method",
 							"name": "AddBox",
 							"signature": "static void AddBox(std::vector<LitVertex>& verts, std::vector<uint32_t>& indices, const Vec3& center, const Vec3& halfExtents)",
 							"static": true,
-							"line": 31
+							"line": 38
 						},
 						{
 							"kind": "method",
 							"name": "AddSphere",
 							"signature": "static void AddSphere(std::vector<LitVertex>& verts, std::vector<uint32_t>& indices, const Vec3& center, float radius, uint32_t segments, uint32_t rings)",
 							"static": true,
-							"line": 32
+							"line": 39
 						}
 					]
 				}
@@ -12041,7 +12109,7 @@
 							"name": "GlobalIllumination",
 							"signature": "static constexpr uint32_t GlobalIllumination = 1u << 3",
 							"static": true,
-							"doc": "Umbra: scene SDF build, DDGI probe update/sample, screen probe gather,\nSSGI and the GI denoise composite.",
+							"doc": "GI: scene SDF build, DDGI probe update/sample, screen probe gather,\nSSGI and the GI denoise composite.",
 							"line": 40
 						},
 						{

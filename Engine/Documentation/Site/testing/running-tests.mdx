@@ -9,7 +9,7 @@ sources:
   - Engine/Source/Developer/MowoTestKit/Private/TestCase.cpp
   - Engine/Source/Developer/MowoTestKit/Shared/ScreenshotBaseline.cpp
   - Engine/Source/CoreTests.Target.cs
-verifiedAt: 1a346c1c5
+verifiedAt: 7f8f31f8d
 ---
 
 `mbt test` is the gate for engine changes. It builds every target, runs every case of the six test executables in its own process, runs the C# unit tests, and writes a JUnit report. This page covers the command, its options, how to read the result, and how to run one case by hand.
@@ -32,7 +32,7 @@ From the engine root:
 
 </CodeTabs>
 
-The default configuration is Debug.
+The default configuration is `debug`: several cases (Live Coding, crash symbolisation) judge unoptimised code.
 </Step>
 <Step title="Let it build first">
 Unless you pass `--no-build`, the command first runs `mbt build -c <config>` for every target. If that build fails, no case runs and the exit code is 1. The suite starts the test executables and the hosts they launch, so stale executables against fresh libraries would give false failures <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TestCommand.cs" />.
@@ -43,7 +43,7 @@ Each case prints `PASS`, `FAIL`, `SKIP` or `CRASH` with its duration. The run en
 </Steps>
 
 <Callout type="warning">
-Do not edit sources while a full `mbt test` runs. The suite builds more than once (the Shipping and server rows compile their own trees), so an edit mid-run lands in some binaries and not others.
+Do not edit sources while a full `mbt test` runs. The suite builds more than once (the release and server rows compile their own trees), so an edit mid-run lands in some binaries and not others.
 </Callout>
 
 ## Options
@@ -53,13 +53,13 @@ The generated [mbt CLI reference](/docs/reference/mbt-cli/) lists every option. 
 | Option | Effect |
 |---|---|
 | `-f`, `--filter <text>` | Only cases whose name, switch or description contains the text. The same text filters the C# tests |
-| `-t`, `--tag <tag>` | Only cases carrying every given tag (`core`, `runtime`, `renderer`, `net`, `programs`, `editor`, `gpu`, `packaged`, `loom`, …). Repeatable |
+| `-t`, `--tag <tag>` | Only cases carrying every given tag (`core`, `runtime`, `renderer`, `net`, `programs`, `editor`, `gpu`, `packaged`, `visual-script`, …). Repeatable |
 | `--target <exe>` | Only these test executables, such as `CoreTests`. Repeatable |
 | `--shard=<i>/<n>` | One shard of the planned cases: `--shard=2/4` takes every fourth case from the second |
 | `--cpp` / `--csharp` | Only the engine cases / only the C# unit tests |
 | `--cpu-only` | Skip every case that needs a GPU device. Each is recorded as a skip |
 | `--allow-skips` | Exit 0 even when cases were skipped |
-| `-c`, `--config <name>` | Configuration to test. Default `Debug` |
+| `-c`, `--config <name>` | Configuration to test (`debug`, `dev`, `profile`, `release`, `debuggame`). Default `debug` |
 | `--no-build` | Do not build first. Assumes the binaries are current |
 | `--capture-baselines` | Let screenshot cases record a missing or drifted reference image |
 | `--asan`, `--ubsan`, `--tsan` | Build and run the CPU cases under a sanitizer, in a separate tree. One at a time; `--tsan` needs Linux or macOS |
@@ -69,14 +69,14 @@ The generated [mbt CLI reference](/docs/reference/mbt-cli/) lists every option. 
 Common loops:
 
 ```powershell
-.\mbt.cmd test --cpp --tag loom              # every Visual Scripting case
+.\mbt.cmd test --cpp --tag visual-script              # every Visual Scripting case
 .\mbt.cmd test --cpp --cpu-only              # the GPU-free set
 .\mbt.cmd test --target CoreTests --no-build # one executable, no rebuild
 .\mbt.cmd test --filter curve-eval --no-build # one case by name
 .\mbt.cmd test --csharp                      # C# unit tests only
 ```
 
-A run with a filter, a tag, a target or a shard is a **partial run**: it skips the Shipping and server rows, which cost a full extra compile.
+A run with a filter, a tag, a target or a shard is a **partial run**: it skips the release and server rows, which cost a full extra compile.
 
 ### Sanitizers
 
@@ -120,7 +120,7 @@ Open every captured image before you commit it: it is the look every later run i
 
 ### The JUnit report
 
-Every run writes `build/TestResults/junit.xml`, with one suite per test executable plus `judged-from-outside` for the Shipping and server rows and `perf-trends` for the trend verdicts. Each case's own doctest report stays under `build/TestResults/cases/`. A failed case's detail lists its failing lines and the tail of its output.
+Every run writes `build/TestResults/junit.xml`, with one suite per test executable plus `judged-from-outside` for the release and server rows and `perf-trends` for the trend verdicts. Each case's own doctest report stays under `build/TestResults/cases/`. A failed case's detail lists its failing lines and the tail of its output.
 
 ### Exit codes of mbt test
 
@@ -134,14 +134,14 @@ When a quarter or more of the cases did not run, the summary also prints a cover
 
 ## Run one case by hand
 
-The fastest loop is the test executable itself. The executables are ordinary doctest runners in `Engine/Binaries/<Platform>/`, named like every binary there (`CoreTests-Win64-Debug.exe` in Debug, `CoreTests.exe` in Development) <Source path="Engine/Source/CoreTests.Target.cs" />:
+The fastest loop is the test executable itself. The executables are ordinary doctest runners in the configuration's binaries folder, `Engine/Binaries/<platform>/<config>/`, and carry only their name (`Engine/Binaries/win-x64/debug/CoreTests.exe`, no extension on Linux and macOS) <Source path="Engine/Source/CoreTests.Target.cs" />:
 
 ```powershell
-cd Engine\Binaries\Win64
-.\CoreTests-Win64-Debug.exe --list-test-cases          # doctest's own listing
-.\CoreTests-Win64-Debug.exe -tc=curve-eval-test        # one case
-.\CoreTests-Win64-Debug.exe --curve-eval-test          # the same case, by its switch
-.\RendererTests-Win64-Debug.exe -ts="*[gi]*"           # every case tagged [gi]
+cd Engine\Binaries\win-x64\debug
+.\CoreTests.exe --list-test-cases          # doctest's own listing
+.\CoreTests.exe -tc=curve-eval-test        # one case
+.\CoreTests.exe --curve-eval-test          # the same case, by its switch
+.\RendererTests.exe -ts="*[gi]*"           # every case tagged [gi]
 ```
 
 A case applies its own switches before its body runs, so `<Exe> -tc=<case>` alone reproduces what `mbt test` ran. Running a whole executable in one process is a convenience only: some cases leave global state behind, which is why the gate runs each in its own process.
@@ -162,7 +162,7 @@ When you run a GPU case by hand to compare with `mbt test`, add `--gpu-validatio
 
 The editor's **Automation** panel lists the same cases and runs them with the arguments `mbt test` would use. It never builds and cannot run packaged cases. See the [Testing overview](/docs/testing/).
 
-<Screenshot id="testing-automation-run-details" alt="The Automation panel in Mowo Editor after running the cases filtered to 'loom': the list shows green PASS rows and one yellow SKIP, and the selected SKIP row shows its reason and the path of its archived log." caption="A finished run in the Automation panel." />
+<Screenshot id="testing-automation-run-details" alt="The Automation panel in Mowo Editor after running the cases filtered to 'visual-script': the list shows green PASS rows and one yellow SKIP, and the selected SKIP row shows its reason and the path of its archived log." caption="A finished run in the Automation panel." />
 
 ## Related
 

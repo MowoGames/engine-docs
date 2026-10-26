@@ -1,31 +1,32 @@
 ---
-title: The .loom file format
-sidebarTitle: .loom file format
+title: The .vscript file format
+sidebarTitle: .vscript file format
 description: The on-disk MDF schema of a visual class, its blocks and keys, how constants and object references are written, and the schema versioning rules.
 order: 12
 sources:
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomGraphSerializer.h
-  - Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomGraph.h
-  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/BP_Door.loom
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptGraphSerializer.h
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptGraph.h
+  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/BP_Door.vscript
   - Engine/Source/Runtime/Core/Private/FileTypes.cpp
-  - Engine/Documentation/ROADMAP.md
-verifiedAt: 08e26df3d
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/MdfCooker.cs
+  - Engine/Source/Runtime/MDF/Public/mdf/mdf.h
+verifiedAt: 5922e6e5e
 ---
 
-A visual class is saved as one `.loom` file. The file is text [MDF](/docs/api/mdf/), the engine's own data format, so it diffs and merges like source code. This page describes the schema so you can read a class in a code review, fix a merge conflict, or generate a class from a tool.
+A visual class is saved as one `.vscript` file. The file is text [MDF](/docs/api/mdf/), the engine's own data format, so it diffs and merges like source code. This page describes the schema so you can read a class in a code review, fix a merge conflict, or generate a class from a tool.
 
 ## A real file
 
-This is `BP_Door.loom` from the engine's test project, trimmed to one of its three functions and the first four nodes of its event graph <Source path="Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/BP_Door.loom" />:
+This is `BP_Door.vscript` from the engine's test project, trimmed to one of its three functions and the first four nodes of its event graph <Source path="Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/BP_Door.vscript" />:
 
-```mdf title="Content/BP_Door.loom"
-Package "LoomClass" {
+```mdf title="Content/BP_Door.vscript"
+Package "VisualScriptClass" {
     id: uuid("8DBFCACB-C269-F3DB")
     format_version: 1
 }
 
-LoomClass {
+VisualScriptClass {
     schema: 4
     class: "BP_Door"
     parent: "AActor"
@@ -122,13 +123,13 @@ LoomClass {
 }
 ```
 
-A file that has been through the asset package migration starts with a small `Package "LoomClass"` block carrying the asset id, as `BP_Door.loom` does; the loader skips it and the class follows. Files without it load the same way.
+A file that has been through the asset package migration starts with a small `Package "VisualScriptClass"` block carrying the asset id, as `BP_Door.vscript` does; the loader skips it and the class follows. Files without it load the same way.
 
 Read the event graph like this: node 0 is the entry. Its `execNext: 1` runs the Branch. The Branch's condition input is linked to node 2's output, a pure call to `IsPlayerInRange`, whose argument is linked to node 3, a read of `TriggerRadius`. The Branch continues at node 4 when true and node 6 when false.
 
 ## The class block
 
-The root node is `LoomClass`. The serializer writes its parts in a fixed order <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />:
+The root node is `VisualScriptClass`. The serializer writes its parts in a fixed order <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp" />:
 
 | Key or child | Meaning |
 | --- | --- |
@@ -147,14 +148,14 @@ A **graph body** is `entry`, the index of the entry node, followed by `Node` chi
 
 ## Nodes
 
-Each `Node` writes its `kind` as a string and only the keys it uses <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />:
+Each `Node` writes its `kind` as a string and only the keys it uses <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp" />:
 
 | Key | Meaning |
 | --- | --- |
 | `kind` | The node kind, for example `Branch` or `CallFunction`. See [Flow control](/docs/visual-scripting/flow-control/). |
 | `name` | Event name, comment text, or another label. |
 | `function` | Called function, macro or async action name. |
-| `op` | The math operation of a `Pure` node, as an integer index into `LoomPureOp`. |
+| `op` | The math operation of a `Pure` node, as an integer index into `VisualScriptPureOp`. |
 | `var` | Variable, property, gate, dispatcher, pin or class name, depending on the kind. |
 | `ns`, `key`, `src` | Localization namespace, key and source text of a `MakeText` node. |
 | `execNext`, `execElse` | The next node on the first and second exec outputs. `-1` means none. |
@@ -172,7 +173,7 @@ Children of a node:
 
 ## Constants
 
-A constant writes `vtype` and `val` <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />. Vectors use MDF's vector literal, as in `val: vec3(0.0, 1.0, -8.0)`.
+A constant writes `vtype` and `val` <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp" />. Vectors use MDF's vector literal, as in `val: vec3(0.0, 1.0, -8.0)`.
 
 - **Object constants** never store a pointer. They write `objref` as `Self`, `Name` or `Tag`, and `ref` with the name or tag. The reference resolves against the world when the graph runs.
 - **Containers** add `ctype` (`Array`, `Map` or `Set`). Arrays and sets nest `Item` children. Maps add `ktype` and nest `Entry` children with a `Key` and a `Value`. Containers nest, so an array of arrays round-trips.
@@ -197,13 +198,13 @@ Input {
 
 <Callout type="note">
 
-The loader recognizes the type names `Bool`, `Int`, `UInt32`, `Int64`, `UInt64`, `Float`, `Double`, `Vec3`, `String` and `Object`. Other names, such as `Vec2`, `Vec4` and `Quat`, read back as `Void` <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />.
+The loader recognizes the type names `Bool`, `Int`, `UInt32`, `Int64`, `UInt64`, `Float`, `Double`, `Vec3`, `String` and `Object`. Other names, such as `Vec2`, `Vec4` and `Quat`, read back as `Void` <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp" />.
 
 </Callout>
 
 ## Versioning
 
-The current schema is **9** <Source symbol="LoomGraph" />. A new field is only ever added, and only written when it differs from its default. So a file that uses no newer feature looks the same as it did before, and `BP_Door.loom` above still says `schema: 4`.
+The current schema is **9** <Source symbol="VisualScriptGraph" />. A new field is only ever added, and only written when it differs from its default. So a file that uses no newer feature looks the same as it did before, and `BP_Door.vscript` above still says `schema: 4`.
 
 | Version | Added |
 | --- | --- |
@@ -219,17 +220,17 @@ The current schema is **9** <Source symbol="LoomGraph" />. A new field is only e
 
 <Callout type="warning">
 
-A file written by a newer engine is **refused**, not loaded best-effort <Source path="Engine/Source/Runtime/Loom/Private/LoomGraphSerializer.cpp" />. An older build would drop what it does not understand, and the editor saves a graph back over its file, so loading it anyway would erase those nodes. Older files always load: missing fields take their defaults.
+A file written by a newer engine is **refused**, not loaded best-effort <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptGraphSerializer.cpp" />. An older build would drop what it does not understand, and the editor saves a graph back over its file, so loading it anyway would erase those nodes. Older files always load: missing fields take their defaults.
 
 </Callout>
 
 ## Tools and cooking
 
-`LoomGraphSerializer` saves and loads both forms: a bare graph (root `LoomGraph`) and a whole class (root `LoomClass`), to a string or a file <Source symbol="LoomGraphSerializer" />. Saving goes through a temporary file and a rename, so a crash mid-write cannot leave an empty `.loom`. A file that already carries a package block keeps it when saved again. Git treats `.loom` as text with its own `merge=loom` driver <Source path="Engine/Source/Runtime/Core/Private/FileTypes.cpp" />.
+`VisualScriptGraphSerializer` saves and loads both forms: a bare graph (root `VisualScriptGraph`) and a whole class (root `VisualScriptClass`), to a string or a file <Source symbol="VisualScriptGraphSerializer" />. Saving goes through a temporary file and a rename, so a crash mid-write cannot leave an empty `.vscript`. A file that already carries a package block keeps it when saved again. Git treats `.vscript` as text with its own `merge=vscript` driver <Source path="Engine/Source/Runtime/Core/Private/FileTypes.cpp" />.
 
-When you cook, `.loom` files are packed into the archive as text, not converted to binary MDF, because their loader reads text <Source path="Engine/Documentation/ROADMAP.md" />.
+When you cook, `.vscript` files are converted to binary MDF (mdfb) like the other game data types <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/MdfCooker.cs" />. The loader parses through `MdfDocument::ParseFromString`, which detects the binary encoding by its magic, so a cooked class loads the same as its text source. `mbt cook --mdf-text` keeps the text instead.
 
 ## Next
 
 - [Classes and inheritance](/docs/visual-scripting/classes-and-inheritance/): what the class block means at run time.
-- [Loom API](/docs/api/loom/)
+- [Visual Scripting API](/docs/api/visualscripting/)

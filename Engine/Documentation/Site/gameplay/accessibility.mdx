@@ -8,12 +8,17 @@ sources:
   - Engine/Source/Runtime/Accessibility/Public/Accessibility/AccessibilityAPI.h
   - Engine/Source/Runtime/ML/Public/ML/SpeechRecognizer.h
   - Engine/Source/Runtime/ML/Public/ML/MLModels.h
+  - Engine/Source/Runtime/ML/Public/ML/OnnxSession.h
+  - Engine/Source/Runtime/ML/Private/OnnxSession.cpp
+  - Engine/Source/Runtime/ML/Private/SpeechRecognizer.cpp
+  - Engine/Source/ThirdParty/OnnxRuntimeWebGpu/OnnxRuntimeWebGpu.Build.cs
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/AutoSubtitlesShipping.cs
   - Engine/Source/Runtime/Narrative/Public/Narrative/SubtitleSystem.h
   - Engine/Source/Runtime/Camera/Private/CameraShakeSystem.cpp
   - Engine/Source/Runtime/Input/Private/InputActionSystem.cpp
   - Engine/Source/Runtime/Audio/Public/Audio/MAudioStatics.h
-verifiedAt: 08e26df3d
+verifiedAt: 5922e6e5e
 ---
 
 Every accessibility option below is a console variable that an engine system reads, so a game gets it without extra wiring. The project sets defaults in **Project Settings › Engine › Accessibility**, and each player picks their own on the shipped settings screen, described in [UI](/docs/ui/).
@@ -56,6 +61,10 @@ With `audio.AutoSubtitles` on, speech that nobody captioned, such as other playe
 To caption another audio stream, push its samples with `FAutoSubtitleSystem::PushAudio(source, speaker, samples, count, sampleRate)`.
 
 The recognizer runs a speech model through ONNX Runtime. <Source symbol="FSpeechRecognizer" /> Shipping it adds about 110 MB to a package, so it is a project option: turn on **Ship Auto Subtitles** in Project Settings › Accessibility (`audio.AutoSubtitles.Available`), and `mbt package` includes the module, ONNX Runtime and the model. Without it the package carries none of it. <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/AutoSubtitlesShipping.cs" />
+
+The same option also ships ONNX Runtime's WebGPU execution provider, which runs models on the GPU. It adds about 42 MB on Windows (the 10.4 MB provider plus the engine's 31.9 MB DXC shader compiler, staged beside it), 15.7 MB on Linux and 14.3 MB on macOS. On Linux, GPU inference also needs the system's Vulkan loader, `libvulkan.so.1`; without it the recognizer runs on the CPU. <Source path="Engine/Source/ThirdParty/OnnxRuntimeWebGpu/OnnxRuntimeWebGpu.Build.cs" />
+
+`ml.ExecutionProvider` (**Inference Device** in Project Settings › Engine › Performance) picks where models run. Under the default, `auto`, the recognizer stays on the CPU: on the GPU it transcribed no faster, and there it would compete with rendering for the frame. Set `gpu` to move it to the GPU anyway; the engine warns and falls back to the CPU when no GPU is usable. `cpu` never touches the GPU. The setting applies to models loaded after you change it. <Source symbol="FOnnxSession::SetCpuUnderAuto" />
 
 ## Check your game
 

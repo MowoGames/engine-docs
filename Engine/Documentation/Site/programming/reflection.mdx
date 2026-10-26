@@ -15,7 +15,8 @@ sources:
   - Engine/Source/Programs/MowoHeaderTool/Emit/GeneratedHeaderEmitter.cs
   - Engine/Source/Programs/MowoHeaderTool/Emit/ReflSourceEmitter.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleResolver.cs
-verifiedAt: 1a346c1c5
+  - Engine/Source/Runtime/Reflection/Private/PropertyTypeRegistry.cpp
+verifiedAt: 5922e6e5e
 ---
 
 Reflection is what lets a C++ field save into a level, show in the Details panel, keep its target alive in the garbage collector and replicate, and what lets a function be called by name from Visual Scripting. You opt in with macros in your headers. At build time **MowoHeaderTool** (MHT) reads them and generates the descriptor tables and glue code.
@@ -155,6 +156,8 @@ MHT turns this into a type descriptor with a property table and registers the co
 | `MCATEGORY("...")` | On the struct, the Add Component menu group; on a field, its category |
 
 `std::vector<T>` fields become arrays, `std::map`, `std::unordered_map` and `TMap` become maps, `std::set`, `std::unordered_set` and `TSet` become sets, and a field typed as another reflected struct becomes a nested struct. Map keys and set elements are `int32_t`, `uint32_t`, `UUID` or `std::string`. Shapes MHT does not support (a vector of vectors, a vector of enums) are skipped with a build warning; mark them `MOWO_RUNTIME_ONLY` or give them a custom handler.
+
+A field typed `FGameplayTag` or `FGameplayTagContainer` goes to a built-in handler without any marker: it saves as the tag name (a container as a list of names), and the Details panel shows a picker over the project's declared tags instead of a text box. An explicit `MOWO_CUSTOM("key")` or `Custom=` still wins. <Source path="Engine/Source/Runtime/Reflection/Private/PropertyTypeRegistry.cpp" />
 
 `MOWO_CUSTOM_SERIALIZE(fn)` and `MOWO_CUSTOM_DESERIALIZE(fn)` on the struct add hooks that run beside the reflected fields. Define them in the component's own module: the generated code that references them compiles into that module.
 

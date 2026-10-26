@@ -59,34 +59,101 @@
 			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
 			"types": [
 				{
+					"kind": "enum",
+					"name": "EOnnxExecutionPreference",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Where a session runs. FromConfig follows ml.ExecutionProvider; the others\npin one session regardless of it (a test comparing GPU against CPU output).",
+					"line": 21,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "FromConfig",
+							"signature": "FromConfig",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "Auto",
+							"signature": "Auto",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "Cpu",
+							"signature": "Cpu",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "Gpu",
+							"signature": "Gpu",
+							"line": 25
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FOnnxDeviceInfo",
+					"namespace": "Mowo",
+					"doc": "One device an execution provider offers in this process.",
+					"line": 29,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Provider",
+							"signature": "std::string Provider",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "Vendor",
+							"signature": "std::string Vendor",
+							"line": 32
+						},
+						{
+							"kind": "field",
+							"name": "Gpu",
+							"signature": "bool Gpu = false",
+							"line": 33
+						}
+					]
+				},
+				{
 					"kind": "class",
 					"name": "FOnnxSession",
 					"namespace": "Mowo",
-					"line": 19,
+					"line": 36,
 					"members": [
 						{
 							"kind": "method",
 							"name": "FOnnxSession",
 							"signature": "FOnnxSession()",
-							"line": 21
+							"line": 38
 						},
 						{
 							"kind": "method",
 							"name": "~FOnnxSession",
 							"signature": "~FOnnxSession()",
-							"line": 22
+							"line": 39
 						},
 						{
 							"kind": "method",
 							"name": "FOnnxSession",
 							"signature": "FOnnxSession(const FOnnxSession&) = delete",
-							"line": 24
+							"line": 41
 						},
 						{
 							"kind": "method",
 							"name": "operator=",
 							"signature": "FOnnxSession& operator=(const FOnnxSession&) = delete",
-							"line": 25
+							"line": 42
 						},
 						{
 							"kind": "method",
@@ -94,7 +161,7 @@
 							"signature": "static bool IsAvailable()",
 							"static": true,
 							"doc": "False when the module compiled without a usable runtime (should not\nhappen — the build gates on the vendored binary) or the ORT\nenvironment failed to come up.",
-							"line": 30
+							"line": 47
 						},
 						{
 							"kind": "method",
@@ -102,60 +169,131 @@
 							"signature": "static const char* RuntimeVersion()",
 							"static": true,
 							"doc": "The ONNX Runtime version string, for logs/diagnostics.",
-							"line": 33
+							"line": 50
 						},
 						{
 							"kind": "method",
 							"name": "AvailableProviders",
 							"signature": "static std::vector<std::string> AvailableProviders()",
 							"static": true,
-							"doc": "Execution providers compiled into the vendored runtime, CPU last.",
-							"line": 36
+							"doc": "Execution providers compiled into the vendored runtime, CPU last. The\nWebGPU provider is a plugin library and is listed by Devices() instead.",
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "Devices",
+							"signature": "static std::vector<FOnnxDeviceInfo> Devices()",
+							"static": true,
+							"doc": "Every execution provider device the environment offers, plugin\nproviders included — the CPU always, a GPU when the WebGPU provider\nregistered and found an adapter.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "HasGpuDevice",
+							"signature": "static bool HasGpuDevice()",
+							"static": true,
+							"doc": "True when a GPU device is on offer. GpuUnavailableReason says why not\n(provider library missing, failed to register, no adapter).",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "GpuDeviceName",
+							"signature": "static std::string GpuDeviceName()",
+							"static": true,
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "GpuUnavailableReason",
+							"signature": "static std::string GpuUnavailableReason()",
+							"static": true,
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "IsStarted",
+							"signature": "static bool IsStarted()",
+							"static": true,
+							"doc": "True once something in this process brought ONNX Runtime up. Every\nquery above starts it (and with it the GPU provider), which a UI that\nonly wants to describe the current state should not do.",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "SetExecutionPreference",
+							"signature": "void SetExecutionPreference(EOnnxExecutionPreference preference)",
+							"doc": "Set before a load; a loaded session keeps the device it loaded onto.",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "SetCpuUnderAuto",
+							"signature": "void SetCpuUnderAuto(bool cpuUnderAuto)",
+							"doc": "A model the GPU does not pay off for: Auto (the cvar's or this\nsession's) loads it on the CPU, an explicit Gpu still takes the GPU.",
+							"line": 77
 						},
 						{
 							"kind": "method",
 							"name": "LoadFromFile",
 							"signature": "bool LoadFromFile(const std::string& path)",
-							"line": 38
+							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "LoadFromMemory",
 							"signature": "bool LoadFromMemory(const void* data, size_t size)",
-							"line": 39
+							"line": 80
 						},
 						{
 							"kind": "method",
 							"name": "IsLoaded",
 							"signature": "bool IsLoaded() const",
-							"line": 40
+							"line": 81
+						},
+						{
+							"kind": "method",
+							"name": "ExecutionProvider",
+							"signature": "const std::string& ExecutionProvider() const",
+							"doc": "The provider and device the loaded model runs on (\"WebGpuExecutionProvider\"\non \"NVIDIA GeForce RTX 3050 ...\"); empty until loaded. Nodes the provider\nhas no kernel for still run on the CPU inside the same session.",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "ExecutionDevice",
+							"signature": "const std::string& ExecutionDevice() const",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "RunsOnGpu",
+							"signature": "bool RunsOnGpu() const",
+							"line": 88
 						},
 						{
 							"kind": "method",
 							"name": "InputNames",
 							"signature": "const std::vector<std::string>& InputNames() const",
 							"doc": "Model I/O names in declaration order — empty until loaded.",
-							"line": 43
+							"line": 91
 						},
 						{
 							"kind": "method",
 							"name": "OutputNames",
 							"signature": "const std::vector<std::string>& OutputNames() const",
-							"line": 44
+							"line": 92
 						},
 						{
 							"kind": "method",
 							"name": "Run",
 							"signature": "bool Run(const std::string& inputName, const float* data, const std::vector<int64_t>& shape, const std::string& outputName, std::vector<float>& outData, std::vector<int64_t>& outShape)",
 							"doc": "Run one inference: a single float32 input tensor in, a single float32\noutput tensor out. `shape` is the input's dims (e.g. {1, 3, 512, 512});\nthe output's dims land in `outShape`. Returns false on any ORT error\n(logged). Multi-input models bind by the given name.",
-							"line": 50
+							"line": 98
 						},
 						{
 							"kind": "method",
 							"name": "LastError",
 							"signature": "const std::string& LastError() const",
 							"doc": "The last error message ORT reported, for tests/tools.",
-							"line": 54
+							"line": 101
 						}
 					]
 				}
@@ -299,6 +437,19 @@
 							"name": "LastError",
 							"signature": "const std::string& LastError() const",
 							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "Session",
+							"signature": "FOnnxSession& Session()",
+							"doc": "The model's session: set its execution preference before a load, read\nthe provider it landed on after.",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "Session",
+							"signature": "const FOnnxSession& Session() const",
+							"line": 71
 						}
 					]
 				},
@@ -306,37 +457,37 @@
 					"kind": "struct",
 					"name": "FSpeechCaption",
 					"namespace": "Mowo",
-					"line": 74,
+					"line": 83,
 					"members": [
 						{
 							"kind": "field",
 							"name": "source",
 							"signature": "uint32_t source = 0",
-							"line": 75
+							"line": 84
 						},
 						{
 							"kind": "field",
 							"name": "text",
 							"signature": "std::string text",
-							"line": 76
+							"line": 85
 						},
 						{
 							"kind": "field",
 							"name": "confidence",
 							"signature": "float confidence = 0.0f",
-							"line": 77
+							"line": 86
 						},
 						{
 							"kind": "field",
 							"name": "startSeconds",
 							"signature": "float startSeconds = 0.0f",
-							"line": 78
+							"line": 87
 						},
 						{
 							"kind": "field",
 							"name": "durationSeconds",
 							"signature": "float durationSeconds = 0.0f",
-							"line": 79
+							"line": 88
 						}
 					]
 				},
@@ -344,48 +495,48 @@
 					"kind": "struct",
 					"name": "FSpeechCaptionerSettings",
 					"namespace": "Mowo",
-					"line": 82,
+					"line": 91,
 					"members": [
 						{
 							"kind": "field",
 							"name": "energyThreshold",
 							"signature": "float energyThreshold = 0.015f",
 							"doc": "RMS (of -1..1 samples) a 20 ms window needs to count as speech.",
-							"line": 84
+							"line": 93
 						},
 						{
 							"kind": "field",
 							"name": "silenceSeconds",
 							"signature": "float silenceSeconds = 0.45f",
 							"doc": "Silence that ends an utterance.",
-							"line": 86
+							"line": 95
 						},
 						{
 							"kind": "field",
 							"name": "maxSegmentSeconds",
 							"signature": "float maxSegmentSeconds = 8.0f",
 							"doc": "An utterance longer than this is cut and captioned, so a monologue\nstill shows up while it goes on.",
-							"line": 89
+							"line": 98
 						},
 						{
 							"kind": "field",
 							"name": "minSpeechSeconds",
 							"signature": "float minSpeechSeconds = 0.25f",
 							"doc": "Shorter bursts are clicks and breaths, not words.",
-							"line": 91
+							"line": 100
 						},
 						{
 							"kind": "field",
 							"name": "preRollSeconds",
 							"signature": "float preRollSeconds = 0.2f",
 							"doc": "Audio kept from before the first loud window, so a soft first\nconsonant is not cut off.",
-							"line": 94
+							"line": 103
 						},
 						{
 							"kind": "field",
 							"name": "minConfidence",
 							"signature": "float minConfidence = 0.0f",
-							"line": 95
+							"line": 104
 						}
 					]
 				},
@@ -394,88 +545,88 @@
 					"name": "FSpeechCaptioner",
 					"namespace": "Mowo",
 					"doc": "FSpeechCaptioner — turns streams of audio (one per speaker) into captions:\neach stream is cut into utterances by energy, and every utterance is\ntranscribed — on a worker thread when async, so the game thread only ever\npushes samples and pops finished lines.",
-					"line": 102,
+					"line": 111,
 					"members": [
 						{
 							"kind": "method",
 							"name": "FSpeechCaptioner",
 							"signature": "explicit FSpeechCaptioner(FSpeechRecognizer& recognizer, bool async = true)",
-							"line": 104
+							"line": 113
 						},
 						{
 							"kind": "method",
 							"name": "~FSpeechCaptioner",
 							"signature": "~FSpeechCaptioner()",
-							"line": 105
+							"line": 114
 						},
 						{
 							"kind": "method",
 							"name": "FSpeechCaptioner",
 							"signature": "FSpeechCaptioner(const FSpeechCaptioner&) = delete",
-							"line": 107
+							"line": 116
 						},
 						{
 							"kind": "method",
 							"name": "operator=",
 							"signature": "FSpeechCaptioner& operator=(const FSpeechCaptioner&) = delete",
-							"line": 108
+							"line": 117
 						},
 						{
 							"kind": "method",
 							"name": "SetSettings",
 							"signature": "void SetSettings(const FSpeechCaptionerSettings& settings)",
-							"line": 110
+							"line": 119
 						},
 						{
 							"kind": "method",
 							"name": "GetSettings",
 							"signature": "const FSpeechCaptionerSettings& GetSettings() const",
-							"line": 111
+							"line": 120
 						},
 						{
 							"kind": "method",
 							"name": "Push",
 							"signature": "void Push(uint32_t source, const float* samples, size_t count, uint32_t sampleRate)",
 							"doc": "Any rate, mono, -1..1.",
-							"line": 116
+							"line": 125
 						},
 						{
 							"kind": "method",
 							"name": "PushPcm16",
 							"signature": "void PushPcm16(uint32_t source, const int16_t* samples, size_t count, uint32_t sampleRate)",
-							"line": 117
+							"line": 126
 						},
 						{
 							"kind": "method",
 							"name": "Flush",
 							"signature": "void Flush(uint32_t source)",
 							"doc": "Ends the source's current utterance now (a speaker who stopped talking\ninto push-to-talk, the end of a clip).",
-							"line": 121
+							"line": 130
 						},
 						{
 							"kind": "method",
 							"name": "Pop",
 							"signature": "bool Pop(FSpeechCaption& outCaption)",
-							"line": 123
+							"line": 132
 						},
 						{
 							"kind": "method",
 							"name": "WaitIdle",
 							"signature": "void WaitIdle()",
 							"doc": "Blocks until every queued utterance is transcribed.",
-							"line": 126
+							"line": 135
 						},
 						{
 							"kind": "method",
 							"name": "GetUtteranceCount",
 							"signature": "uint32_t GetUtteranceCount() const",
-							"line": 128
+							"line": 137
 						},
 						{
 							"kind": "method",
 							"name": "GetDroppedCount",
 							"signature": "uint32_t GetDroppedCount() const",
-							"line": 131
+							"line": 140
 						}
 					]
 				}
@@ -688,6 +839,19 @@
 							"name": "LastError",
 							"signature": "const std::string& LastError() const",
 							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "Session",
+							"signature": "FOnnxSession& Session()",
+							"doc": "The model's session: set its execution preference before Load, read the\nprovider it landed on after.",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "Session",
+							"signature": "const FOnnxSession& Session() const",
+							"line": 95
 						}
 					]
 				},
@@ -696,25 +860,25 @@
 					"name": "ETextureUpscaleMode",
 					"namespace": "Mowo",
 					"bases": "uint8_t",
-					"line": 96,
+					"line": 105,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "None",
 							"signature": "None",
-							"line": 97
+							"line": 106
 						},
 						{
 							"kind": "enumerator",
 							"name": "Fast",
 							"signature": "Fast",
-							"line": 98
+							"line": 107
 						},
 						{
 							"kind": "enumerator",
 							"name": "Quality",
 							"signature": "Quality",
-							"line": 99
+							"line": 108
 						}
 					]
 				},
@@ -722,51 +886,51 @@
 					"kind": "struct",
 					"name": "FTextureEnhanceRequest",
 					"namespace": "Mowo",
-					"line": 102,
+					"line": 111,
 					"members": [
 						{
 							"kind": "field",
 							"name": "SourcePath",
 							"signature": "std::string SourcePath",
-							"line": 103
+							"line": 112
 						},
 						{
 							"kind": "field",
 							"name": "Upscale",
 							"signature": "ETextureUpscaleMode Upscale = ETextureUpscaleMode::None",
-							"line": 104
+							"line": 113
 						},
 						{
 							"kind": "field",
 							"name": "MaxOutputSize",
 							"signature": "uint32_t MaxOutputSize = 4096",
 							"doc": "The upscaled texture's largest side never exceeds this; a source already\nat or above it is left alone.",
-							"line": 108
+							"line": 117
 						},
 						{
 							"kind": "field",
 							"name": "Seamless",
 							"signature": "bool Seamless = true",
-							"line": 110
+							"line": 119
 						},
 						{
 							"kind": "field",
 							"name": "NormalPath",
 							"signature": "std::string NormalPath",
 							"doc": "Empty skips that map. The caller picks the names so it can steer clear\nof files an artist authored.",
-							"line": 114
+							"line": 123
 						},
 						{
 							"kind": "field",
 							"name": "RoughnessPath",
 							"signature": "std::string RoughnessPath",
-							"line": 115
+							"line": 124
 						},
 						{
 							"kind": "field",
 							"name": "HeightPath",
 							"signature": "std::string HeightPath",
-							"line": 116
+							"line": 125
 						}
 					]
 				},
@@ -774,55 +938,55 @@
 					"kind": "struct",
 					"name": "FTextureEnhanceJobResult",
 					"namespace": "Mowo",
-					"line": 119,
+					"line": 128,
 					"members": [
 						{
 							"kind": "field",
 							"name": "Result",
 							"signature": "ETextureEnhanceResult Result = ETextureEnhanceResult::Failed",
-							"line": 120
+							"line": 129
 						},
 						{
 							"kind": "field",
 							"name": "Error",
 							"signature": "std::string Error",
-							"line": 121
+							"line": 130
 						},
 						{
 							"kind": "field",
 							"name": "Upscaled",
 							"signature": "bool Upscaled = false",
-							"line": 122
+							"line": 131
 						},
 						{
 							"kind": "field",
 							"name": "SourceWidth",
 							"signature": "uint32_t SourceWidth = 0",
-							"line": 123
+							"line": 132
 						},
 						{
 							"kind": "field",
 							"name": "SourceHeight",
 							"signature": "uint32_t SourceHeight = 0",
-							"line": 124
+							"line": 133
 						},
 						{
 							"kind": "field",
 							"name": "OutputWidth",
 							"signature": "uint32_t OutputWidth = 0",
-							"line": 125
+							"line": 134
 						},
 						{
 							"kind": "field",
 							"name": "OutputHeight",
 							"signature": "uint32_t OutputHeight = 0",
-							"line": 126
+							"line": 135
 						},
 						{
 							"kind": "field",
 							"name": "WrittenMaps",
 							"signature": "std::vector<std::string> WrittenMaps",
-							"line": 127
+							"line": 136
 						}
 					]
 				},
@@ -830,7 +994,7 @@
 					"kind": "class",
 					"name": "FTextureEnhanceJob",
 					"namespace": "Mowo",
-					"line": 137,
+					"line": 146,
 					"members": [
 						{
 							"kind": "method",
@@ -838,7 +1002,7 @@
 							"signature": "static bool CanEnhance(const std::string& path)",
 							"static": true,
 							"doc": "PNG, JPEG, TGA and BMP: the formats the job can write back in place.",
-							"line": 140
+							"line": 149
 						},
 						{
 							"kind": "method",
@@ -846,7 +1010,7 @@
 							"signature": "static std::string MapPath(const std::string& sourcePath, ETextureEnhanceModel model)",
 							"static": true,
 							"doc": "`<stem>_<suffix>.png` beside the source.",
-							"line": 143
+							"line": 152
 						},
 						{
 							"kind": "method",
@@ -854,14 +1018,14 @@
 							"signature": "static uint32_t UpscaleDivisor(uint32_t width, uint32_t height, uint32_t maxOutputSize)",
 							"static": true,
 							"doc": "1 for a full 4x upscale, 2 when only 2x fits `maxOutputSize`, 0 when not\neven that does — a 1x pass would spend minutes to change nothing visible.",
-							"line": 147
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "Run",
 							"signature": "static FTextureEnhanceJobResult Run(const FTextureEnhanceRequest& request, const FTextureEnhancerProvider& enhancers, const FTextureEnhanceJobProgress& progress)",
 							"static": true,
-							"line": 149
+							"line": 158
 						}
 					]
 				}
@@ -879,14 +1043,14 @@
 					"name": "FTextureEnhanceJobProgress",
 					"signature": "using FTextureEnhanceJobProgress = std::function<bool(float, const char*)>",
 					"doc": "Progress reports the overall fraction and a short label of the running step.",
-					"line": 131
+					"line": 140
 				},
 				{
 					"kind": "alias",
 					"name": "FTextureEnhancerProvider",
 					"signature": "using FTextureEnhancerProvider = std::function<FTextureEnhancer*(ETextureEnhanceModel)>",
 					"doc": "Supplies loaded models, so a queue can keep sessions alive across jobs\ninstead of rebuilding a 30 MB graph per texture.",
-					"line": 135
+					"line": 144
 				}
 			]
 		}

@@ -16,7 +16,7 @@ sources:
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/PackagePaks.h
   - Engine/Source/Runtime/GameHost/Private/MGameEngine.cpp
   - Engine/Source/Runtime/Networking/Private/NetSession.cpp
-verifiedAt: 1a346c1c5
+verifiedAt: 7f8f31f8d
 ---
 
 A released game changes after launch. Mowo gives you three tools for that: **binary patches** that turn one installed package into the next, **content chunks** that split the base game into separately deliverable archives, and **DLC** packs that mount over the base game when the player owns them.
@@ -96,7 +96,7 @@ The manifest can also be generated from primary asset rules in `Config/DefaultGa
 
 **The partition rule.** Every cooked file lands in exactly one archive. A file reached by several chunks goes to the lowest-numbered one, and a file reached by none goes to chunk 0 <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Assets/ChunkPartitioner.cs" />. So chunk 0 is self-contained, and a higher chunk never holds a file a lower one needs. Cooked texture and mesh derivatives follow their source.
 
-In a package, every chunk becomes a hash-named pak whose descriptor carries the chunk id as its `order`. The chunk report, `<Product>-chunks.json`, is written beside the package folder and lists each chunk's archive, size and keys. It is the package's content identity: the `buildId` in `Shipping.json` is a hash of it <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VersionInfoStamper.cs" />.
+In a package, every chunk becomes a hash-named pak whose descriptor carries the chunk id as its `order`. The chunk report, `<Product>-chunks.json`, is written beside the package folder and lists each chunk's archive, size and keys. It is the package's content identity: the `buildId` in `BuildInfo.json` is a hash of it <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/VersionInfoStamper.cs" />.
 
 A missing chunk archive is not an error at runtime. Its keys do not resolve, which is what an optional download looks like before it finishes.
 
@@ -158,7 +158,7 @@ After the base archives mount, the game scans `Content/Paks/DLC/*/dlc.json` with
 Mowo::FDlcManager::Get().SetEntitlement(std::make_unique<Mowo::FSteamDlcEntitlement>());
 ```
 
-In multiplayer, the join handshake carries the client's `buildId` and a hash of its mounted DLC set. The host refuses a join when either differs and sends the reason to the refused client. Development builds are always compatible <Source path="Engine/Source/Runtime/Networking/Private/NetSession.cpp" />.
+In multiplayer, the join handshake carries the client's `buildId` and a hash of its mounted DLC set. The host refuses a join when either differs and sends the reason to the refused client. Other builds (every configuration but `release` and `profile`) are always compatible <Source path="Engine/Source/Runtime/Networking/Private/NetSession.cpp" />.
 
 ### Steam depots for chunks and DLC
 

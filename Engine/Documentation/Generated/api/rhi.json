@@ -2036,7 +2036,7 @@
 							"name": "IsRecordingEnabled",
 							"signature": "static bool IsRecordingEnabled()",
 							"static": true,
-							"doc": "Whether GPU scopes record timestamps. Off, a scope still names its span\nfor a capture and writes the crash breadcrumb, but takes no timestamp\npair, so the resolve (which BLOCKS on Vulkan) never has a slot to read.\nDriven by r.GpuTimings — armed by default in a build that carries\nasserts, off in Release and Shipping, and movable at runtime either way,\nbecause the per-pass breakdown is how most of this pass was found.",
+							"doc": "Whether GPU scopes record timestamps. Off, a scope still names its span\nfor a capture and writes the crash breadcrumb, but takes no timestamp\npair, so the resolve (which BLOCKS on Vulkan) never has a slot to read.\nDriven by r.GpuTimings — armed by default in a build that carries\nasserts, off in profile and release, and movable at runtime either way,\nbecause the per-pass breakdown is how most of this pass was found.",
 							"line": 56
 						},
 						{
@@ -2060,7 +2060,7 @@
 							"name": "RequestFrameTime",
 							"signature": "static void RequestFrameTime()",
 							"static": true,
-							"doc": "Hold the frame's GPU total on for half a second without arming the\nper-pass breakdown: only the outermost scopes take timestamps, so\nLastResolvedFrame().totalMs stays live in Release and Shipping where\nr.GpuTimings is 0. Dynamic resolution calls it every frame it steers —\nit used to read a total nobody recorded and never moved the scale.",
+							"doc": "Hold the frame's GPU total on for half a second without arming the\nper-pass breakdown: only the outermost scopes take timestamps, so\nLastResolvedFrame().totalMs stays live in profile and release where\nr.GpuTimings is 0. Dynamic resolution calls it every frame it steers —\nit used to read a total nobody recorded and never moved the scale.",
 							"line": 74
 						},
 						{
@@ -2309,6 +2309,14 @@
 							"static": true,
 							"doc": "Generate prefiltered environment cubemap (per-roughness mip levels)",
 							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "PrefilterSampleCount",
+							"signature": "static uint32_t PrefilterSampleCount(uint32_t mip, uint32_t mipLevels)",
+							"static": true,
+							"doc": "GGX samples per texel for one prefilter mip, shared by every backend.",
+							"line": 56
 						}
 					]
 				}
@@ -3669,7 +3677,7 @@
 					"name": "Image3D",
 					"namespace": "Mowo",
 					"bases": "public RefCounted",
-					"doc": "Volume (3D) texture — the substrate for the world-space scene SDF (Umbra GI).\nBacked by a flat VK_IMAGE_TYPE_3D image so compute can splat into it (storage,\nVK_IMAGE_LAYOUT_GENERAL) and shaders sample it with hardware trilinear filtering\n(sampled, SHADER_READ_ONLY). Transition between the two with\nRenderer::TransitionImage(Ref<Image3D>, ImageState).",
+					"doc": "Volume (3D) texture — the substrate for the world-space scene SDF (GI).\nBacked by a flat VK_IMAGE_TYPE_3D image so compute can splat into it (storage,\nVK_IMAGE_LAYOUT_GENERAL) and shaders sample it with hardware trilinear filtering\n(sampled, SHADER_READ_ONLY). Transition between the two with\nRenderer::TransitionImage(Ref<Image3D>, ImageState).",
 					"line": 110,
 					"members": [
 						{
@@ -6724,24 +6732,39 @@
 						},
 						{
 							"kind": "method",
+							"name": "GetTransitionCounters",
+							"signature": "static FTransitionCounters GetTransitionCounters()",
+							"static": true,
+							"line": 174
+						},
+						{
+							"kind": "method",
+							"name": "SetGraphBarrierScope",
+							"signature": "static void SetGraphBarrierScope(bool inScope)",
+							"static": true,
+							"doc": "Bracketed by the executor around the barriers it derives from a\ncompiled graph, on the recording thread.",
+							"line": 177
+						},
+						{
+							"kind": "method",
 							"name": "SetViewport",
 							"signature": "static void SetViewport(float x, float y, float width, float height)",
 							"static": true,
-							"line": 164
+							"line": 179
 						},
 						{
 							"kind": "method",
 							"name": "SetScissor",
 							"signature": "static void SetScissor(int32_t x, int32_t y, uint32_t width, uint32_t height)",
 							"static": true,
-							"line": 165
+							"line": 180
 						},
 						{
 							"kind": "method",
 							"name": "BindDescriptorSet",
 							"signature": "static void BindDescriptorSet(const Ref<Pipeline>& pipeline, const Ref<DescriptorSet>& descriptorSet, uint32_t setIndex = 0)",
 							"static": true,
-							"line": 166
+							"line": 181
 						},
 						{
 							"kind": "method",
@@ -6749,7 +6772,7 @@
 							"signature": "static void BindBindlessTable(const Ref<Pipeline>& pipeline, const Ref<class BindlessTextureTable>& table, uint32_t setIndex = 0)",
 							"static": true,
 							"doc": "Bind a bindless texture table's descriptor set at setIndex. The\npipeline must have been built with this table in its spec.",
-							"line": 169
+							"line": 184
 						},
 						{
 							"kind": "method",
@@ -6757,21 +6780,21 @@
 							"signature": "static void BindBindlessTable(const Ref<ComputePipeline>& pipeline, const Ref<class BindlessTextureTable>& table, uint32_t setIndex = 0)",
 							"static": true,
 							"doc": "Same for a compute pipeline. Only a spec that declared the table may be\nbound this way — ComputePipeline::SupportsBindlessTable is the gate both\nthe caller and the backend answer.",
-							"line": 173
+							"line": 188
 						},
 						{
 							"kind": "method",
 							"name": "PushConstants",
 							"signature": "static void PushConstants(const Ref<Pipeline>& pipeline, ShaderStage stage, const void* data, uint32_t size, uint32_t offset = 0)",
 							"static": true,
-							"line": 174
+							"line": 189
 						},
 						{
 							"kind": "method",
 							"name": "Draw",
 							"signature": "static void Draw(const Ref<Pipeline>& pipeline, const Ref<VertexBuffer>& vertexBuffer, uint32_t vertexCount)",
 							"static": true,
-							"line": 176
+							"line": 191
 						},
 						{
 							"kind": "method",
@@ -6779,28 +6802,28 @@
 							"signature": "static void BindPipeline(Pipeline* pipeline)",
 							"static": true,
 							"doc": "Bind-once / draw-many hot path (UI, and any batched geometry-pool\nrenderer). Raw pointers — NO Ref<> by value — so a per-draw loop of\nhundreds of calls records zero atomic refcount traffic. BindPipeline /\nBindVertexBuffer / BindIndexBuffer record the bind once when state\nchanges; DrawIndexedBound is a bare draw against whatever is bound (it\ndoes NOT re-bind the pipeline or buffers). Mirrors what a direct\nvkCmdDrawIndexed loop does. Caller owns the lifetime of the pointers for\nthe duration of recording.",
-							"line": 186
+							"line": 201
 						},
 						{
 							"kind": "method",
 							"name": "BindVertexBuffer",
 							"signature": "static void BindVertexBuffer(VertexBuffer* vertexBuffer)",
 							"static": true,
-							"line": 187
+							"line": 202
 						},
 						{
 							"kind": "method",
 							"name": "BindIndexBuffer",
 							"signature": "static void BindIndexBuffer(IndexBuffer* indexBuffer)",
 							"static": true,
-							"line": 188
+							"line": 203
 						},
 						{
 							"kind": "method",
 							"name": "DrawIndexedBound",
 							"signature": "static void DrawIndexedBound(uint32_t indexCount, uint32_t firstIndex = 0, uint32_t vertexOffset = 0)",
 							"static": true,
-							"line": 189
+							"line": 204
 						},
 						{
 							"kind": "method",
@@ -6808,14 +6831,14 @@
 							"signature": "static void DrawMeshTasks(const Ref<Pipeline>& pipeline, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)",
 							"static": true,
 							"doc": "Mesh-shading draw — launches task/mesh workgroups instead of\nconsuming vertex buffers. Requires a pipeline built from a\nMesh(+Task) shader and RendererCapabilities.SupportsMeshShaders.",
-							"line": 194
+							"line": 209
 						},
 						{
 							"kind": "method",
 							"name": "DrawIndexed",
 							"signature": "static void DrawIndexed(const Ref<Pipeline>& pipeline, const Ref<VertexBuffer>& vertexBuffer, const Ref<IndexBuffer>& indexBuffer, uint32_t indexCount = 0, uint32_t firstIndex = 0)",
 							"static": true,
-							"line": 195
+							"line": 210
 						},
 						{
 							"kind": "method",
@@ -6823,14 +6846,14 @@
 							"signature": "static void DrawIndexedInstanced(const Ref<Pipeline>& pipeline, const Ref<VertexBuffer>& vertexBuffer, const Ref<IndexBuffer>& indexBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex = 0)",
 							"static": true,
 							"doc": "Instanced indexed draw (auto-instancing). Per-instance data comes\nfrom a storage buffer indexed by SV_InstanceID in the shader.",
-							"line": 201
+							"line": 216
 						},
 						{
 							"kind": "method",
 							"name": "DrawIndexedIndirect",
 							"signature": "static void DrawIndexedIndirect(const Ref<Pipeline>& pipeline, const Ref<VertexBuffer>& vertexBuffer, const Ref<IndexBuffer>& indexBuffer, const Ref<StorageBuffer>& indirectBuffer, uint64_t offset = 0)",
 							"static": true,
-							"line": 203
+							"line": 218
 						},
 						{
 							"kind": "method",
@@ -6838,7 +6861,7 @@
 							"signature": "static void MultiDrawIndexedIndirect(const Ref<Pipeline>& pipeline, const Ref<VertexBuffer>& vertexBuffer, const Ref<IndexBuffer>& indexBuffer, const Ref<StorageBuffer>& indirectBuffer, uint32_t drawCount, uint32_t stride, uint64_t offset = 0)",
 							"static": true,
 							"doc": "Multi-draw indexed indirect: drawCount indexed-indirect commands\npacked `stride` bytes apart from `offset`. Binds vertexBuffer/indexBuffer\nONCE (a shared geometry pool) — each command carries its own\nvertexOffset/firstIndex/firstInstance. This is the batched GPU-driven\ndraw: N meshes culled by compute, one CPU call.",
-							"line": 212
+							"line": 227
 						},
 						{
 							"kind": "method",
@@ -6846,14 +6869,14 @@
 							"signature": "static void DrawIndexedIndirectCount(const Ref<Pipeline>& pipeline, const Ref<VertexBuffer>& vertexBuffer, const Ref<IndexBuffer>& indexBuffer, const Ref<StorageBuffer>& indirectBuffer, uint64_t offset, const Ref<StorageBuffer>& countBuffer, uint64_t countOffset, uint32_t maxDrawCount, uint32_t stride)",
 							"static": true,
 							"doc": "Count-buffer variant: up to maxDrawCount commands, the GPU-written\nuint at countBuffer + countOffset deciding how many issue. Check\nGetCapabilities().SupportsDrawIndirectCount first — D3D11 and Metal\nrecord nothing.",
-							"line": 220
+							"line": 235
 						},
 						{
 							"kind": "method",
 							"name": "Dispatch",
 							"signature": "static void Dispatch(const Ref<ComputePipeline>& pipeline, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)",
 							"static": true,
-							"line": 222
+							"line": 237
 						},
 						{
 							"kind": "method",
@@ -6861,28 +6884,28 @@
 							"signature": "static void DispatchIndirect(const Ref<ComputePipeline>& pipeline, const Ref<StorageBuffer>& argsBuffer, uint64_t offset = 0)",
 							"static": true,
 							"doc": "Group counts from a buffer a shader wrote (three uints at offset).",
-							"line": 224
+							"line": 239
 						},
 						{
 							"kind": "method",
 							"name": "BindComputeDescriptorSet",
 							"signature": "static void BindComputeDescriptorSet(const Ref<ComputePipeline>& pipeline, const Ref<DescriptorSet>& descriptorSet, uint32_t setIndex = 0)",
 							"static": true,
-							"line": 225
+							"line": 240
 						},
 						{
 							"kind": "method",
 							"name": "ComputePushConstants",
 							"signature": "static void ComputePushConstants(const Ref<ComputePipeline>& pipeline, const void* data, uint32_t size, uint32_t offset = 0)",
 							"static": true,
-							"line": 226
+							"line": 241
 						},
 						{
 							"kind": "method",
 							"name": "DispatchImmediate",
 							"signature": "static void DispatchImmediate(const Ref<ComputePipeline>& pipeline, const Ref<DescriptorSet>& descriptorSet, const void* pushData, uint32_t pushSize, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)",
 							"static": true,
-							"line": 228
+							"line": 243
 						},
 						{
 							"kind": "method",
@@ -6890,21 +6913,21 @@
 							"signature": "static void DispatchOrdered(const Ref<ComputePipeline>& pipeline, const Ref<DescriptorSet>& descriptorSet, const void* pushData, uint32_t pushSize, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)",
 							"static": true,
 							"doc": "A dispatch whose inputs this frame uploaded with SetData and whose\noutput this frame's draws consume: recorded into the frame's command\nstream (after the copies, before the draws, with the compute→graphics\nbarrier) whenever one is open, and submitted single-time otherwise.\nDispatchImmediate from inside a frame is NOT that on D3D12 — its\nsingle-time list runs ahead of the frame list that carries the copies,\nso the kernel reads the previous contents. The meshlet vertex gather\ndid exactly this and read uninitialized page tables after a large\npage-in: a garbage per-page source count looped a thread ~2^26 times\n(DEVICE_HUNG on Sun Temple) or, when it read zeros, wrote nothing and\nthe frame drew grid and sky. Not for a dispatch followed by a CPU\nreadback: that still needs completion, i.e. DispatchImmediate.",
-							"line": 242
+							"line": 257
 						},
 						{
 							"kind": "method",
 							"name": "ComputeToGraphicsBarrier",
 							"signature": "static void ComputeToGraphicsBarrier()",
 							"static": true,
-							"line": 244
+							"line": 259
 						},
 						{
 							"kind": "method",
 							"name": "GraphicsToComputeBarrier",
 							"signature": "static void GraphicsToComputeBarrier()",
 							"static": true,
-							"line": 245
+							"line": 260
 						},
 						{
 							"kind": "method",
@@ -6912,7 +6935,7 @@
 							"signature": "static void ComputeToComputeBarrier()",
 							"static": true,
 							"doc": "Memory barrier between two compute dispatches (write → read), e.g. an\niterative reduction where each level reads the previous level's output.",
-							"line": 248
+							"line": 263
 						},
 						{
 							"kind": "method",
@@ -6920,7 +6943,7 @@
 							"signature": "static void TaskToTaskBarrier()",
 							"static": true,
 							"doc": "Memory barrier between task/mesh-stage buffer writes and later\ntask/mesh-stage reads or writes (two-phase meshlet occlusion cull:\nthe phase-0 visibility slots feed the phase-2 recovery dispatches).\nNo-op when the device lacks mesh-shader support.",
-							"line": 253
+							"line": 268
 						},
 						{
 							"kind": "method",
@@ -6928,7 +6951,7 @@
 							"signature": "static void BlitToSwapchain(const Ref<Image2D>& sourceImage)",
 							"static": true,
 							"doc": "Blit an offscreen image to the current swapchain image (for runtime rendering)\nMust be called between BeginFrame() and EndFrame(), BEFORE BeginSwapChainRenderPass().",
-							"line": 257
+							"line": 272
 						},
 						{
 							"kind": "method",
@@ -6936,21 +6959,21 @@
 							"signature": "static void BlitToSwapchainRegion(const Ref<Image2D>& sourceImage, int32_t dstX, int32_t dstY, int32_t dstW, int32_t dstH, uint32_t srcW = 0, uint32_t srcH = 0)",
 							"static": true,
 							"doc": "Like BlitToSwapchain but copies into a sub-region of the swapchain\n(in pixel coordinates). Used by multi-camera setups to composite\neach camera's offscreen output into its assigned viewport region.\nRepeated calls overdraw — for non-overlapping viewports this is\nfree, for overlapping ones (PiP) the later call wins, matching\nCameraComponent::renderOrder semantics.\nsrcW/srcH bound the source region read from the image's top-left —\nthe dynamic-resolution active extent when the source chain is\nallocated larger than the frame rendered. 0 = the whole image.",
-							"line": 268
+							"line": 283
 						},
 						{
 							"kind": "method",
 							"name": "SetVSync",
 							"signature": "static void SetVSync(bool enabled)",
 							"static": true,
-							"line": 273
+							"line": 288
 						},
 						{
 							"kind": "method",
 							"name": "GetVSync",
 							"signature": "static bool GetVSync()",
 							"static": true,
-							"line": 274
+							"line": 289
 						},
 						{
 							"kind": "method",
@@ -6958,28 +6981,28 @@
 							"signature": "static bool IsHDROutputActive()",
 							"static": true,
 							"doc": "Negotiated swapchain mode: 0=SDR, 1=scRGB, 2=HDR10. Driven by the\nr.HDROutput cvar (applied at BeginFrame via deferred swapchain\nrecreation); stays 0 when the surface offers no HDR formats.",
-							"line": 279
+							"line": 294
 						},
 						{
 							"kind": "method",
 							"name": "GetActiveHDRMode",
 							"signature": "static int32_t GetActiveHDRMode()",
 							"static": true,
-							"line": 280
+							"line": 295
 						},
 						{
 							"kind": "method",
 							"name": "GetHDRPaperWhiteNits",
 							"signature": "static float GetHDRPaperWhiteNits()",
 							"static": true,
-							"line": 281
+							"line": 296
 						},
 						{
 							"kind": "method",
 							"name": "GetHDRMaxNits",
 							"signature": "static float GetHDRMaxNits()",
 							"static": true,
-							"line": 282
+							"line": 297
 						},
 						{
 							"kind": "method",
@@ -6987,14 +7010,14 @@
 							"signature": "static void SetSceneHDRMode(int32_t mode)",
 							"static": true,
 							"doc": "Scene-side HDR encode opt-in. The present-path owner (game runtime)\nsets this to the negotiated swapchain mode so the SceneRenderer\ntonemapper encodes for the display; the editor\nnever sets it — its scenes stay SDR and are mapped to paper white by\nthe overlay composite instead.",
-							"line": 289
+							"line": 304
 						},
 						{
 							"kind": "method",
 							"name": "GetSceneHDRMode",
 							"signature": "static int32_t GetSceneHDRMode()",
 							"static": true,
-							"line": 290
+							"line": 305
 						},
 						{
 							"kind": "method",
@@ -7002,21 +7025,21 @@
 							"signature": "static void BeginOverlayTarget()",
 							"static": true,
 							"doc": "Overlay target: SDR renders straight into the swapchain\n(identical to BeginSwapChainRenderPass(true) / EndSwapChainRenderPass);\nwith an HDR swapchain the overlay renders into an offscreen BGRA8\nstaging image and End composites it with the paper-white sRGB→HDR\nencode. Call in place of the swapchain-pass pair around overlay draws.",
-							"line": 297
+							"line": 312
 						},
 						{
 							"kind": "method",
 							"name": "EndOverlayTargetAndComposite",
 							"signature": "static void EndOverlayTargetAndComposite()",
 							"static": true,
-							"line": 298
+							"line": 313
 						},
 						{
 							"kind": "method",
 							"name": "WaitIdle",
 							"signature": "static void WaitIdle()",
 							"static": true,
-							"line": 300
+							"line": 315
 						},
 						{
 							"kind": "method",
@@ -7024,28 +7047,28 @@
 							"signature": "static bool AsyncComputeSupported()",
 							"static": true,
 							"doc": "Async compute lane — a second hardware queue running compute work\nconcurrently with the graphics queue. Usage is a bracket around the\nwork plus one wait before whatever consumes it:\n\nif (Renderer::BeginAsyncCompute()) { ...record...; Renderer::EndAsyncCompute(); }\nelse { ...record the same work inline... }\n...graphics passes that do not touch it...\nRenderer::WaitAsyncCompute();   // before the first consumer\n\nBeginAsyncCompute returns false when the backend has no second queue,\na lane is already open, or a render pass is recording — the caller then\nrecords inline and gets identical results without the overlap. The\nrecording calls in between are the ordinary ones: the lane works by\nswapping the command buffer the facade records into.\n\nSCHEDULING POLICY. What may go on the lane is not a matter of taste —\nthe queues are ordered in ONE direction only (lane signals, graphics\nwaits), so:\n1. A lane pass may read only what was finished before the lane opened\nor in an earlier frame. There is no graphics→lane wait; a lane pass\nthat samples something this frame's graphics queue is still writing\nreads a torn resource, and no barrier inside either command buffer\ncan express that ordering.\n2. Nothing recorded on the graphics queue between the lane's open and\nthe wait may touch what the lane writes. That span is exactly the\noverlap window, and it is unsynchronized by construction.\n3. The wait goes immediately before the first consumer, between passes.\nInside a render pass or a GPU timestamp scope the backend cannot\nsplit the graphics submit (both hold the raw command buffer), so the\nwait silently degrades to a whole-frame wait — correct, but the\noverlap is lost.\n4. Every resource the lane touches must be reachable from the compute\nqueue. On Vulkan the RHI marks compute-reachable resources\nCONCURRENT at creation; an attachment-usage image is NOT one of\nthem, and handing the lane a render target is a queue-ownership\nviolation the backend logs rather than papers over.\nEndFrame waits for an outstanding lane the caller forgot to wait on, so\na skipped consumer degrades to a stall, never to a race.\n\nwaitForGraphicsSoFar lifts rule 1 for ONE bracket: the graphics work\nrecorded up to this point is submitted immediately and the lane's submit\nwaits for it, so the lane may read what those passes wrote. It is opt-in\nper call because it costs a graphics submit at the open and shrinks the\noverlap window to what is recorded AFTER the bracket; the default false\nis the one-way lane every existing caller gets. It returns false — no\nlane, record inline — on a backend without the reverse primitive or\nwhile a GPU scope holds the command buffer the split would end.",
-							"line": 349
+							"line": 364
 						},
 						{
 							"kind": "method",
 							"name": "BeginAsyncCompute",
 							"signature": "static bool BeginAsyncCompute(bool waitForGraphicsSoFar = false)",
 							"static": true,
-							"line": 350
+							"line": 365
 						},
 						{
 							"kind": "method",
 							"name": "EndAsyncCompute",
 							"signature": "static void EndAsyncCompute()",
 							"static": true,
-							"line": 351
+							"line": 366
 						},
 						{
 							"kind": "method",
 							"name": "WaitAsyncCompute",
 							"signature": "static void WaitAsyncCompute()",
 							"static": true,
-							"line": 352
+							"line": 367
 						},
 						{
 							"kind": "method",
@@ -7053,7 +7076,7 @@
 							"signature": "static bool AsyncComputeGraphicsHandoffSupported()",
 							"static": true,
 							"doc": "Whether a lane can be opened with waitForGraphicsSoFar at all on the\nlive backend, for a caller that wants to choose its pass layout rather\nthan discover the refusal.",
-							"line": 357
+							"line": 372
 						},
 						{
 							"kind": "method",
@@ -7061,7 +7084,7 @@
 							"signature": "static bool AsyncComputeInFlight()",
 							"static": true,
 							"doc": "True between EndAsyncCompute and the wait that consumes it — the window\nin which lane work and graphics work are executing concurrently.",
-							"line": 361
+							"line": 376
 						},
 						{
 							"kind": "method",
@@ -7069,14 +7092,14 @@
 							"signature": "static uint64_t AsyncComputeSplitWaitCount()",
 							"static": true,
 							"doc": "How many lane submissions the graphics queue actually waited for behind a\nSPLIT submit (real in-frame overlap) versus folded into the frame's own\nsubmit (no in-frame overlap). Counters are process-lifetime; the split\ncount staying at zero is the signal that the lane is recording into a\nsecond buffer and nothing more.",
-							"line": 368
+							"line": 383
 						},
 						{
 							"kind": "method",
 							"name": "AsyncComputeFoldedWaitCount",
 							"signature": "static uint64_t AsyncComputeFoldedWaitCount()",
 							"static": true,
-							"line": 369
+							"line": 384
 						},
 						{
 							"kind": "method",
@@ -7084,7 +7107,7 @@
 							"signature": "static uint64_t AsyncComputeGraphicsHandoffCount()",
 							"static": true,
 							"doc": "How many lanes were opened with the graphics→lane hand-off. Zero means\nthe reverse primitive is built and nothing has asked for it — which is\nthe intended state until a pass qualifies for it.",
-							"line": 374
+							"line": 389
 						},
 						{
 							"kind": "method",
@@ -7092,28 +7115,28 @@
 							"signature": "static void NoteGpuScopeOpened()",
 							"static": true,
 							"doc": "GPU timestamp scopes hold the raw command buffer they opened on, so a\nsplit submit underneath one would end a buffer the scope still writes\ninto. GpuScope reports its depth here and the lane refuses to split\nwhile any scope is open.",
-							"line": 380
+							"line": 395
 						},
 						{
 							"kind": "method",
 							"name": "NoteGpuScopeClosed",
 							"signature": "static void NoteGpuScopeClosed()",
 							"static": true,
-							"line": 381
+							"line": 396
 						},
 						{
 							"kind": "method",
 							"name": "BeginUploadBatch",
 							"signature": "static void BeginUploadBatch()",
 							"static": true,
-							"line": 383
+							"line": 398
 						},
 						{
 							"kind": "method",
 							"name": "EndUploadBatch",
 							"signature": "static void EndUploadBatch()",
 							"static": true,
-							"line": 384
+							"line": 399
 						},
 						{
 							"kind": "method",
@@ -7121,7 +7144,28 @@
 							"signature": "static uint32_t ReloadShaders()",
 							"static": true,
 							"doc": "WaitIdle → drop the VFS read cache → re-read SPIR-V for every live\nshader → recreate every live pipeline. Must be called OUTSIDE frame\nrecording (before BeginFrame). Returns the number of shaders whose\nbytecode actually changed.",
-							"line": 390
+							"line": 405
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "Renderer::FTransitionCounters",
+					"namespace": "Mowo",
+					"doc": "Transition requests, split by who issued them: the render-graph\nexecutor's barrier walk, or code recording outside it (pass bodies run\nby the graph included, since their barriers are still hand-placed).\nCumulative across the process; a frame's share is the difference of\ntwo reads. Requests, not barriers — a request for the state an image is\nalready in records nothing.",
+					"line": 170,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Graph",
+							"signature": "uint64_t Graph = 0",
+							"line": 171
+						},
+						{
+							"kind": "field",
+							"name": "Manual",
+							"signature": "uint64_t Manual = 0",
+							"line": 172
 						}
 					]
 				},
@@ -7129,31 +7173,31 @@
 					"kind": "class",
 					"name": "FUploadBatchScope",
 					"namespace": "Mowo",
-					"line": 396,
+					"line": 411,
 					"members": [
 						{
 							"kind": "method",
 							"name": "FUploadBatchScope",
 							"signature": "FUploadBatchScope()",
-							"line": 398
+							"line": 413
 						},
 						{
 							"kind": "method",
 							"name": "~FUploadBatchScope",
 							"signature": "~FUploadBatchScope()",
-							"line": 399
+							"line": 414
 						},
 						{
 							"kind": "method",
 							"name": "FUploadBatchScope",
 							"signature": "FUploadBatchScope(const FUploadBatchScope&) = delete",
-							"line": 401
+							"line": 416
 						},
 						{
 							"kind": "method",
 							"name": "operator=",
 							"signature": "FUploadBatchScope& operator=(const FUploadBatchScope&) = delete",
-							"line": 402
+							"line": 417
 						}
 					]
 				}

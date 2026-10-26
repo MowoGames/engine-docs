@@ -14,62 +14,39 @@
 					"kind": "class",
 					"name": "FBinaryNames",
 					"namespace": "Mowo",
-					"line": 35,
+					"line": 26,
 					"members": [
-						{
-							"kind": "method",
-							"name": "Prefix",
-							"signature": "static std::string Prefix()",
-							"static": true,
-							"doc": "The build environment every module library of this build is prefixed with:\n\"MowoEditor\" for the shared one, a target's own name where it composes\nmodules its own way (the dedicated server).",
-							"line": 40
-						},
 						{
 							"kind": "method",
 							"name": "PlatformFolder",
 							"signature": "static std::string PlatformFolder()",
 							"static": true,
-							"doc": "Win64, Linux, Mac, Android or IOS: the folder under Engine/Binaries.",
-							"line": 45
+							"doc": "win-x64, linux-x64, osx-arm64, android-arm64 or ios-arm64: the folder\nunder Engine/Binaries.",
+							"line": 30
 						},
 						{
 							"kind": "method",
 							"name": "Configuration",
 							"signature": "static std::string Configuration()",
 							"static": true,
-							"line": 49
-						},
-						{
-							"kind": "method",
-							"name": "Suffix",
-							"signature": "static std::string Suffix()",
-							"static": true,
-							"doc": "\"-Win64-Debug\", or empty for Development and for a mobile image.",
-							"line": 54
-						},
-						{
-							"kind": "method",
-							"name": "ShortModuleName",
-							"signature": "static std::string ShortModuleName(const std::string& moduleName)",
-							"static": true,
-							"doc": "A module's name inside a file name: its run-time name without the\n\"MowoEngine.\" or \"MowoEngine.Plugins.\" it carries in manifests and logs.\nMBT's BinaryLayout.ShortModuleName strips the same; the two must agree.",
-							"line": 65
+							"doc": "debug, dev, debuggame, profile or release: the folder under the platform.\nProfile defines MOWO_BUILD_RELEASE too, so it is tested first.",
+							"line": 43
 						},
 						{
 							"kind": "method",
 							"name": "ModuleStem",
 							"signature": "static std::string ModuleStem(const std::string& moduleName)",
 							"static": true,
-							"doc": "\"MowoEngine.Core\" -> \"MowoEditor-Core-Win64-Debug\": the file name of a\nmodule library without the platform's \"lib\" prefix and extension.",
-							"line": 81
+							"doc": "\"MowoEngine.Core\" -> \"MowoEngine.Core\": the file name of a module library\nwithout the platform's \"lib\" prefix and extension.",
+							"line": 59
 						},
 						{
 							"kind": "method",
 							"name": "ExecutableStem",
 							"signature": "static std::string ExecutableStem(const std::string& name)",
 							"static": true,
-							"doc": "\"MowoServer\" -> \"MowoServer-Win64-Debug\": a sibling executable this build\nproduced, without extension. IPlatformProcess::ExecutableFileName adds it.",
-							"line": 87
+							"doc": "A sibling executable this build produced, without extension.\nIPlatformProcess::ExecutableFileName adds it.",
+							"line": 65
 						}
 					]
 				}
@@ -1029,90 +1006,97 @@
 							"kind": "method",
 							"name": "ModuleFileName",
 							"signature": "std::string ModuleFileName(const std::string& moduleName) const",
-							"doc": "The on-disk filename for a module, prefix and extension included —\n\"MowoEditor-Platform.dll\" for MowoEngine.Platform in a Development\nbuild on Windows, \"libMowoEditor-Platform-Mac-Debug.dylib\" in a Debug\none on macOS (FBinaryNames::ModuleStem). Building it as\n`name + Extension()` is a Windows-shaped bug: it names a file that does\nnot exist on POSIX, and every caller doing so was silently failing to\nfind plugin binaries there.",
-							"line": 32
+							"doc": "The on-disk filename for a module, prefix and extension included —\n\"MowoEngine.Platform.dll\" on Windows, \"libMowoEngine.Platform.dylib\" on\nmacOS (FBinaryNames::ModuleStem). Building it as\n`name + Extension()` is a Windows-shaped bug: it names a file that does\nnot exist on POSIX, and every caller doing so was silently failing to\nfind plugin binaries there.",
+							"line": 31
 						},
 						{
 							"kind": "method",
 							"name": "OwnsAddress",
 							"signature": "virtual bool OwnsAddress(void* handle, const void* address) = 0",
 							"doc": "True when `address` falls inside the loaded image `handle` refers to.\nUsed to attribute a static registration back to the module that owns it.",
-							"line": 38
+							"line": 37
 						},
 						{
 							"kind": "method",
 							"name": "AddSearchDirectory",
 							"signature": "virtual void AddSearchDirectory(const std::string& absDir)",
-							"doc": "Add a directory to the process's shared-library search path so\nsubsequent by-name loads (ours AND any a vendor runtime performs\ninternally) can resolve from it — packaged games use this for\nBinaries/<Platform>/Upscalers. Default: no-op.",
-							"line": 44
+							"doc": "Add a directory to the process's shared-library search path so\nsubsequent by-name loads (ours AND any a vendor runtime performs\ninternally) can resolve from it — packaged games use this for\nBinaries/<platform>/Upscalers. Default: no-op.",
+							"line": 43
 						},
 						{
 							"kind": "method",
 							"name": "LoadedImagePath",
 							"signature": "virtual std::string LoadedImagePath(const std::string& fileName)",
 							"doc": "Full path of an image with this file name already mapped into the\nprocess, or empty. The Windows loader keys a load by FULL path, so a\nplugin a host links (the test executables link every plugin) and a plugin loader\nthen loads from Plugins/<X>/Binaries/ come up as two copies with two sets\nof registries. The POSIX loaders already hand back the mapped image for a\nmatching SONAME / install name, so the default answers empty.",
-							"line": 54
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "MappedImageSymbol",
+							"signature": "virtual bool MappedImageSymbol(const std::string& path, const char* name, void*& outSymbol) = 0",
+							"doc": "Whether the image at `path` (the executable for an empty path) is mapped\ninto the process, and if it is, the address of the symbol `name` THAT\nimage exports, or null in `outSymbol` when it exports none. A by-handle\ndlsym also searches the image's dependencies, which would hand back a\ndependency's copy of a symbol every image defines (the build id).\nTakes no reference on the image.",
+							"line": 64
 						},
 						{
 							"kind": "method",
 							"name": "OpenImageForLoad",
 							"signature": "virtual void* OpenImageForLoad(const std::string& path) = 0",
 							"doc": "A module file held open across a verified load. The signature gate hashes\nthe bytes through this handle, and on Windows nobody can write, rename or\ndelete the file until CloseImageForLoad, so the image Load maps is the one\nthat was verified — checking a path and then loading the path left a window\nin which the file could be swapped. POSIX cannot deny writers: there\nImageStillAtPath catches a path renamed over and any write to the held\ninode through its change time (ctime, which utimes() cannot set back), so\nan in-place rewrite of the same size with a restored mtime is caught too.\nNull when the file cannot be opened.",
-							"line": 68
+							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "ImageFileSize",
 							"signature": "virtual uint64_t ImageFileSize(void* image) = 0",
-							"line": 69
+							"line": 76
 						},
 						{
 							"kind": "method",
 							"name": "ReadImage",
 							"signature": "virtual int64_t ReadImage(void* image, uint64_t offset, void* dst, uint64_t size) = 0",
 							"doc": "Bytes read at `offset` (0 at the end of the file, -1 on an error).",
-							"line": 72
+							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "ImageStillAtPath",
 							"signature": "virtual bool ImageStillAtPath(void* image, const std::string& path) = 0",
 							"doc": "False when `path` no longer names the file the handle holds.",
-							"line": 75
+							"line": 82
 						},
 						{
 							"kind": "method",
 							"name": "CloseImageForLoad",
 							"signature": "virtual void CloseImageForLoad(void* image) = 0",
-							"line": 76
+							"line": 83
 						},
 						{
 							"kind": "method",
 							"name": "ImportedLibraryNames",
 							"signature": "virtual std::vector<std::string> ImportedLibraryNames(void* image)",
 							"doc": "The shared libraries the image pulls in when it is mapped: the PE import\nand delay-import tables, ELF DT_NEEDED, Mach-O LC_LOAD_DYLIB and its weak,\nlazy, upward and re-export forms (a fat image answers for this host's\nslice). Empty where the format is not parsed — the dependencies then load\nunverified.",
-							"line": 83
+							"line": 90
 						},
 						{
 							"kind": "method",
 							"name": "ResolveImportForLoad",
 							"signature": "virtual std::string ResolveImportForLoad(const std::string& importName)",
 							"doc": "The file the loader would map for an import of this name when that is a\nfile the game ships: empty for an image already mapped, an OS library or\nan API set, which the gate has no signature for and no reason to doubt.",
-							"line": 91
+							"line": 98
 						},
 						{
 							"kind": "method",
 							"name": "RestrictSearchPath",
 							"signature": "virtual bool RestrictSearchPath()",
 							"doc": "Takes the working directory and PATH out of the shared-library search, so\na DLL dropped beside a shortcut's target or anywhere on PATH is never\nwhat an import resolves to. The application directory and the\ndirectories AddSearchDirectory named stay searched. False where the\nplatform has no such switch.",
-							"line": 101
+							"line": 108
 						},
 						{
 							"kind": "method",
 							"name": "PlatformName",
 							"signature": "virtual const char* PlatformName() const = 0",
-							"doc": "Platform folder name used by the packaged layouts (\"Win64\", \"Linux\",\n\"Mac\") — Binaries/<PlatformName>, Plugins/<X>/Binaries/<PlatformName>.",
-							"line": 107
+							"doc": "Platform id used by every binaries layout (\"win-x64\", \"linux-x64\",\n\"osx-arm64\", \"android-arm64\", \"ios-arm64\") — Engine/Binaries/<id>,\na package's Binaries/<id>, Plugins/<X>/Binaries/<id>.",
+							"line": 115
 						}
 					]
 				}
@@ -1552,6 +1536,13 @@
 							"signature": "virtual void RouteDebugReportsToStderr() = 0",
 							"doc": "Send the C runtime's debug assertion and error reports to stderr instead\nof a modal dialog. A headless test row inside a windowed host has nobody\nto press the box, so an assert read as a wedge until the runner's\ntimeout; on stderr the report is printed and the process ends with a\ndecodable exit. No-op where the runtime has no dialog mode.",
 							"line": 147
+						},
+						{
+							"kind": "method",
+							"name": "ShowStartupError",
+							"signature": "virtual void ShowStartupError(const std::string& title, const std::string& message) = 0",
+							"doc": "A failure the process cannot start past, reported before any window or\nlog exists: always on stderr, and where the process has no stderr to\nwrite to (an editor started from the desktop) also in a message box, or\nthe process would simply vanish.",
+							"line": 153
 						}
 					]
 				}

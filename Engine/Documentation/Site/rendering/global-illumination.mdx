@@ -14,15 +14,16 @@ sources:
   - Engine/Source/Editor/MowoEditor/Private/Core/MEditorEngineLevelEditing.cpp
   - Engine/Source/Editor/MowoEditor/Private/Settings/EngineSettingsPages.cpp
   - Engine/Source/Editor/MowoEditor/Private/Settings/ProjectSettingsPages.cpp
+  - Engine/Shaders/Private/GI/DdgiSample.hlsl
+  - Engine/Shaders/Private/GI/ScreenProbeInterpolate.hlsl
+  - Engine/Shaders/Private/GI/NeuralCacheSample.hlsl
+  - Engine/Shaders/Private/PostProcess/GTAO.hlsl
+  - Engine/Shaders/Private/GI/GiDenoise.hlsl
   - Engine/Documentation/ROADMAP.md
-verifiedAt: 1a346c1c5
+verifiedAt: 5922e6e5e
 ---
 
 Global Illumination is Mowo's real-time indirect lighting. It combines a camera-centred signed distance field, a grid of irradiance probes, a radiance cache, a mesh-card surface cache and a screen-space probe gather, with temporal denoising on top. At Epic it can also trace its gather rays through the hardware ray-tracing scene. Nothing has to be baked for it to work; a baked field is only a fallback for tiers that turn the live system off.
-
-<Callout type="note">
-The system's internal codename is Umbra. Some console-variable help text, the **UMBRA GLOBAL ILLUMINATION** heading in Project Settings and some log lines still call it that.
-</Callout>
 
 Global Illumination runs from the **Medium** tier up. Low turns it off and samples a [baked field](#bake-a-fallback-for-low) instead when the scene has one.
 
@@ -70,7 +71,17 @@ At Epic and Cinematic, screen-probe rays trace the ray-tracing scene with inline
 
 ### Denoising
 
-The gathered light goes through a velocity-aware temporal pass and a variance-guided spatial filter (`r.GI.Denoise`: `0` off, `1` on). By default the filter runs at half resolution and upsamples in the composite (`r.GI.DenoiseHalfRes`). AO from GTAO or ray-traced AO darkens the indirect light in the composite (`r.GI.AOWeight`, `r.GI.BentNormalAO`).
+The gathered light goes through a velocity-aware temporal pass and a variance-guided spatial filter (`r.GI.Denoise`: `0` off, `1` on). By default the filter runs at half resolution and upsamples in the composite (`r.GI.DenoiseHalfRes`).
+
+### Composite
+
+The composite multiplies the gathered irradiance by the surface's diffuse albedo: the base colour times one minus metallic. This holds for world probes, screen probes and the neural cache alike. A fully metallic surface has no diffuse albedo, so it takes no diffuse indirect light or sky fill; its indirect light comes from reflections.
+
+AO from GTAO or ray-traced AO darkens the indirect light here. `r.GI.AOWeight` (default 1) scales a plain AO multiply. `r.GI.BentNormalAO` (default 1) adds cone occlusion along the AO pass's bent normal, the average unoccluded direction, so creases and contacts lose indirect light while an open floor keeps its sky fill.
+
+<Callout type="note">
+In earlier versions metal surfaces such as a mirror floor picked up grey diffuse sky fill, and GTAO's bent normal on open floors pointed into the surface, which occluded most of their indirect light. Both are fixed: scenes tuned against the old look may show brighter non-metal floors and darker metals.
+</Callout>
 
 ### Reflections and translucency
 
@@ -100,7 +111,7 @@ To keep a tier's shadows and resolution but drop the cost of Global Illumination
 ## Settings
 
 - **Project Settings > Rendering**: **Dynamic GI Method** (off, screen space or radiance cascades; needs a restart) and **Reflection Method**.
-- **Project Settings > Engine > Global Illumination**: the distance field resolution, radiance interval, denoise mode, final gather, probe and ray counts, surface cache, the tracing step caps and the screen-probe settings.
+- **Project Settings > Engine > Global Illumination**: the distance field resolution, radiance interval, denoise mode, final gather, probe and ray counts, surface cache, the tracing step caps, the screen-probe settings, and an **Ambient Occlusion** section (AO slices, the ray-traced AO rays, radius scale, calibration and history, **AO Weight On Indirect**, **Bent Normal Occlusion** and the AO and bent-normal resolutions).
 - Players get a **Global Illumination** row (off, screen space or radiance cascades) in the **Graphics** settings.
 
 ## Tune it for a scene
@@ -110,7 +121,7 @@ To keep a tier's shadows and resolution but drop the cost of Global Illumination
 Make sure the tier is Medium or higher, or force it with `r.DDGI 1`. Switch the viewport to the **Global Illumination** buffer view (or set `r.ViewMode 14`) to see the indirect light on its own.
 </Step>
 <Step title="Balance sky and AO">
-`r.GI.SkyScale` (default 1) scales how much sky light fills outdoor shadows. `r.GI.AOWeight` (default 1) controls how strongly AO darkens the indirect light.
+`r.GI.SkyScale` (default 1) scales how much sky light fills outdoor shadows. `r.GI.AOWeight` (default 1) controls how strongly AO darkens the indirect light. Neither changes metals: a fully metallic surface takes no diffuse fill, so light it through its reflections instead.
 </Step>
 <Step title="Adjust the indirect intensity">
 `SceneRenderer::Options::DdgiIntensity` is an artist gain on indirect diffuse.
@@ -120,7 +131,7 @@ If light leaks or thin objects bounce no light, look at the field itself with th
 </Step>
 </Steps>
 
-<Screenshot id="rendering-umbra-gi-buffer" alt="Mowo Editor viewport at the High tier showing the Global Illumination buffer view of a room with a red wall and a white floor lit through a window, with visible red color bleeding onto the floor and ceiling" caption="The Global Illumination view isolates the indirect light." />
+<Screenshot id="rendering-gi-buffer" alt="Mowo Editor viewport at the High tier showing the Global Illumination buffer view of a room with a red wall and a white floor lit through a window, with visible red color bleeding onto the floor and ceiling" caption="The Global Illumination view isolates the indirect light." />
 
 ## Bake a fallback for Low
 

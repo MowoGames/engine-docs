@@ -10,8 +10,9 @@ sources:
   - Engine/Source/Runtime/PCG/Public/PCG/PcgComponent.h
   - Engine/Source/Runtime/PCG/Public/PCG/PcgGeneratedComponent.h
   - Engine/Source/Runtime/PCG/Public/PCG/PcgGeneration.h
+  - Engine/Source/Runtime/PCG/Private/PcgGeneration.cpp
   - Engine/Source/Runtime/PCG/Public/PCG/MPcgStatics.h
-verifiedAt: 08e26df3d
+verifiedAt: 5922e6e5e
 ---
 
 A PCG graph (`.pcg`) scatters content over the landscape or through a volume: foliage, mesh actors, gameplay actors and whole level instances. The same seed always produces the same result, on every machine.
@@ -51,8 +52,16 @@ Add a `PCG` component (category **Environment**) to an entity. <Source symbol="P
 | `landscape` | Which terrain to sample; empty uses the first |
 | `generateInEditor`, `generateAtRuntime` | When it runs |
 | `maxPoints`, `maxMeshActors` | Safety caps |
+| `partitioned`, `partitionCellSize` | Generate the volume as a grid of world-aligned cells (64 m by default), each on its own worker, so a large volume regenerates in parallel |
 
 In the editor, a volume regenerates on its own when anything it depends on changes: the graph or a subgraph, the level's splines, the seed, the volume or the terrain. Before generating, it removes its previous output: foliage goes onto the volume's own painted-foliage component, and every spawned actor carries a `PcgGenerated` component naming the volume, so the next run removes exactly what it made. <Source symbol="PcgGeneratedComponent" />
+
+A regeneration reruns only the nodes after what changed. Each node's result is cached under a hash of its inputs, parameters, seed, bounds, landscape and splines, and a node whose hash matches a cached result reuses it. In a partitioned volume, each cell's unchanged nodes come from the same cache. <Source symbol="FPcgCache" />
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `pcg.NodeCache` | 1 | Reuse cached node results; 0 recomputes every node |
+| `pcg.NodeCacheEntries` | 512 | Node results kept across every volume before the least recently used is dropped |
 
 ## At runtime
 

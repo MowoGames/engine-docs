@@ -20,7 +20,7 @@ sources:
   - Engine/Source/MowoServer.Target.cs
   - Templates/TP_Coop/Source/TP_Coop.Target.cs
   - Templates/TP_Coop/Source/TP_Coop/TP_Coop.Build.cs
-verifiedAt: 08e26df3d
+verifiedAt: 7f8f31f8d
 ---
 
 The build is described by two kinds of C# file, shaped like Unreal Build Tool's. A **module** (`<Module>.Build.cs`) is a unit of code: one folder of sources that builds into one library. A **target** (`<Target>.Target.cs`) is one executable: which module it launches, what kind of binary it is, and the definitions every module in it compiles with.
@@ -81,7 +81,7 @@ Dependencies use short names (`"Core"`, `"EngineLoop"`). An engine library's run
 | `SourceDirectories`, `ExcludeSourcePatterns` | Compile other folders than `Private/`, or drop sources by name |
 | `bUseUnity`, `UnityChunkSize`, `UnityExclude` | Unity (jumbo) builds |
 | `PrivatePCHHeaderFile` | A precompiled header |
-| `OptimizeCode` | `Default`, `Never` (always debuggable) or `Always` (optimized even in Debug) |
+| `OptimizeCode` | `Default`, `Never` (always debuggable) or `Always` (optimized even in `debug`) |
 | `bUseHeaderTool`, `HeaderToolDirectories` | Run the reflection code generator over these folders (`Public/` when empty) |
 | `ShaderDirectories`, `ShaderArchive`, `AddShaderSourceDirectoryMapping` | Shaders this module compiles; see [Shaders and cook](/docs/build-tool/shaders-and-cook/) |
 | `EmbeddedContentDirectory` | A folder (`Content` by default) linked into the binary as read-only data |
@@ -99,7 +99,7 @@ The rules can read the target through `Target`: `Target.Platform`, `Target.Confi
 | `ModuleType.CPlusPlus` (default) | Compiled from the module's sources. A target's launch module is an executable, a module with no sources is header-only, anything else a shared library (a static one in a monolithic build). |
 | `ModuleType.External` | A prebuilt library: include paths, libraries and runtime files only. |
 
-Third-party libraries are external modules under `Engine/Source/ThirdParty/<Lib>/`, with their static and import libraries in `Lib/<Platform>/` and their runtime files in `Engine/Binaries/ThirdParty/<Lib>/<Platform>/`:
+Third-party libraries are external modules under `Engine/Source/ThirdParty/<Lib>/`, with their static and import libraries in `Lib/<platform>/` and their runtime files in `Engine/Binaries/ThirdParty/<Lib>/<platform>/`, where `<platform>` is a platform id such as `win-x64`:
 
 ```csharp title="Engine/Source/ThirdParty/zstd/zstd.Build.cs (excerpt)"
 public class zstd : ModuleRules
@@ -111,17 +111,17 @@ public class zstd : ModuleRules
 
 		if (Target.Platform == TargetPlatform.Win64)
 		{
-			PublicAdditionalLibraries.Add("Lib/Win64/zstd_static.lib");
+			PublicAdditionalLibraries.Add("Lib/win-x64/zstd_static.lib");
 		}
 		else if (Target.Platform == TargetPlatform.Linux)
 		{
-			PublicAdditionalLibraries.Add("Lib/Linux/libzstd_static.a");
+			PublicAdditionalLibraries.Add("Lib/linux-x64/libzstd_static.a");
 		}
 	}
 }
 ```
 
-A runtime file added with a ship condition decides whether a game package carries it: `Always`, `SteamEnabled`, `DiscordEnabled`, `Upscalers`, or `EditorOnly` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ShipCondition.cs" />. `mbt thirdparty` rebuilds the vendored libraries from source.
+A runtime file added with a ship condition decides whether a game package carries it: `Always`, `SteamEnabled`, `DiscordEnabled`, `Upscalers`, `EditorOnly`, or `AutoSubtitles` (ONNX Runtime and its WebGPU provider, shipped only when the project turns on auto-subtitles) <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ShipCondition.cs" />. `mbt thirdparty` rebuilds the vendored libraries from source.
 
 ## Module categories
 
@@ -130,12 +130,12 @@ The group folder a module sits in is its category, as in Unreal <Source path="En
 | Folder | Category | May link into |
 |---|---|---|
 | `Engine/Source/Runtime`, `Engine/Source/ThirdParty` | Runtime | Anything |
-| `Engine/Source/Editor` | Editor | Editor, Program and Test targets; never a Game or Server target, never the Shipping or Test configuration |
-| `Engine/Source/Developer` | Developer | Any target, never the Shipping or Test configuration |
+| `Engine/Source/Editor` | Editor | Editor, Program and Test targets; never a Game or Server target, never the `release` or `profile` configuration |
+| `Engine/Source/Developer` | Developer | Any target, never the `release` or `profile` configuration |
 | `Engine/Source/Programs` | Program | Program targets only |
 | A project, a template, anything outside the engine | Game | Anything |
 
-Only the dedicated server's host declares a category in its rules (`Server`), because it is Runtime code the folder cannot tell apart. A `-t` build whose launch module links a module its target type or configuration rules out fails with the reason, for example `Editor modules never link into a Game target`. Under Shipping and Test, a full build simply leaves those modules out.
+Only the dedicated server's host declares a category in its rules (`Server`), because it is Runtime code the folder cannot tell apart. A `-t` build whose launch module links a module its target type or configuration rules out fails with the reason, for example `Editor modules never link into a Game target`. Under `release` and `profile`, a full build simply leaves those modules out. A module named like a configuration is a rules error.
 
 ## Targets
 
@@ -163,7 +163,7 @@ A target file is named `<Target>.Target.cs` and declares `<Target>Target : Targe
 | `GlobalDefinitions` | Definitions every module of the target compiles with |
 | `LinkType` | `Default` (monolithic when the build asks for it or the platform is mobile), `Modular` or `Monolithic` |
 | `Configurations`, `Platforms` | Where the target builds; empty is everywhere |
-| `bSeparateOutputTree` | The target composes some module differently, so its binaries build into `Engine/Binaries/<Platform>/<Target>/` instead of the shared tree |
+| `bSeparateOutputTree` | The target composes some module differently, so its binaries build into `Engine/Binaries/<platform>/<config>-<tree>/` (`dev-server`, `dev-noonline`) instead of the shared configuration folder |
 | `bWithOnline` | `false` leaves the session, replication and transport layer out |
 | `bBuildEnabledPlugins` | Build the enabled engine plugins with the target |
 | `bEnableSteam`, `bEnableDiscord`, `bEnableMowoOnline`, `bEnableTracy`, `bEnableFSR`, `bEnableXeSS`, `bEnableStreamline`, `bEnableAntiLag2` | SDK switches |
@@ -199,7 +199,7 @@ The game target launches the engine's player, `MowoGame`, under the project's na
 |---|---|---|
 | `MOWO_MONOLITHIC` | `false` | Link the engine statically into the executable |
 | `MOWO_ENABLE_STEAM`, `MOWO_ENABLE_DISCORD`, `MOWO_ENABLE_MOWO_ONLINE` | `true` | Build the platform plugins |
-| `MOWO_ENABLE_TRACY` | per configuration | The Tracy profiler; on in Development and Test when unset |
+| `MOWO_ENABLE_TRACY` | per configuration | The Tracy profiler; on in `dev` and `profile` when unset |
 | `MOWO_ENABLE_FSR`, `MOWO_ENABLE_XESS`, `MOWO_ENABLE_STREAMLINE`, `MOWO_ENABLE_ANTILAG2` | per RHI | Vendor SDKs; each RHI decides by whether the SDK is vendored when unset |
 | `MOWO_WITH_AUTO_SUBTITLES` | `false` | Build the speech recognizer behind auto-subtitles |
 | `MOWO_LOG_FLOOR` | empty | Compile out log lines below `info`, `warning` or `error` |

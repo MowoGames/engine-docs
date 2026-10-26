@@ -320,7 +320,7 @@
 							"name": "IsPlaceableInLevel",
 							"signature": "static bool IsPlaceableInLevel(const std::string& assetPath)",
 							"static": true,
-							"doc": "Asset kinds a level can hold as an actor: any mesh the importer reads\n(source or cooked), a prefab, and a Loom class.",
+							"doc": "Asset kinds a level can hold as an actor: any mesh the importer reads\n(source or cooked), a prefab, and a Visual Script class.",
 							"line": 37
 						},
 						{
@@ -2784,7 +2784,7 @@
 					"kind": "class",
 					"name": "FAssetPackageMigration",
 					"namespace": "Mowo",
-					"doc": "Two migrations (ROADMAP §23 D5 as amended 2026-10-01, §23.6, §23.8 step 8).\n\nRenameLegacyExtensions — every project, every open: each file under\nContent/ spelled the way an older engine wrote it moves to its type's own\nextension (Core/FileTypes.h): .mdfmat -> .mat (.matinst when it has a\nparent), .marcui -> .ui, .mtheme -> .theme, a generic .masset/.mdf package\n-> the extension of the class in its summary, a level -> .mmap (single\nfile; a package project converts it instead), \"<level>.sectors.mdf\" ->\n\"<level>.sectors\". The content is not touched.\n\nMigrate — the text types into packages, for a project on the package\nformat: Material/Material Instance/Prefab/Loom/UI files that do not lead\nwith a summary are wrapped in place under their own extension, a level\nbecomes a World package plus one .actor file per actor under\n__ExternalActors__/<Level>/, and every other text asset type is wrapped in\nplace with its file-type row's name as its class, its sidecar left beside\nit (MdfDocument::Root() steps over the summary, so its loaders read it as\nbefore).\n\nEach file keeps the UUID its .mdfmeta sidecar held, so every registry\nreference by id survives; every path reference survives through an asset\nredirect old -> new in Config/Redirects.ini and the quoted references under\nContent/ are rewritten. Originals a conversion replaces move, never get\ndeleted, to Saved/MigratedSources/<same path>; a rename that would land on\nan existing file is skipped and reported.\n\nRemoval date: 2027-04-19 for RenameLegacyExtensions and the legacy spellings it reads.",
+					"doc": "Two migrations (ROADMAP §23 D5 as amended 2026-10-01, §23.6, §23.8 step 8).\n\nRenameLegacyExtensions — every project, every open: each file under\nContent/ spelled the way an older engine wrote it moves to its type's own\nextension (Core/FileTypes.h): .mdfmat -> .mat (.matinst when it has a\nparent), .marcui -> .ui, .mtheme -> .theme, a generic .masset/.mdf package\n-> the extension of the class in its summary, a level -> .mmap (single\nfile; a package project converts it instead), \"<level>.sectors.mdf\" ->\n\"<level>.sectors\". The content is not touched.\n\nMigrate — the text types into packages, for a project on the package\nformat: Material/Material Instance/Prefab/VisualScripting/UI files that do not lead\nwith a summary are wrapped in place under their own extension, a level\nbecomes a World package plus one .actor file per actor under\n__ExternalActors__/<Level>/, and every other text asset type is wrapped in\nplace with its file-type row's name as its class, its sidecar left beside\nit (MdfDocument::Root() steps over the summary, so its loaders read it as\nbefore).\n\nEach file keeps the UUID its .mdfmeta sidecar held, so every registry\nreference by id survives; every path reference survives through an asset\nredirect old -> new in Config/Redirects.ini and the quoted references under\nContent/ are rewritten. Originals a conversion replaces move, never get\ndeleted, to Saved/MigratedSources/<same path>; a rename that would land on\nan existing file is skipped and reported.\n\nRemoval date: 2027-04-19 for RenameLegacyExtensions and the legacy spellings it reads.",
 					"line": 77,
 					"members": [
 						{
@@ -9824,7 +9824,7 @@
 							"kind": "field",
 							"name": "actorNode",
 							"signature": "std::optional<MdfNode> actorNode",
-							"doc": "The entry's `Actor` node, when the source entity was actor-backed. It\nis what makes a prefab an instance of a CLASS rather than a list of\ncomponents: FActorSerializer respawns the named class, so a prefab of a\nLoom actor comes back with its graphs, its component slots and its CDO\ndefaults, and only the values this entry overrode on top. Kept out of\n`components` because it is not a reflected ECS component and the\ncomponent loop would refuse it by name.",
+							"doc": "The entry's `Actor` node, when the source entity was actor-backed. It\nis what makes a prefab an instance of a CLASS rather than a list of\ncomponents: FActorSerializer respawns the named class, so a prefab of a\nVisual Script actor comes back with its graphs, its component slots and its CDO\ndefaults, and only the values this entry overrode on top. Kept out of\n`components` because it is not a reflected ECS component and the\ncomponent loop would refuse it by name.",
 							"line": 38
 						},
 						{
@@ -11137,60 +11137,73 @@
 							"kind": "method",
 							"name": "GetDecodedImage",
 							"signature": "const DecodedImage& GetDecodedImage() const",
-							"doc": "Get decoded image data (available after Load, before/after CreateGPU)",
-							"line": 129
+							"doc": "Decoded RGBA8 pixels: filled by Load and, unless the CPU copy is kept,\nemptied once CreateGPU has uploaded them — the device copy is the one\nevery sampler reads, and a 4K source held a 64 MB duplicate for the\nasset's lifetime. A CreateGPU after DestroyGPU re-reads the source.",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "SetKeepCpuCopy",
+							"signature": "void SetKeepCpuCopy(bool keep)",
+							"doc": "Opt-in for a tool that reads the pixels after upload (a CPU sampler, a\nheightfield, an editor paint tool): call before CreateGPU. r.Texture.\nKeepCpuCopy=1 keeps every texture's copy.",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "HasCpuCopy",
+							"signature": "bool HasCpuCopy() const",
+							"line": 142
 						},
 						{
 							"kind": "method",
 							"name": "GetWidth",
 							"signature": "uint32_t GetWidth() const",
-							"line": 133
+							"line": 146
 						},
 						{
 							"kind": "method",
 							"name": "GetHeight",
 							"signature": "uint32_t GetHeight() const",
-							"line": 136
+							"line": 153
 						},
 						{
 							"kind": "method",
 							"name": "EstimatedMemoryUsage",
 							"signature": "uint64_t EstimatedMemoryUsage() const override",
-							"doc": "Native BC: the exact cooked chain size. RGBA8: pixels + full mip\nchain (×4/3).",
-							"line": 142
+							"doc": "Native BC: the exact cooked chain size. RGBA8: pixels + full mip\nchain (×4/3). Once the CPU copy is gone, what the upload measured.",
+							"line": 163
 						},
 						{
 							"kind": "method",
 							"name": "GetImportSettings",
 							"signature": "TextureImportSettings& GetImportSettings()",
 							"doc": "Import settings",
-							"line": 156
+							"line": 181
 						},
 						{
 							"kind": "method",
 							"name": "GetImportSettings",
 							"signature": "const TextureImportSettings& GetImportSettings() const",
-							"line": 159
+							"line": 184
 						},
 						{
 							"kind": "method",
 							"name": "HasAuthoredImportSettings",
 							"signature": "bool HasAuthoredImportSettings() const",
 							"doc": "True once a sidecar has spoken for this texture. Load() derives sRGB and\nthe texture group from the filename ONLY while this is false, so an\nartist who set sRGB by hand keeps it through every later rescan.",
-							"line": 166
+							"line": 191
 						},
 						{
 							"kind": "method",
 							"name": "WriteImportSettings",
 							"signature": "void WriteImportSettings(MdfNode& importNode) const override",
 							"doc": "Metadata",
-							"line": 171
+							"line": 196
 						},
 						{
 							"kind": "method",
 							"name": "ReadImportSettings",
 							"signature": "void ReadImportSettings(const MdfNode& importNode) override",
-							"line": 172
+							"line": 197
 						}
 					]
 				}
@@ -14528,37 +14541,6 @@
 			"free": []
 		},
 		{
-			"path": "Engine/Source/Runtime/AssetSystem/Public/AssetSystem/LoomAssetProvider.h",
-			"include": "AssetSystem/LoomAssetProvider.h",
-			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
-			"types": [
-				{
-					"kind": "class",
-					"name": "FLoomAssetProvider",
-					"namespace": "Mowo",
-					"doc": "Installs Loom's AsyncLoadAsset provider over the process-wide asset manager.\nWired from AssetManager::SetInstance, so a host that never wires a manager\n(a headless self-test, the crash reporter) keeps Loom's no-provider failure\ninstead of polling a manager that is not there.",
-					"line": 12,
-					"members": [
-						{
-							"kind": "method",
-							"name": "Install",
-							"signature": "static void Install()",
-							"static": true,
-							"line": 14
-						},
-						{
-							"kind": "method",
-							"name": "Uninstall",
-							"signature": "static void Uninstall()",
-							"static": true,
-							"line": 15
-						}
-					]
-				}
-			],
-			"free": []
-		},
-		{
 			"path": "Engine/Source/Runtime/AssetSystem/Public/AssetSystem/MeshSimplify.h",
 			"include": "AssetSystem/MeshSimplify.h",
 			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
@@ -16553,6 +16535,37 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/AssetSystem/Public/AssetSystem/VisualScriptAssetProvider.h",
+			"include": "AssetSystem/VisualScriptAssetProvider.h",
+			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVisualScriptAssetProvider",
+					"namespace": "Mowo",
+					"doc": "Installs Visual Scripting's AsyncLoadAsset provider over the process-wide asset manager.\nWired from AssetManager::SetInstance, so a host that never wires a manager\n(a headless self-test, the crash reporter) keeps Visual Scripting's no-provider failure\ninstead of polling a manager that is not there.",
+					"line": 12,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Install",
+							"signature": "static void Install()",
+							"static": true,
+							"line": 14
+						},
+						{
+							"kind": "method",
+							"name": "Uninstall",
+							"signature": "static void Uninstall()",
+							"static": true,
+							"line": 15
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/AssetSystem/Public/Gameplay/GameplayEffect.h",
 			"include": "Gameplay/GameplayEffect.h",
 			"doc": "Copyright 2025 Mowo Group. All Rights Reserved.",
@@ -17367,7 +17380,7 @@
 							"kind": "method",
 							"name": "SetOnProjectMounted",
 							"signature": "void SetOnProjectMounted(ProjectOpenedCallback callback)",
-							"doc": "Runs inside OpenProject once the manifest is read and the VFS mounts are\nup, before the asset registry is loaded or rebuilt. A host starts work\nthere that needs the project's files but not its registry — the editor\nreads and parses its start scene and indexes its Loom classes on other\nthreads — so a cold registry rebuild overlaps it instead of preceding it.",
+							"doc": "Runs inside OpenProject once the manifest is read and the VFS mounts are\nup, before the asset registry is loaded or rebuilt. A host starts work\nthere that needs the project's files but not its registry — the editor\nreads and parses its start scene and indexes its Visual Script classes on other\nthreads — so a cold registry rebuild overlaps it instead of preceding it.",
 							"line": 80
 						},
 						{
@@ -17549,7 +17562,7 @@
 					"kind": "struct",
 					"name": "FTemplateRename",
 					"namespace": "Mowo",
-					"doc": "A project template, the way UE lays them out: Templates/TP_<Name>/ is a\ncomplete project (TP_<Name>.mproject, Config/, Content/, Source/ with the\ngame module and its <Name>.Target.cs / <Name>Editor.Target.cs, Media/ with\nthe launcher's icon and preview) plus Config/TemplateDefs.ini, which says how\nthe launcher presents it and how a copy becomes the user's project:\n\n[/Script/AssetSystem.TemplateProjectDefs]\nCategory=Games\nDisplayName=First Person\nSubtitle=Camera, input, interaction\nDescription=A lit room with collidable props ...\nIcon=crosshair\nSortKey=10\nbPlayable=True\nModuleGameModeClass=AFirstPersonPlayerGameMode\n+Tags=Loom\n+FoldersToIgnore=Media\n+FilesToIgnore=%TEMPLATENAME%.mproject\n+FolderRenames=(From=\"Source/%TEMPLATENAME%\",To=\"Source/%PROJECTNAME%\")\n+FilenameReplacements=(Extensions=(\"cs\",\"cpp\",\"h\"),From=\"%TEMPLATENAME%\",To=\"%PROJECTNAME%\",bCaseSensitive=True)\n+ReplacementsInFiles=(Extensions=(\"cs\",\"cpp\",\"h\",\"ini\"),From=\"%TEMPLATENAME%\",To=\"%PROJECTNAME%\",bCaseSensitive=True)\n\n%TEMPLATENAME% is the template's folder name and %PROJECTNAME% the new\nproject's; both also come as _UPPERCASE and _LOWERCASE.",
+					"doc": "A project template, the way UE lays them out: Templates/TP_<Name>/ is a\ncomplete project (TP_<Name>.mproject, Config/, Content/, Source/ with the\ngame module and its <Name>.Target.cs / <Name>Editor.Target.cs, Media/ with\nthe launcher's icon and preview) plus Config/TemplateDefs.ini, which says how\nthe launcher presents it and how a copy becomes the user's project:\n\n[/Script/AssetSystem.TemplateProjectDefs]\nCategory=Games\nDisplayName=First Person\nSubtitle=Camera, input, interaction\nDescription=A lit room with collidable props ...\nIcon=crosshair\nSortKey=10\nbPlayable=True\nModuleGameModeClass=AFirstPersonPlayerGameMode\n+Tags=Visual Scripting\n+FoldersToIgnore=Media\n+FilesToIgnore=%TEMPLATENAME%.mproject\n+FolderRenames=(From=\"Source/%TEMPLATENAME%\",To=\"Source/%PROJECTNAME%\")\n+FilenameReplacements=(Extensions=(\"cs\",\"cpp\",\"h\"),From=\"%TEMPLATENAME%\",To=\"%PROJECTNAME%\",bCaseSensitive=True)\n+ReplacementsInFiles=(Extensions=(\"cs\",\"cpp\",\"h\",\"ini\"),From=\"%TEMPLATENAME%\",To=\"%PROJECTNAME%\",bCaseSensitive=True)\n\n%TEMPLATENAME% is the template's folder name and %PROJECTNAME% the new\nproject's; both also come as _UPPERCASE and _LOWERCASE.",
 					"line": 38,
 					"members": [
 						{

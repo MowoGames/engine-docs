@@ -17,8 +17,9 @@ sources:
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs
   - Engine/Source/MowoEditor.Target.cs
   - Engine/Source/MowoProjectLauncher.Target.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs
   - Engine/Documentation/ROADMAP.md
-verifiedAt: 08e26df3d
+verifiedAt: 7f8f31f8d
 ---
 
 This page takes you from a clean machine to a running Mowo Project Launcher. You install the toolchain the repository pins, clone the engine with Git LFS, check the setup with `mbt doctor`, and build. You do not need CMake or a Vulkan SDK.
@@ -91,7 +92,7 @@ cd MowoEngine
 </Steps>
 
 <Callout type="note">
-macOS packages are ad-hoc signed and not notarized, so a packaged game does not open on another person's Mac without extra steps <Source path="Engine/Documentation/ROADMAP.md" />.
+macOS packages are ad-hoc signed and not notarized, so a packaged game does not open on another person's Mac without extra steps <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/MacDmgBuilder.cs" />.
 </Callout>
 
 </Tab>
@@ -142,12 +143,12 @@ Build every module:
 
 </CodeTabs>
 
-`build` defaults to the Debug configuration and the host platform. It also compiles the shaders that modules declare and packs `Shaders.meaf` beside the binaries, so a separate shader step is not needed <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs" />. New `.cpp` files are picked up on the next build; there is no configure step.
+`build` defaults to the `dev` configuration and the host platform. It also compiles the shaders that modules declare and packs `Shaders.meaf` beside the binaries, so a separate shader step is not needed <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs" />. New `.cpp` files are picked up on the next build; there is no configure step.
 
-Binaries land in `Engine/Binaries/<Platform>/`. The configuration is part of the file name except in Development: a Debug build gives `MowoEditor-Win64-Debug.exe`, a Development build gives `MowoEditor.exe`. Each binary finds the engine root and its archives from its own path, so you can launch it from any working directory.
+Binaries land in one folder per platform and configuration, `Engine/Binaries/<platform>/<config>/`, and file names carry only the name: a `dev` build gives `Engine/Binaries/win-x64/dev/MowoEditor.exe`, a `debug` build `Engine/Binaries/win-x64/debug/MowoEditor.exe`. Each configuration folder has its own `Shaders.meaf` and content archives. Each binary finds the engine root and its archives from its own path, so you can launch it from any working directory.
 
 <Callout type="tip">
-Debug leaves the engine unoptimized, which is what you want for stepping through it. For everyday editor work, also build `-c Development`: it is optimized and keeps assertions. See [Build tool](/docs/build-tool/) for every configuration.
+`dev` is optimized and keeps assertions, which is what you want for everyday editor work. To step through the engine, also build `-c debug`: it leaves the engine unoptimized. See [Build tool](/docs/build-tool/) for every configuration.
 </Callout>
 
 `mbt shaders` recompiles shaders on their own, for example `.\mbt.cmd shaders --watch` to recompile on save <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/ShadersCommand.cs" />.
@@ -167,13 +168,13 @@ Debug leaves the engine unoptimized, which is what you want for stepping through
 The launcher is part of the default build. Start it from the output folder:
 
 ```powershell
-& .\Engine\Binaries\Win64\MowoProjectLauncher-Win64-Debug.exe
+& .\Engine\Binaries\win-x64\dev\MowoProjectLauncher.exe
 ```
 
 The Project Launcher lists your projects and creates new ones. To open an existing project directly, pass its manifest to the editor:
 
 ```powershell
-& .\Engine\Binaries\Win64\MowoEditor-Win64-Debug.exe --project D:\Projects\MyGame\MyGame.mproject
+& .\Engine\Binaries\win-x64\dev\MowoEditor.exe --project D:\Projects\MyGame\MyGame.mproject
 ```
 
 [Create a project](/docs/getting-started/create-a-project/) walks through both.

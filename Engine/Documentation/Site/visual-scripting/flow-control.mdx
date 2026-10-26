@@ -4,23 +4,23 @@ sidebarTitle: Flow control
 description: How the Visual Scripting VM decides what runs and in what order, plus every node kind grouped by what it does.
 order: 4
 sources:
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomGraph.h
-  - Engine/Source/Runtime/Loom/Public/Loom/LoomVM.h
-  - Engine/Source/Runtime/Loom/Private/LoomVM.cpp
-  - Engine/Source/Runtime/Loom/Private/LoomAsync.cpp
-  - Engine/Source/Runtime/Loom/Private/LoomMacroExpander.cpp
-  - Engine/Source/Runtime/Game/Private/LoomRuntime.cpp
-  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/LoomEditorPanel.cpp
-verifiedAt: 08e26df3d
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptGraph.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptAsync.cpp
+  - Engine/Source/Runtime/VisualScripting/Private/VisualScriptMacroExpander.cpp
+  - Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp
+  - Engine/Source/Editor/MowoEditor/Private/AssetEditors/VisualScriptEditorPanel.cpp
+verifiedAt: 5922e6e5e
 ---
 
-Flow-control nodes sit on the exec path and decide what runs next. This page explains the execution model first, then covers every node kind the engine defines. There are 78, in the `LoomNodeKind` enum <Source symbol="LoomNodeKind" />.
+Flow-control nodes sit on the exec path and decide what runs next. This page explains the execution model first, then covers every node kind the engine defines. There are 78, in the `VisualScriptNodeKind` enum <Source symbol="VisualScriptNodeKind" />.
 
 ## How execution works
 
 <Flow steps={["Event fires", "Push entry node", "Pop and run node", "Push next exec targets", "Stack empty or suspended"]} highlight={2} caption="The VM's exec loop" />
 
-The VM does not recurse in C++. It keeps an explicit stack of work items <Source symbol="LoomExecItem" />. A Sequence pushes a "resume at output N" item. A loop pushes its current iteration and its Completed target. Because the whole run is data, three things work:
+The VM does not recurse in C++. It keeps an explicit stack of work items <Source symbol="VisualScriptExecItem" />. A Sequence pushes a "resume at output N" item. A loop pushes its current iteration and its Completed target. Because the whole run is data, three things work:
 
 - A **Sequence** runs each output's whole chain before starting the next one.
 - **Break Loop** finds its enclosing loop on the stack, even from inside a macro.
@@ -30,7 +30,7 @@ Data pins are pulled, not pushed. When a node needs an input, the VM evaluates t
 
 <Callout type="engine">
 
-Two guards stop runaway graphs. A run that executes more than 2,000,000 steps stops with "exec guard tripped" <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />. A function call chain deeper than 64 stops with "function recursion too deep" <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />.
+Two guards stop runaway graphs. A run that executes more than 2,000,000 steps stops with "exec guard tripped" <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />. A function call chain deeper than 64 stops with "function recursion too deep" <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />.
 
 </Callout>
 
@@ -67,11 +67,11 @@ Latches keep state on the instance, so they remember across calls and across eve
 | **Set Gate** | Opens or closes a named gate, or toggles it. |
 | **Multi Gate** | Takes one output per call: in order, looping, or at random. |
 
-A latch you give a name is one state for the whole class. That is how a Gate and the Set Gate that opens it address the same gate. An unnamed latch is keyed by its node index and its graph, so two unnamed Do Once nodes in different graphs never share state <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />.
+A latch you give a name is one state for the whole class. That is how a Gate and the Set Gate that opens it address the same gate. An unnamed latch is keyed by its node index and its graph, so two unnamed Do Once nodes in different graphs never share state <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />.
 
 ## Latent nodes
 
-Latent nodes suspend the graph and resume it on a later frame. The instance advances pending runs from its `Tick` <Source path="Engine/Source/Runtime/Game/Private/LoomRuntime.cpp" />.
+Latent nodes suspend the graph and resume it on a later frame. The instance advances pending runs from its `Tick` <Source path="Engine/Source/Runtime/Game/Private/VisualScriptRuntime.cpp" />.
 
 | Node | What it does |
 | --- | --- |
@@ -87,9 +87,9 @@ Latent nodes only suspend in event graphs. Inside a function, a Delay or Timelin
 
 ### Timeline
 
-A Timeline has a length, an optional loop flag and any number of tracks. Float, Vector and Color tracks carry keyframe curves with Constant, Linear or Cubic interpolation per key, and each drives a value output. Event tracks carry key times and fire their own exec output when the playhead crosses one <Source symbol="LoomTimeline" />.
+A Timeline has a length, an optional loop flag and any number of tracks. Float, Vector and Color tracks carry keyframe curves with Constant, Linear or Cubic interpolation per key, and each drives a value output. Event tracks carry key times and fire their own exec output when the playhead crosses one <Source symbol="VisualScriptTimeline" />.
 
-The exec input applies the control on the `Control` pin <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />:
+The exec input applies the control on the `Control` pin <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />:
 
 | Control | Value | Effect |
 | --- | --- | --- |
@@ -111,12 +111,12 @@ An Async Action node starts a registered action and resumes the graph on whichev
 | Node | What it does |
 | --- | --- |
 | **Math (Pure Op)** | One math or logic operation, chosen in the details. |
-| **Select** | Picks one input by index. A bool selector picks option 1 for true, option 2 for false <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />. |
+| **Select** | Picks one input by index. A bool selector picks option 1 for true, option 2 for false <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />. |
 | **Is Valid** | True for a live object, a non-empty string or a non-empty container. |
 | **Make Vector**, **Break Vector** | Build a `Vec3` from X, Y, Z, or split one. |
 | **Make Localized Text** | A string looked up by namespace and key, with a source fallback. It re-resolves on every read, so a language change reaches running graphs. |
 
-The math operations are Add, Sub, Mul, Div, Neg, Greater, Less, GreaterEqual, LessEqual, Equal, NotEqual, And, Or, Not, Min, Max, Clamp, Lerp, Abs, Sqrt, Mod, Pow, Floor, Ceil, Round, Sign, Sin, Cos, RandomInt, RandomFloat, Concat and ToString <Source symbol="LoomPureOp" />.
+The math operations are Add, Sub, Mul, Div, Neg, Greater, Less, GreaterEqual, LessEqual, Equal, NotEqual, And, Or, Not, Min, Max, Clamp, Lerp, Abs, Sqrt, Mod, Pow, Floor, Ceil, Round, Sign, Sin, Cos, RandomInt, RandomFloat, Concat and ToString <Source symbol="VisualScriptPureOp" />.
 
 ## All 78 node kinds by category
 
@@ -140,16 +140,16 @@ The math operations are Add, Sub, Mul, Div, Neg, Greater, Less, GreaterEqual, Le
 
 Notes on a few of them:
 
-- **Cast** checks whether an object's class chain contains the named class. It continues on the success output with the object, or on the failure output with null <Source path="Engine/Source/Runtime/Loom/Private/LoomVM.cpp" />.
+- **Cast** checks whether an object's class chain contains the named class. It continues on the success output with the object, or on the failure output with null <Source path="Engine/Source/Runtime/VisualScripting/Private/VisualScriptVM.cpp" />.
 - **CallOn** calls a function on the object in its Target pin. If the target's class has no reflected function of that name, it tries a visual function of that name on the target's class and runs it in the target's context.
 - **FirePin** fires a named output pin through the world's wire table. Wired actors run the matching input-pin graph with the payload in `PinPayload`.
 - **HasAuthority** is true on the server, in standalone play, and for a client-local actor that was never replicated. **SwitchHasAuthority** is the exec form, with Authority and Remote outputs.
 - **ClassRef** carries a class name, not a pointer, so a class from a module that has not loaded yet is a warning at edit time and resolves at run time.
 - **MacroInstance** never reaches the VM. Macros are inlined when the class registers.
 
-The [Loom API reference](/docs/api/loom/) lists the `LoomNodeKind` enum with each entry's source comment.
+The [Visual Scripting API reference](/docs/api/visualscripting/) lists the `VisualScriptNodeKind` enum with each entry's source comment.
 
-<Screenshot id="loom-flow-control-sequence" alt="Visual Scripting editor canvas showing a BeginPlay event wired into a Sequence node with three outputs; output 0 leads to a For Loop whose Loop Body calls a function and whose Completed pin continues to a Delay of 1.5 seconds, and output 1 leads to a Do Once node" caption="Sequence, For Loop, Delay and Do Once in one graph." />
+<Screenshot id="visual-script-flow-control-sequence" alt="Visual Scripting editor canvas showing a BeginPlay event wired into a Sequence node with three outputs; output 0 leads to a For Loop whose Loop Body calls a function and whose Completed pin continues to a Delay of 1.5 seconds, and output 1 leads to a Do Once node" caption="Sequence, For Loop, Delay and Do Once in one graph." />
 
 ## Next
 

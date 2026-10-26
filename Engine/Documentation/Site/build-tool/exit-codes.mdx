@@ -10,7 +10,7 @@ sources:
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/ShadersCommand.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Shaders/ShaderCompiler.cs
-verifiedAt: 6caf55861
+verifiedAt: 7f8f31f8d
 ---
 
 Every `mbt` command returns a small, fixed set of exit codes, so scripts and CI jobs can tell a failed build from a mistyped command. The wrapper scripts pass the code through unchanged <Source path="mbt.cmd" />.
@@ -21,12 +21,12 @@ Every `mbt` command returns a small, fixed set of exit codes, so scripts and CI 
 |---|---|---|
 | `0` | Success | The command did what it was asked |
 | `1` | The work failed | Compile or link errors, failing tests, a required tool missing in `doctor`, a failed cook or package step, stale output under `docs --check` |
-| `2` | Usage or setup problem, or an incomplete result | No engine checkout found, an invalid option value, a contradictory pair of options, a bad `--project` path, a Shipping package without content keys; `test` cases skipped |
+| `2` | Usage or setup problem, or an incomplete result | No engine checkout found, an invalid option value, a contradictory pair of options, a bad `--project` path, a `release` package without content keys; `test` cases skipped |
 | `3` | Shader compiler not found | DXC is missing when shaders must compile |
 
 ## 1: the work failed
 
-The command ran and the result was a failure. `build` returns 1 when any module fails to compile or link, or when a rules file does not compile <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs" />. `doctor` returns 1 when a required tool is missing <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DoctorCommand.cs" />. `test` returns 1 when any case failed. `package` returns 1 when a step fails, for example a cook error, a monolithic import check, or a Shipping symbol upload that was attempted and failed <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />.
+The command ran and the result was a failure. `build` returns 1 when any module fails to compile or link, or when a rules file does not compile <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs" />. `doctor` returns 1 when a required tool is missing <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DoctorCommand.cs" />. `test` returns 1 when any case failed. `package` returns 1 when a step fails, for example a cook error, a monolithic import check, or a `release` symbol upload that was attempted and failed <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />.
 
 <Callout type="note">
 A missing or too old C++ toolchain also ends `build` with 1: toolchain detection fails the build rather than returning a code of its own. Run `mbt doctor` to see what is missing.
@@ -41,7 +41,7 @@ A missing or too old C++ toolchain also ends `build` with 1: toolchain detection
 - `--hot-reload` or `--frozen-engine` is passed without `-t`, or two sanitizers are combined;
 - `package` gets both `--monolithic` and `--modular`, a mobile platform, or an output folder that is not empty and does not look like an earlier package;
 - `--project` does not point at an existing `.mproject`;
-- a Shipping package's project has no content keys and `--unprotected` was not passed.
+- a `release` package's project has no content keys and `--unprotected` was not passed.
 
 `test` also uses 2 for an incomplete run. If any case was skipped, the run exits 2 unless you pass `--allow-skips`, so a partial run never reads as a full one <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TestCommand.cs" />.
 
@@ -54,7 +54,7 @@ A missing or too old C++ toolchain also ends `build` with 1: toolchain detection
 <CodeTabs>
 
 ```powershell tab="PowerShell"
-.\mbt.cmd build -c Development
+.\mbt.cmd build -c dev
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
@@ -64,7 +64,7 @@ if ($LASTEXITCODE -ne 0) {
 ```
 
 ```bash tab="bash"
-./mbt.sh build -c Development || exit $?
+./mbt.sh build -c dev || exit $?
 
 ./mbt.sh test --cpu-only
 status=$?

@@ -15,7 +15,7 @@ sources:
   - Engine/Source/Runtime/Reflection/Public/Reflection/PropertyInfo.h
   - Engine/Source/Runtime/Reflection/Public/Reflection/NetBitStream.h
   - Engine/Source/Runtime/Components/Public/Components/TransformComponent.h
-verifiedAt: 1a346c1c5
+verifiedAt: 5922e6e5e
 ---
 
 Replication is how the host keeps each client's copy of the world in sync. Every networked entity has an authoritative version on the host and a **ghost** on each client. The host sends only the fields that changed, and the client applies them to its ghost. Which fields travel is decided by reflection: you mark a field, and it replicates.
@@ -127,7 +127,9 @@ Change detection compares the quantized encodings, so jitter below the quantum c
 | `InitialOnly` | Each peer once, when the component is first sent to it (spawn or becoming relevant). |
 | `InitialOrOwner` | The owner always, everyone else once. |
 
-A field a peer may not see is left out of its delta, never zeroed, so a non-owner keeps the spawn default of an owner-only field. An object owned by the host (`ownerPeerId == 0`) has no owning client, so its `OwnerOnly` fields reach nobody. Ownership changes do not resend owner-only fields the new owner missed: call `ServerResyncPeer` for that peer.
+A field a peer may not see is left out of its delta, never zeroed, so a non-owner keeps the spawn default of an owner-only field. An object owned by the host (`ownerPeerId == 0`) has no owning client, so its `OwnerOnly` fields reach nobody.
+
+Owner-only fields follow ownership. The host checks every networked object's `ownerPeerId` once per snapshot tick. When it changed, every client is told the new owner, and the old and the new owner both have their baselines for that object reset and get its discrete state in full <Source symbol="ReplicationManager::ServerDetectOwnerChanges" />. You only need `ServerResyncPeer` to resend a whole peer's world.
 
 <Callout type="warning">
 Both machines must run the same build. The replication header carries a protocol version and a schema id computed from every replicated type, field, quantizer and condition. A peer on a different build is refused at the header and the client fails with `ProtocolMismatch`, so adding or changing a replicated field means shipping the new binary to everyone.
@@ -180,15 +182,16 @@ On the host, `AddItem` adds and marks an item, `MarkItemDirty` marks an item you
 
 ## What the wire carries
 
-The replication protocol is version 7 <Source symbol="ReplicationPacketType" />. The host sends:
+The replication protocol is version 8 <Source symbol="ReplicationPacketType" />. The host sends:
 
 - **Spawn** when an object becomes known to a client: network id, owner, full pose, `netState`, prefab path and placed-object id.
 - **Destroy** when an object is removed or leaves a client's relevancy.
 - **Snapshot** with continuous field deltas, on the unreliable channel.
 - **StateSnapshot** with discrete field deltas, on the reliable channel.
 - **FastArrayDelta** with fast-array changes, on the reliable channel after the snapshot.
+- **OwnerChange** when an object's owner changes, on the reliable channel.
 
-Clients send input, RPCs and acknowledgements. The host drops any spawn, destroy or snapshot that arrives from a client, so a client cannot create entities or overwrite replicated state.
+Clients send input, RPCs and acknowledgements. Either side sends **Blob** and **BlobAck** packets, which carry a large RPC in chunks (see [RPCs and events](/docs/multiplayer/rpcs/#large-rpcs)). The host drops any spawn, destroy, snapshot or owner change that arrives from a client, so a client cannot create entities, overwrite replicated state or take ownership.
 
 ## Acknowledged baselines
 

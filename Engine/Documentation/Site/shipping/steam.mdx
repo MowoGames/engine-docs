@@ -14,7 +14,7 @@ sources:
   - Engine/Plugins/SteamPlatform/Private/SteamOnlineService.cpp
   - Engine/Source/Runtime/Networking/Private/CompositeTransport.cpp
   - Engine/Documentation/ROADMAP.md
-verifiedAt: 6caf55861
+verifiedAt: 7f8f31f8d
 ---
 
 `mbt steam-upload` takes a finished `mbt package` output and uploads it to Steamworks. It writes the `steamcmd` build scripts for your app and depots, then runs `steamcmd`. It never builds or packages anything itself.
@@ -38,14 +38,14 @@ Steam settings live in the `.mproject`, under `platform`. In the editor they are
   "platform": {
     "steamEnabled": true,
     "steamAppId": 480,
-    "steamDepots": { "Win64": 481, "Mac": 482 }
+    "steamDepots": { "win-x64": 481, "osx-arm64": 482 }
   }
 }
 ```
 
 - `steamEnabled` decides whether the Steam runtime libraries ship at all <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageCommand.cs" />. Without it, the package carries no Steam code.
 - `steamAppId` is the app the upload targets, the same key the packager and the DRM wrap read.
-- `steamDepots` is optional. It maps package platform folder names (`Win64`, `Mac`, `Linux`) to depot ids. Without it, the depot is the app id + 1 for Win64, + 2 for Mac and + 3 for Linux, the ids Steamworks creates for a new app <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SteamUploader.cs" />.
+- `steamDepots` is optional. It maps package platform folder names (`win-x64`, `osx-arm64`, `linux-x64`; the older `Win64`, `Mac` and `Linux` spellings still read) to depot ids. Without it, the depot is the app id + 1 for `win-x64`, + 2 for `osx-arm64` and + 3 for `linux-x64`, the ids Steamworks creates for a new app <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/SteamUploader.cs" />.
 
 The numbers above are examples; use the ids from your Steamworks partner page.
 
@@ -95,21 +95,21 @@ The command refuses a `--package` folder that does not look like `mbt package` o
 A cross-platform multiplayer game should ship every platform in one Steam build. If the Windows depot goes live minutes before the Mac one, players on the two cannot join each other in between. Use `--depot` once per platform:
 
 ```powershell
-./mbt.cmd steam-upload --project D:/Projects/MyGame/MyGame.mproject --depot win64=D:/Builds/Win --depot macos-arm64=D:/Builds/Mac --username mybuildaccount
+./mbt.cmd steam-upload --project D:/Projects/MyGame/MyGame.mproject --depot win-x64=D:/Builds/Win --depot osx-arm64=D:/Builds/Mac --username mybuildaccount
 ```
 
 `--depot` replaces `--platform` and `--package`. Each platform needs its own depot id; two platforms on one depot fail the command, because Steam would let the second overwrite the first. `--depot-id` names a single depot, so it cannot be combined with more than one `--depot`; put the ids in `platform.steamDepots` instead.
 
 ## The generated scripts
 
-The scripts go to `build/Steam/<Product>-<Platform>`, or `build/Steam/<Product>` for a multi-platform build; `--out` overrides it. There is one app script and one depot script per platform:
+The scripts go to `build/Steam/<Product>-<platform>`, or `build/Steam/<Product>` for a multi-platform build; `--out` overrides it. There is one app script and one depot script per platform:
 
 ```text title="app_build_480.vdf"
 "AppBuild"
 {
 	"AppID" "480"
-	"Desc" "MyGame Win64 (2026-10-22 12:00 UTC)"
-	"BuildOutput" "D:/MowoEngine/build/Steam/MyGame-Win64/BuildOutput"
+	"Desc" "MyGame win-x64 (2026-10-22 12:00 UTC)"
+	"BuildOutput" "D:/MowoEngine/build/Steam/MyGame-win-x64/BuildOutput"
 	"Preview" "0"
 	"SetLive" ""
 	"Depots"
@@ -141,7 +141,7 @@ If `steamcmd` is not installed, the command writes the scripts, skips the upload
 ## Steam at runtime
 
 - **Relaunch through Steam.** A packaged run with Steam enabled asks `SteamAPI_RestartAppIfNecessary` whether it was started outside the client. If so, it exits and lets Steam relaunch it, so the overlay, cloud saves and the licence check are present <Source path="Engine/Source/Runtime/MowoGame/Private/MowoGame.cpp" />.
-- **`steam_appid.txt`.** Development builds write this file beside the executable so Steam initializes outside the client. Shipping builds never write it; the client provides the app id <Source path="Engine/Plugins/SteamPlatform/Private/SteamOnlineService.cpp" />.
-- **Relay-only hosting.** A Shipping listen server with Steam running listens only through the Steam relay, which keeps the host's IP address private. The `net.ShipExposeEnetHost` console variable opens the direct listener as well, for a game that wants direct connections <Source path="Engine/Source/Runtime/Networking/Private/CompositeTransport.cpp" />.
+- **`steam_appid.txt`.** Builds other than `release` and `profile` write this file beside the executable so Steam initializes outside the client. Release builds never write it; the client provides the app id <Source path="Engine/Plugins/SteamPlatform/Private/SteamOnlineService.cpp" />.
+- **Relay-only hosting.** A release listen server with Steam running listens only through the Steam relay, which keeps the host's IP address private. The `net.ShipExposeEnetHost` console variable opens the direct listener as well, for a game that wants direct connections <Source path="Engine/Source/Runtime/Networking/Private/CompositeTransport.cpp" />.
 
 The [mbt command reference](/docs/reference/mbt-cli/) lists every `steam-upload` option. [Patches, chunks and DLC](/docs/shipping/patches-and-dlc/) covers DLC that ships in depots of its own.

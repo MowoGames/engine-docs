@@ -1,40 +1,40 @@
 ---
 title: CI
-description: What the GitLab pipeline runs (docs jobs only), how the docs reach mowoengine.com, and why mbt test on a developer machine is the real gate.
+description: What the GitHub Actions workflow runs (docs jobs only), how the docs reach mowoengine.com, and why mbt test on a developer machine is the real gate.
 order: 3
 sources:
-  - .gitlab-ci.yml
+  - .github/workflows/docs.yml
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TestCommand.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DocsCommand.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Docs/SiteDocsBundle.cs
   - Engine/Documentation/ROADMAP.md
-verifiedAt: 216b5fda9
+verifiedAt: 5922e6e5e
 ---
 
-Continuous integration runs on a self-hosted GitLab instance. Today it runs **only the documentation jobs**: it keeps the generated reference data in step with the code, lints the guides and publishes them to the website. **CI builds no C++, runs no engine tests and no build-tool unit tests.** A green pipeline means the documentation is consistent and nothing more <Source path=".gitlab-ci.yml" />.
+Continuous integration is GitHub Actions, on GitHub's own runners. Today it runs **only the documentation jobs**: it keeps the generated reference data in step with the code, lints the guides and publishes them to the website. **CI builds no C++, runs no engine tests and no build-tool unit tests.** A green run means the documentation is consistent and nothing more <Source path=".github/workflows/docs.yml" />.
 
 The real gate for engine changes is `mbt test` on a developer machine. See [Running tests](/docs/testing/running-tests/).
 
-## When the pipeline runs
+## When the workflow runs
 
-A pipeline starts for merge-request events, for commits on the `dev` branch and for release tags (`v<major>.<minor>…`). Jobs use the `mcr.microsoft.com/dotnet/sdk:10.0` image, skip Git LFS downloads, and are interruptible, so a newer push cancels a superseded run. They need a GitLab Runner with the Docker executor that takes untagged jobs; without one the pipeline stays pending.
+The `docs` workflow starts for pull requests, for pushes to the `dev` branch and for release tags (`v<major>.<minor>…`). Jobs run in the `mcr.microsoft.com/dotnet/sdk:10.0` container, skip Git LFS downloads, and a newer push to the same branch cancels a superseded run.
 
-<Flow steps={["push to dev or MR", "docs: docs-reference", "docs: docs-lint", "publish: docs-publish", "mowoengine.com deploys"]} caption="Two stages, docs and publish. docs-publish runs on dev and on release tags." />
+<Flow steps={["push to dev or PR", "docs-reference", "docs-lint", "docs-publish", "mowoengine.com deploys"]} caption="docs-reference and docs-lint run side by side; docs-publish runs after docs-lint, on dev and on release tags." />
 
 ## The jobs
 
-| Job | Stage | Runs | Fails when |
-|---|---|---|---|
-| `docs-reference` | docs | `./mbt.sh docs`, then compares `Engine/Documentation/Generated` with the commit | On a merge request: the generated data drifted from the code |
-| `docs-lint` | docs | `./mbt.sh docs --lint --require-verified` | A guide has a broken source, symbol, fact or link, or a page without `verifiedAt` |
-| `docs-publish` | publish | `./mbt.sh docs --bundle` into the `mowoengine-docs` repository, then moves the website's `engine-docs` submodule to it | A push fails or `MOWO_CI_PUSH_TOKEN` is not set. Runs on `dev` and on release tags |
+| Job | Runs | Fails when |
+|---|---|---|
+| `docs-reference` | `./mbt.sh docs`, then compares `Engine/Documentation/Generated` with the commit | On a pull request: the generated data drifted from the code |
+| `docs-lint` | `./mbt.sh docs --lint --require-verified` | A guide has a broken source, symbol, fact or link, or a page without `verifiedAt` |
+| `docs-publish` | `./mbt.sh docs --bundle` into the `engine-docs` repository, then moves the website's `engine-docs` submodule to it | A push fails or a deploy key secret is not set. Runs on `dev` and on release tags |
 
 ### docs-reference
 
 Regenerates the API, console, command-line and facts data from the code <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DocsCommand.cs" />. What it does with a difference depends on the pipeline source:
 
-- On a **merge request**, it is a read-only gate. If the generated data differs from what is committed, the job fails and asks you to run `./mbt.sh docs` locally and commit the result.
-- On **`dev`**, it commits the regenerated data back to the branch with `-o ci.skip`, so the bot commit does not start another pipeline. This needs a group access token with `write_repository` and the Maintainer role in the `MOWO_CI_PUSH_TOKEN` variable. Without it, a run with stale data fails with instructions instead of passing.
+- On a **pull request**, it is a read-only gate. If the generated data differs from what is committed, the job fails and asks you to run `./mbt.sh docs` locally and commit the result.
+- On **`dev`**, it commits the regenerated data back to the branch with the job's own `GITHUB_TOKEN`. A push made with that token starts no workflow, so the bot commit does not trigger another run.
 
 ### docs-lint
 
@@ -42,31 +42,32 @@ Checks every guide under `Engine/Documentation/Site/`: frontmatter, that each `s
 
 ## How the docs reach mowoengine.com
 
-The website does not read the engine repository. It pins `mowogames/mowoengine-docs` as its `engine-docs` submodule and builds from that. `docs-publish` fills that repository with `mbt docs --bundle` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Docs/SiteDocsBundle.cs" />:
+The website does not read the engine repository. It pins `MowoGames/engine-docs` as its `engine-docs` submodule and builds from that. `docs-publish` fills that repository with `mbt docs --bundle` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Docs/SiteDocsBundle.cs" />:
 
 - `Engine/Documentation/Site/` and `Engine/Documentation/Generated/`, at their engine paths;
-- `bundle.json`: the engine commit, branch and version, the date each guide last changed, and the release snapshots;
+- `bundle.json`: the engine commit, branch and version, the date each guide and each generated file last changed, and the release snapshots;
+- a `.gitattributes` that stores every file with LF line endings, written on each run because the bundle replaces the directory's contents;
 - `versions/<tag>/`: `Site/` and `Generated/` as of the newest tag of each minor version.
 
-The job then commits the new submodule commit to the website's `dev`, and that push deploys the site. A release tag runs the same job, so a new tag publishes its snapshot without waiting for the next commit.
+The job then commits the new submodule commit to the website's `dev`, and that push deploys the site. It writes to the two repositories with deploy keys, one per repository, kept as the secrets `ENGINE_DOCS_DEPLOY_KEY` and `MOWOENGINE_COM_DEPLOY_KEY`; unlike `GITHUB_TOKEN`, a deploy-key push starts the website's deploy workflow. A release tag runs the same job, so a new tag publishes its snapshot without waiting for the next commit.
 
 To build the bundle yourself:
 
 ```powershell
-.\mbt.cmd docs --bundle ..\mowoengine-docs
+.\mbt.cmd docs --bundle ..\engine-docs
 ```
 
 ## What CI does not run
 
 | Not in CI | Consequence |
 |---|---|
-| Any engine build | A change that does not compile still gets a green pipeline |
-| `mbt test` and every C++ case | No headless, GPU, editor, packaged or Shipping case runs on the server |
+| Any engine build | A change that does not compile still gets a green run |
+| `mbt test` and every C++ case | No headless, GPU, editor, packaged or release case runs on the server |
 | The build tool's C# unit tests | `MowoBuildTool.Tests` runs only through `mbt test` locally |
 | Sanitizer runs | `--asan`, `--ubsan` and `--tsan` run only locally |
 | Windows or macOS jobs | The engine's main platforms are never built by CI |
 
-Build, test and packaging jobs existed in earlier versions of the pipeline and were removed. The ROADMAP lists bringing back a build and CPU-test job, starting with Linux third-party binaries, as open work <Source path="Engine/Documentation/ROADMAP.md" />.
+Build, test and packaging jobs existed in earlier versions of the pipeline (on GitLab) and were removed. The ROADMAP lists bringing back a build and CPU-test job, starting with Linux third-party binaries, as open work <Source path="Engine/Documentation/ROADMAP.md" />.
 
 <Callout type="note">
 When a `mbt test --cpu-only` run skips a quarter or more of the cases, it prints a coverage warning: those GPU cases run nowhere until you run `mbt test` on a machine with a GPU <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/TestCommand.cs" />.
@@ -83,10 +84,10 @@ Because CI cannot see engine regressions, run the suite yourself.
 .\mbt.cmd test
 ```
 
-A full, unfiltered run also builds and launches the Shipping player and boots the server tree. It exits 0 only when nothing failed and nothing was skipped.
+A full, unfiltered run also builds and launches the release player and boots the server tree. It exits 0 only when nothing failed and nothing was skipped.
 </Step>
 <Step title="Treat skips as missing coverage">
-If your change touches a backend or feature your machine cannot run, the matching cases skip. `--allow-skips` makes the run exit 0, but those cases are still unverified. Say so in the merge request.
+If your change touches a backend or feature your machine cannot run, the matching cases skip. `--allow-skips` makes the run exit 0, but those cases are still unverified. Say so in the pull request.
 </Step>
 <Step title="Regenerate the reference data if you changed public headers, console variables or mbt options">
 
@@ -95,14 +96,14 @@ If your change touches a backend or feature your machine cannot run, the matchin
 .\mbt.cmd docs --lint
 ```
 
-Commit the result with your change, or `docs-reference` fails on the merge request.
+Commit the result with your change, or `docs-reference` fails on the pull request.
 </Step>
 <Step title="Attach the JUnit report if it helps review">
 `build/TestResults/junit.xml` records every case with its status and failure detail.
 </Step>
 </Steps>
 
-<Screenshot id="testing-gitlab-pipeline" alt="The GitLab pipeline view for a merge request on the self-hosted GitLab: the docs stage shows docs-reference and docs-lint passed, and there is no build or test stage." caption="A merge-request pipeline: documentation jobs only." />
+<Screenshot id="testing-gitlab-pipeline" alt="The checks of a pull request on GitHub: docs-reference and docs-lint passed, and there is no build or test job." caption="A pull request's checks: documentation jobs only." />
 
 ## Related
 

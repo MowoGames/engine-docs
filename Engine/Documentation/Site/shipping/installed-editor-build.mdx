@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs
   - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs
   - Engine/Config/Toolchains.ini
-verifiedAt: 08e26df3d
+verifiedAt: 7f8f31f8d
 ---
 
 `mbt package-editor` builds Mowo's counterpart to Unreal's Installed Build: an installable bundle with **Mowo Editor**, the **Mowo Project Launcher** and a game-module SDK <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/PackageEditorCommand.cs" />. Developers on your team install it, create projects from templates, and compile their game's C++ modules against the prebuilt engine, without cloning or building the engine repository.
@@ -31,12 +31,12 @@ Run it from a full engine checkout on Windows:
 
 | Option | Default | Meaning |
 |---|---|---|
-| `-c, --config` | Release | Configuration the installed engine ships as |
+| `-c, --config` | `dev` | Configuration the installed engine ships as |
 | `-o, --out` | `build/Package/MowoEditor` | Output folder |
 | `--zip` | off | Also write `MowoEditor-<version>-<config>.zip` |
 | `--installer` | on | Write an installer (see below) |
 | `--sign` | none | Code-sign the executables and engine DLLs; falls back to `MOWO_SIGN_CERT` |
-| `--skip-build`, `--skip-shaders` | off | Reuse the binaries in `Engine/Binaries/<Platform>` and the build tree's shader archive |
+| `--skip-build`, `--skip-shaders` | off | Reuse the binaries in `Engine/Binaries/<platform>/<config>` and the build tree's shader archive |
 
 The command builds the engine, stages the binaries, compiles the editor's shader set, stages the SDK, the templates and the build toolchain, then builds the distributables. It refuses to run on a non-Windows host, and from inside an installed build.
 
@@ -51,20 +51,20 @@ MowoEditor/
 ├── mbt.cmd, mbt.sh                  forwarders to the shipped mbt
 ├── Engine/
 │   ├── EngineManifest.json          engine-root marker and version source
-│   ├── Binaries/Win64/              MowoEditor, MowoProjectLauncher, MowoGame, MowoServer,
+│   ├── Binaries/win-x64/dev/        MowoEditor, MowoProjectLauncher, MowoGame, MowoServer,
 │   │                                MowoCrashReporter, MdfTool, MeafBuilder, engine and vendor DLLs,
 │   │                                the VC++ runtime, Shaders.meaf, EngineContent.meaf
 │   ├── Source/<Group>/**            every .Build.cs and .Target.cs, and the Public/ header trees
 │   ├── Source/ThirdParty/**         the include folders and libraries game modules need
 │   ├── Source/Programs/MowoBuildTool/publish/   self-contained mbt
-│   ├── Lib/Win64/                   engine import libraries
+│   ├── Lib/win-x64/                 engine import libraries
 │   ├── Config/                      the engine's Base*.ini layer
 │   └── Legal/ThirdPartyNotices.txt  license texts of the shipped libraries
 ├── Templates/TP_*/**                Project Launcher templates
 └── Samples/StarterContent/**        the optional starter pack a new project can add
 ```
 
-The binaries keep the names of the configuration they were built in, picked out of the shared `Engine/Binaries/<Platform>` by their suffix <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />. No PDBs ship.
+The binaries come from one configuration's folder, `Engine/Binaries/<platform>/<config>`, and keep that folder in the bundle <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/BinaryLayout.cs" />. No PDBs ship.
 
 The third-party slice is not hand-picked. The packager resolves the canonical game module (`MowoSandbox`, the same shape every template uses) and stages exactly the include folders and libraries its closure references <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Packaging/EditorPackager.cs" />. Programs ship their rules only.
 
@@ -74,7 +74,7 @@ The third-party slice is not hand-picked. The packager resolves the canonical ga
 
 <Flow steps={["mbt build -t MyGame", "Engine modules: prebuilt DLL + import lib", "Compile only project modules", "Link against Engine/Lib"]} caption="In installed mode only project modules compile." />
 
-- **Engine modules are prebuilt.** They resolve to the shipped DLLs in `Engine/Binaries/<Platform>` and the import libraries in `Engine/Lib/<Platform>`, and are never recompiled.
+- **Engine modules are prebuilt.** They resolve to the shipped DLLs in `Engine/Binaries/<platform>/<config>` and the import libraries in `Engine/Lib/<platform>`, and are never recompiled.
 - **A bare `mbt build` is refused.** Name a project module: `mbt build -t <GameModule> --extra-source <Project>/Source` <Source path="Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs" />.
 - **The configuration is pinned.** A game module always builds in the configuration the engine shipped as, because mixing C runtime flavors across the DLL boundary does not work. A different `-c` is corrected, with a log line.
 - **Reflection code generation still runs**, through the header tool built into the shipped `mbt`.
