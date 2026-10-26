@@ -11,10 +11,13 @@ sources:
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorExtensionRegistry.h
   - Engine/Plugins/Combat/Combat.mplugin
   - Samples/SampleProject/Config/Plugins.ini
-verifiedAt: 3f3a08d31
+  - Engine/Source/Runtime/Project/Public/Project/FeatureModules.h
+  - Engine/Source/Runtime/Core/Public/Core/EngineCapabilities.h
+  - Engine/Source/Runtime/Core/Public/Core/EngineFeatureRequirements.h
+verifiedAt: 8f1cfbd42
 ---
 
-A plugin is a folder with a `.mplugin` manifest and, usually, C++ modules and a `Content/` folder. When a project enables it, its content mounts into the virtual filesystem, its modules load and register their types, and its editor module (if it has one) extends the editor. The engine ships <Fact id="plugins.length" /> plugins in `Engine/Plugins/`, all off by default.
+A plugin is a folder with a `.mplugin` manifest and, usually, C++ modules and a `Content/` folder. When a project enables it, its content mounts into the virtual filesystem, its modules load and register their types, and its editor module (if it has one) extends the editor. The engine ships <Fact id="plugins.length" /> plugins in `Engine/Plugins/`, all off by default, and lists its feature modules beside them.
 
 ## Layout
 
@@ -222,4 +225,37 @@ An enabled plugin's `Content/` mounts at `Plugins/<Name>`, so its assets are ref
 
 ## Engine plugins and feature modules
 
-Engine systems such as AI and navigation, the Sequencer and destruction are feature modules, not plugins: they always ship and the engine loads them by name. What stays a plugin is what a game opts into: platform SDKs (SteamPlatform, DiscordPlatform, MowoOnlinePlatform), gameplay kits (Combat, Survival), SmartProps and ScanHierarchy. No engine module depends on a plugin. See [Architecture](/docs/getting-started/core-concepts/#feature-modules).
+Engine systems such as AI and navigation, the Sequencer and destruction are feature modules. They build with the engine, but a project switches each one in `Config/Plugins.ini` exactly like a plugin, and the Plugins window lists them under **Engine Features**. A game loads, registers and packages only the ones its project enables; the editor registers all of them, because its asset editors open every asset type, and the switch decides what a standalone run, the packaged game and the server load. Play in the editor keeps every module registered.
+
+| Feature module | Default | Needs |
+| --- | --- | --- |
+| `AINavigation` (AI and Navigation) | on | |
+| `Narrative` | on | AINavigation |
+| `VoiceChat` | off | |
+| `Destruction`, `GeometryTools`, `PointCloud`, `Sequencer`, `LevelGen`, `PCG`, `GpuEcs` | off | |
+| `Accessibility` (Automatic Subtitles, ONNX Runtime) | off | VoiceChat, Narrative |
+
+AI and Navigation and Narrative are on because the templates place navigation agents, schedules, quests and music, and Combat depends on both. A plugin may name a feature module in `dependencies` (Combat does), and turning that module off blocks the plugin. What stays a plugin is what a game opts into on top: platform SDKs (SteamPlatform, DiscordPlatform, MowoOnlinePlatform), gameplay kits (Combat, Survival), SmartProps and ScanHierarchy. No engine module depends on a plugin. See [Architecture](/docs/getting-started/core-concepts/#feature-modules).
+
+```ini title="Config/Plugins.ini"
+[enabled]
+VoiceChat=True
+Sequencer=True
+AINavigation=False
+```
+
+A module another enabled module links stays loaded by the operating system but does not register: Narrative links VoiceChat, so its library is mapped, yet with VoiceChat off no voice system, input action or setting exists. The package carries `Config/Plugins.ini` and stages only the enabled modules, so a monolithic game compiles in and registers exactly that set.
+
+## What a machine skips
+
+At startup the engine probes the machine once and logs a `[Capabilities]` block: CPU, audio devices, gamepads, whether the Steam and Discord clients run, the GPU, driver and VRAM, hardware ray tracing, mesh shaders, VRS, bindless, async compute, and each vendor feature with the reason it is missing. Vendor features are decided from the vendor, model and driver: DLSS needs an NVIDIA RTX GPU and driver 520 or newer, DLSS Frame Generation an RTX 40-series, Reflex any NVIDIA GPU, Anti-Lag 2 a Radeon RX, XeSS Frame Generation and XeLL an Intel Arc GPU; FSR and XeSS run on every vendor. No vendor runtime loads to answer, and a runtime this GPU cannot run never loads.
+
+A `[Features]` block follows: every subsystem that waits for a capability, a project switch or an enabled module, and whether it starts. A skipped one allocates nothing and starts no thread:
+
+```text
+[Features] skipped VoiceCapture: no audio input device
+[Features] skipped SteamOnline: the Steam client is not running
+[Features] skipped DLSS Frame Generation runtime: needs an RTX 40-series or newer
+```
+
+The client check runs once at startup: a Steam or Discord client started after the game is picked up on the next launch.

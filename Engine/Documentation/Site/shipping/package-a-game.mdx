@@ -5,7 +5,7 @@ order: 1
 sources:
   - Engine/Source/Runtime/Project/Public/Project/PackagingSettings.h
   - Samples/SampleProject/SampleProject.mproject
-verifiedAt: 4d3133579
+verifiedAt: 8f1cfbd42
 ---
 
 This guide takes a project from the editor to a folder you can hand to a player. It targets Windows, the platform packaging is finished for. macOS, Linux and Android are covered at the end, with what does not work yet.
@@ -146,6 +146,11 @@ The log marks each step from process start, so you can see where your start spen
 ```
 
 Ship the pipeline cache (`Config/PsoCache.mdfb`, see [PSO cache](/docs/shipping/pso-cache/)) so the prewarm compiles from a recorded set instead of the first frames hitching.
+## What the package carries
+
+The package stages the plugins and engine feature modules your project enables in `Config/Plugins.ini`, and nothing else: a modular package leaves out the libraries of disabled feature modules (and their runtimes, such as ONNX Runtime for Automatic Subtitles), a monolithic one compiles in only the enabled set. `Config/Plugins.ini` ships with the game so the player loads the same set. See [Writing a plugin](/docs/programming/plugins/#engine-plugins-and-feature-modules).
+
+When the project turns upscalers on (`graphics.upscalers` in the `.mproject`: `true` ships every vendor, a list ships the vendors it names), the vendor runtimes for DLSS and Reflex (Streamline), FSR, XeSS and XeLL go to `Binaries/<platform>/Upscalers`. Every player gets the same files; at launch the game checks the player's GPU and driver and loads only the runtimes that GPU can run, and its settings screen lists only those options. The `[Capabilities]` block at the top of the log says what it found.
 
 ## The committed packaging settings
 

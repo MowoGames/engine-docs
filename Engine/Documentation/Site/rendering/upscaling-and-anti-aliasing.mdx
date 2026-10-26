@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/RHI/Public/RHI/FrameGeneration.h
   - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
-verifiedAt: aee5cfcae
+verifiedAt: 8f1cfbd42
 ---
 
 Mowo can render at a lower internal resolution and reconstruct the output with a temporal upscaler, or render at native resolution and resolve aliasing with TAA or FXAA. One cvar, `r.Upscaler`, picks the method; `r.UpscalerQuality` picks the render resolution.
@@ -29,7 +29,7 @@ Mowo can render at a lower internal resolution and reconstruct the output with a
 The values match.
 
 <Callout type="note">
-Selecting a vendor upscaler is always safe. If its SDK, runtime or GPU is missing, the engine falls back to TAA. `IUpscaler::IsUpscalerSupported` answers whether a method can really run on this device, and the editor and the game's settings screen only offer the methods that can ().
+Selecting a vendor upscaler is always safe. If its SDK, runtime or GPU is missing, the engine falls back to TAA. The startup capability check decides from the GPU vendor, model and driver which vendor runtimes this machine can run, without loading any (DLSS needs an NVIDIA RTX GPU, DLSS Frame Generation an RTX 40-series, Anti-Lag 2 a Radeon RX, XeSS Frame Generation and XeLL an Intel Arc GPU); a runtime it rules out never loads. `IUpscaler::IsUpscalerSupported` answers whether a method can really run on this device, and the editor and the game's settings screen only offer the methods that can ().
 </Callout>
 
 ### TSR
@@ -95,7 +95,7 @@ The editor viewport is an authoring view: it always resolves at native resolutio
 
 <Steps>
 <Step title="Per project">
-Open **Project Settings**, the **Rendering** page, section **ANTI-ALIASING & UPSCALING**. Set **Anti-Aliasing Method**, **Screen Percentage** and, if you want a fixed scale, **Custom Percentage**. Unsupported methods are greyed.
+Open **Project Settings**, the **Rendering** page, section **ANTI-ALIASING & UPSCALING**. Set **Anti-Aliasing Method**, **Screen Percentage** and, if you want a fixed scale, **Custom Percentage**. A method the graphics API cannot host is not listed; one this GPU cannot run stays listed with the note that it applies to players' hardware, because the setting ships with the game.
 </Step>
 <Step title="From code">
 Check support first, then set the cvars. The renderer applies the change at the next `BeginScene`.
@@ -117,7 +117,7 @@ Mowo::IConsoleManager::Get().SetByName("r.Upscaler", std::to_string(static_cast<
 Mowo::IConsoleManager::Get().SetByName("r.UpscalerQuality", std::to_string(static_cast<int>(Mowo::UpscalerQuality::Quality)));
 ```
 
-<Screenshot id="rendering-upscaling-project-settings" alt="Mowo Editor Project Settings on the Rendering page scrolled to the ANTI-ALIASING & UPSCALING section, with the Anti-Aliasing Method dropdown open listing TAA, TSR, FSR, DLSS, XeSS and MetalFX, where unsupported entries appear greyed" caption="Pick the method and screen percentage per project." />
+<Screenshot id="rendering-upscaling-project-settings" alt="Mowo Editor Project Settings on the Rendering page scrolled to the ANTI-ALIASING & UPSCALING section, with the Anti-Aliasing Method dropdown open listing TAA, TSR, FSR, DLSS, XeSS and MetalFX, where entries this GPU cannot run carry a note" caption="Pick the method and screen percentage per project." />
 
 ## The scene's AA setting
 
@@ -153,7 +153,7 @@ Which backend each API can host:
 - **Metal**: the MetalFX frame interpolator.
 - **D3D11**: none.
 
-Frame generation is a project switch, off for a new project: turn on **Project Settings > Rendering > Features > Frame Generation** (`r.FrameGeneration.EnableForProject 1`) first, or `r.FrameGeneration` is ignored and the player's rows are greyed out. It engages only while the game owns the presented swapchain. The editor never enables it, because its viewport is a texture inside the editor UI. Set it per project on **Project Settings > Engine > Frame Generation**; players get **Frame Generation**, **Backend**, **Multiplier** and **Dynamic Frame Generation** rows that list only what their GPU reports.
+Frame generation is a project switch, off for a new project: turn on **Project Settings > Rendering > Features > Frame Generation** (`r.FrameGeneration.EnableForProject 1`) first, or `r.FrameGeneration` is ignored and the player's settings screen leaves the rows out. It engages only while the game owns the presented swapchain. The editor never enables it, because its viewport is a texture inside the editor UI. Set it per project on **Project Settings > Engine > Frame Generation**; players get **Frame Generation**, **Backend**, **Multiplier** and **Dynamic Frame Generation** rows that list only what their GPU reports.
 
 ## Low latency
 
