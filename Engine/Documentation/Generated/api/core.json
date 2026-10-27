@@ -2565,22 +2565,22 @@
 							"kind": "alias",
 							"name": "FModuleVerifier",
 							"signature": "using FModuleVerifier = bool (*)(const std::string& resolvedPath, void* image, std::string& outReason)",
-							"doc": "Verify-before-load gate. The ABI check in LoadModuleFromPath only runs\nAFTER LoadLibrary has already executed the image's static init (DllMain),\nso a hostile or wrong module gets to run code before it is (maybe)\nrefused. A higher tier — one that can reach the EdDSA/hash crypto in\nFilesystem — registers a verifier here; the loader calls it on the\nresolved binary PATH *before* the image is mapped, and a false result\nrefuses the load with the image never touched. With no verifier\nregistered the loader behaves exactly as before (unsigned local/dev\nmodules load), so this is opt-in hardening a shipping host arms. One\nverifier, process-lifetime; the last registration wins. `outReason` is\nlogged on refusal.\n\n`image` is the IPlatformLibrary::OpenImageForLoad handle the loader holds\nfrom before the verifier runs until after the image is mapped: the\nverifier reads the bytes through it (IPlatformLibrary::ReadImage), so\nwhat it vouches for is what gets mapped. The module's imports that are\nfiles the game ships, not yet mapped, are held and verified the same way\nbefore the load — an unsigned DLL beside a signed plugin would otherwise\ncome in as its dependency, without ever passing the gate.",
-							"line": 91
+							"doc": "Verify-before-load gate. The ABI check in LoadModuleFromPath only runs\nAFTER LoadLibrary has already executed the image's static init (DllMain),\nso a hostile or wrong module gets to run code before it is (maybe)\nrefused. A higher tier — one that can reach the EdDSA/hash crypto in\nFilesystem — registers a verifier here; the loader calls it on the\nresolved binary PATH *before* the image is mapped, and a false result\nrefuses the load with the image never touched. With no verifier\nregistered the loader behaves exactly as before (unsigned local/dev\nmodules load), so this is opt-in hardening a shipping host arms. One\nverifier, process-lifetime; the last registration wins. `outReason` is\nlogged on refusal. A distribution build also checks every engine library\nagainst the engine's signed statement before this verifier runs\n(Core/ModuleIntegrity.h), whether or not one is registered.\n\n`image` is the IPlatformLibrary::OpenImageForLoad handle the loader holds\nfrom before the verifier runs until after the image is mapped: the\nverifier reads the bytes through it (IPlatformLibrary::ReadImage), so\nwhat it vouches for is what gets mapped. The module's imports that are\nfiles the game ships, not yet mapped, are held and verified the same way\nbefore the load — an unsigned DLL beside a signed plugin would otherwise\ncome in as its dependency, without ever passing the gate.",
+							"line": 93
 						},
 						{
 							"kind": "method",
 							"name": "SetModuleVerifier",
 							"signature": "static void SetModuleVerifier(FModuleVerifier verifier)",
 							"static": true,
-							"line": 92
+							"line": 94
 						},
 						{
 							"kind": "method",
 							"name": "HasModuleVerifier",
 							"signature": "static bool HasModuleVerifier()",
 							"static": true,
-							"line": 93
+							"line": 95
 						},
 						{
 							"kind": "method",
@@ -2588,21 +2588,21 @@
 							"signature": "static bool OwnsAddress(void* moduleHandle, const void* address)",
 							"static": true,
 							"doc": "True when `address` lies inside the loaded image `handle` refers to\n— the attribution primitive the unload handlers filter with (same\nPlatform query FMObjectArray::PurgeModuleObjects uses on vtables).",
-							"line": 98
+							"line": 100
 						},
 						{
 							"kind": "method",
 							"name": "LoadModule",
 							"signature": "bool LoadModule(const std::string& name)",
 							"doc": "Load `name` from the executable's directory — the newest\nversioned binary when one exists, else `<name>.dll`. Loading an\nalready-loaded module is a no-op returning true. Calls the\noptional InitializeModule export.",
-							"line": 104
+							"line": 106
 						},
 						{
 							"kind": "method",
 							"name": "LoadModuleFromPath",
 							"signature": "bool LoadModuleFromPath(const std::string& name, const std::string& path)",
 							"doc": "Load a specific binary path under a module name (hot reload\nhands the freshly-built versioned file directly). A binary whose\nMowoModuleApiVersion export is missing or differs from\nMOWO_MODULE_API_VERSION is refused: its static registrations are\nswept back out and the image is freed before this returns false.",
-							"line": 111
+							"line": 113
 						},
 						{
 							"kind": "method",
@@ -2610,7 +2610,7 @@
 							"signature": "static uint32_t ModuleApiVersion()",
 							"static": true,
 							"doc": "The version the loader compares against; a module exports the same\nnumber through MOWO_IMPLEMENT_MODULE_API_VERSION().",
-							"line": 115
+							"line": 117
 						},
 						{
 							"kind": "method",
@@ -2618,7 +2618,7 @@
 							"signature": "static const char* BuildAbi()",
 							"static": true,
 							"doc": "The engine's own MOWO_BUILD_ABI_SIGNATURE, as compiled into Core.",
-							"line": 120
+							"line": 122
 						},
 						{
 							"kind": "method",
@@ -2626,7 +2626,7 @@
 							"signature": "static std::string CompatibilityProblem(bool hasVersionExport, uint32_t version, const char* buildAbi)",
 							"static": true,
 							"doc": "Why a module with these exports may not load, or empty when it may.\n`buildAbi` is null when the module exports no MowoModuleBuildAbi.\nPure, so the refusal rules can be pinned without building a binary for\nevery way of getting them wrong.",
-							"line": 126
+							"line": 128
 						},
 						{
 							"kind": "method",
@@ -2634,34 +2634,34 @@
 							"signature": "static bool IsEngineOwnedModule(const std::string& name)",
 							"static": true,
 							"doc": "Engine runtime modules (\"MowoEngine.<Name>\") ship with the loader and\nneed no version export; every other module (plugin, game, sandbox)\nmust carry one or is refused. A layout question only: anyone can name a\nDLL \"MowoEngine.X\", so no trust decision may read it — the signature\ngate verifies every module it is handed, whatever the name.",
-							"line": 133
+							"line": 135
 						},
 						{
 							"kind": "method",
 							"name": "UnloadModule",
 							"signature": "bool UnloadModule(const std::string& name)",
 							"doc": "Calls the optional ShutdownModule export, then frees the\nlibrary. Returns false when the module isn't loaded.",
-							"line": 137
+							"line": 139
 						},
 						{
 							"kind": "method",
 							"name": "IsModuleLoaded",
 							"signature": "bool IsModuleLoaded(const std::string& name) const",
-							"line": 139
+							"line": 141
 						},
 						{
 							"kind": "method",
 							"name": "GetModuleHandle",
 							"signature": "void* GetModuleHandle(const std::string& name) const",
 							"doc": "Native handle (HMODULE / dlopen handle) as void*. nullptr when\nnot loaded. Pass to MClassRegistry::UnregisterAllInModule.",
-							"line": 143
+							"line": 145
 						},
 						{
 							"kind": "method",
 							"name": "FindModuleBinary",
 							"signature": "std::string FindModuleBinary(const std::string& name) const",
 							"doc": "Path of the binary LoadModule would pick for `name` right now:\nthe highest `<name>.v<N>.dll` in the executable directory, else\n`<name>.dll`, else empty when neither exists.",
-							"line": 148
+							"line": 150
 						}
 					]
 				}
