@@ -1,0 +1,109 @@
+---
+title: Protect your game
+sidebarTitle: Protect your game
+description: Turn on native-code protection for a game's release builds — watermarking, integrity checks, code packing and string obfuscation — from Project Settings, and where to put annotations (and what never to annotate).
+order: 10
+sources:
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/ProjectProtectionSettings.h
+  - Engine/Source/Runtime/Core/Public/Core/EngineIntegrity.h
+  - Engine/Source/Runtime/Filesystem/Public/Filesystem/EmbeddedCryptoKeys.h
+verifiedAt: c5696fb37
+---
+
+# Protect your game
+
+Protection makes a shipped build resist tampering and piracy: it stamps a
+traceable watermark into the executable, checks that the code has not been
+modified, can encrypt your crown-jewel code on disk, and obfuscates the strings
+and functions you mark. It applies to **release and profile packages only** —
+your debug and dev builds, and the editor, are never changed — and it is **off
+by default**. During the engine beta every license includes it.
+
+Protection never alters your game's data or results. Its checks are a signal, not
+a kill switch: a modified build is reported to your own code, which decides what
+to do. It changes no gameplay on its own.
+
+## Turn it on
+
+Open **Project Settings › Protection** and switch **Enable protection** on. The
+page writes your choices to `Config/DefaultProtection.ini`; commit that file with
+your project. When you package with `mbt package -c release` (or `-c profile`),
+the build applies the options below. The file itself never ships inside the
+package.
+
+A protected release build is **harder to debug**: watermarking, the integrity
+stamp and code packing also make it harder to attach a debugger or read a crash
+of the release binary. Keep protection off while you are still diagnosing release
+issues, and turn it on for the builds you hand out.
+
+## The options
+
+- **Watermark** — a short payload stamped into the packaged binary so a leaked
+  copy is traceable to the build (and, on your build server, to the customer).
+  Leave it empty to use the default (target, configuration, platform and engine
+  version).
+- **Integrity stamp** — hashes the shipped code at package time; the game checks
+  it at startup and refuses to trust a modified binary.
+- **Periodic monitor** — re-checks integrity in the background while the game
+  runs, so a swap or patch that lands after startup is caught too. The result is
+  readable from your game code (below); it never pauses or changes the game.
+- **Pack code (Windows)** — encrypts the crown-jewel code section on disk and
+  decrypts it only at load, so a static dump of the executable shows ciphertext.
+  The loudest change in the chain, so it is off until you opt in.
+- **Obfuscate strings** — obfuscates string literals and honours the protection
+  annotations in the sources you list, so a `strings` scan of the binary does not
+  surface them.
+
+Your project's content encryption key is already protected independently of this
+page: `mbt package` splits it across the executable so it never appears as a
+plain run of bytes, and a release player reassembles it in a packed, wiped-after
+function. See [Content protection](/docs/shipping/encrypted-archives).
+
+## Annotations: what to mark, and what never to
+
+**Annotated Sources** lists the project source files to route through the
+obfuscation plugin. In those files you mark the functions worth protecting:
+
+```cpp
+#include <mowo/protection.h>
+
+MOWO_PROTECT_HEAVY int32_t CheckEntitlement(const FReceipt& receipt);
+MOWO_VIRTUALIZE     void   ApplyServerGrant(FGrant& grant);
+```
+
+Use `MOWO_STRING("...")` for a literal that should not read back from the binary,
+and `MOWO_PROTECT_LIGHT` / `MEDIUM` / `HEAVY` or `MOWO_VIRTUALIZE` on a function
+whose logic is worth hiding — a licence or entitlement check, a save-integrity
+routine, an anti-cheat helper.
+
+**Never annotate a hot path.** Protection transforms add real overhead, so a
+function that runs more than once per frame must stay unannotated:
+
+- rendering and RHI command recording
+- ECS iteration and the physics step
+- animation evaluation and audio mixing
+- UI paint and the Visual Scripting VM
+- anything called every frame or per entity
+
+Annotating one of these can cost you frames. Mark cold, security-relevant
+functions only — the ones that run at startup, on a transaction, or on a
+once-per-session event.
+
+## Reading the integrity signal from your game
+
+A game can ask whether its own build was modified and report that to its
+server or telemetry, without the engine changing anything:
+
+```cpp
+#include <Core/EngineIntegrity.h>
+
+if (Mowo::FEngineIntegrity::IsSessionModified()) {
+    // flag this session to your backend; do NOT change gameplay here
+}
+```
+
+In multiplayer the same signal travels in the join handshake: a client reports
+its integrity status to the authoritative server at join and rejoin, and your
+server-side code receives it (`FNetSession::SetOnPlayerIntegrity`) to log, flag
+or act on as you choose. It is never folded into gameplay or rollback checksums,
+so a false positive can never desync an honest player.

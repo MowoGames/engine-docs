@@ -6769,6 +6769,13 @@
 							"name": "rejoinToken",
 							"signature": "uint64_t rejoinToken = 0",
 							"line": 58
+						},
+						{
+							"kind": "field",
+							"name": "integrityBits",
+							"signature": "uint32_t integrityBits = 0",
+							"doc": "The engine integrity-status bits the client reported at join/rejoin\n(FEngineIntegrity::Status on its side; 0 = clean). The authoritative\nserver reads it to tell an honest server a client is running a modified\nbuild — a signal only. It is never folded into rollback checksums or any\ngameplay value, so a false positive cannot desync an honest player.",
+							"line": 65
 						}
 					]
 				},
@@ -6778,25 +6785,25 @@
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "Outcome of RouteActorRpc. Sent = shipped on the wire; RunLocal = the\nresolved destination is THIS machine (a Client RPC whose owning client is\nthe listen host), so the caller must invoke it locally; Failed = the call\ncould not travel and must not execute anywhere.",
-					"line": 65,
+					"line": 72,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Failed",
 							"signature": "Failed",
-							"line": 66
+							"line": 73
 						},
 						{
 							"kind": "enumerator",
 							"name": "Sent",
 							"signature": "Sent",
-							"line": 67
+							"line": 74
 						},
 						{
 							"kind": "enumerator",
 							"name": "RunLocal",
 							"signature": "RunLocal",
-							"line": 68
+							"line": 75
 						}
 					]
 				},
@@ -6806,19 +6813,19 @@
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "Rate class of a client→server session event, mirroring the replication\nlayer's ENetRpcChannelClass. HighRate puts the event on its own token\nbucket and the unreliable-sequenced channel — the shape a swept sensor or a\nheld trigger needs, and the wrong shape for anything a player clicks once.",
-					"line": 75,
+					"line": 82,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Default",
 							"signature": "Default = 0",
-							"line": 76
+							"line": 83
 						},
 						{
 							"kind": "enumerator",
 							"name": "HighRate",
 							"signature": "HighRate = 1",
-							"line": 77
+							"line": 84
 						}
 					]
 				},
@@ -6828,19 +6835,19 @@
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "Why the session's hooks are coming down. `Left` is a deliberate exit and\nends the replication session outright; `DroppedPendingRejoin` is a link that\nfailed while the grace window is open, and must NOT end it — the id maps and\nthe marks replication left on scene-owned entities are exactly what a rejoin\nre-binds to, and clearing them turns a reconnect into a fresh join.",
-					"line": 85,
+					"line": 92,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Left",
 							"signature": "Left = 0",
-							"line": 86
+							"line": 93
 						},
 						{
 							"kind": "enumerator",
 							"name": "DroppedPendingRejoin",
 							"signature": "DroppedPendingRejoin = 1",
-							"line": 87
+							"line": 94
 						}
 					]
 				},
@@ -6849,311 +6856,311 @@
 					"name": "FNetSession",
 					"namespace": "Mowo",
 					"doc": "The session surface a co-op game actually calls. Owns the host/join/leave\nstate machine on top of NetworkManager + ReplicationManager, one player\nrecord per connection (pawn spawned on join, destroyed on leave), and a\ngameplay-event channel that rides the existing RPC packet with a\ndefault-deny client->server policy.\n\nTicked from ReplicationManager::Update, which Scene drives in the runtime\nand simulation system sets. Headless drivers call Tick directly.",
-					"line": 98,
+					"line": 105,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static FNetSession& Get()",
 							"static": true,
-							"line": 100
+							"line": 107
 						},
 						{
 							"kind": "alias",
 							"name": "FPawnHostFactoryFn",
 							"signature": "using FPawnHostFactoryFn = INetPawnHost* (*)(MWorld* world)",
 							"doc": "Factory invoked whenever a session gains an actor world (host/join/\nworld-swap with an MWorld); release is called with the same pointer on\nleave/swap so allocation and free stay in the installing image.",
-							"line": 109
+							"line": 116
 						},
 						{
 							"kind": "alias",
 							"name": "FPawnHostReleaseFn",
 							"signature": "using FPawnHostReleaseFn = void (*)(INetPawnHost* host)",
-							"line": 110
+							"line": 117
 						},
 						{
 							"kind": "method",
 							"name": "SetPawnHostFactory",
 							"signature": "static void SetPawnHostFactory(FPawnHostFactoryFn factory, FPawnHostReleaseFn release)",
 							"static": true,
-							"line": 111
+							"line": 118
 						},
 						{
 							"kind": "alias",
 							"name": "FContentIdentityFn",
 							"signature": "using FContentIdentityFn = void (*)(std::string& outBuildId, uint64_t& outContentHash)",
 							"doc": "Build id + mounted-content hash for the join compatibility handshake\n(DLC lives above this module). Unset provider = empty id + 0, which\nstill round-trips the handshake symmetrically.",
-							"line": 116
+							"line": 123
 						},
 						{
 							"kind": "method",
 							"name": "SetContentIdentityProvider",
 							"signature": "static void SetContentIdentityProvider(FContentIdentityFn fn)",
 							"static": true,
-							"line": 117
+							"line": 124
 						},
 						{
 							"kind": "alias",
 							"name": "FWorldAdapterFn",
 							"signature": "using FWorldAdapterFn = World* (*)(MWorld* world)",
 							"doc": "MWorld is opaque down here; the same installer provides the one thing\nthe convenience overloads need from it — its ECS world.",
-							"line": 121
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "SetWorldAdapter",
 							"signature": "static void SetWorldAdapter(FWorldAdapterFn fn)",
 							"static": true,
-							"line": 122
+							"line": 129
 						},
 						{
 							"kind": "alias",
 							"name": "EventHandler",
 							"signature": "using EventHandler = std::function<void(uint32_t senderPlayerId, FNetEventReader& reader)>",
-							"line": 124
+							"line": 131
 						},
 						{
 							"kind": "alias",
 							"name": "PlayerDelegate",
 							"signature": "using PlayerDelegate = std::function<void(const FNetPlayer&)>",
-							"line": 125
+							"line": 132
 						},
 						{
 							"kind": "alias",
 							"name": "StateDelegate",
 							"signature": "using StateDelegate = std::function<void(ENetSessionState, ENetSessionFailure)>",
-							"line": 126
+							"line": 133
 						},
 						{
 							"kind": "alias",
 							"name": "LidarShotDelegate",
 							"signature": "using LidarShotDelegate = std::function<void(const FNetLidarShot&)>",
-							"line": 127
+							"line": 134
 						},
 						{
 							"kind": "alias",
 							"name": "RpcFallback",
 							"signature": "using RpcFallback = std::function<void(NetworkId, uint16_t, uint16_t, const uint8_t*, size_t, uint32_t)>",
-							"line": 128
+							"line": 135
 						},
 						{
 							"kind": "alias",
 							"name": "TravelDelegate",
 							"signature": "using TravelDelegate = std::function<void(const std::string& scenePath, uint32_t travelId)>",
-							"line": 129
+							"line": 136
 						},
 						{
 							"kind": "method",
 							"name": "HostSession",
 							"signature": "bool HostSession(MWorld* world, const FNetSessionSettings& settings)",
 							"doc": "Listen server. The hosting player gets playerId 1 / peerId 0 and a\npawn of its own, so host and clients run the same code path.",
-							"line": 133
+							"line": 140
 						},
 						{
 							"kind": "method",
 							"name": "HostSession",
 							"signature": "bool HostSession(World* ecsWorld, const FNetSessionSettings& settings)",
-							"line": 134
+							"line": 141
 						},
 						{
 							"kind": "method",
 							"name": "JoinSession",
 							"signature": "bool JoinSession(MWorld* world, const std::string& address, uint16_t port, const FNetSessionSettings& settings)",
-							"line": 136
+							"line": 143
 						},
 						{
 							"kind": "method",
 							"name": "JoinSession",
 							"signature": "bool JoinSession(World* ecsWorld, const std::string& address, uint16_t port, const FNetSessionSettings& settings)",
-							"line": 137
+							"line": 144
 						},
 						{
 							"kind": "method",
 							"name": "JoinSteamHost",
 							"signature": "bool JoinSteamHost(MWorld* world, uint64_t hostSteamId, const FNetSessionSettings& settings)",
 							"doc": "Steam lobby / invite handoff — the SteamID64 form makes the composite\ntransport pick the Steam P2P backend.",
-							"line": 141
+							"line": 148
 						},
 						{
 							"kind": "method",
 							"name": "JoinSteamHost",
 							"signature": "bool JoinSteamHost(World* ecsWorld, uint64_t hostSteamId, const FNetSessionSettings& settings)",
-							"line": 142
+							"line": 149
 						},
 						{
 							"kind": "method",
 							"name": "EnableInviteHandling",
 							"signature": "void EnableInviteHandling(MWorld* world, const FNetSessionSettings& settings)",
 							"doc": "Claim the platform's invite / \"Join Game\" delegate so accepting one\njoins THIS session layer instead of opening a bare transport\nconnection. The world and settings are the ones the join will use; a\nnull world parks the invite (GetPendingInviteHost) for a menu that has\nnot built its world yet.",
-							"line": 149
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "EnableInviteHandling",
 							"signature": "void EnableInviteHandling(World* ecsWorld, const FNetSessionSettings& settings)",
-							"line": 150
+							"line": 157
 						},
 						{
 							"kind": "method",
 							"name": "DisableInviteHandling",
 							"signature": "void DisableInviteHandling()",
-							"line": 151
+							"line": 158
 						},
 						{
 							"kind": "method",
 							"name": "IsInviteHandlingEnabled",
 							"signature": "bool IsInviteHandlingEnabled() const",
-							"line": 152
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "RebindInviteWorld",
 							"signature": "void RebindInviteWorld(MWorld* world)",
 							"doc": "Point invite joins at the world that is live now. The stored world is\nraw, so map travel — which destroys the world invite handling was\nclaimed with — has to hand over the replacement or a later invite joins\ninto freed memory. No-op while invite handling is not claimed.",
-							"line": 160
+							"line": 167
 						},
 						{
 							"kind": "method",
 							"name": "RebindInviteWorld",
 							"signature": "void RebindInviteWorld(World* ecsWorld)",
-							"line": 161
+							"line": 168
 						},
 						{
 							"kind": "method",
 							"name": "GetPendingInviteHost",
 							"signature": "uint64_t GetPendingInviteHost() const",
 							"doc": "Host id of an invite that arrived with no world to join into. Consuming\nit clears the slot, so a menu can drive the join on its own terms.",
-							"line": 165
+							"line": 172
 						},
 						{
 							"kind": "method",
 							"name": "ConsumePendingInviteHost",
 							"signature": "uint64_t ConsumePendingInviteHost()",
-							"line": 168
+							"line": 175
 						},
 						{
 							"kind": "method",
 							"name": "GetInviteCount",
 							"signature": "uint32_t GetInviteCount() const",
 							"doc": "Invites accepted since the delegate was claimed, for tests and UI.",
-							"line": 171
+							"line": 178
 						},
 						{
 							"kind": "method",
 							"name": "LeaveSession",
 							"signature": "void LeaveSession()",
-							"line": 175
+							"line": 182
 						},
 						{
 							"kind": "method",
 							"name": "IsRejoinPending",
 							"signature": "bool IsRejoinPending() const",
 							"doc": "Reconnect / rejoin\nA client whose link failed while the host still holds its slot keeps\nenough to come back as the SAME player: the id the host issued, the\naddress it was talking to, and the token that proves the claim.\nRejoinSession reconnects to that address and presents the token; the\nhost re-binds the held pawn, its NetworkIds and its ownership, then\nresyncs the whole world state to it.",
-							"line": 184
+							"line": 191
 						},
 						{
 							"kind": "method",
 							"name": "GetRejoinToken",
 							"signature": "uint64_t GetRejoinToken() const",
-							"line": 187
+							"line": 194
 						},
 						{
 							"kind": "method",
 							"name": "RejoinSession",
 							"signature": "bool RejoinSession(MWorld* world)",
-							"line": 190
+							"line": 197
 						},
 						{
 							"kind": "method",
 							"name": "RejoinSession",
 							"signature": "bool RejoinSession(World* ecsWorld)",
-							"line": 191
+							"line": 198
 						},
 						{
 							"kind": "method",
 							"name": "GetRejoinGraceSeconds",
 							"signature": "float GetRejoinGraceSeconds() const",
 							"doc": "Seconds the HOST holds a dropped player's slot. Negative in the settings\nmeans \"follow net.rejoin_grace_seconds\"; the resolved value is here.",
-							"line": 195
+							"line": 202
 						},
 						{
 							"kind": "method",
 							"name": "SetRejoinGraceSeconds",
 							"signature": "void SetRejoinGraceSeconds(float seconds)",
-							"line": 198
+							"line": 205
 						},
 						{
 							"kind": "method",
 							"name": "GetPendingRejoinCount",
 							"signature": "uint32_t GetPendingRejoinCount() const",
 							"doc": "Players whose link is down but whose slot is still held.",
-							"line": 201
+							"line": 208
 						},
 						{
 							"kind": "method",
 							"name": "ServerBeginTravel",
 							"signature": "uint32_t ServerBeginTravel(const std::string& scenePath)",
-							"line": 203
+							"line": 210
 						},
 						{
 							"kind": "method",
 							"name": "PrepareForWorldSwap",
 							"signature": "void PrepareForWorldSwap()",
-							"line": 204
+							"line": 211
 						},
 						{
 							"kind": "method",
 							"name": "CompleteWorldSwap",
 							"signature": "bool CompleteWorldSwap(MWorld* world)",
-							"line": 205
+							"line": 212
 						},
 						{
 							"kind": "method",
 							"name": "CompleteWorldSwap",
 							"signature": "bool CompleteWorldSwap(World* ecsWorld)",
-							"line": 206
+							"line": 213
 						},
 						{
 							"kind": "method",
 							"name": "ServerCompleteTravel",
 							"signature": "void ServerCompleteTravel()",
-							"line": 207
+							"line": 214
 						},
 						{
 							"kind": "method",
 							"name": "ClientSendTravelAck",
 							"signature": "bool ClientSendTravelAck(uint32_t travelId)",
-							"line": 208
+							"line": 215
 						},
 						{
 							"kind": "method",
 							"name": "SetOnTravelRequested",
 							"signature": "void SetOnTravelRequested(TravelDelegate d)",
-							"line": 209
+							"line": 216
 						},
 						{
 							"kind": "method",
 							"name": "IsTravelInProgress",
 							"signature": "bool IsTravelInProgress() const",
-							"line": 212
+							"line": 219
 						},
 						{
 							"kind": "method",
 							"name": "GetTravelId",
 							"signature": "uint32_t GetTravelId() const",
-							"line": 215
+							"line": 222
 						},
 						{
 							"kind": "method",
 							"name": "GetClientPendingTravelId",
 							"signature": "uint32_t GetClientPendingTravelId() const",
-							"line": 218
+							"line": 225
 						},
 						{
 							"kind": "method",
 							"name": "GetClientPendingTravelScene",
 							"signature": "const std::string& GetClientPendingTravelScene() const",
-							"line": 221
+							"line": 228
 						},
 						{
 							"kind": "method",
@@ -7161,303 +7168,310 @@
 							"signature": "static bool IsSafeTravelScenePath(const std::string& scenePath)",
 							"static": true,
 							"doc": "The scene a host names for travel is peer data, and the client loads it.\nOnly a relative content path passes: an absolute or drive-qualified path\nskips the VFS mounts, a UNC path makes the client authenticate to that\nshare, and a \"..\" segment climbs out of the content tree.",
-							"line": 229
+							"line": 236
 						},
 						{
 							"kind": "method",
 							"name": "Tick",
 							"signature": "void Tick(float deltaSeconds)",
-							"line": 231
+							"line": 238
 						},
 						{
 							"kind": "method",
 							"name": "GetState",
 							"signature": "ENetSessionState GetState() const",
-							"line": 233
+							"line": 240
 						},
 						{
 							"kind": "method",
 							"name": "GetFailure",
 							"signature": "ENetSessionFailure GetFailure() const",
-							"line": 236
+							"line": 243
 						},
 						{
 							"kind": "method",
 							"name": "IsHost",
 							"signature": "bool IsHost() const",
-							"line": 239
+							"line": 246
 						},
 						{
 							"kind": "method",
 							"name": "IsClient",
 							"signature": "bool IsClient() const",
-							"line": 242
+							"line": 249
 						},
 						{
 							"kind": "method",
 							"name": "IsInSession",
 							"signature": "bool IsInSession() const",
-							"line": 245
+							"line": 252
 						},
 						{
 							"kind": "method",
 							"name": "GetSettings",
 							"signature": "const FNetSessionSettings& GetSettings() const",
-							"line": 249
+							"line": 256
 						},
 						{
 							"kind": "method",
 							"name": "GetJoinKey",
 							"signature": "std::string GetJoinKey() const",
 							"doc": "What a player on another machine needs to join this hosted session\ndirectly: \"<address>:<port>#<key>\". Empty when not hosting, or when the\nlink authenticates otherwise (a configured net.psk, Steam).",
-							"line": 256
+							"line": 263
 						},
 						{
 							"kind": "method",
 							"name": "GetRoute",
 							"signature": "ENetSessionRoute GetRoute() const",
-							"line": 257
+							"line": 264
 						},
 						{
 							"kind": "method",
 							"name": "GetPlayers",
 							"signature": "const std::vector<FNetPlayer>& GetPlayers() const",
-							"line": 261
+							"line": 268
 						},
 						{
 							"kind": "method",
 							"name": "GetPlayerCount",
 							"signature": "uint32_t GetPlayerCount() const",
-							"line": 264
+							"line": 271
 						},
 						{
 							"kind": "method",
 							"name": "FindPlayerById",
 							"signature": "const FNetPlayer* FindPlayerById(uint32_t playerId) const",
-							"line": 267
+							"line": 274
 						},
 						{
 							"kind": "method",
 							"name": "FindPlayerByPeer",
 							"signature": "const FNetPlayer* FindPlayerByPeer(uint32_t peerId) const",
-							"line": 268
+							"line": 275
 						},
 						{
 							"kind": "method",
 							"name": "GetLocalPlayer",
 							"signature": "const FNetPlayer* GetLocalPlayer() const",
-							"line": 269
+							"line": 276
 						},
 						{
 							"kind": "method",
 							"name": "GetLocalPlayerId",
 							"signature": "uint32_t GetLocalPlayerId() const",
-							"line": 270
+							"line": 277
 						},
 						{
 							"kind": "method",
 							"name": "IsSessionFull",
 							"signature": "bool IsSessionFull() const",
-							"line": 273
+							"line": 280
 						},
 						{
 							"kind": "method",
 							"name": "SetPlayerPawnClass",
 							"signature": "void SetPlayerPawnClass(MClass* pawnClass)",
 							"doc": "Pawn class spawned per connected player. Null falls back to a bare\nTransform + NetworkObject entity, which is what a headless driver and\nthe self-test use.",
-							"line": 278
+							"line": 285
 						},
 						{
 							"kind": "method",
 							"name": "GetPlayerPawnClass",
 							"signature": "MClass* GetPlayerPawnClass() const",
-							"line": 281
+							"line": 288
 						},
 						{
 							"kind": "method",
 							"name": "SetOnPlayerJoined",
 							"signature": "void SetOnPlayerJoined(PlayerDelegate d)",
-							"line": 285
+							"line": 292
 						},
 						{
 							"kind": "method",
 							"name": "SetOnPlayerLeft",
 							"signature": "void SetOnPlayerLeft(PlayerDelegate d)",
-							"line": 288
+							"line": 295
 						},
 						{
 							"kind": "method",
 							"name": "SetOnStateChanged",
 							"signature": "void SetOnStateChanged(StateDelegate d)",
-							"line": 291
+							"line": 298
 						},
 						{
 							"kind": "method",
 							"name": "SetOnLidarShot",
 							"signature": "void SetOnLidarShot(LidarShotDelegate d)",
-							"line": 294
+							"line": 301
+						},
+						{
+							"kind": "method",
+							"name": "SetOnPlayerIntegrity",
+							"signature": "void SetOnPlayerIntegrity(PlayerDelegate d)",
+							"doc": "Fires on the host when a joining or rejoining client reported a non-zero\nengine integrity status (a modified build). The server's own code decides\nwhat to do — kick, flag for review, tell a match service. The default\nwithout a handler is log-only; it never changes gameplay. The FNetPlayer\ncarries the bits in `integrityBits`, and is also delivered to\nOnPlayerJoined with them set, so an existing join handler can read them.",
+							"line": 311
 						},
 						{
 							"kind": "method",
 							"name": "ClearGameCallbacks",
 							"signature": "void ClearGameCallbacks()",
 							"doc": "Drops every game-installed per-session slot: event handlers, client\nevent policies, the player/state/lidar delegates, the RPC fallback and\nthe pawn class. LeaveSession calls it — the installers live in game\ncode (often the hot-reloadable game module), and a std::function\ncarries no address the session could attribute to an image, so the\nslots cannot be allowed to outlive the session they were set up for.\nInstall your handlers when starting a session, not once per process.\nThe travel delegate stays: it is engine-host wiring with its own\nlifetime (the runtime clears it in StopGame).",
-							"line": 307
+							"line": 324
 						},
 						{
 							"kind": "method",
 							"name": "RegisterEventHandler",
 							"signature": "void RegisterEventHandler(uint16_t eventId, EventHandler handler)",
 							"doc": "Gameplay events. Ids must sit at or above kGameEventFirst; the\nreserved block above kReservedFirst belongs to the join protocol.",
-							"line": 311
+							"line": 328
 						},
 						{
 							"kind": "method",
 							"name": "UnregisterEventHandler",
 							"signature": "void UnregisterEventHandler(uint16_t eventId)",
-							"line": 312
+							"line": 329
 						},
 						{
 							"kind": "method",
 							"name": "HasEventHandler",
 							"signature": "bool HasEventHandler(uint16_t eventId) const",
-							"line": 313
+							"line": 330
 						},
 						{
 							"kind": "method",
 							"name": "AllowClientEvent",
 							"signature": "void AllowClientEvent(uint16_t eventId, bool ownerOnly = true, ENetEventRate rate = ENetEventRate::Default)",
 							"doc": "Client->server events are refused unless allow-listed. OwnerOnly (the\ndefault) additionally requires the sender to own the pawn the event is\nstamped with — the correct setting for anything a pawn does.",
-							"line": 318
+							"line": 335
 						},
 						{
 							"kind": "method",
 							"name": "DenyClientEvent",
 							"signature": "void DenyClientEvent(uint16_t eventId)",
-							"line": 319
+							"line": 336
 						},
 						{
 							"kind": "method",
 							"name": "SendEventToServer",
 							"signature": "bool SendEventToServer(uint16_t eventId, const FNetEventWriter& payload)",
-							"line": 321
+							"line": 338
 						},
 						{
 							"kind": "method",
 							"name": "SendEventToAllClients",
 							"signature": "bool SendEventToAllClients(uint16_t eventId, const FNetEventWriter& payload)",
-							"line": 322
+							"line": 339
 						},
 						{
 							"kind": "method",
 							"name": "SendEventToPlayer",
 							"signature": "bool SendEventToPlayer(uint32_t playerId, uint16_t eventId, const FNetEventWriter& payload)",
-							"line": 323
+							"line": 340
 						},
 						{
 							"kind": "method",
 							"name": "BroadcastEvent",
 							"signature": "bool BroadcastEvent(uint16_t eventId, const FNetEventWriter& payload)",
 							"doc": "Role-agnostic: on the host runs the handler locally and fans out to\nevery client; on a client asks the server to do that. The call site a\ngame writes for \"this happened\".",
-							"line": 328
+							"line": 345
 						},
 						{
 							"kind": "method",
 							"name": "ReportLidarShot",
 							"signature": "bool ReportLidarShot(const FNetLidarShot& shot)",
 							"doc": "The driving co-op case. Scans replicate as one shot record, never as\npoint clouds — the receiving side regenerates the points.\n\nThe shooter's own scan is applied LOCALLY the instant this is called, so\nthe beam is not one round trip late on the machine that fired it, and\nthe server's relay of that same scan is recognised by its shot id and\nskipped rather than painted twice. Shots are coalesced for\nsettings.shotCoalesceSeconds and shipped as one batch on the high-rate\nchannel; Tick does the flush, so a session that stops ticking does not\nstrand them.",
-							"line": 340
+							"line": 357
 						},
 						{
 							"kind": "method",
 							"name": "GetLidarShotAuthority",
 							"signature": "const FLidarShotAuthority& GetLidarShotAuthority() const",
-							"line": 341
+							"line": 358
 						},
 						{
 							"kind": "method",
 							"name": "FlushPendingShots",
 							"signature": "void FlushPendingShots()",
 							"doc": "Ship whatever is queued right now instead of waiting out the coalescing\nwindow — for a driver with no clock, and for the last shot before a\ndeliberate leave.",
-							"line": 348
+							"line": 365
 						},
 						{
 							"kind": "method",
 							"name": "GetPendingShotCount",
 							"signature": "uint32_t GetPendingShotCount() const",
-							"line": 349
+							"line": 366
 						},
 						{
 							"kind": "method",
 							"name": "WasShotLocallyEchoed",
 							"signature": "bool WasShotLocallyEchoed(uint32_t shotId, uint32_t shooterPlayerId) const",
 							"doc": "True when this machine already applied that shot locally, so the\nserver's relay of it must be skipped. Keyed on the shooter as well as\nthe id: two players' shot counters run independently and would collide.",
-							"line": 356
+							"line": 373
 						},
 						{
 							"kind": "method",
 							"name": "SetLocalPlayerState",
 							"signature": "void SetLocalPlayerState(const FNetPlayerState& state)",
 							"doc": "Packed animation / gameplay word for the local pawn, replicated on the\nreliable discrete-state stream.",
-							"line": 360
+							"line": 377
 						},
 						{
 							"kind": "method",
 							"name": "GetPlayerState",
 							"signature": "bool GetPlayerState(uint32_t playerId, FNetPlayerState& outState) const",
-							"line": 361
+							"line": 378
 						},
 						{
 							"kind": "method",
 							"name": "SetRpcFallback",
 							"signature": "void SetRpcFallback(RpcFallback fallback)",
 							"doc": "Component RPCs (a networkId that is not the session sentinel) land\nhere after the default reflection dispatch has run.",
-							"line": 365
+							"line": 382
 						},
 						{
 							"kind": "alias",
 							"name": "FActorRpcInvokeFn",
 							"signature": "using FActorRpcInvokeFn = void (*)(uint64_t entityId, AActor* actorOrNull, const uint8_t* data, size_t len, bool fromServer, uint32_t senderPeerId)",
 							"doc": "Game-installed receive dispatch. Plain fn ptr — it crosses a DLL\nboundary; the session treats AActor* as opaque and hands over both the\nresolved entity and the attach-registry actor (null when the entity was\nnever registered — the installer may resolve it through its own world).",
-							"line": 379
+							"line": 396
 						},
 						{
 							"kind": "method",
 							"name": "SetActorRpcInvoker",
 							"signature": "static void SetActorRpcInvoker(FActorRpcInvokeFn fn)",
 							"static": true,
-							"line": 380
+							"line": 397
 						},
 						{
 							"kind": "method",
 							"name": "RouteActorRpc",
 							"signature": "ENetActorRpcRoute RouteActorRpc(NetworkId nid, uint16_t rpcFlags, const uint8_t* data, size_t len)",
 							"doc": "Ship one named actor RPC toward where its flags say it runs. `nid` is\nthe target actor's replication id, `rpcFlags` the function's reflected\nflags (Server/Client/Multicast decide the direction). Returns RunLocal\nwhen the destination resolves to this machine (Client RPC on a\nhost-owned actor) — the caller invokes locally then.",
-							"line": 387
+							"line": 404
 						},
 						{
 							"kind": "method",
 							"name": "GetReplication",
 							"signature": "ReplicationManager* GetReplication() const",
-							"line": 389
+							"line": 406
 						},
 						{
 							"kind": "method",
 							"name": "GetECSWorld",
 							"signature": "World* GetECSWorld() const",
-							"line": 392
+							"line": 409
 						},
 						{
 							"kind": "method",
 							"name": "GetGameWorld",
 							"signature": "MWorld* GetGameWorld() const",
-							"line": 395
+							"line": 412
 						},
 						{
 							"kind": "method",
 							"name": "GetBytesSentToPlayer",
 							"signature": "uint64_t GetBytesSentToPlayer(uint32_t playerId) const",
-							"line": 399
+							"line": 416
 						},
 						{
 							"kind": "method",
@@ -7465,14 +7479,14 @@
 							"signature": "static uint32_t ResolvePeerByteBudget(const FNetSessionSettings& settings)",
 							"static": true,
 							"doc": "The per-client outgoing budget the session actually applies: the\nsettings' per-peer figure, lowered so maxPlayers - 1 clients together\nfit hostUplinkBytesPerSecond.",
-							"line": 404
+							"line": 421
 						},
 						{
 							"kind": "method",
 							"name": "CheckContentCompatibility",
 							"signature": "static bool CheckContentCompatibility(const std::string& localBuildId, uint64_t localDlcHash, const std::string& remoteBuildId, uint64_t remoteDlcHash, std::string& outReason)",
 							"static": true,
-							"line": 406
+							"line": 423
 						},
 						{
 							"kind": "method",
@@ -7480,142 +7494,142 @@
 							"signature": "static ENetSessionFailure ClassifyClientFailure(uint32_t versionMismatches, uint32_t schemaMismatches, ENetSessionFailure fallback, std::string& outReason)",
 							"static": true,
 							"doc": "What a connecting client's drop or timeout really was: ProtocolMismatch\nwhen the replication layer refused the host's packets at the header\n(version or schema), else `fallback`. Fills the reason for the UI.",
-							"line": 411
+							"line": 428
 						},
 						{
 							"kind": "method",
 							"name": "GetLastJoinRefusalReason",
 							"signature": "const std::string& GetLastJoinRefusalReason() const",
 							"doc": "Also the reason a kick or ban carried, on the ejected client.",
-							"line": 413
+							"line": 430
 						},
 						{
 							"kind": "method",
 							"name": "GetPhase",
 							"signature": "ENetSessionPhase GetPhase() const",
 							"doc": "Host only. A kicked player is told why (kKicked), released at once —\nnever held for rejoin, the hold is for a link that dropped, not one the\nhost cut — and disconnected; the other clients get the usual\nkPlayerLeft. A ban is a kick whose platform id is refused at the next\njoin request for the life of this hosted session (LeaveSession clears\nthe list; persisting bans across sessions is the game's job). A player\nwith no platform id (LAN, no online service) can only be kicked. The\nhost and the local player refuse both.\nThe phase is the host's; clients follow kSessionPhase. ServerStartRun\nrefuses while anyone connected is not ready unless forced, and\nServerReturnToLobby clears every ready flag for the next run. With\nlateJoinPolicy = LobbyOnly a new player is refused InRun (RunInProgress)\nwhile a held slot can still be rejoined.",
-							"line": 431
+							"line": 448
 						},
 						{
 							"kind": "method",
 							"name": "ServerStartRun",
 							"signature": "bool ServerStartRun(bool force = false)",
-							"line": 434
+							"line": 451
 						},
 						{
 							"kind": "method",
 							"name": "ServerReturnToLobby",
 							"signature": "bool ServerReturnToLobby()",
-							"line": 435
+							"line": 452
 						},
 						{
 							"kind": "method",
 							"name": "SetLocalReady",
 							"signature": "bool SetLocalReady(bool ready)",
-							"line": 436
+							"line": 453
 						},
 						{
 							"kind": "method",
 							"name": "IsPlayerReady",
 							"signature": "bool IsPlayerReady(uint32_t playerId) const",
-							"line": 437
+							"line": 454
 						},
 						{
 							"kind": "method",
 							"name": "AreAllPlayersReady",
 							"signature": "bool AreAllPlayersReady() const",
-							"line": 438
+							"line": 455
 						},
 						{
 							"kind": "alias",
 							"name": "PhaseDelegate",
 							"signature": "using PhaseDelegate = std::function<void(ENetSessionPhase)>",
-							"line": 439
+							"line": 456
 						},
 						{
 							"kind": "method",
 							"name": "SetOnPhaseChanged",
 							"signature": "void SetOnPhaseChanged(PhaseDelegate d)",
-							"line": 440
+							"line": 457
 						},
 						{
 							"kind": "alias",
 							"name": "ReturnToMenuDelegate",
 							"signature": "using ReturnToMenuDelegate = std::function<void(ENetSessionFailure failure, const std::string& reason)>",
 							"doc": "Fired once on a client whose session ended for good: the host left\n(HostEndedSession), the host was lost after the automatic rejoin attempts\n(HostLost), the player was kicked or banned, or the build differs. The\nruntime wires it to a travel to the project's start scene; like the\ntravel delegate it is host wiring and survives ClearGameCallbacks.",
-							"line": 450
+							"line": 467
 						},
 						{
 							"kind": "method",
 							"name": "SetOnReturnToMenu",
 							"signature": "void SetOnReturnToMenu(ReturnToMenuDelegate d)",
-							"line": 451
+							"line": 468
 						},
 						{
 							"kind": "method",
 							"name": "GetLastExitReason",
 							"signature": "const std::string& GetLastExitReason() const",
-							"line": 454
+							"line": 471
 						},
 						{
 							"kind": "method",
 							"name": "GetReturnToMenuCount",
 							"signature": "uint32_t GetReturnToMenuCount() const",
-							"line": 457
+							"line": 474
 						},
 						{
 							"kind": "method",
 							"name": "GetAutoRejoinAttemptsLeft",
 							"signature": "uint32_t GetAutoRejoinAttemptsLeft() const",
-							"line": 460
+							"line": 477
 						},
 						{
 							"kind": "method",
 							"name": "KickPlayer",
 							"signature": "bool KickPlayer(uint32_t playerId, const std::string& reason)",
-							"line": 464
+							"line": 481
 						},
 						{
 							"kind": "method",
 							"name": "BanPlayer",
 							"signature": "bool BanPlayer(uint32_t playerId, const std::string& reason)",
-							"line": 465
+							"line": 482
 						},
 						{
 							"kind": "method",
 							"name": "BanPlatformId",
 							"signature": "void BanPlatformId(uint64_t platformId)",
-							"line": 466
+							"line": 483
 						},
 						{
 							"kind": "method",
 							"name": "UnbanPlatformId",
 							"signature": "bool UnbanPlatformId(uint64_t platformId)",
-							"line": 467
+							"line": 484
 						},
 						{
 							"kind": "method",
 							"name": "IsPlatformIdBanned",
 							"signature": "bool IsPlatformIdBanned(uint64_t platformId) const",
-							"line": 468
+							"line": 485
 						},
 						{
 							"kind": "method",
 							"name": "GetBannedPlatformIds",
 							"signature": "const std::vector<uint64_t>& GetBannedPlatformIds() const",
-							"line": 469
+							"line": 486
 						},
 						{
 							"kind": "method",
 							"name": "FNetSession",
 							"signature": "FNetSession(const FNetSession&) = delete",
-							"line": 473
+							"line": 490
 						},
 						{
 							"kind": "method",
 							"name": "operator=",
 							"signature": "FNetSession& operator=(const FNetSession&) = delete",
-							"line": 474
+							"line": 491
 						}
 					]
 				}
