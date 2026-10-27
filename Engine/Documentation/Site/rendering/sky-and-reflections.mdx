@@ -15,7 +15,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/AReflectionCapture.h
   - Engine/Source/Runtime/RHI/Public/RHI/IBLGenerator.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ReflectionProbes.h
-verifiedAt: aee5cfcae
+verifiedAt: 68067c1d8
 ---
 
 The environment around a scene is built from a few actors: a sky light for ambient and reflected sky light, a sky atmosphere and clouds for the visible sky, height fog and volumetric fog for the air, and reflection captures for interiors. This page covers how each one renders and the settings that matter. Placing and animating them (time of day, weather) belongs to the [Gameplay](/docs/gameplay/) section.
@@ -30,7 +30,7 @@ The environment around a scene is built from a few actors: a sky light for ambie
 | Specified Cubemap | An HDR environment you pick in **Cubemap** |
 | Procedural Atmosphere | The procedural sky atmosphere |
 
-From that cubemap the renderer derives a diffuse irradiance map and a prefiltered specular map with one mip per roughness step, plus a BRDF lookup table, through `IBLGenerator` (). **Intensity** and **Tint** scale the result; **Lower Hemisphere Is Black** removes light from below the horizon.
+From that cubemap the renderer derives a diffuse irradiance map and a prefiltered specular map with one mip per roughness step, plus a BRDF lookup table, through `IBLGenerator` (). The irradiance map and the rough specular mips integrate over a box-filtered 16×16-per-face copy of the capture, so a real-time sky light that re-captures under moving clouds costs a fraction of a millisecond instead of a frame spike. **Intensity** and **Tint** scale the result; **Lower Hemisphere Is Black** removes light from below the horizon.
 
 **Sky Rotation** turns the visible cubemap sky and its lighting together, in degrees; `r.Sky.Rotation` adds to it. A procedural atmosphere ignores rotation, because its sun disc follows the directional light.
 
@@ -39,6 +39,7 @@ From that cubemap the renderer derives a diffuse irradiance map and a prefiltere
 | `r.SkyLight.CaptureSize` | 128 | Face size of the sky capture cubemap |
 | `r.SkyLight.CaptureClouds` | 1 | Include clouds in the capture, so they shade the ambient and show in reflections |
 | `r.SkyIBL.CrossfadeSeconds` | 1 | Blend time between two captures, so time-of-day changes do not pop |
+| `r.SkyLight.CloudRecaptureSeconds` | 0.5 | Shortest time between real-time captures that only drifting clouds asked for; sun and atmosphere changes still re-capture on the sky light's interval |
 | `r.Sky.CoupleAmbient` | 1 | Derive the sky that Global Illumination sees from the sky on screen |
 
 ## Sky atmosphere and clouds
@@ -76,7 +77,7 @@ Reflections come from several sources. Each pixel takes the best one that has an
 
 <Flow steps={["Sky", "Reflection captures", "Distance field or ray tracing", "Screen space"]} highlight={3} caption="From lowest to highest priority. Where a higher source hits, it replaces the ones below." />
 
-1. **Screen-space reflections** (Medium and up, `r.SSR`) trace the depth buffer. With `r.Reflections.Continuation` (default 1) a ray that leaves the screen continues in the world instead of giving up.
+1. **Screen-space reflections** (Medium and up, `r.SSR`) trace the depth buffer. With `r.Reflections.Continuation` (default 1) a ray that leaves the screen continues in the world instead of giving up. Up to High the screen leg traces a quarter of the pixels each frame (`r.SSR.TraceDivisor 2`, a 2×2 pattern that rotates every frame) and a depth- and normal-aware upsample rebuilds the rest before the temporal filter; Epic and Cinematic trace every pixel. The spatial filter after it is a 3×3 à-trous (`r.SSR.FilterTaps 3`; `5` is the 5×5 kernel).
 2. **The world leg** of that ray traces the Global Illumination distance field and shades from its radiance cache, or, with `r.RTReflections` (Epic and up), traces the ray-tracing scene. See [Ray tracing](/docs/rendering/ray-tracing/#ray-traced-reflections).
 3. **Reflection captures** cover the pixels where tracing found nothing.
 4. **The sky** covers everything else.

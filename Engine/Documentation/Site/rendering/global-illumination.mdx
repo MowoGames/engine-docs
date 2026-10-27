@@ -6,7 +6,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/DdgiBake.h
-verifiedAt: aee5cfcae
+verifiedAt: 68067c1d8
 ---
 
 Global Illumination is Mowo's real-time indirect lighting. It combines a camera-centred signed distance field, a grid of irradiance probes, a radiance cache, a mesh-card surface cache and a screen-space probe gather, with temporal denoising on top. At Epic it can also trace its gather rays through the hardware ray-tracing scene. Nothing has to be baked for it to work; a baked field is only a fallback for tiers that turn the live system off.
@@ -53,7 +53,7 @@ Without a surface cache a ray hit shades from one flat colour per mesh. The surf
 How each pixel collects indirect light is set by `r.GI.FinalGather`:
 
 - **World probes** (Medium): each pixel samples the probe grid directly.
-- **Screen probes** (High and up): probes are placed on the depth buffer, one per 16-pixel tile plus extra 8-pixel probes at depth and normal edges (`r.GI.ScreenProbes.Budget`). Each probe traces first through the depth buffer (`r.GI.ScreenTraces`), then through the distance field, and shades hits from the radiance cache. Rays favour directions that were bright last frame (`r.GI.ImportanceSample`), and probes accumulate over time.
+- **Screen probes** (High and up): probes are placed on the depth buffer, one per 16-pixel tile plus extra 8-pixel probes at depth and normal edges (`r.GI.ScreenProbes.Budget`). Each probe traces first through the depth buffer (`r.GI.ScreenTraces`), then through the distance field, and shades hits from the radiance cache. Rays favour directions that were bright last frame (`r.GI.ImportanceSample`), and probes accumulate over time. A tile probe whose history holds `r.GI.ScreenProbes.HalfRateMinFrames` (8) frames traces on alternate frames in a checkerboard and carries its history forward in between, each traced frame counting twice (`r.GI.ScreenProbes.HalfRateConverged`, default 1); a probe that loses its history traces every frame until it converges again.
 
 ### Hardware ray-traced gather
 
@@ -61,7 +61,7 @@ At Epic and Cinematic, screen-probe rays trace the ray-tracing scene with inline
 
 ### Denoising
 
-The gathered light goes through a velocity-aware temporal pass and a variance-guided spatial filter (`r.GI.Denoise`: `0` off, `1` on). By default the filter runs at half resolution and upsamples in the composite (`r.GI.DenoiseHalfRes`).
+The gathered light goes through a velocity-aware temporal pass and a variance-guided spatial filter (`r.GI.Denoise`: `0` off, `1` on). By default the filter runs at half resolution and upsamples in the composite (`r.GI.DenoiseHalfRes`), which filters with a 3×3 à-trous over the 5×5 footprint (`r.GI.DenoiseCompositeTaps 3`; `5` is the full kernel).
 
 ### Composite
 
