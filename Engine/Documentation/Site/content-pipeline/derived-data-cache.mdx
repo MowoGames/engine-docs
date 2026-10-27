@@ -4,7 +4,7 @@ description: Where Mowo caches built textures, meshes and audio, how entries are
 order: 11
 sources:
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/DerivedDataCache.h
-verifiedAt: 5922e6e5e
+verifiedAt: 6652defff
 ---
 
 The Derived Data Cache (DDC) stores the expensive results of processing an asset, such as a texture's compressed mip chain, a decoded audio clip or a cooked mesh, so the work runs once per change instead of once per load. It lives in the project at `Intermediate/DerivedDataCache`. It is safe to delete at any time and is never committed.
@@ -71,15 +71,17 @@ Writes to the shared tier use a temp file and a rename, so two machines writing 
 `mbt ddc serve` runs `MowoDDC`, a small HTTP cache server, over a cache folder:
 
 ```bash
-./mbt.cmd ddc serve --port 8558 --max-size 200000 --token <secret>
+./mbt.cmd ddc serve --bind 0.0.0.0 --port 8558 --max-size 200000 --token <secret>
 ```
+
+The server listens on `127.0.0.1` by default, so a plain `serve` is reachable only from the same machine; pass `--bind 0.0.0.0` (or a specific interface) to share it with the team.
 
 Then set `MOWO_DDC_HTTP=http://<host>:8558` and `MOWO_DDC_HTTP_TOKEN=<secret>` on every machine. The server stores entries in the same layout as a local or shared cache, so a folder already used as `MOWO_SHARED_DDC` can be served as it is.
 
 | Option | Meaning |
 |---|---|
 | `--root <dir>` | Folder to serve. Default: the project's `Intermediate/DerivedDataCache` |
-| `--bind <address>`, `--port <n>` | Listen address and port |
+| `--bind <address>`, `--port <n>` | Listen address and port. Default `127.0.0.1` (loopback); pass `0.0.0.0` to serve the network. |
 | `--token <t>` | Bearer token every request must carry. `mbt` passes it to the server through `MOWO_DDC_SERVER_TOKEN`, never on its command line. |
 | `--readonly` | Refuse writes |
 | `--max-size <MB>` | Size cap; least recently used entries go first. `0` is no cap. |
