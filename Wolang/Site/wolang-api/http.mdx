@@ -4,7 +4,7 @@ sidebarTitle: "http"
 description: "The http package: http."
 order: 4
 generated: "wolang"
-verifiedAt: "bf78bdddd"
+verifiedAt: "263ca1903"
 ---
 
 ## http
@@ -414,6 +414,9 @@ offer fun FromHexDigits(line: text) -> int uses unsafe
 
 The number a hexadecimal chunk header spells, or -1.
 
+More than seven digits is -1: eight would overflow `int` and trap the
+client on a hostile server's chunk header (D223).
+
 A header may carry extensions after a `;`, which nothing uses and
 everything has to skip.
 
@@ -482,6 +485,25 @@ var keep_alive: bool = true
 
 Whether a connection is kept open after an answer.
 
+#### field `head_timeout`
+
+```wolang
+var head_timeout: int = 10
+```
+
+Seconds a connection may take to deliver a request, counted from its
+first byte (or from the accept, before it has sent any). What stops
+a client that trickles one header byte at a time from holding a slot
+for ever (D223).
+
+#### field `idle_timeout`
+
+```wolang
+var idle_timeout: int = 60
+```
+
+Seconds a keep-alive connection may sit between requests.
+
 ### function `LimitsDefault`
 
 ```wolang
@@ -522,6 +544,44 @@ var closing: bool = false
 
 Set when the client said `Connection: close`, or when the server
 decided this one is done: the loop closes it after answering.
+
+#### field `since`
+
+```wolang
+var since: s64 = 0
+```
+
+When the wait for the current request began, in monotonic seconds:
+the accept, the end of the last answer, or the first byte of this
+request, whichever is latest (D223).
+
+#### field `served`
+
+```wolang
+var served: bool = false
+```
+
+Whether this connection has had a request answered. Until then it
+owes the head deadline even with nothing sent.
+
+### function `IsExpired`
+
+```wolang
+offer fun IsExpired(
+    now: s64,
+    since: s64,
+    partial: bool,
+    served: bool,
+    limits: Limits) -> bool
+```
+
+Whether a connection that has waited since `since` has used up its
+time at `now`. Pure, so the rule is testable without a clock or a
+socket (D223).
+
+A connection with part of a request in its buffer, or one that has not
+yet had any request answered, is on the short head deadline; one that
+is idle between keep-alive requests gets the long one.
 
 ### class `Connections`
 
@@ -577,6 +637,30 @@ fun Release(slot: int)
 Gives the slot back. The buffer stays for the next connection: a
 server that allocates per connection allocates per request under
 load.
+
+#### method `Stamp`
+
+```wolang
+fun Stamp(slot: int, now: s64)
+```
+
+Starts the slot's wait for a request at `now`.
+
+#### method `MarkServed`
+
+```wolang
+fun MarkServed(slot: int)
+```
+
+Notes that a request on this slot was answered.
+
+#### method `TimedOut`
+
+```wolang
+fun TimedOut(slot: int, now: s64) -> bool
+```
+
+Whether the slot holds a connection that has waited too long.
 
 #### method `Fd`
 
@@ -664,8 +748,9 @@ offer fun RequestLength(bytes: []u8, filled: int, limits: Limits) -> int uses un
 
 How long a request is, or what is missing.
 
-`-1` says "not all here yet", `-2` says "this is not a request", and
-`-3` says "bigger than the server allows".
+`-1` says "not all here yet", `-2` says "this is not a request",
+`-3` says "bigger than the server allows", and `-4` says "it frames
+its body in a way this server does not implement" (D223).
 
 ### function `HeadEnd`
 
@@ -686,6 +771,25 @@ One header's value out of raw bytes, before anything is parsed.
 Used for the two headers the loop itself needs -- the length and
 whether to keep the connection -- which have to be read before there
 is a `Request` to ask (D122).
+
+### function `ValueAt`
+
+```wolang
+offer fun ValueAt(bytes: []u8, head: int, start: int) -> text uses unsafe
+```
+
+The value that starts at `start`, up to the end of its line.
+
+### function `HeaderStart`
+
+```wolang
+offer fun HeaderStart(bytes: []u8, head: int, name: text, skip: int) -> int uses unsafe
+```
+
+Where the value of the `skip`th header called `name` (counting from
+zero) starts, or -1 when there are not that many: a repeated
+`Content-Length` has to be seen to be compared (D223). An index rather
+than an optional text, so that an empty value is not "absent".
 
 ### function `QueryInt`
 
@@ -1130,13 +1234,17 @@ The same response with a different content type.
 ### function `ParseRequest`
 
 ```wolang
-offer fun ParseRequest(bytes: []u8, received: int) -> Request uses unsafe
+offer fun ParseRequest(everything: []u8, received: int) -> Request uses unsafe
 ```
 
 Splits `GET /path HTTP/1.1` into its first two words.
 
 Returns a request whose `length` is zero when the line is not one: a
 parser that cannot say "this is not a request" is not a parser.
+
+Only the first `received` bytes are looked at: the buffer is reused
+from one client to the next, and what lies past `received` belongs to
+whoever used it before (D223).
 
 ### function `ParseInt`
 
@@ -1146,7 +1254,20 @@ offer fun ParseInt(value: text) -> int uses unsafe
 
 The number `value` spells, or zero. Stops at the first byte that is
 not a digit, which is what a `Content-Length` with anything after it
-deserves.
+deserves. More than nine digits is `-1`: `int` is 32 bits, so the
+product would trap (D223).
+
+### function `ParseLength`
+
+```wolang
+offer fun ParseLength(value: text) -> int uses unsafe
+```
+
+The number a `Content-Length` spells, or `-1` when it spells anything
+else: no digits, or garbage such as `5, 10`. Spaces and tabs around
+the digits are allowed. A run of more than nine digits is a length, but
+no server's: it answers the largest `int`, which every limit refuses
+with 413 rather than the 400 that garbage gets (D223).
 
 ### function `Serve`
 
@@ -1403,7 +1524,7 @@ offer fun Logged(request: &Request, answer: Response) -> Response uses io, time,
 ### function `Logger`
 
 ```wolang
-offer fun Logger(layers: &mut Layers) uses unsafe
+offer fun Logger(layers: &mut Layers) uses io, time, unsafe
 ```
 
 Writes one line per request, with how long it took.

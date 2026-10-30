@@ -4,7 +4,7 @@ sidebarTitle: "std"
 description: "The std package: std.compress, std.crypto, std.csv, std.deque, std.doc, std.encoding and more."
 order: 1
 generated: "wolang"
-verifiedAt: "bf78bdddd"
+verifiedAt: "263ca1903"
 ---
 
 ## std.compress
@@ -23,7 +23,18 @@ What a stream that is not one answers with.
 offer fun Inflate(bytes: []u8) -> []u8! uses unsafe
 ```
 
-Reads a deflate stream.
+Reads a deflate stream. There is no cap on the output, so a hostile
+stream can expand about a thousandfold; use `InflateLimited` on anything
+that came from outside (D227).
+
+### function `InflateLimited`
+
+```wolang
+offer fun InflateLimited(bytes: []u8, most: int) -> []u8! uses unsafe
+```
+
+Reads a deflate stream, failing with `Malformed` once the output would
+pass `most` bytes -- the guard against a decompression bomb (D227).
 
 ### function `Deflate`
 
@@ -51,7 +62,16 @@ Wraps deflated bytes in a gzip container, which is what a `.gz` is.
 offer fun Gunzip(bytes: []u8) -> []u8! uses unsafe
 ```
 
-Reads a gzip container.
+Reads a gzip container. Unlimited output; see `GunzipLimited` (D227).
+
+### function `GunzipLimited`
+
+```wolang
+offer fun GunzipLimited(bytes: []u8, most: int) -> []u8! uses unsafe
+```
+
+Reads a gzip container, failing with `Malformed` once the output would
+pass `most` bytes (D227).
 
 ### function `Crc32`
 
@@ -1648,6 +1668,11 @@ function taking `[]T` wants, which is most of them. The language
 has no slicing syntax yet, so this is a view built from where the
 storage is and how much of it is in use.
 
+The view is valid only until the list next grows: `Push` or `Reserve`
+past the capacity moves the storage and leaves the view pointing at
+freed memory, and so does the list dying. Take it after the last
+mutation and use it before the next (D227).
+
 #### method `Capacity`
 
 ```wolang
@@ -2535,6 +2560,140 @@ offer fun Accept(listener: Socket) -> Socket uses net, unsafe
 
 Waits for a connection on a listening socket.
 
+### struct `Datagram`
+
+```wolang
+offer struct Datagram
+```
+
+One datagram received: how many bytes landed in the caller's buffer,
+who sent it, and whether it was longer than the buffer (then the rest
+is gone, as UDP has no way to ask for it again).
+
+#### field `count`
+
+```wolang
+var count: int
+```
+
+#### field `address`
+
+```wolang
+var address: s64
+```
+
+#### field `port`
+
+```wolang
+var port: int
+```
+
+#### field `truncated`
+
+```wolang
+var truncated: bool
+```
+
+### class `UdpSocket`
+
+```wolang
+offer class UdpSocket
+```
+
+An unconnected datagram socket (D244). Its `fd` can be given to a
+poller like any other descriptor.
+
+#### field `fd`
+
+```wolang
+var fd: s32 = -1
+```
+
+#### method `IsOpen`
+
+```wolang
+fun IsOpen() -> bool
+```
+
+#### method `LocalPort`
+
+```wolang
+fun LocalPort() -> int uses net, unsafe
+```
+
+The port the socket is bound to; how port 0 says which was picked.
+-1 when closed.
+
+#### method `SendTo`
+
+```wolang
+fun SendTo(address: s64, port: int, bytes: []u8) -> int uses net, unsafe
+```
+
+Sends `bytes` as one datagram to `address` (see `Resolve`) and
+`port`. The bytes sent, or -1: closed socket, no bytes, or more than
+65507 (the most a datagram carries).
+
+#### method `SendTextTo`
+
+```wolang
+fun SendTextTo(address: s64, port: int, message: text) -> int uses net, unsafe
+```
+
+Sends the bytes of `message`; see `SendTo`.
+
+#### method `ReceiveFrom`
+
+```wolang
+fun ReceiveFrom(buffer: []u8) -> Datagram? uses net, unsafe
+```
+
+Takes one datagram into `buffer`, never writing past its length. Null
+when a non-blocking socket has nothing yet, or on an error; a
+datagram longer than the buffer comes with `truncated` set.
+
+#### method `SetNonBlocking`
+
+```wolang
+fun SetNonBlocking(on: bool) uses net, unsafe
+```
+
+Whether `ReceiveFrom` answers null at once (true) or waits (the
+default).
+
+#### method `SetBroadcast`
+
+```wolang
+fun SetBroadcast(on: bool) -> bool uses net, unsafe
+```
+
+Whether datagrams may be sent to the broadcast address.
+
+#### method `Close`
+
+```wolang
+fun Close() uses net, unsafe
+```
+
+### function `BindUdp`
+
+```wolang
+offer fun BindUdp(port: int) -> UdpSocket uses net, unsafe
+```
+
+A UDP socket bound to `port` on every interface (0 picks a free one;
+ask `LocalPort`), or a closed one.
+
+### function `BindUdpOn`
+
+```wolang
+offer fun BindUdpOn(address: s64, port: int) -> UdpSocket uses net, unsafe
+```
+
+Like `BindUdp` but on one local `address` (e.g. 127.0.0.1 from
+`ParseAddress`), so a test or a LAN-only game stays off other
+interfaces.
+
 ## std.own
 
 ### class `Owned`
@@ -2744,6 +2903,11 @@ offer fun Normalize(path: text) -> text uses unsafe
 
 Textual: it never looks at the filesystem, so a `..` after a symbolic
 link means what the text says rather than what the disk says.
+
+A path with more than 64 parts left after the dots are worked out
+answers "" -- the one thing Normalize otherwise never returns -- rather
+than dropping the rest, which would turn a deep path into a different,
+shallower one (D223).
 
 ### function `IsInside`
 
@@ -3366,10 +3530,13 @@ offer fun IsEmpty(value: text) -> bool
 ### function `Bytes`
 
 ```wolang
+@Exposes
 offer fun Bytes(value: text) -> []u8 uses unsafe
 ```
 
-The bytes of `value`, as a view. Nothing is copied.
+The bytes of `value`, as a view. Nothing is copied. The view is of text
+that may be a literal, so it must only be read: the caller declares
+`uses unsafe` for it (D233).
 
 ### function `Equals`
 
@@ -3439,9 +3606,11 @@ fun Text() -> text uses unsafe
 
 What has been built, as a view of the builder's own bytes.
 
-The view lasts as long as the builder does: appending more may move
-the bytes, and the destructor gives them back. A string that has to
-outlive the builder is `Release`.
+The view is valid only until the next `Append`, `Reserve` or `Clear`
+(they may move or rewrite the bytes) and until the builder dies (its
+destructor frees them). Returning it from the function that owns the
+builder, or keeping it after, dangles. A string that has to outlive
+the builder is `Release`, the owning one (D227).
 
 #### method `Release`
 
@@ -3766,6 +3935,7 @@ Waits for it to finish. False when there was nothing to wait for.
 ### function `Spawn`
 
 ```wolang
+@Thread
 offer fun Spawn(body: fun()) -> Thread uses unsafe
 ```
 
@@ -3835,6 +4005,7 @@ before, with no other thread able to see a half-done sum.
 ### function `ParallelFor`
 
 ```wolang
+@Thread(captures)
 offer fun ParallelFor(count: int, threads: int, body: fun(int, int)) uses unsafe
 ```
 
