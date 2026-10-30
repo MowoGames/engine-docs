@@ -1,9 +1,14 @@
 ---
 title: Wolang scripting
-description: Give an actor its behaviour in a Wolang script, call the engine through bindings generated from its reflection, reload while playing and debug from VS Code.
+description: Write actors and components in Wolang, edit their fields per instance in Details, handle events and timers, reload while playing and debug from VS Code.
 order: 36
 status: in-development
 sources:
+  - Engine/Source/Runtime/Scripting/Public/Scripting/AWolangActor.h
+  - Engine/Source/Runtime/Scripting/Public/Scripting/MWolangComponent.h
+  - Engine/Source/Runtime/Scripting/Public/Scripting/WolangClassRegistry.h
+  - Engine/Source/Runtime/Scripting/Public/Scripting/WolangScriptInstance.h
+  - Engine/Source/Runtime/Scripting/Public/Scripting/WolangFunctionLibrary.h
   - Engine/Source/Runtime/Scripting/Public/Scripting/AWolangScriptActor.h
   - Engine/Source/Runtime/Scripting/Public/Scripting/WolangScripting.h
   - Engine/Source/Runtime/Scripting/Public/Scripting/WolangObjectBridge.h
@@ -11,16 +16,17 @@ sources:
   - Samples/SampleProject/Scripts/Mover/src/mover.wo
   - Samples/SampleProject/Content/Scenes/WolangDemo.mmap
   - Samples/SampleProject/Config/Plugins.ini
+  - Templates/TP_Wolang/Scripts/Starter/src/starter.wo
 verifiedAt: b12b8a5a2
 ---
 
-Wolang is the engine's scripting language. A script actor (`AWolangScriptActor`) names a Wolang package, and the package's `BeginPlay`, `Tick` and `EndPlay` become the actor's. Scripts call the engine through the `mowo` package, which the build generates from the engine's reflection, so every reflected class an engine module exposes is there without anyone writing a binding by hand. Saving a script while the level plays reloads it and keeps its state; a debugger attaches from VS Code. <Source symbol="AWolangScriptActor" />
+Wolang is the engine's scripting language. A Wolang class that derives from `AActor` is an actor class like a C++ or Visual Scripting one: it is in Place Actors, the level saves it by name, its `@Editable` fields are rows in Details, and it spawns by class from C++ and Visual Scripting. A class that derives from `MActorComponent` is a component any actor can carry. Scripts call the engine through the `mowo` package, which the build generates from the engine's reflection. Saving a script while the level plays reloads it and keeps its state; a debugger attaches from VS Code. <Source symbol="AWolangActor" />
 
-<Callout type="warning">Milestone 1. Scripts run on Windows x64 only; other platforms build the module but log that no script runs. A packaged game carries the project's `Scripts/` folder as source and runs it on the interpreter and JIT; there is no ahead-of-time compiled form yet, so the script sources ship readable.</Callout>
+<Callout type="warning">In development. Scripts run on Windows x64 and Linux x64; the macOS (Apple silicon) library is vendored but not yet run on a Mac. A packaged game carries the project's `Scripts/` folder as source and runs it on the interpreter and JIT; there is no ahead-of-time compiled form yet, so the script sources ship readable. The limits that wait on the Wolang compiler are listed at the end of this page.</Callout>
 
 ## Turn it on
 
-Scripting is a feature module, off by default. Enable **Wolang Scripting** in the Plugins window under **Engine Features**, or in `Config/Plugins.ini`:
+Scripting is a feature module, off by default. Enable it in **Project Settings ▸ Scripting** (or the Plugins window under **Engine Features**), or in `Config/Plugins.ini`:
 
 ```ini title="Config/Plugins.ini"
 [enabled]
@@ -29,78 +35,206 @@ Scripting=True
 
 The editor loads it whatever the project says, so Play in the editor always runs scripts; the switch decides what a standalone run, the packaged game and the server load. See [Plugins](/docs/programming/plugins/#engine-plugins-and-feature-modules).
 
-## A script package
+A new project can start from the **Wolang Starter** template: in the Project Launcher's New Project wizard choose **Wolang** as the language. It has Scripting enabled, a script actor that bobs over the floor and a script component on a timer.
 
-Scripts live in packages: a folder with a `wolang.toml` manifest and its sources under `src/`. Keep them outside `Content/`, in a `Scripts/` folder at the project root. The engine loads its own `mowo` package first, so a script package names it with `need` and lists no dependency for it.
+## Script packages
+
+Scripts live in packages under the project's `Scripts/` folder: a folder with a `wolang.toml` manifest and its sources under `src/`. The Content Browser shows the folder as the **Wolang Scripts** root, next to **C++ Classes**, with each class a file declares listed beside the file: drag an actor class into the level, drag a component class onto the level with an actor selected, double-click to open the file at the class. The engine loads its own `mowo` package first, so a script package names it with `need` and lists no dependency for it.
 
 ```text
 MyGame/
   Scripts/
-    Mover/
+    Game/
       wolang.toml
       src/
-        mover.wo
+        enemy.wo
 ```
 
-```text title="Scripts/Mover/wolang.toml"
+```text title="Scripts/Game/wolang.toml"
 [package]
-name = "mover"
+name = "game"
 version = "0.1.0"
 source = "src"
 ```
 
-## The script actor
+In the Content Browser, right-click the Wolang Scripts root for **New Wolang Package**; inside a package, **New Wolang Actor Class**, **New Wolang Component** and **New Wolang Script** write a file from a template and open it in your code editor. Double-click a `.wo` file to open it. Renaming a class item renames the class in every script and keeps placed instances through a `ClassRedirects` line; **Find References** lists what names it; a file that does not compile shows a red badge. See [Content Browser](/docs/editor/content-browser/#wolang-scripts).
 
-Add an actor of class `AWolangScriptActor` to the level and set its `scriptPath` to the package, relative to the project: `Scripts/Mover`, or a `.wo` file inside it. The actor has a root and a static mesh component, so it can be seen and moved like a static mesh actor.
+## Actor classes
 
-When play begins, the world's script machine loads the package (once, however many actors name it) and the actor looks up its entry points. Every one of them is optional; a missing function is not an error:
+```text title="Scripts/Game/src/enemy.wo"
+need mowo.{AActor, Log, World}
 
-| Function | Called |
-| --- | --- |
-| `offer fun BeginPlay(owner: AActor)` | once, when the actor begins play |
-| `offer fun Tick(owner: AActor, delta: f32)` | every frame the actor ticks, with the frame's delta in seconds |
-| `offer fun EndPlay(owner: AActor)` | once, when the actor ends play (Stop, or the actor is destroyed) |
-| `offer fun Create(owner: AActor) -> T` | before `BeginPlay`; the actor keeps the object it answers |
+/// Walks toward its target.
+offer class Enemy : AActor {
+  /// Units per second.
+  @Editable
+  @Range(0.0, 10.0)
+  @Category("Movement")
+  var speed: f32 = 2.0
 
-`owner` is the actor itself. When `Create` exists, `BeginPlay`, `Tick` and `EndPlay` may take the object it answered as their first parameter, which is how each actor keeps state of its own:
+  @Editable
+  var target: AActor? = null
 
-```text title="Scripts/Mover/src/door.wo"
-offer class Door {
-  var openFor: f32
-}
+  var steps: int = 0
 
-offer fun Door_Create(owner: AActor) -> Door {
-  return Door(0.0)
-}
+  fun BeginPlay(owner: AActor) uses World {
+    Log("enemy ready")
+  }
 
-offer fun Door_Tick(state: Door, owner: AActor, delta: f32) {
-  state.openFor = state.openFor + delta
+  fun Tick(owner: AActor, delta: f32) uses World {
+    steps = steps + 1
+    var at = owner.GetActorLocation()
+    at.x = at.x + speed * delta
+    owner.SetActorLocation(at)
+  }
 }
 ```
 
-All the actors of one world share one script machine, and its functions share one namespace: two packages that both offer `Tick` collide. Set the actor's `scriptEntry` to a prefix to tell behaviours apart: with `scriptEntry` set to `Door`, the actor calls `Door_Create`, `Door_BeginPlay`, `Door_Tick` and `Door_EndPlay`.
+- An engine class is an `offer class` that derives from `AActor` or `MActorComponent`, directly or through another script class. Its name is the class name in the engine, so it has to be unique across the project's packages.
+- Each placed instance owns one object of the class while the level plays. The object's fields are its state; module-level `var`s are shared by every instance of the world.
+- The engine's actor is passed in: a hook method takes it as its first actor-typed parameter (`owner` above). `self` is the script object, not the actor.
+- The actor has a root and a static mesh component, so it can be seen and moved like a static mesh actor; give it a mesh in Details or with `SetMesh`.
+- Saving the file updates the class: Place Actors, Add Component and Details follow the code. A class that disappears from the sources keeps its placed instances, and their values, until it comes back.
 
-<Screenshot id="gameplay-wolang-script-actor-details" alt="The Details panel with a Wolang Script Actor selected in the WolangDemo level of the sample project: Script Path set to Scripts/Mover and Script Entry empty." caption="A script actor names its package and, optionally, a prefix for its entry points." />
+## Component classes
+
+```text title="Scripts/Game/src/health.wo"
+need mowo.{AActor, World}
+
+offer class Health : MActorComponent {
+  @Editable
+  var health: f32 = 100.0
+
+  fun OnDamage(amount: f32, from: AActor?) {
+    health = health - amount
+  }
+}
+```
+
+Select any actor and choose **Add** in Details: Wolang components are listed under **Scripts**. A component's hooks get the actor that carries it as their owner. An actor can carry several, each with its own values.
+
+## Editable fields
+
+A field marked `@Editable` is a Details row on every placed instance. The value the class declares is the default; an instance that changes it keeps its own value, and only changed values are written to the level, so raising a default in the code reaches every instance that never changed it.
+
+| Attribute | Effect |
+| --- | --- |
+| `@Editable` | A Details row, per instance, saved with the level and the prefab |
+| `@Range(min, max)` | Bounds a number; `@Slider` draws a slider between them |
+| `@Tooltip("...")` | The row's tooltip; a `///` comment above the field is used when there is none |
+| `@Category("...")` | The group the row is listed under |
+| `@DisplayName("...")` | The row's label |
+| `@ReadOnly` | Shown, not editable |
+| `@ShowIf(other)` | Shown only while the bool field `other` is true (`@ShowIf(!other)` for false) |
+| `@Color` | A `Vec3` edited with the color picker |
+| `@Asset("StaticMesh")` | A `text` field that names an asset of that type |
+
+| Field type | Row |
+| --- | --- |
+| `bool`, `int`, `s32`, `u32`, `f32`, `f64`, `text` | Checkbox, number or text |
+| `Vec2`, `Vec3` | Axis fields |
+| `AActor?` or another engine actor class | A reference to a placed actor: a dropdown, an eyedropper, or drag the actor from the Outliner onto the row |
+| A script actor class (`Enemy?`) | The same, receiving that actor's own script object |
+| `text` with `@Asset(...)` | An asset reference: the picker filtered to that type, or drop an asset from the Content Browser |
+
+An actor reference is stored by the actor's stable id: it survives renaming the actor, and while playing it points at the playing copy of that actor. A reference whose actor was deleted shows **None (missing)**.
+
+Rename a field without losing what levels stored under the old name with a line in `Config/Redirects.ini`:
+
+```ini title="Config/Redirects.ini"
+[CoreRedirects]
++PropertyRedirects=(OldName="Enemy.walkSpeed",NewName="Enemy.speed")
+```
+
+Edits made in Details while the level plays go into the running object the same frame; when Play stops, the editor asks, actor by actor, whether to keep them in the level. See [Outliner and Details](/docs/editor/outliner-and-details/#script-variables).
+
+## Events in Details
+
+A `text` field marked `@Event` is an inspector event: in Details its listeners are wired by hand, each an actor and one of its reflected functions (a C++ `MFUNCTION`, a Visual Scripting function, a Wolang `@Callable` method) taking nothing or one bool, number or text, with a constant argument. The script fires it with `FireEvent`:
+
+```text
+need mowo.{AActor, FireEvent, World}
+
+offer class PressurePlate : AActor {
+  /// What happens when something steps on the plate.
+  @Event
+  var onPressed: text = ""
+
+  fun OnBeginOverlap(owner: AActor, other: AActor) uses World {
+    const _called = FireEvent(owner, "onPressed")
+  }
+}
+```
+
+A listener's actor is stored by its stable id, so it follows the actor into Play.
+
+## Actions
+
+A method marked `@Action` with no parameters is a **Run** button in Details. Outside Play it runs on the selected instance's values in the edited level, and whatever it changed is one undo entry; while playing it runs on the live object.
+
+```text
+  /// Puts the motion back to the defaults.
+  @Action
+  fun ResetMotion() {
+    speed = 2.0
+  }
+```
+
+## Hooks and events
+
+A class receives the engine's events through methods with these names. Every one is optional.
+
+| Method | Called |
+| --- | --- |
+| `BeginPlay` | Once, when the actor begins play |
+| `Tick` | Every frame, with the frame's delta in seconds |
+| `EndPlay` | Once, when play ends or the actor is destroyed |
+| `OnDestroyed` | When the actor is destroyed, before `EndPlay` |
+| `OnHit` | When the actor's physics body hits another, with the other actor |
+| `OnBeginOverlap`, `OnEndOverlap` | When an actor enters or leaves the actor's trigger component |
+| `OnDamage` | When the actor takes damage, with the amount and the instigator |
+
+A hook takes the engine's values it declares, matched by type in order: the owning actor (the first actor-typed parameter), the other actor of a hit, overlap or damage (the second), the component (a component-typed parameter), the frame's delta, the damage amount or an axis value (a float), a pressed flag (a bool), the input action's name (a text). `fun Tick(delta: f32)` and `fun Tick(owner: AActor, delta: f32)` both work.
+
+Input and timers are attributes:
+
+| Attribute | Called |
+| --- | --- |
+| `@Input("Jump")` | When the input action starts; `@Input("Jump", "Completed")` when it is released (`Triggered`, `Ongoing`, `Canceled` also work) |
+| `@Axis("MoveForward")` | Every frame with the input action's value |
+| `@Every(0.5)` | Every half second of game time |
+
+Timers run on game time: pausing the world stops them and time dilation slows them. `SetTimer` starts one from a script:
+
+```text
+need mowo.{AActor, SetTimer, World}
+
+  fun BeginPlay(owner: AActor) uses World {
+    const _handle = SetTimer(owner, 2.0, "Explode", false)
+  }
+
+  fun Explode() {
+  }
+```
+
+Everything an instance subscribed to is let go of when it ends play: its timers, its collision and overlap subscriptions, its input bindings.
 
 ## Calling the engine
 
 The `mowo` package declares every reflected engine class as an `extern class`, with its base, its reflected functions and a `Get`/`Set` pair for each reflected property. A function that takes or answers a vector or text has a script-friendly form, so `owner.GetActorLocation()` answers a `Vec3`. Every engine call states the `World` effect, so a function that calls the engine says `uses World`.
 
-```text title="Scripts/Mover/src/mover.wo"
-need mowo.{AActor, Vec3, Log, World}
+The hand-written half of `mowo` adds:
 
-var ticks: int = 0
+| Function | Does |
+| --- | --- |
+| `Log`, `Warn`, `Error` | A line in the engine's log, prefixed `[Wolang]` |
+| `SetTimer(owner, seconds, method, repeat)`, `ClearTimer(owner, handle)` | A timer on the owner's script (or one of its script components) that has `method` |
+| `WorldTime(owner)` | Seconds of game time since the world began play |
+| `SetMesh(owner, path)` | Shows a mesh on the actor's static mesh component |
+| `DestroyActor(owner)` | Destroys the actor |
+| `DamageActor(target, amount, instigator)` | Deals damage; the target's `OnDamage` runs |
 
-offer fun Tick(owner: AActor, delta: f32) uses World {
-  ticks = ticks + 1
-  var at = owner.GetActorLocation()
-  at.x = at.x + delta
-  owner.SetActorLocation(at)
-  Log("moved {ticks} times")
-}
-```
-
-`Log`, `Warn` and `Error` write a line to the engine's log, prefixed `[Wolang]`. The standard library is not loaded for scripts yet, so these are the way to print.
+A property written through a generated `Set` accessor reaches what the engine draws, plays and simulates the same frame: setting a light's intensity from a script changes the light.
 
 What the bindings leave out:
 
@@ -108,34 +242,44 @@ What the bindings leave out:
 - Functions that answer a `std::string`, static functions and overloads.
 - Properties whose type has no binding: text, rotations (`Quat`), object pointers.
 
-<Callout type="warning">In this release a script can call an engine function only through the script-friendly forms the `mowo` package itself defines (the vector and text ones such as `GetActorLocation`). Calling a plain bound function or a property accessor straight from a script package, `owner.SetActorHiddenInGame(true)` for example, fails at run time with `no body at @AActor.SetActorHiddenInGame`. The fix is in the Wolang compiler.</Callout>
+## Asset references
 
-## Holding actors
-
-A script that stores an actor in a `var` holds a reference to it: the actor stays alive for the garbage collector while the script holds it. Destroying the actor still destroys it; a strong reference does not stop `Destroy`, so hold actors you do not own through a `weak var`, which reads `null` once the actor is gone:
+A script that names an asset by path, as an `@Asset` field's default or in a call such as `SetMesh(owner, "Content/Meshes/Rock.mesh")`, ships that asset: the cook reads every `"Content/..."` string the project's scripts contain, and every asset an instance's `@Asset` field was set to in a level, as a dependency.
 
 ```text
-class Watch {
-  weak var target: AActor? = null
-}
+  @Editable
+  @Asset("StaticMesh")
+  var mesh: text = "Content/Meshes/Rock.mesh"
 
-var watch: Watch = Watch(null)
+  fun BeginPlay(owner: AActor) uses World {
+    const _shown = SetMesh(owner, mesh)
+  }
 ```
 
-Declare a `weak var` as a field of a class, as above. A `weak var` at the top level of a file is currently held like an ordinary `var`.
+## Visual Scripting
 
-When play stops, the script machine is destroyed and every reference its program still held is released.
+- Every `offer fun` of the project's script packages whose parameters are numbers, `bool`, `text` or actors is a function of the **Wolang Library** in the Visual Script palette (`WolangStatics::Name` on a call node).
+- A method marked `@Callable` is a function of its script class: a graph whose target is that actor calls it on the actor's own script object.
+
+## The editor
+
+- **Compile errors** go to the Message Log's **Scripts** page each time a script is saved, one entry per error; click one to open the file at its line. The status bar shows **Scripts: compiled** or how many errors there are.
+- **Play is refused** while a script does not compile; the Message Log's Play in Editor page says why, with the first error.
+- **Open in your code editor.** A `.wo` file opens in Visual Studio Code when it is installed, else in the code editor chosen under **Tools ▸ Source Code Editor**. **Tools ▸ Open Scripts in VS Code** writes the project's `.vscode/` folder first: the Wolang extension's language server path, the extension as a recommendation, and an attach configuration on the debugger port.
+- **Tools ▸ Compile Wolang Scripts** checks every package now.
+- **Project Settings ▸ Scripting** turns Wolang on for the project, sets the debugger port and whether a saved script reloads while playing, and writes the VS Code workspace.
+- Script hooks show as profiler zones named after the class and method (`Enemy.Tick`).
 
 ## Reloading while playing
 
-In builds with the editor, the script machine watches every file it loaded. Save a script while the level plays and the next frame runs the new code: every top-level `var` keeps its value, function handles stay valid, and a function the new code adds is found. The log shows the reload, and lists any `var` whose type changed and so started again:
+In builds with the editor, the script machine watches every file it loaded. Save a script while the level plays and the next frame runs the new code: every top-level `var` and every instance's object keeps its value (a field the new code adds starts from its initializer), function handles stay valid, and a function the new code adds is found. The log shows the reload, and lists any `var` whose type changed and so started again:
 
 ```text
-[Wolang] world vm: ...\Scripts\Mover\src\mover.wo changed, reloading
+[Wolang] world vm: ...\Scripts\Game\src\enemy.wo changed, reloading
 [Wolang] world vm: reloaded (1)
 ```
 
-Because state is kept, changing a `var`'s initializer does not change a running value; use a `const` for a tunable you want a reload to pick up. A script that no longer compiles stops every script of that world until a save compiles again, and the errors are logged.
+Because state is kept, changing a field's initializer does not change a running value; use a `const` for a tunable you want a reload to pick up. A script that no longer compiles stops every script of that world until a save compiles again, and the errors are logged. Turn reloading off with **Reload on Save** in Project Settings ▸ Scripting (`wolang.HotReload`).
 
 ## Debugging from VS Code
 
@@ -145,20 +289,32 @@ When play starts in the editor, the world's script machine opens a debug port an
 [Wolang] world vm: debugger listening on 127.0.0.1:4711 (attach from VS Code: ...)
 ```
 
-Install the Wolang extension in VS Code, open the project's `Scripts` folder and add an `attach` configuration:
-
-```json title=".vscode/launch.json"
-{
-  "version": "0.2.0",
-  "configurations": [
-    { "type": "wolang", "request": "attach", "name": "Wolang: attach to the editor", "port": 4711 }
-  ]
-}
-```
-
-Start it while the level plays and set a breakpoint in `Tick`. While a debugger is attached, scripts run on the interpreter, and a breakpoint stops the frame where it is: the editor waits until you continue or detach.
+Choose **Tools ▸ Attach Wolang Debugger**: the editor writes the attach configuration and opens VS Code on the project's scripts. Start Play, then run **Wolang: attach to the editor** from VS Code's Run and Debug view and set a breakpoint in `Tick`. While a debugger is attached, scripts run on the interpreter, and a breakpoint stops the frame where it is: the editor waits until you continue or detach.
 
 The port is the console variable `wolang.DebugPort`: `0` takes any free port, `-1` opens none. A second world playing at the same time (a multiplayer session in the editor) takes a free port and logs it. Release and profile builds never open one.
+
+## Script actors
+
+`AWolangScriptActor` is the earlier form, kept for scripts written as free functions: an actor that names a package in its `scriptPath`, whose `BeginPlay`, `Tick` and `EndPlay` are the package's `offer fun`s of those names (with `scriptEntry` as a name prefix, so `Door_Tick`). A `Create(owner) -> T` function makes the object the other three receive first. New code should use classes.
+
+## Holding actors
+
+A script that stores an actor in a `var` holds a reference to it: the actor stays alive for the garbage collector while the script holds it. Destroying the actor still destroys it; a strong reference does not stop `Destroy`, so hold actors you do not own through a `weak var`, which reads `null` once the actor is gone. Declare a `weak var` as a field of a class; a `weak var` at the top level of a file is currently held like an ordinary `var`.
+
+When play stops, the script machine is destroyed and every reference its program still held is released.
+
+## Current limits
+
+These wait on the Wolang compiler; the engine side is in place and starts working when they land:
+
+- A script package cannot yet call a plain bound engine function or property accessor (`owner.SetActorHiddenInGame(true)`, `light.SetIntensity(5.0)`): only the script-friendly forms the `mowo` package defines run. The calls fail with `no body at @AActor.SetActorHiddenInGame`.
+- `self` inside a class that derives from `AActor` is the script object, not the actor: inherited engine methods are reached through the `owner` parameter.
+- `if const t = target` does not take the present branch for an optional engine actor (`AActor?`), and `target?.GetActorLocation()` does not compile. Test with `target != null`, or declare the field without `?` (`var target: AActor`): an unset reference is then no actor, and engine calls on it do nothing and answer zero.
+- The engine's asset aliases (`MeshAsset`, `MaterialAsset`, ...) cannot be used as field types yet; use `text` with `@Asset(...)`.
+- A text field edited in Details while playing takes effect when play starts again, and edits while a debugger is attached reach the running object only at the next Play.
+- `after` delays in `machine` transitions do not run; use `@Every` or `SetTimer`.
+- A field whose initializer is not a literal shows the type's zero as its Details default.
+- Array and map fields of a Wolang class are not Details rows yet: the engine cannot read or write a script container across the boundary. (Visual Script array and set variables are.)
 
 ## The sample
 

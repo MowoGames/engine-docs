@@ -1,12 +1,12 @@
 ---
 title: Logging
-description: Log macros and levels, declaring log categories, the log console command, what release builds keep, and where log files are written.
+description: Log macros and levels, declaring log categories and their verbosity, the log console command, -LogCmds and [Core.Log], once-only and rate-limited lines, what release builds keep, and where log files are written.
 order: 12
 sources:
   - Engine/Source/Runtime/Logging/Public/Logging/Logger.h
   - Engine/Source/Runtime/Core/Public/Core/Constants.h
   - Engine/Source/Runtime/Core/Public/Core/AppDataPath.h
-verifiedAt: 7f8f31f8d
+verifiedAt: 026f26db8
 ---
 
 The Logging module writes every message to a set of sinks: the console, a log file, and in the editor the Output Log. Messages carry a level and a category, and each category has its own threshold you can change at run time. <Source symbol="Logger" />
@@ -20,26 +20,36 @@ const int32_t count = 12;
 const char* path = "Content/Textures/Rock.tex";
 
 MOWO_LOG_INFO("Loaded %d meshes", count);
+MOWO_LOG_DISPLAY("Wave %d started", count);
 MOWO_LOG_WARN("Texture %s missing", path);
 MOWO_LOG_ERROR("Device lost");
 MOWO_LOG_DEBUG("Streaming pass done");
 ```
 
-The macros take a `printf`-style format. The levels are `Trace`, `Debug`, `Info`, `Warning`, `Error` and `Fatal`.
+The macros take a `printf`-style format. The levels, quietest first, are Unreal's verbosities under the engine's names:
 
-| Macro | Level |
+| Level | Unreal name | Macro | Where it goes by default |
+| --- | --- | --- | --- |
+| `Trace` | VeryVerbose | `MOWO_LOG_TRACE` | Nowhere until the category is lowered; compiled only in builds with debug logs |
+| `Debug` | Verbose | `MOWO_LOG_DEBUG` | Nowhere until the category is lowered; compiled only in builds with debug logs |
+| `Info` | Log | `MOWO_LOG_INFO` | Log file and console; the Output Log shows it for your own categories |
+| `Display` | Display | `MOWO_LOG_DISPLAY` | Everywhere, the Output Log included |
+| `Warning`, `Error` | Warning, Error | `MOWO_LOG_WARN`, `MOWO_LOG_ERROR` | Everywhere |
+| `Fatal` | Fatal | `MOWO_LOG_FATAL` | Everywhere; never compiled out |
+
+| Helper | What it does |
 | --- | --- |
-| `MOWO_LOG_TRACE`, `MOWO_LOG_DEBUG` | Trace, Debug; compiled only in builds with debug logs |
-| `MOWO_LOG_INFO`, `MOWO_LOG_WARN`, `MOWO_LOG_ERROR` | Info, Warning, Error |
-| `MOWO_LOG_FATAL` | Fatal; never compiled out |
-| `MOWO_LOG_INFO_ONCE`, `MOWO_LOG_WARN_ONCE`, `MOWO_LOG_ERROR_ONCE` | Logged the first time the line runs |
+| `MOWO_LOG_INFO_ONCE`, `MOWO_LOG_WARN_ONCE`, `MOWO_LOG_ERROR_ONCE`, `MOWO_LOG_ONCE(Level, …)`, `MOWO_LOG_CAT_ONCE(Category, Level, …)` | Logged the first time the line runs |
+| `MOWO_LOG_WARN_RATE_LIMITED(seconds, …)`, `MOWO_LOG_RATE_LIMITED(Level, seconds, …)`, `MOWO_LOG_CAT_RATE_LIMITED(Category, Level, seconds, …)` | The first line, then at most one per interval, followed by how many were held back |
 | `MOWO_LOG_RENDER`, `MOWO_LOG_PHYSICS`, `MOWO_LOG_AUDIO`, `MOWO_LOG_INPUT`, `MOWO_LOG_SCRIPT`, `MOWO_LOG_NET` | Debug level in the matching built-in category |
+
+Use `Display` for the few lines a developer using the editor should see: something they did finished, or the state they are working in changed. Detail that helps someone reading a bug report is `Info`. Per-item and per-frame detail is `Debug`.
 
 Debug logs (`MOWO_DEBUG_LOGS`) are on in builds with assertions (`debug`, `dev` and `debuggame`) and off otherwise. A translation unit can force either by defining `MOWO_DEBUG_LOGS` itself. <Source path="Engine/Source/Runtime/Logging/Public/Logging/Logger.h" />
 
 ## Categories
 
-A category is a named channel with its own threshold. Declare it in a header with your module's export macro, define it in exactly one `.cpp` of that module, and log to it with `MOWO_LOG_CAT`:
+A category is a named channel with its own threshold. Every message in a game module that names none goes to `LogGame`. Declare your own in a header with your module's export macro, define it in exactly one `.cpp` of that module, and log to it with `MOWO_LOG_CAT`:
 
 ```cpp nocompile
 MOWO_DECLARE_LOG_CATEGORY(MYGAME_API, LogAI, Info);
@@ -49,26 +59,45 @@ MOWO_DEFINE_LOG_CATEGORY(LogAI, Info);
 MOWO_LOG_CAT(LogAI, Warning, "lost the path: %s", name);
 ```
 
-Define the category once and export it: an inline definition would give every DLL its own copy, and changing the level would reach only one of them. A message below its category's threshold costs one atomic load and is dropped before its arguments are formatted.
+A category your game module or plugin defines is your own: the editor's Output Log shows its `Info` lines, where it hides the engine's below `Display` unless **Show engine logs** is on. Define the category once and export it: an inline definition would give every DLL its own copy, and changing the level would reach only one of them. A message below its category's threshold costs one atomic load and is dropped before its arguments are formatted.
 
-## The log command
+## Changing a category's verbosity
 
 ```text
 log                          list every category and its level
 log LogRender                print one category's level
+log LogRender Verbose        lower LogRender to Verbose
 log LogRender warning        raise LogRender's threshold to Warning
 log LogRender reset          restore the declared level
+log global Warning           every category at once
 ```
 
-Type it in the editor's Output Log or the game console. Levels are case-insensitive.
+Type it in the editor's Output Log or the game console. Levels are case-insensitive and take either spelling (`Verbose` or `debug`, `Log` or `info`); `All` is VeryVerbose and `Off` leaves only Fatal.
+
+The same instructions come from two more places, applied at startup and again when a project opens. The command line wins over the INI:
+
+```bash
+MyGame.exe --logcmds="LogAI Verbose, LogRender Warning"
+```
+
+```ini title="Config/DefaultEngine.ini"
+[Core.Log]
+LogAI=Verbose
+LogRender=Warning
+```
+
+A category that is not loaded yet, such as one in a game module or plugin, takes its level when its module loads.
 
 ## Keep the log readable
 
-In a `debug` build the Output Log shows every level, so demoting a message to Debug does not hide it. For anything that can fire more than once a second:
+Every category starts at `Info` in every build, so a `Debug` line is quiet until someone asks for it. For anything that can fire more than once a second:
 
-- gate it behind a console variable that defaults to off,
+- make it `Debug`, or gate it behind a console variable that defaults to off,
 - log on change or once (`MOWO_LOG_WARN_ONCE`) when the message reports a state,
+- rate-limit it (`MOWO_LOG_WARN_RATE_LIMITED(5.0, …)`) when every occurrence matters but not every line,
 - never log unconditionally from a per-frame path, including failure branches.
+
+Outside `release` and `profile` builds a flood guard watches each category. When one writes more than 20 lines a second for three seconds in a row, it warns once, naming the call site that wrote the most. `FloodGuardLinesPerSecond=` under `[Core.Log]` changes the budget; `0` turns the guard off.
 
 ## Release builds
 

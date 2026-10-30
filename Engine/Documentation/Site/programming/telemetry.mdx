@@ -1,0 +1,130 @@
+---
+title: Hardware telemetry and the netgraph
+description: Read CPU, GPU, frame, memory and network figures from C++, Visual Scripting, Wolang and .ui bindings, react to thermal alerts, and show the netgraph.
+order: 14
+sources:
+  - Engine/Source/Runtime/Telemetry/Public/Telemetry/Telemetry.h
+  - Engine/Source/Runtime/Telemetry/Public/Telemetry/TelemetryAlerts.h
+  - Engine/Source/Runtime/Telemetry/Public/Telemetry/TelemetryEvents.h
+  - Engine/Source/Runtime/Telemetry/Public/Telemetry/TelemetryProviders.h
+  - Engine/Source/Runtime/Telemetry/Public/Telemetry/Statics/MPerformanceStatics.h
+  - Engine/Source/Runtime/Telemetry/Public/Telemetry/Statics/MNetStatics.h
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformHardwareSensors.h
+  - Engine/Source/Runtime/Platform/Public/Platform/PlatformCpuTopology.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUINetGraph.h
+verifiedAt: 77b5ea1b2
+---
+
+The telemetry service samples what the machine is doing (CPU, GPU, the frame, memory and the network link) and turns sustained heat, thermal throttling and VRAM pressure into alerts. Every figure is readable from C++, Visual Scripting, Wolang and a `.ui` binding, and the netgraph overlay shows them on screen.
+
+## What it measures
+
+| Group | Figures | Where they come from |
+|---|---|---|
+| Frame | fps, frame time, 1 % low, game and render thread time, GPU frame time | the engine loop and the GPU timestamps |
+| CPU | total and per-core load, frequency, package temperature, throttling | the OS: `NtQuerySystemInformation` and the power manager on Windows, `/proc/stat`, cpufreq, hwmon and the thermal throttle counters on Linux, `host_processor_info` and the thermal state on macOS |
+| GPU | load, temperature, hotspot, memory temperature, core and memory clock, power draw, throttle reasons | NVML on NVIDIA, Level Zero sysman on Intel, hwmon (`amdgpu`, `i915`, `xe`) on Linux, IOKit on macOS |
+| VRAM | used and budget | DXGI `QueryVideoMemoryInfo`, `VK_EXT_memory_budget`, the Metal working set |
+| Memory | process resident memory | the OS |
+| Network | ping, jitter, packet loss out and in, bandwidth in and out, server tick rate | the session's transport (ENet) and replication |
+
+**A metric the machine does not report is unavailable, never 0.** Windows exposes no CPU temperature without a kernel driver, NVML reports no hotspot, ENet measures loss only on what it sends: those read as unavailable everywhere, in C++ as `FTelemetryValue::Available == false`, to a script as `-1`, in a binding as no value, on screen as `n/a`.
+
+The vendor libraries ship with the GPU driver and are never redistributed with a game. Each loads only when that vendor's GPU is the one the engine renders on, and the engine matches the device by PCI id on a machine with several. AMD on Windows reports through ADLX and Intel on Windows through IGCL when Level Zero is absent; neither is wired yet, so there the GPU figures other than VRAM read as unavailable and the log says so.
+
+<Callout type="note">
+The service runs on a thread of its own at `telemetry.SampleHz` (4 Hz) while something reads it (a getter, the netgraph, a binding, `stat hardware` or `stat net` within the last two seconds) and at `telemetry.Alert.SampleHz` (1 Hz) otherwise while alerts are on. With `telemetry.Enable 0` nothing is sampled. Frame and network figures are taken on the game thread at the end of a frame, at the same rate.
+</Callout>
+
+## Read it
+
+From C++:
+
+```cpp title="ReadTelemetry.cpp" wrap
+#include "Logging/Logger.h"
+#include "Telemetry/Telemetry.h"
+
+const Mowo::FTelemetrySnapshot snapshot = Mowo::FTelemetry::GetSnapshot();
+const Mowo::FTelemetryValue& gpu = snapshot.Get(Mowo::ETelemetryMetric::GpuTemperatureC);
+if (gpu.Available) {
+	MOWO_LOG_INFO("GPU at %.0f C, %s", gpu.Value, snapshot.GpuSource.c_str());
+}
+```
+
+From Visual Scripting and Wolang, `MPerformanceStatics` and `MNetStatics` answer plain numbers: `GetFps`, `GetOnePercentLowFps`, `GetGpuTemperatureC`, `GetCpuLoad`, `GetCpuCoreLoad(core)`, `GetVramUsedMB`, `GetPingMs`, `GetJitterMs`, `GetPacketLossOutPercent`, `GetBandwidthInKBps`, `GetServerTickRateHz` and the rest. Each returns `-1` when the metric is unavailable; `IsMetricAvailable(id)` tells a missing metric from a real `-1`, and `GetMetric(id)` reads any metric by its `ETelemetryMetric` number. `GetSnapshot` returns the main figures as one `FPerformanceSnapshot` struct for Visual Scripting's struct pins.
+
+<Callout type="warning">
+Wolang cannot yet call a `*Statics` class's functions directly or receive a returned string; both are open in the Wolang compiler. The numeric getters are the ones it will bind first, and nothing here works around it.
+</Callout>
+
+From a `.ui` file, bind to `perf.` and `net.` sources (`FTelemetry::MetricKey` lists them):
+
+```text title="Netgraph.ui (excerpt)"
+TextBlock "Ping" {
+    Bindings { Bind { property: "text"  source: "net.pingMs" } }
+}
+TextBlock "GpuTemp" {
+    Bindings { Bind { property: "text"  source: "perf.gpu.temperatureC" } }
+}
+```
+
+| Source | Value |
+|---|---|
+| `perf.fps`, `perf.frameMs`, `perf.onePercentLowFps`, `perf.gameThreadMs`, `perf.renderThreadMs`, `perf.gpuFrameMs` | the frame |
+| `perf.cpu.load`, `perf.cpu.frequencyMHz`, `perf.cpu.temperatureC` | the CPU |
+| `perf.gpu.load`, `perf.gpu.temperatureC`, `perf.gpu.hotspotC`, `perf.gpu.memoryTemperatureC`, `perf.gpu.coreClockMHz`, `perf.gpu.memoryClockMHz`, `perf.gpu.powerW` | the GPU |
+| `perf.vram.usedMB`, `perf.vram.budgetMB`, `perf.memory.processMB` | memory |
+| `net.pingMs`, `net.jitterMs`, `net.lossOutPercent`, `net.lossInPercent`, `net.inKBps`, `net.outKBps`, `net.tickRateHz` | the link |
+| `net.connected`, `perf.alert.any` | 1 or 0 |
+
+## Alerts
+
+| Alert | Raises at | Clears under |
+|---|---|---|
+| GPU hot | `telemetry.Alert.GpuTempC` (87 °C), or the hotspot at `telemetry.Alert.GpuHotspotC` (105 °C) | `telemetry.Alert.GpuTempClearC` (80 °C) |
+| GPU thermal throttling | the driver reports a thermal slowdown | it stops |
+| CPU hot | `telemetry.Alert.CpuTempC` (95 °C) | `telemetry.Alert.CpuTempClearC` (88 °C) |
+| CPU throttling | the OS holds the CPU below its rated speed | it stops |
+| VRAM near budget | `telemetry.Alert.VramFraction` (0.95 of the OS budget) | `telemetry.Alert.VramClearFraction` (0.88) |
+
+A reading must stay past a threshold for `telemetry.Alert.HoldSeconds` (3 s) to raise an alert, and back under its clear threshold as long to clear it, so a value hovering at the line is one alert, not one per sample. A GPU held at its power limit under load is normal and never alerts. The thresholds are cvars, so a project sets them in its INI and a [device profile](/docs/rendering/device-profiles/) sets them per GPU (the Steam Deck's raises at 97 °C). `telemetry.Alert.Enable 0` turns alerts off; `telemetry.Alert.Throttling 0` keeps the temperature alerts and drops the throttling ones.
+
+Each transition writes one log line (`[Telemetry] alert raised: GPU hot (89.00, threshold 87.00)`) and, on the game thread, calls `FTelemetry::OnAlert()` and posts a `TelemetryAlertEvent` on the `EventBus`:
+
+```cpp title="WatchHeat.cpp" wrap
+#include "Events/EventBus.h"
+#include "Logging/Logger.h"
+#include "Telemetry/TelemetryEvents.h"
+
+Mowo::EventBus::Get().Subscribe<Mowo::TelemetryAlertEvent>([](Mowo::TelemetryAlertEvent& event) {
+	if (event.GetData().Active && event.GetData().Alert == Mowo::ETelemetryAlert::GpuHot) {
+		MOWO_LOG_INFO("lower the effects budget");
+	}
+});
+```
+
+A script polls `IsAlertActive(id)`, `IsAnyAlertActive` and `GetAlertSerial`, which counts every raise and clear; the `FOnTelemetryAlert` delegate type documents the C++ signature.
+
+In the editor a raised alert is a toast with **Open Performance settings**. A packaged game shows nothing by default; turn on **Project Settings > Engine > Performance > Show Thermal Warnings to Players** (`telemetry.ShowPlayerWarnings 1`) to draw a one-line banner while an alert is raised, or react to the event in your own UI.
+
+## The netgraph
+
+| Command | Shows |
+|---|---|
+| `net.graph 1` | frame rate and 1 % low, ping and jitter, loss, bandwidth and the server tick, in the bottom-right corner |
+| `net.graph 2` | adds the frame-time and ping graphs |
+| `net.graph 3` | adds the GPU temperature graph and the CPU, GPU and VRAM line |
+| `stat hardware` | the hardware panel: CPU and GPU load, clocks, temperature, power, throttling, VRAM and process memory |
+| `stat net` | the network panel |
+| `telemetry.dump` | the current snapshot as two log lines |
+
+The netgraph is off by default in a packaged game. A project turns it on with `net.graph=1` under `[ConsoleVariables]` in its INI or on **Project Settings > Engine > Performance > Netgraph**; players change it with the **Performance Overlay** row in the game's **Display** settings.
+
+## Hybrid CPUs
+
+On a CPU with performance and efficiency cores (Intel 12th generation and later, Apple silicon), the job system sizes its pool to the cores: workers that prefer the P-cores, leaving three P-core threads for the game, render and RHI threads, take every High-priority job, and the rest prefer the E-cores. The render, RHI and audio threads prefer the P-cores; the telemetry thread prefers the E-cores. Preferences are soft (Windows CPU sets, Linux affinity, macOS QoS classes), so an idle core of either kind still picks work up. `--job-workers=N` sizes the pool by hand and `--no-hybrid-cores` turns the preferences off. The `[JobSystem]` log line at startup shows the topology and the split.
+
+## API reference
+
+- [Telemetry module](/docs/api/telemetry/): `FTelemetry`, `FTelemetrySnapshot`, `ETelemetryMetric`, `ETelemetryAlert`, `TelemetryAlertEvent`, `MPerformanceStatics`, `MNetStatics`
+- [ArcUI module](/docs/api/arcui/): `AArcUINetGraph`

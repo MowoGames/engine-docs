@@ -1,0 +1,155 @@
+---
+title: Device profiles
+description: Match GPUs by vendor, name, device id, VRAM, driver and platform to cap the quality tier and set cvars, block known-bad drivers, and size streaming to VRAM.
+order: 5
+sources:
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/DeviceProfiles.h
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/QualityAutoTier.h
+  - Engine/Config/BaseDeviceProfiles.ini
+  - Engine/Source/Runtime/Game/Public/Streaming/VramPressureGovernor.h
+  - Engine/Source/Runtime/Game/Public/Streaming/TextureStreamingManager.h
+verifiedAt: 77b5ea1b2
+---
+
+A device profile is a rule that recognises a GPU and adjusts the engine for it: it caps the [quality tier](/docs/rendering/quality-tiers/) the auto-detection may pick and sets console variables. It is Mowo's form of Unreal Engine's `DeviceProfiles.ini`. The same files carry a **driver blocklist** that names driver versions known to break the engine and tells the player what to do.
+
+## Where the rules live
+
+Rules are INI sections in the `DeviceProfiles` config hierarchy, lowest layer first:
+
+1. `Engine/Config/BaseDeviceProfiles.ini`: the rules the engine ships.
+2. `Engine/Config/<platform>/<platform>DeviceProfiles.ini`.
+3. Your project's `Config/DefaultDeviceProfiles.ini`.
+4. `Config/<platform>/<platform>DeviceProfiles.ini` in your project.
+
+A project adds a rule with a new section, changes one by writing a section of the same name, and switches one off with `Enabled=False`.
+
+```ini title="Config/DefaultDeviceProfiles.ini"
+; The 3050's 8 GB holds Epic textures, but this game's Epic GI is too heavy
+; for it: cap it at High and keep the GPU-hot alert a little lower.
+[DeviceProfile MyGame_RTX3050]
+Description=GeForce RTX 3050
+Priority=20
+Vendor=NVIDIA
++NameContains=RTX 3050
++DeviceIds=0x2507
++DeviceIds=0x2582
+TierCap=High
++CVars=telemetry.Alert.GpuTempC=84
+```
+
+## How a rule matches
+
+| Key | Matches when |
+|---|---|
+| `Vendor` | the PCI vendor is `NVIDIA`, `AMD`, `Intel`, `Apple`, or the id you write (`0x10DE`) |
+| `+NameContains` | the GPU name contains the text, case-insensitive |
+| `+DeviceIds` | the PCI device id is the id or inside the range (`0x2200-0x25FF`) |
+| `SteamDeck=True` | the platform reports Steam Deck hardware |
+| `+NameExcludes` | the name does **not** contain the text |
+| `MinVramMB`, `MaxVramMB` | dedicated video memory is inside the bounds (an unknown size never meets `MaxVramMB`) |
+| `MinDriver`, `MaxDriver` | the vendor driver version is inside the bounds, compared field by field (`566.36`) |
+| `Integrated` | `True` for integrated or unified-memory GPUs only, `False` for discrete only |
+| `+Platforms` | `win-x64`, `linux-x64`, `osx-arm64`, or a family prefix (`win`, `linux`, `osx`) |
+| `+GraphicsApis` | `D3D12`, `D3D11`, `Vulkan` or `Metal` |
+
+`NameContains`, `DeviceIds` and `SteamDeck` are alternatives: a rule can name a GPU family by marketing name and by PCI id range, and a device that reports either matches. Every other key that is set must hold. Among the rules that match, the highest `Priority` wins; a tie goes to the rule with more criteria, then to the one written first.
+
+What a rule does:
+
+| Key | Effect |
+|---|---|
+| `TierCap` | the highest tier the first-run benchmark or the GPU heuristic may pick: `Low` to `Cinematic`. An explicit `r.Quality` and a platform's recommended tier are never capped. |
+| `+CVars=name=value` | set at device-profile priority: above the tier, below every INI, the player's settings and the command line, so nothing you or the player chose is overwritten |
+| `CVarsUpToTier` | the cvars apply only while the resolved tier is at or below this |
+| `Description` | shown in the log and in **Project Settings > Engine > Scalability** |
+
+## The shipped profiles
+
+| Profile | Identifies | Tier cap |
+|---|---|---|
+| `SteamDeck` | Steam Deck LCD and OLED APUs (names, `0x163F`, `0x1435`, or the platform's word) | Low, plus the cvars below |
+| `NVIDIA_RTX50` | RTX 50 series, `0x2B80-0x2FFF` | none |
+| `NVIDIA_RTX40` | RTX 40 series, `0x2680-0x28FF` | none |
+| `NVIDIA_RTX30` | RTX 30 series, `0x2200-0x25FF` | Epic |
+| `NVIDIA_RTX20` | RTX 20 series and TITAN RTX, `0x1E00-0x1F7F` | High |
+| `NVIDIA_GTX16` | GTX 16 series, `0x1F80-0x1FFF`, `0x2180-0x21FF` | Medium |
+| `AMD_RX9000` | Radeon RX 9000 (RDNA 4), `0x7550-0x75BF` | none |
+| `AMD_RX7000` | Radeon RX 7000 (RDNA 3), `0x7440-0x749F` | Epic |
+| `AMD_RX6000` | Radeon RX 6000 (RDNA 2), `0x73A0-0x743F` | Epic |
+| `AMD_Integrated`, `AMD_Integrated_RDNA3` | Radeon integrated graphics; the 740M to 890M | Low; Medium |
+| `Intel_ArcB`, `Intel_ArcA` | Arc B-series `0xE200-0xE2FF`; Arc A-series `0x5690-0x56BF` | Epic; High |
+| `Intel_Integrated`, `Intel_Integrated_Arc` | Intel integrated graphics; integrated Arc (Xe-LPG, Xe2) | Low; Medium |
+| `Apple_M`, `Apple_M_MaxUltra` | Apple M-series; Max and Ultra | High; Epic |
+
+The integrated and Apple profiles also set `r.TextureStreaming.PoolSizeMB` (1 to 3 GB): their dedicated VRAM is a firmware carve-out, not the memory the GPU reaches.
+
+The Steam Deck profile keeps Low's shadow budget, effects and view-distance cuts and adds Global Illumination from the Medium row (`sg.GlobalIlluminationQuality=1`), FSR at Quality on the 1280x800 panel (`r.Upscaler=3`, `r.Upscaler.AutoQuality=0`, `r.UpscalerQuality=1`), a 40 fps cap for the panel's 40 Hz mode (`t.MaxFPS=40`; set 60 for the 60 Hz mode), a dynamic-resolution target of 22 ms, and a GPU-hot alert at 97 °C, because the APU runs near 90 °C under load by design. Its cost has not been measured on a Deck.
+
+## What you see
+
+At startup the engine logs the device and the verdict:
+
+```text
+[DeviceProfile] gpu='NVIDIA GeForce RTX 3050' vendor 0x10DE device 0x2507 driver 566.36 discrete, 8192 MB VRAM, D3D12, win-x64: NVIDIA_RTX30 (GeForce RTX 30 series (Ampere)): tier cap Epic, 0 cvars
+[Quality] preset=High source=auto-tier(... measured GPU index ...)
+```
+
+Each cvar the profile sets, or leaves because a higher source holds it, gets its own `[DeviceProfile]` line. **Project Settings > Engine > Scalability** shows the matched profile under the tier table.
+
+Test a rule on any machine:
+
+| cvar | Effect |
+|---|---|
+| `r.DeviceProfile.Force` | use this profile by name, whatever the GPU |
+| `r.DeviceProfile.Enable 0` | no device profile at all |
+| `r.AutoQuality.ForceName`, `ForceVendorId`, `ForceDeviceId`, `ForceVRAMMB`, `ForceIntegrated`, `ForceDriver` | match as if the GPU were this one |
+
+## The driver blocklist
+
+A `[DriverBlock <Name>]` section names a driver range:
+
+```ini
+[DriverBlock NVIDIA_Before520]
+Vendor=NVIDIA
+DriverBelow=520.00
+Severity=Warn
+Reason=NVIDIA drivers older than 520 cannot run DLSS and miss graphics fixes this game relies on; expect rendering errors and crashes.
+Advice=Update to the current GeForce driver from nvidia.com or the NVIDIA app.
+```
+
+It takes the identity keys of a profile (`Vendor`, `NameContains`, `DeviceIds`, `Platforms`, `GraphicsApis`) and a driver range: `MinDriver` and `MaxDriver` are inclusive, `DriverBelow` exclusive. A section with no driver range would match every driver and is ignored with a warning. Driver versions are the vendor's own: the GeForce number on NVIDIA, the user-mode driver version (`31.0.101.5590`) on AMD and Intel under D3D, the packed Vulkan version under Vulkan, so a rule for AMD or Intel should name its `GraphicsApis`.
+
+| Severity | What happens |
+|---|---|
+| `Warn` | a `[DeviceProfile] driver blocklist: ...` warning in the log, and in a packaged game a dialog the player sees once per driver version |
+| `Block` | an error in the log and, before the first frame, a dialog offering **Quit** or **Continue anyway** |
+
+No dialog appears in an unattended run (`--unattended`, `MOWO_NO_CRASH_REPORTER=1`) or with `r.DriverBlocklist.Prompt 0`. The engine ships two entries: NVIDIA drivers older than 520 and Intel Arc drivers older than 31.0.101.4091 (February 2023) on Windows D3D, both `Warn`.
+
+## Streaming to the VRAM you have
+
+The texture streaming pool (`r.TextureStreaming.PoolSizeMB`, 0 = auto) is sized at startup from the VRAM class of the GPU, leaving room for the render targets (about 1 GB at 1440p with Global Illumination and shadow pages), the meshlet pool, the OS and other processes:
+
+| VRAM class | Pool |
+|---|---|
+| under 4 GB | 768 MB |
+| 4 GB | 1536 MB |
+| 6 GB | 2560 MB |
+| 8 GB | 3584 MB |
+| 12 GB and more | 5120 MB |
+
+Each class starts a little under its nominal size, since a 4 GB card reports less once the driver takes its share. A device profile, an INI or the player's **Texture Pool Size** setting overrides it.
+
+While the game runs, the VRAM-pressure governor (`r.TextureStreaming.VramPressure`, on by default) reads the budget the OS grants the process: DXGI `QueryVideoMemoryInfo` on D3D12 and D3D11, `VK_EXT_memory_budget` on Vulkan, the recommended working set on Metal. Over 95 % of it, the pool cap drops below what is resident by the overshoot (split between the texture and mesh pools by what each holds), so the farthest textures lose mips first; under 85 % it relaxes and lifts. The log says when it starts and stops capping, and whenever the budget pass changes what it takes away:
+
+```text
+[Runtime] Texture streaming: 41 texture(s) 63 mip level(s) below the detail their screen size wants, to fit a 1043 MB pool (VRAM 3010 / 2048 MB used, capped by VRAM pressure)
+```
+
+`r.TextureStreaming.ForceBudgetMB` treats the OS budget as that many megabytes, so the pressure path can be watched on a card with room to spare.
+
+## API reference
+
+- [SceneRenderer module](/docs/api/scenerenderer/): `FDeviceProfiles`, `FDeviceProfile`, `FDriverBlock`, `FDeviceProfileInputs`, `FQualityAutoTier::TexturePoolForVramMB`
+- [Game module](/docs/api/game/): `FVramPressureGovernor`, `FTextureStreamingManager`

@@ -180,9 +180,30 @@ Editor plugins can register their own customizations for a component type throug
 
 Open a second Details panel with **Window ▸ New Details**, select an actor, and click the padlock chip in its search row. The locked panel keeps showing that actor while the first panel follows your selection, which is useful for comparing two actors.
 
-### Visual Scripting variables
+### Script variables
 
-A placed Visual Scripting actor gets one more section, **Visual Script Variables**, below its components: a row per variable the class marks **Instance Editable**, including those inherited from parent classes. Scalars, vectors, rotations (in degrees) and colours get their usual widgets. An object variable shows a dropdown of the level's actors, or an asset picker when the variable's default names an asset. Container variables are read-only here. A changed value resets to the class default with the reset arrow. See [Visual Scripting](/docs/visual-scripting/).
+A placed actor whose behaviour is a script gets one section per script below its components: **Visual Script Variables** for a Visual Scripting class, **Script Variables (Enemy)** for a [Wolang](/docs/gameplay/wolang-scripting/) class, and **Health (Health)** for each Wolang script component. All of them are the same rows, kept per placed instance, saved with the level, carried into Play and into prefabs, and undone like any property:
+
+| Variable | Row widget |
+| --- | --- |
+| Bool, number, text | Checkbox, numeric field, text box; a `Range` bounds the field and `Slider` draws one |
+| Vector, rotation | X/Y/Z fields; a rotation in degrees |
+| Colour | Swatch with the color picker |
+| Actor or component reference | Dropdown of the level's actors of that class, an eyedropper (click it, then click an actor in the viewport) and a drop target for an actor dragged from the Outliner |
+| Asset reference | Asset picker filtered to the asset type, which also takes an asset dropped from the Content Browser |
+| Action | A **Run** button that runs the method on this instance |
+| Array or set of bools, numbers or text | One row per element with move up, move down and remove; **+ Element** on the variable's row |
+| Event | One row per listener: an actor, one of its functions taking nothing or one bool, number or text, and the constant argument; **+ Listener** on the event's row |
+
+- The declaration supplies the metadata: a tooltip, a category, a range, read-only, and **ShowIf**, which hides a row while the bool it names is off.
+- A value that differs from the default the code declares has an emphasized label and the reset arrow, and only those values are written to the level. Raising the default in the code reaches every instance that never changed it.
+- An actor reference is stored by the actor's stable id, so it survives a rename and points at the copy of the actor while playing. A reference to an actor that no longer exists reads **None (missing)**.
+- A field renamed in the code keeps its stored values through a `PropertyRedirects` line in `Config/Redirects.ini`, as a C++ property does.
+- An action runs on the instance you see: in the edited level outside Play (its changes are one undo entry), on the running object while playing.
+- Edits made while playing go into the running script at once. When Play stops, the editor asks, actor by actor, whether to keep them in the level (one undo entry) or discard them with the play session.
+- Maps and containers of vectors or references are read-only here.
+
+**Add** lists Wolang component classes under **Scripts**, for any actor; adding one is one undo entry. See [Visual Scripting](/docs/visual-scripting/) and [Wolang scripting](/docs/gameplay/wolang-scripting/).
 
 ## The Property Matrix
 

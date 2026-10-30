@@ -1,16 +1,16 @@
 ---
 title: Upscaling and anti-aliasing
-description: Choose between TAA, TSR, FSR, DLSS, XeSS and MetalFX, set the render resolution, and use frame generation and low-latency modes.
+description: Choose between TAA, TSR, FSR, DLSS, XeSS and MetalFX, let Auto pick the render resolution from the display, and use frame generation and low latency.
 order: 12
 sources:
   - Engine/Source/Runtime/RHI/Public/RHI/IUpscaler.h
   - Engine/Source/Runtime/RHI/Public/RHI/FrameGeneration.h
   - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
-verifiedAt: 8f1cfbd42
+verifiedAt: 77b5ea1b2
 ---
 
-Mowo can render at a lower internal resolution and reconstruct the output with a temporal upscaler, or render at native resolution and resolve aliasing with TAA or FXAA. One cvar, `r.Upscaler`, picks the method; `r.UpscalerQuality` picks the render resolution.
+Mowo can render at a lower internal resolution and reconstruct the output with a temporal upscaler, or render at native resolution and resolve aliasing with TAA or FXAA. One cvar, `r.Upscaler`, picks the method; `r.UpscalerQuality` picks the render resolution, or Auto upscaling (`r.Upscaler.AutoQuality`) picks it from the output resolution.
 
 ## The methods
 
@@ -29,7 +29,7 @@ Mowo can render at a lower internal resolution and reconstruct the output with a
 The values match.
 
 <Callout type="note">
-Selecting a vendor upscaler is always safe. If its SDK, runtime or GPU is missing, the engine falls back to TAA. The startup capability check decides from the GPU vendor, model and driver which vendor runtimes this machine can run, without loading any (DLSS needs an NVIDIA RTX GPU, DLSS Frame Generation an RTX 40-series, Anti-Lag 2 a Radeon RX, XeSS Frame Generation and XeLL an Intel Arc GPU); a runtime it rules out never loads. `IUpscaler::IsUpscalerSupported` answers whether a method can really run on this device, and the editor and the game's settings screen only offer the methods that can ().
+Selecting a vendor upscaler is always safe. If its SDK, runtime or GPU is missing, the engine falls back to TSR, which upscales on every backend, so the frame still renders at the mode's resolution. The startup capability check decides from the GPU vendor, model and driver which vendor runtimes this machine can run, without loading any (DLSS needs an NVIDIA RTX GPU, DLSS Frame Generation an RTX 40-series, Anti-Lag 2 a Radeon RX, XeSS Frame Generation and XeLL an Intel Arc GPU); a runtime it rules out never loads. `IUpscaler::IsUpscalerSupported` answers whether a method can really run on this device, and the editor and the game's settings screen only offer the methods that can ().
 </Callout>
 
 ### TSR
@@ -72,36 +72,60 @@ Spatial is FSR1: render smaller, upsample with edge-adaptive EASU, then sharpen 
 | `3` | Performance | 0.500 |
 | `4` | Ultra Performance | 0.333 |
 
-Only scaling methods act on it. TAA and None always render at full resolution. An explicit `r.RenderScale` (0.25 to 1.0) wins over the preset; the **Custom Percentage** setting writes it. With [dynamic resolution](/docs/rendering/quality-tiers/#dynamic-resolution) on, the render scale moves between its bounds below the preset's base scale.
+Only scaling methods act on it. TAA and None always render at full resolution. While Auto upscaling is on, it picks this value itself (next section) and writes the live mode back here for readers. An explicit `r.RenderScale` (0.25 to 1.0) wins over the preset; the **Custom Percentage** setting writes it. With [dynamic resolution](/docs/rendering/quality-tiers/#dynamic-resolution) on, the render scale moves between its bounds below the preset's base scale.
 
 While a temporal upscaler reconstructs the output, material textures are sampled with a negative mip bias so they keep output-resolution detail. `r.MaterialMipBias.Auto` (default 1) turns this on, `r.MaterialMipBias.Offset` adds to it and `r.MaterialMipBias.Min` (default -2) limits it.
+
+## Auto upscaling
+
+Auto upscaling picks the quality mode from the output resolution, the way Unreal Engine 5.1 and later derive the screen percentage from the display. The output is measured as the height of a 16:9 frame with the same pixel count, so an ultrawide pays for its pixels rather than its rows:
+
+| Output (16:9 equivalent height) | Examples | Mode | Rendered |
+|---|---|---|---|
+| up to 900 | 720p, 1280x800, 900p | Native | as output |
+| up to 1200 | 1080p, 1920x1200 | Quality (0.667) | about 720p |
+| up to 1600 | 1440p, 2560x1600 | Balanced (0.58) | about 835p |
+| up to 2400 | 4K, 3440x1440, 5120x1440 | Performance (0.5) | about 1080p |
+| above | 5K, 8K | Ultra Performance (0.333) | about 960p at 5K, 1440p at 8K |
+
+Up to 4K the rendered image stays between roughly 720p and 1080p, which is the range temporal upscalers are tuned for. The tier shifts the mode toward Performance: Low by two steps, Medium by one, High by none, and never past Performance unless the resolution alone asks for Ultra Performance. At 1080p this lands on the mode each tier fixed before (Low Performance, Medium Balanced, High Quality), so a 1080p player sees no change; at 1440p and 4K the frame stops paying for pixels the upscaler would reconstruct anyway.
+
+| `r.Upscaler.AutoQuality` | Meaning |
+|---|---|
+| `-1` (default) | Follow the tier: on at Low, Medium and High; Epic and Cinematic keep their fixed mode |
+| `1` | On at every tier |
+| `0` | Off: `r.UpscalerQuality` decides |
+
+Auto works with every upscaler that scales: TSR, FSR, DLSS, XeSS, MetalFX and Spatial each map the mode to their own render scale. It is re-evaluated every frame, so resizing the window or the viewport across a band changes the mode once and resets the temporal history at that point. The live mode is logged: `[Upscaler] auto quality 2 for 2560x1440 output (TSR, render scale 0.580)`.
+
+Turn it on or off per project with **Project Settings > Rendering > Auto Upscaling**. Players get an **Auto Resolution** row in the game's **Graphics** settings; picking a fixed **Screen Percentage** there means turning it off.
 
 ## How the default is chosen
 
 When `r.Upscaler` is `-1`, the auto-tier fills it at startup ():
 
-1. The quality mode comes from the tier: Performance at Low, Balanced at Medium, Quality at High and Epic, Native at Cinematic.
+1. The quality mode comes from the tier. Low, Medium and High upscale automatically (Auto upscaling above); Epic uses Quality and Cinematic Native.
 2. Vendor upscalers are picked only when `r.AutoQuality.VendorUpscalers` is 1. Then an NVIDIA GPU with DLSS gets DLSS, AMD with FSR gets FSR, Intel with XeSS gets XeSS, and Apple with MetalFX gets MetalFX.
-3. At Native the choice is TAA.
+3. At a fixed Native mode (Cinematic) the choice is TAA.
 4. Otherwise the choice is TSR.
 
 <Callout type="engine">
 Vendor upscalers are opt-in for the automatic case because their SDKs sit between the engine and the graphics API and install their own process-exit handlers. TSR hooks nothing, so it carries the automatic case, and DLSS, FSR and XeSS stay one setting away.
 </Callout>
 
-The editor viewport is an authoring view: it always resolves at native resolution with a temporal AA resolve, whatever the tier says, so you never judge reconstructed pixels. The shipped game keeps the tier's upscaling.
+The editor viewport resolves exactly as the game does: the same tier, the same upscaler and Auto upscaling from the viewport's own size, so the frame rate it shows is the one a player on that tier gets. The viewport toolbar's **Upscaling** chip shows what the viewport runs (for example `Auto · TSR 58%`) and overrides it for the session: **Auto (from output resolution)**, a fixed mode from **Native** to **Ultra Performance**, or another method (methods this GPU cannot run are greyed). The override does not touch the project's settings. The **Quality** popover's **Upscaler** row and the **Screen Percentage** override store the same choice in your editor configuration.
 
 ## Choose an upscaler
 
 <Steps>
 <Step title="Per project">
-Open **Project Settings**, the **Rendering** page, section **ANTI-ALIASING & UPSCALING**. Set **Anti-Aliasing Method**, **Screen Percentage** and, if you want a fixed scale, **Custom Percentage**. A method the graphics API cannot host is not listed; one this GPU cannot run stays listed with the note that it applies to players' hardware, because the setting ships with the game.
+Open **Project Settings**, the **Rendering** page, section **ANTI-ALIASING & UPSCALING**. Set **Anti-Aliasing Method** (Auto, the default, lets the device pick TSR or, when allowed, the vendor upscaler), **Auto Upscaling**, and with Auto Upscaling off a **Screen Percentage** or **Custom Percentage**. A method the graphics API cannot host is not listed; one this GPU cannot run stays listed with the note that it applies to players' hardware, because the setting ships with the game.
 </Step>
 <Step title="From code">
 Check support first, then set the cvars. The renderer applies the change at the next `BeginScene`.
 </Step>
 <Step title="For players">
-The game's settings screen has **Anti-Aliasing Method**, **Screen Percentage** and **Custom Percentage** rows in the **Graphics** category, and lists only the methods this GPU can run.
+The game's settings screen has **Anti-Aliasing Method**, **Auto Resolution**, **Screen Percentage** and **Custom Percentage** rows in the **Graphics** category, and lists only the methods this GPU can run.
 </Step>
 </Steps>
 
@@ -114,6 +138,7 @@ const bool dlss = Mowo::IUpscaler::IsUpscalerSupported(Mowo::UpscalerType::DLSS)
 const Mowo::UpscalerType type = dlss ? Mowo::UpscalerType::DLSS : Mowo::UpscalerType::TSR;
 
 Mowo::IConsoleManager::Get().SetByName("r.Upscaler", std::to_string(static_cast<int>(type)));
+Mowo::IConsoleManager::Get().SetByName("r.Upscaler.AutoQuality", "0");
 Mowo::IConsoleManager::Get().SetByName("r.UpscalerQuality", std::to_string(static_cast<int>(Mowo::UpscalerQuality::Quality)));
 ```
 
@@ -170,4 +195,4 @@ A running DLSS-G or XeSS-FG keeps low latency on.
 ## API reference
 
 - [Renderer module](/docs/api/renderer/): `AntiAliasingMode`
-- [SceneRenderer module](/docs/api/scenerenderer/): `FQualityAutoTier`
+- [SceneRenderer module](/docs/api/scenerenderer/): `FQualityAutoTier` (`AutoUpscalerQuality`, `IsAutoUpscalingOn`)

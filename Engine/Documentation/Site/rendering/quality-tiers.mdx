@@ -7,7 +7,9 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/QualityAutoTier.h
-verifiedAt: 68067c1d8
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/DeviceProfiles.h
+  - Engine/Config/BaseDeviceProfiles.ini
+verifiedAt: 77b5ea1b2
 ---
 
 A quality tier is one setting that decides which rendering features run and how much each one may spend. Mowo has five tiers: **Low, Medium, High, Epic and Cinematic** (). High is the code default.
@@ -67,7 +69,7 @@ The active tier is resolved in this order, highest first:
 
 1. An explicit `r.Quality`: the user config, `Scalability.ini`, the editor menu, the in-game settings or `--cvar=r.Quality=N` in a development build.
 2. A tier the platform recommends for the device. On Steam this is the recommended profile the developer set for that hardware.
-3. The auto-tier, which fills only an unset slot.
+3. The auto-tier, which fills only an unset slot, capped by the matched [device profile](/docs/rendering/device-profiles/).
 4. The code default, High.
 
 The editor and the game run the same auto-tier, so the editor viewport, Play In Editor and the shipped game pick the same tier on the same machine. Each logs a `[Quality]` line with the tier and why it was chosen.
@@ -88,7 +90,7 @@ On the first launch on a machine the engine runs a short synthetic GPU and CPU b
 | 150 to 240 | Epic |
 | 240 and up | Cinematic |
 
-VRAM still caps a measured tier: under 4 GB caps it at Medium, under 6 GB at High. `r.AutoQuality.Benchmark 0` ignores the measurement.
+VRAM still caps a measured tier: under 4 GB caps it at Medium, under 6 GB at High. The matched device profile's `TierCap` caps it as well, so a benchmark never picks a tier the profile rules out for that GPU family. `r.AutoQuality.Benchmark 0` ignores the measurement.
 
 ### From the device
 
@@ -120,11 +122,11 @@ Simulate another machine with `r.AutoQuality.ForceVRAMMB`, `r.AutoQuality.ForceI
 
 ### Device profiles
 
-After the tier is known, a device profile can adjust a few values that nothing else has claimed. The Steam Deck profile applies at Low: it moves `sg.GlobalIlluminationQuality` to Medium so the Deck keeps Global Illumination, caps the frame rate at 40 with `t.MaxFPS`, and sets the dynamic-resolution target to 22 ms (). A value you set explicitly always wins over a profile.
+A device profile, matched from `DeviceProfiles.ini` by GPU vendor, name, device-id range, VRAM, driver, graphics API and platform, caps the auto-detected tier and sets cvars at device-profile priority: above the tier, below every INI, the player's settings and the command line. The engine ships profiles for the RTX 20 to 50 series, GTX 16, Radeon RX 6000 to 9000, Arc A and B, Intel and AMD integrated graphics, Apple M-series and the Steam Deck; the Deck's applies at Low and moves `sg.GlobalIlluminationQuality` to Medium so the Deck keeps Global Illumination, renders through FSR at Quality, caps the frame rate at 40 with `t.MaxFPS` and sets the dynamic-resolution target to 22 ms. See [Device profiles](/docs/rendering/device-profiles/) for the rules, the driver blocklist and how to add your own.
 
 ### Upscaler choice
 
-The auto-tier also picks the anti-aliasing method. It chooses the engine's TSR, or TAA when the tier renders at native resolution (Cinematic). Vendor upscalers (DLSS, FSR, XeSS, MetalFX) are picked automatically only when `r.AutoQuality.VendorUpscalers` is 1. See [Upscaling and anti-aliasing](/docs/rendering/upscaling-and-anti-aliasing/).
+The auto-tier also picks the anti-aliasing method. It chooses the engine's TSR, or TAA when the tier renders at a fixed native resolution (Cinematic). Low, Medium and High pick their quality mode from the output resolution ([Auto upscaling](/docs/rendering/upscaling-and-anti-aliasing/#auto-upscaling)), in the editor viewport as in the game. Vendor upscalers (DLSS, FSR, XeSS, MetalFX) are picked automatically only when `r.AutoQuality.VendorUpscalers` is 1. See [Upscaling and anti-aliasing](/docs/rendering/upscaling-and-anti-aliasing/).
 
 ## What each tier turns on
 
@@ -183,7 +185,7 @@ Every row has an `r.*` cvar that defaults to `-1` (the tier value).
 | Bloom mips | `r.Bloom.Mips` | 4 | 5 | 5 | 6 | 6 |
 | Depth of field kernel | `r.DoF.Bokeh` | gaussian | gaussian | gaussian | disk | disk |
 | Render scale | `r.RenderScale` | 0.75 | 1.0 | 1.0 | 1.0 | 1.0 |
-| Upscaler quality | `r.UpscalerQuality` | Performance | Balanced | Quality | Quality | Native |
+| Upscaler quality | `r.UpscalerQuality` | Auto, 2 steps lower | Auto, 1 step lower | Auto | Quality | Native |
 | Mesh LOD bias | `r.MeshLODBias` | +2 | +1 | 0 | 0 | 0 |
 | Small-object cull (fraction of vertical FOV) | `r.MinScreenCoverage` | 0.0025 | 0.0015 | 0.001 | 0.0006 | off |
 | Hi-Z occlusion cull | `r.OcclusionCull` | on | on | on | on | off |
@@ -196,7 +198,7 @@ Every row has an `r.*` cvar that defaults to `-1` (the tier value).
 | Emitters per view | `r.Effects.MaxActiveEmitters` | 16 | 32 | 64 | unlimited | unlimited |
 
 <Callout type="note">
-The upscaler-quality row only matters when a scaling method (TSR, FSR, DLSS, XeSS, MetalFX or Spatial) is active. TAA and None render at full resolution. An explicit `r.RenderScale` wins over the quality mode.
+The upscaler-quality row only matters when a scaling method (TSR, FSR, DLSS, XeSS, MetalFX or Spatial) is active. Auto picks the mode from the output resolution (Quality at 1080p, Balanced at 1440p, Performance at 4K) and shifts it toward Performance on the lower tiers, so at 1080p Low renders at Performance and Medium at Balanced, the modes these tiers fixed before; with `r.Upscaler.AutoQuality 0` they use those fixed modes at every resolution. TAA and None render at full resolution. An explicit `r.RenderScale` wins over the quality mode.
 </Callout>
 
 ## Scalability groups

@@ -580,10 +580,17 @@
 						},
 						{
 							"kind": "method",
+							"name": "RemoveComponent",
+							"signature": "bool RemoveComponent(MActorComponent* component)",
+							"doc": "Detach a component added at run time (a script component a designer\nremoved): it leaves the list and loses its owner; the caller ends its\nplay and lets it be collected. False when it was not this actor's.",
+							"line": 233
+						},
+						{
+							"kind": "method",
 							"name": "CreateDefaultSubobject",
 							"signature": "template<typename T> T* CreateDefaultSubobject(const char* name)",
 							"doc": "Convenience for subclass constructors. Constructs a T, sets\nits name, attaches to this actor, returns the raw pointer.\n\nclass APhysicsBox : public AActor {\nAPhysicsBox() {\nauto* root = CreateDefaultSubobject<MSceneComponent>(\"Root\");\nSetRootComponent(root);\nauto* mesh = CreateDefaultSubobject<MStaticMeshComponent>(\"Mesh\");\nmesh->AttachTo(root);",
-							"line": 241
+							"line": 246
 						},
 						{
 							"kind": "method",
@@ -591,21 +598,21 @@
 							"signature": "static void InitDefaultSubobjectConfig(MActorComponent* component)",
 							"static": true,
 							"doc": "The INI's MPROPERTY(Config) values from the component class's default\nobject: a constructor-made component is never cloned from a default,\nso this is the only way a project's Game.ini reaches it.",
-							"line": 255
+							"line": 260
 						},
 						{
 							"kind": "method",
 							"name": "FindComponent",
 							"signature": "template<typename T> T* FindComponent() const",
 							"doc": "Find first component of the given type. Returns nullptr if not\nattached. O(N) in component count — fine for typical actors\nwith <10 components.",
-							"line": 260
+							"line": 265
 						},
 						{
 							"kind": "method",
 							"name": "GetComponents",
 							"signature": "const std::vector<MActorComponent*>& GetComponents() const",
 							"doc": "Read-only access to the full component list (for iteration).",
-							"line": 271
+							"line": 276
 						},
 						{
 							"kind": "method",
@@ -613,137 +620,137 @@
 							"signature": "MActorComponent* GetComponentByClass(const std::string& className) const",
 							"reflected": true,
 							"doc": "The reflected component lookups: by class name (the component's own\nclass or any ancestor, so \"MSceneComponent\" finds a mesh component)\nand by the name it was created under. Nothing when absent.",
-							"line": 278
+							"line": 283
 						},
 						{
 							"kind": "method",
 							"name": "GetComponentByName",
 							"signature": "MActorComponent* GetComponentByName(const std::string& name) const",
 							"reflected": true,
-							"line": 281
+							"line": 286
 						},
 						{
 							"kind": "method",
 							"name": "GetComponentCount",
 							"signature": "int32_t GetComponentCount() const",
 							"reflected": true,
-							"line": 284
+							"line": 289
 						},
 						{
 							"kind": "method",
 							"name": "GetRootComponent",
 							"signature": "MSceneComponent* GetRootComponent() const",
 							"doc": "The scene root — the component whose transform is the actor's\ntransform. Always an MSceneComponent. nullptr for actors that\nare pure logic (controllers / managers).",
-							"line": 293
+							"line": 298
 						},
 						{
 							"kind": "method",
 							"name": "SetRootComponent",
 							"signature": "void SetRootComponent(MSceneComponent* root)",
-							"line": 296
+							"line": 301
 						},
 						{
 							"kind": "method",
 							"name": "GetWorld",
 							"signature": "MWorld* GetWorld() const",
 							"doc": "World",
-							"line": 299
+							"line": 304
 						},
 						{
 							"kind": "method",
 							"name": "SetWorld",
 							"signature": "void SetWorld(MWorld* world)",
 							"doc": "Out-of-line: the TObjectPtr store barrier needs the complete type,\nand MWorld is only forward-declared here.",
-							"line": 304
+							"line": 309
 						},
 						{
 							"kind": "method",
 							"name": "GetBackingEntity",
 							"signature": "EntityID GetBackingEntity() const",
 							"doc": "ECS bridge\nBacking entity in the scene's ECS World. Created by\nMWorld::RegisterActor when the world has an ECS world attached;\nINVALID_ENTITY otherwise (pure-logic worlds, tests). Components\nmirror render/physics state onto it so the flat systems\n(SceneRenderer's MeshRenderer iteration, TransformSystem) see\nactors without knowing about the OO layer. MWorld::Tick syncs\nthe root component transform into the entity each frame.",
-							"line": 314
+							"line": 319
 						},
 						{
 							"kind": "method",
 							"name": "SetBackingEntity",
 							"signature": "void SetBackingEntity(EntityID id)",
-							"line": 317
+							"line": 322
 						},
 						{
 							"kind": "method",
 							"name": "PullFromBackingEntity",
 							"signature": "void PullFromBackingEntity(World* ecs)",
 							"doc": "Adoption counterpart to the OnRegister push: seed the root transform\nfrom the entity's TransformComponent and fan PullFromMirror out to\nevery component, so re-publishing the mirror reproduces the scene's\nauthored values instead of class defaults.",
-							"line": 325
+							"line": 330
 						},
 						{
 							"kind": "method",
 							"name": "AddTag",
 							"signature": "void AddTag(FGameplayTag tag)",
 							"doc": "Gameplay tags\nHierarchical identifiers (Damage.Physical, Faction.Enemy.Goblin)\nused for AI behaviour predicates, ability requirements,\ngameplay filters. HasTag uses hierarchical matching — a query\nfor \"Damage\" matches an actor tagged \"Damage.Physical.Slash\".\n\nStorage is a vector of canonical dot-paths rather than a\nTSet<FGameplayTag>, which is what makes the field reflectable and\ntherefore serialized: MHT maps std::vector<T> to PropertyType::Array\nand has no set support at all, and FGameplayTag itself is not a\nreflected struct (its only member is an FName, which is not a\nPropertyType either). A vector of strings needs nothing new from\nthe header tool, round-trips through the existing scene writer and\nshows up in the inspector. Uniqueness is enforced in AddTag; actors\ncarry a handful of tags, so the linear scan is not worth a set.",
-							"line": 342
+							"line": 347
 						},
 						{
 							"kind": "method",
 							"name": "RemoveTag",
 							"signature": "void RemoveTag(FGameplayTag tag)",
-							"line": 343
+							"line": 348
 						},
 						{
 							"kind": "method",
 							"name": "HasTag",
 							"signature": "bool HasTag(FGameplayTag tag) const",
-							"line": 344
+							"line": 349
 						},
 						{
 							"kind": "method",
 							"name": "HasTagExact",
 							"signature": "bool HasTagExact(FGameplayTag tag) const",
-							"line": 345
+							"line": 350
 						},
 						{
 							"kind": "method",
 							"name": "HasAnyTag",
 							"signature": "bool HasAnyTag(const TSet<FGameplayTag>& s) const",
-							"line": 346
+							"line": 351
 						},
 						{
 							"kind": "method",
 							"name": "GetTags",
 							"signature": "const std::vector<std::string>& GetTags() const noexcept",
-							"line": 347
+							"line": 352
 						},
 						{
 							"kind": "method",
 							"name": "GetArchetypeName",
 							"signature": "const std::string& GetArchetypeName() const noexcept",
 							"doc": "The template (archetype) this instance derives its defaults from, or\nempty when it derives straight from the class CDO. When set, the scene\nwriter diffs the instance against the named template instead of the CDO\n(instance -> template -> CDO -> class), so raising a template default\nreaches every instance of it that never overrode the field.",
-							"line": 356
+							"line": 361
 						},
 						{
 							"kind": "method",
 							"name": "SetArchetypeName",
 							"signature": "void SetArchetypeName(const std::string& name)",
-							"line": 359
+							"line": 364
 						},
 						{
 							"kind": "method",
 							"name": "AddTickPrerequisite",
 							"signature": "void AddTickPrerequisite(AActor* prerequisite)",
 							"doc": "Tick prerequisites\nThis actor's Tick runs only after every prerequisite in the SAME\ntick group has ticked this frame; prerequisites in other groups\nare already ordered by the group sequence. Cycles degrade to\nregistration order. Dead prerequisites are ignored and pruned.",
-							"line": 368
+							"line": 373
 						},
 						{
 							"kind": "method",
 							"name": "RemoveTickPrerequisite",
 							"signature": "void RemoveTickPrerequisite(AActor* prerequisite)",
-							"line": 373
+							"line": 378
 						},
 						{
 							"kind": "method",
 							"name": "GetTickPrerequisites",
 							"signature": "const std::vector<TWeakObjectPtr<AActor>>& GetTickPrerequisites() const noexcept",
-							"line": 381
+							"line": 386
 						}
 					]
 				},
@@ -9862,6 +9869,81 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/FeetAnchoredBody.h",
+			"include": "Game/FeetAnchoredBody.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FFeetAnchoredBody",
+					"namespace": "Mowo",
+					"doc": "The placeholder body of anything whose origin is its feet: a character\ncontroller (its Jolt capsule is lifted by half its height), a nav agent\n(Detour writes the navmesh surface point into its position). The built-in\n\"capsule\" and \"cylinder\" primitives are centred on their origin and two\nmetres tall, so drawn as they are such a body stood half underground at the\nwrong size. FitAll rebuilds them at the body's radius and height with their\nbase on the origin every frame the size changed, and lifts any other\nprimitive so its lowest point rests on the feet. Mesh assets keep their own\npivot: an imported character (the mannequin) is authored feet-down already.",
+					"line": 25,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "FVisit",
+							"signature": "using FVisit = void (*)(void* context, EntityID entity, float radius, float height)",
+							"line": 27
+						},
+						{
+							"kind": "alias",
+							"name": "FSource",
+							"signature": "using FSource = void (*)(World& world, FVisit visit, void* context)",
+							"doc": "A module above Game (AINavigation) reports the feet-anchored entities it\nowns through this; character controllers are built in. Process-lifetime\nand captureless, the FAISignals rule. An entity reported twice keeps the\nlast size, and the built-in source runs last.",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "AddSource",
+							"signature": "static void AddSource(FSource source)",
+							"static": true,
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "IsSizedPrimitive",
+							"signature": "static bool IsSizedPrimitive(const std::string& meshType)",
+							"static": true,
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "LocalTransform",
+							"signature": "static Mat4 LocalTransform(const std::string& meshType, float radius, float height, const GPUMesh* mesh)",
+							"static": true,
+							"doc": "What the body of this size draws with, relative to the entity origin.",
+							"line": 39
+						},
+						{
+							"kind": "method",
+							"name": "MatchesSize",
+							"signature": "static bool MatchesSize(const GPUMesh& mesh, float radius, float height)",
+							"static": true,
+							"doc": "True when the mesh already has the extents of a primitive of this size.",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Fit",
+							"signature": "static void Fit(MeshRendererComponent& mesh, float radius, float height)",
+							"static": true,
+							"doc": "Fits one entity's renderer; a mesh is only rebuilt when the renderer is\nup and the entity already draws the primitive, so the material the\nhydration pass hands it is never skipped.",
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "FitAll",
+							"signature": "static void FitAll(World& world)",
+							"static": true,
+							"line": 49
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Game/Public/Game/GameplayInterfaces.h",
 			"include": "Game/GameplayInterfaces.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -10623,17 +10705,24 @@
 						},
 						{
 							"kind": "method",
+							"name": "RefreshMirror",
+							"signature": "virtual void RefreshMirror()",
+							"doc": "Re-publish the fields a component mirrors onto the ECS (its light, mesh,\naudio, ...). Each mirroring component overrides it; the base has nothing\nto push. Virtual so a writer that only knows the component — a script's\nproperty setter — can refresh what the renderer reads after a raw write.",
+							"line": 75
+						},
+						{
+							"kind": "method",
 							"name": "GetOwner",
 							"signature": "AActor* GetOwner() const",
 							"doc": "Owning actor — set by AActor::AddComponent when the component\nis attached. nullptr for unattached/orphaned components.",
-							"line": 73
+							"line": 80
 						},
 						{
 							"kind": "method",
 							"name": "SetOwner",
 							"signature": "void SetOwner(AActor* owner)",
 							"doc": "Out-of-line: the TObjectPtr store barrier needs the complete type,\nand AActor is only forward-declared here.",
-							"line": 78
+							"line": 85
 						},
 						{
 							"kind": "field",
@@ -10641,7 +10730,7 @@
 							"signature": "bool tickEnabled = true",
 							"reflected": true,
 							"doc": "Tick gate — set to false to skip TickComponent without\ndisabling the component. Cheaper than detaching/reattaching\nfor things that only sometimes need ticking (e.g. an AI\ncomponent that's only active while the player is nearby).",
-							"line": 84
+							"line": 91
 						},
 						{
 							"kind": "field",
@@ -10649,7 +10738,7 @@
 							"signature": "float tickInterval = 0.0f",
 							"reflected": true,
 							"doc": "Tick pacing (UE TickInterval): 0 = every frame. When set, the owning\nactor accumulates time and TickComponent fires with the ACCUMULATED\ndelta once the interval elapses.",
-							"line": 91
+							"line": 98
 						},
 						{
 							"kind": "field",
@@ -10657,14 +10746,14 @@
 							"signature": "int32_t tickGroupOverride = -1",
 							"reflected": true,
 							"doc": "Per-component tick group override. -1 (default) = tick inside the\nowner's Tick, in the owner's group. 0..3 = AActor::ETickGroup values\n(PrePhysics/DuringPhysics/PostPhysics/PostUpdateWork): the world then\nticks this component in THAT group's pass instead — after every\nactor of the group has ticked. An int rather than the enum so this\nheader keeps its forward-declared AActor.",
-							"line": 101
+							"line": 108
 						},
 						{
 							"kind": "method",
 							"name": "AdvanceTickAccumulator",
 							"signature": "bool AdvanceTickAccumulator(float deltaSeconds, float& outDelta)",
 							"doc": "Called by the owning actor's Tick: applies tickInterval pacing.\nReturns false to skip this frame; on true, outDelta carries the\naccumulated dt to tick with.",
-							"line": 108
+							"line": 115
 						}
 					]
 				}
@@ -10984,7 +11073,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"doc": "Re-push the config fields onto the mirrored component (volume /\npitch edits after OnRegister won't apply otherwise).",
 							"line": 45
 						},
@@ -11115,7 +11204,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"doc": "Re-push the fields below onto the mirrored component (edits\nafter OnRegister won't apply otherwise).",
 							"line": 33
 						},
@@ -11357,9 +11446,15 @@
 						},
 						{
 							"kind": "method",
+							"name": "PullFromMirror",
+							"signature": "void PullFromMirror(World* ecs, EntityID entity) override",
+							"line": 34
+						},
+						{
+							"kind": "method",
 							"name": "TickComponent",
 							"signature": "void TickComponent(float deltaSeconds) override",
-							"line": 34
+							"line": 35
 						},
 						{
 							"kind": "method",
@@ -11367,14 +11462,14 @@
 							"signature": "void Jump()",
 							"reflected": true,
 							"doc": "Queue a jump — applied next tick if grounded.",
-							"line": 37
+							"line": 38
 						},
 						{
 							"kind": "method",
 							"name": "StopJumping",
 							"signature": "void StopJumping()",
 							"reflected": true,
-							"line": 43
+							"line": 44
 						},
 						{
 							"kind": "method",
@@ -11382,28 +11477,28 @@
 							"signature": "int32_t ApplyDash(const Vec3& velocity, float duration)",
 							"reflected": true,
 							"doc": "Root-motion sources: predicted, replayed movement that gameplay applies\nover time (FRootMotionSource). Each returns the source id.",
-							"line": 51
+							"line": 52
 						},
 						{
 							"kind": "method",
 							"name": "ApplyJumpForce",
 							"signature": "int32_t ApplyJumpForce(const Vec3& direction, float distance, float height, float duration)",
 							"reflected": true,
-							"line": 54
+							"line": 55
 						},
 						{
 							"kind": "method",
 							"name": "ApplyMoveTo",
 							"signature": "int32_t ApplyMoveTo(const Vec3& target, float duration)",
 							"reflected": true,
-							"line": 57
+							"line": 58
 						},
 						{
 							"kind": "method",
 							"name": "StopRootMotionSource",
 							"signature": "void StopRootMotionSource(int32_t sourceId)",
 							"reflected": true,
-							"line": 60
+							"line": 61
 						},
 						{
 							"kind": "method",
@@ -11411,114 +11506,114 @@
 							"signature": "void SetCustomMovementMode(int32_t customMode)",
 							"reflected": true,
 							"doc": "Switches to a game-registered movement mode (FCustomMovementModes);\nan unregistered id falls back to Walking/Falling on the next step.",
-							"line": 66
+							"line": 67
 						},
 						{
 							"kind": "method",
 							"name": "ClearCustomMovementMode",
 							"signature": "void ClearCustomMovementMode()",
 							"reflected": true,
-							"line": 69
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "Sprint",
 							"signature": "void Sprint(bool enable)",
-							"line": 73
+							"line": 74
 						},
 						{
 							"kind": "method",
 							"name": "SetSprinting",
 							"signature": "void SetSprinting(bool enable)",
 							"reflected": true,
-							"line": 76
+							"line": 77
 						},
 						{
 							"kind": "method",
 							"name": "IsSprinting",
 							"signature": "bool IsSprinting() const",
 							"reflected": true,
-							"line": 81
+							"line": 82
 						},
 						{
 							"kind": "method",
 							"name": "Crouch",
 							"signature": "void Crouch()",
 							"reflected": true,
-							"line": 87
+							"line": 88
 						},
 						{
 							"kind": "method",
 							"name": "UnCrouch",
 							"signature": "void UnCrouch()",
 							"reflected": true,
-							"line": 92
+							"line": 93
 						},
 						{
 							"kind": "method",
 							"name": "SetCrouched",
 							"signature": "void SetCrouched(bool crouched)",
-							"line": 97
+							"line": 98
 						},
 						{
 							"kind": "method",
 							"name": "SetCrouching",
 							"signature": "void SetCrouching(bool crouched)",
-							"line": 100
+							"line": 101
 						},
 						{
 							"kind": "method",
 							"name": "IsCrouched",
 							"signature": "bool IsCrouched() const",
 							"reflected": true,
-							"line": 103
+							"line": 104
 						},
 						{
 							"kind": "method",
 							"name": "SetMovementInput",
 							"signature": "void SetMovementInput(const Vec3& worldDirection)",
 							"reflected": true,
-							"line": 109
+							"line": 110
 						},
 						{
 							"kind": "method",
 							"name": "ClearMovementInput",
 							"signature": "void ClearMovementInput()",
 							"reflected": true,
-							"line": 115
+							"line": 116
 						},
 						{
 							"kind": "method",
 							"name": "GetMovementMode",
 							"signature": "EMovementMode GetMovementMode() const",
-							"line": 122
+							"line": 123
 						},
 						{
 							"kind": "method",
 							"name": "GetMovementModeName",
 							"signature": "std::string GetMovementModeName() const",
 							"reflected": true,
-							"line": 123
+							"line": 124
 						},
 						{
 							"kind": "method",
 							"name": "IsCrouchedShape",
 							"signature": "bool IsCrouchedShape() const",
-							"line": 127
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "IsGrounded",
 							"signature": "bool IsGrounded() const",
 							"reflected": true,
-							"line": 129
+							"line": 130
 						},
 						{
 							"kind": "method",
 							"name": "GetVelocity",
 							"signature": "Vec3 GetVelocity() const",
 							"reflected": true,
-							"line": 132
+							"line": 133
 						},
 						{
 							"kind": "field",
@@ -11526,21 +11621,21 @@
 							"signature": "float maxWalkSpeed = 4.5f",
 							"reflected": true,
 							"doc": "Tuning",
-							"line": 137
+							"line": 138
 						},
 						{
 							"kind": "field",
 							"name": "sprintSpeedMultiplier",
 							"signature": "float sprintSpeedMultiplier = 1.6f",
 							"reflected": true,
-							"line": 141
+							"line": 142
 						},
 						{
 							"kind": "field",
 							"name": "crouchSpeedMultiplier",
 							"signature": "float crouchSpeedMultiplier = 0.45f",
 							"reflected": true,
-							"line": 145
+							"line": 146
 						},
 						{
 							"kind": "field",
@@ -11548,14 +11643,14 @@
 							"signature": "float jumpVelocity = 5.0f",
 							"reflected": true,
 							"doc": "m/s upward",
-							"line": 149
+							"line": 150
 						},
 						{
 							"kind": "field",
 							"name": "airControl",
 							"signature": "float airControl = 0.25f",
 							"reflected": true,
-							"line": 153
+							"line": 154
 						},
 						{
 							"kind": "field",
@@ -11563,7 +11658,7 @@
 							"signature": "float gravity = -9.81f",
 							"reflected": true,
 							"doc": "m/s², applied by the character controller",
-							"line": 157
+							"line": 158
 						},
 						{
 							"kind": "field",
@@ -11571,7 +11666,7 @@
 							"signature": "bool fixedStepRootMotion = true",
 							"reflected": true,
 							"doc": "Root motion is sampled on the physics fixed step rather than the render\nframe, so the capsule's displacement per step is the same at 30, 60 or\n144 Hz — the pose still evaluates per frame. Off = the per-frame delta\nAnimationSystem publishes drives the capsule as before.",
-							"line": 165
+							"line": 166
 						},
 						{
 							"kind": "field",
@@ -11579,21 +11674,21 @@
 							"signature": "float capsuleRadius = 0.3f",
 							"reflected": true,
 							"doc": "Capsule — pushed into the mirrored CharacterControllerComponent\nat OnRegister.",
-							"line": 171
+							"line": 172
 						},
 						{
 							"kind": "field",
 							"name": "capsuleHeight",
 							"signature": "float capsuleHeight = 1.8f",
 							"reflected": true,
-							"line": 175
+							"line": 176
 						},
 						{
 							"kind": "field",
 							"name": "stepHeight",
 							"signature": "float stepHeight = 0.35f",
 							"reflected": true,
-							"line": 179
+							"line": 180
 						}
 					]
 				}
@@ -11743,7 +11838,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 27
 						},
 						{
@@ -11820,7 +11915,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 24
 						},
 						{
@@ -12037,7 +12132,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 20
 						},
 						{
@@ -12677,7 +12772,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 25
 						},
 						{
@@ -13860,7 +13955,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 26
 						},
 						{
@@ -13929,7 +14024,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"doc": "Ensure-only mirror: creates the ECS FPhysicsInteractableComponent plus\na dynamic RigidBody and box Collider on the backing entity. Tuning\n(type enum, angles, thresholds) lives on the ECS component, which the\ndetails panel edits directly.",
 							"line": 24
 						}
@@ -14186,7 +14281,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 21
 						},
 						{
@@ -14385,7 +14480,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 26
 						},
 						{
@@ -14548,7 +14643,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 30
 						},
 						{
@@ -14695,7 +14790,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 26
 						},
 						{
@@ -14863,7 +14958,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 27
 						},
 						{
@@ -15757,7 +15852,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 20
 						},
 						{
@@ -15973,7 +16068,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 28
 						},
 						{
@@ -16063,7 +16158,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 22
 						},
 						{
@@ -16279,7 +16374,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 25
 						},
 						{
@@ -16461,7 +16556,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"doc": "Re-push meshType/meshPath/visible onto the mirrored\nMeshRendererComponent (including hydration). No-op before\nOnRegister or without a backing entity.",
 							"line": 62
 						},
@@ -16844,7 +16939,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 25
 						},
 						{
@@ -17036,7 +17131,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 27
 						},
 						{
@@ -17193,7 +17288,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 26
 						},
 						{
@@ -17283,7 +17378,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 19
 						},
 						{
@@ -17387,7 +17482,7 @@
 						{
 							"kind": "method",
 							"name": "RefreshMirror",
-							"signature": "void RefreshMirror()",
+							"signature": "void RefreshMirror() override",
 							"line": 24
 						},
 						{
@@ -19005,6 +19100,417 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/ScriptVariableHost.h",
+			"include": "Game/ScriptVariableHost.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FScriptVariableDesc",
+					"namespace": "Mowo",
+					"line": 46,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "Type",
+							"signature": "FMValueType Type = FMValueType::Void",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "Container",
+							"signature": "VisualScriptContainer Container = VisualScriptContainer::None",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "Default",
+							"signature": "VisualScriptValue Default",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "Meta",
+							"signature": "FScriptVariableMeta Meta",
+							"line": 51
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FScriptActionDesc",
+					"namespace": "Mowo",
+					"line": 54,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "DisplayName",
+							"signature": "std::string DisplayName",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "Tooltip",
+							"signature": "std::string Tooltip",
+							"line": 57
+						},
+						{
+							"kind": "field",
+							"name": "Category",
+							"signature": "std::string Category",
+							"line": 58
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "IScriptVariableHost",
+					"namespace": "Mowo",
+					"line": 61,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IScriptVariableHost",
+							"signature": "virtual ~IScriptVariableHost() = default",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "GetHostKey",
+							"signature": "virtual std::string GetHostKey() const = 0",
+							"doc": "Unique among the hosts of one actor: \"\" for the actor's own Visual Script\nvariables, \"wolang\" for a script actor, \"wolang:<component>\" for a script\ncomponent. Undo and the Details rows address the host by it.",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "GetSectionName",
+							"signature": "virtual std::string GetSectionName() const = 0",
+							"doc": "The Details section title (\"Script Variables (Enemy)\").",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "GetSerializedNodeName",
+							"signature": "virtual std::string GetSerializedNodeName() const = 0",
+							"doc": "The child of the actor's MDF node the overrides are written to. Empty when\nthe host serializes itself elsewhere.",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "CollectVariables",
+							"signature": "virtual void CollectVariables(std::vector<FScriptVariableDesc>& out) const = 0",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "FindVariable",
+							"signature": "virtual const VisualScriptValue* FindVariable(const std::string& name) const = 0",
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "SetVariable",
+							"signature": "virtual bool SetVariable(const std::string& name, const VisualScriptValue& value) = 0",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "CollectActions",
+							"signature": "virtual void CollectActions(std::vector<FScriptActionDesc>& out) const",
+							"doc": "Functions the declaration marked as Details buttons. An action runs on\nthe instance the panel shows (the edited level outside Play).",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "InvokeAction",
+							"signature": "virtual bool InvokeAction(const std::string& name)",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "GetRedirectTypeName",
+							"signature": "virtual std::string GetRedirectTypeName() const",
+							"doc": "The type a Config/Redirects.ini PropertyRedirects line names for this\nhost's variables (`OldName=\"Enemy.hp\",NewName=\"Enemy.health\"`), so a\nrenamed field keeps the values levels stored under the old name. Empty:\nno redirects apply.",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "FindDesc",
+							"signature": "const FScriptVariableDesc* FindDesc(const std::string& name, std::vector<FScriptVariableDesc>& scratch) const",
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "PassesShowIf",
+							"signature": "bool PassesShowIf(const FScriptVariableDesc& desc) const",
+							"doc": "Whether ShowIf lets the variable's row show: a missing or non-bool\ncondition does not hide it.",
+							"line": 104
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FScriptVariableHosts",
+					"namespace": "Mowo",
+					"line": 107,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "FResolver",
+							"signature": "using FResolver = void (*)(AActor* actor, std::vector<IScriptVariableHost*>& out)",
+							"line": 109
+						},
+						{
+							"kind": "method",
+							"name": "AddResolver",
+							"signature": "static void AddResolver(FResolver resolver)",
+							"static": true,
+							"doc": "Called once per module that owns hosts; idempotent per function.",
+							"line": 112
+						},
+						{
+							"kind": "method",
+							"name": "RemoveResolver",
+							"signature": "static void RemoveResolver(FResolver resolver)",
+							"static": true,
+							"line": 113
+						},
+						{
+							"kind": "method",
+							"name": "Collect",
+							"signature": "static std::vector<IScriptVariableHost*> Collect(AActor* actor)",
+							"static": true,
+							"line": 115
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "static IScriptVariableHost* Find(AActor* actor, const std::string& hostKey)",
+							"static": true,
+							"line": 116
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FScriptValueMdf",
+					"namespace": "Mowo",
+					"line": 119,
+					"members": [
+						{
+							"kind": "method",
+							"name": "ToMdf",
+							"signature": "static MDF::MdfValue ToMdf(const VisualScriptValue& value, const FScriptVariableMeta* meta = nullptr)",
+							"static": true,
+							"doc": "Containers become MDF arrays (a map: an array of [key, value] pairs). An\nObject value writes its reference: \"actor:<uuid>\" for a placed actor (a\nlive object is encoded through its backing entity), the asset path as a\ntyped asset reference when the variable is an asset reference.",
+							"line": 125
+						},
+						{
+							"kind": "method",
+							"name": "FromMdf",
+							"signature": "static VisualScriptValue FromMdf(const MDF::MdfValue& mdf, FMValueType type, VisualScriptContainer container = VisualScriptContainer::None)",
+							"static": true,
+							"line": 126
+						},
+						{
+							"kind": "method",
+							"name": "WriteOverrides",
+							"signature": "static bool WriteOverrides(const IScriptVariableHost& host, MDF::MdfNode& node)",
+							"static": true,
+							"doc": "The overrides of a host (values that differ from their declared\ndefault) into `node`, and back. Unknown keys on read are skipped.",
+							"line": 130
+						},
+						{
+							"kind": "method",
+							"name": "ApplyOverrides",
+							"signature": "static void ApplyOverrides(IScriptVariableHost& host, const MDF::MdfNode& node)",
+							"static": true,
+							"line": 131
+						},
+						{
+							"kind": "method",
+							"name": "SameValue",
+							"signature": "static bool SameValue(const VisualScriptValue& a, const VisualScriptValue& b)",
+							"static": true,
+							"doc": "Value equality for script variables: VisualScriptValue::Equals compares\nobject values by the live object they resolve to, so two unresolved\nreferences (any two, before Play) would read as equal and an actor picked\nin Details as \"still the default\". References compare by what they name.",
+							"line": 137
+						},
+						{
+							"kind": "method",
+							"name": "ResolveActor",
+							"signature": "static AActor* ResolveActor(const VisualScriptValue& value, MWorld* world)",
+							"static": true,
+							"doc": "The live actor an Object value names in `world`, or null.",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "MakeActorRef",
+							"signature": "static VisualScriptValue MakeActorRef(const AActor* actor)",
+							"static": true,
+							"doc": "An Object value that names `actor` by its stable id.",
+							"line": 143
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FScriptEventListener",
+					"namespace": "Mowo",
+					"doc": "An inspector event's listeners and the call that fires them. A listener is\nan actor (by stable id, so it follows the actor into the PIE copy) and one\nof its class's reflected functions taking nothing or one bool, number or\ntext, with the constant argument Details stored.",
+					"line": 150,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Target",
+							"signature": "std::string Target",
+							"line": 151
+						},
+						{
+							"kind": "field",
+							"name": "Function",
+							"signature": "std::string Function",
+							"line": 152
+						},
+						{
+							"kind": "field",
+							"name": "Argument",
+							"signature": "std::string Argument",
+							"line": 153
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FScriptEvent",
+					"namespace": "Mowo",
+					"line": 156,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Parse",
+							"signature": "static std::vector<FScriptEventListener> Parse(const std::string& text)",
+							"static": true,
+							"line": 158
+						},
+						{
+							"kind": "method",
+							"name": "Format",
+							"signature": "static std::string Format(const std::vector<FScriptEventListener>& listeners)",
+							"static": true,
+							"line": 159
+						},
+						{
+							"kind": "method",
+							"name": "Fire",
+							"signature": "static int32_t Fire(const std::string& text, MWorld* world)",
+							"static": true,
+							"doc": "Calls every listener whose actor exists in `world` and whose class has\nthe function. Answers how many were called.",
+							"line": 163
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FScriptClassBinders",
+					"namespace": "Mowo",
+					"line": 166,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "FBinder",
+							"signature": "using FBinder = void (*)(AActor* actor, MClass* cls)",
+							"line": 168
+						},
+						{
+							"kind": "method",
+							"name": "Add",
+							"signature": "static void Add(FBinder binder)",
+							"static": true,
+							"line": 170
+						},
+						{
+							"kind": "method",
+							"name": "Remove",
+							"signature": "static void Remove(FBinder binder)",
+							"static": true,
+							"line": 171
+						},
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "static void Run(AActor* actor, MClass* cls)",
+							"static": true,
+							"doc": "Every binder, in the order they were added; MWorld::SpawnActorByClass\nruns them after the class default object was cloned onto the instance and\nbefore it registers.",
+							"line": 176
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FActorSerializationHooks",
+					"namespace": "Mowo",
+					"doc": "Per-instance structure a module keeps on the actor's MDF node beside the\nvariable values: the script components a designer added in Details. Writers\nrun after the actor's own properties; readers run on load before any host's\noverrides apply, so the component a value belongs to exists by then.",
+					"line": 183,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "FWriter",
+							"signature": "using FWriter = void (*)(AActor* actor, MDF::MdfNode& actorNode)",
+							"line": 185
+						},
+						{
+							"kind": "alias",
+							"name": "FReader",
+							"signature": "using FReader = void (*)(AActor* actor, const MDF::MdfNode& actorNode)",
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "Add",
+							"signature": "static void Add(FWriter writer, FReader reader)",
+							"static": true,
+							"line": 188
+						},
+						{
+							"kind": "method",
+							"name": "Remove",
+							"signature": "static void Remove(FWriter writer, FReader reader)",
+							"static": true,
+							"line": 189
+						},
+						{
+							"kind": "method",
+							"name": "RunWriters",
+							"signature": "static void RunWriters(AActor* actor, MDF::MdfNode& actorNode)",
+							"static": true,
+							"line": 191
+						},
+						{
+							"kind": "method",
+							"name": "RunReaders",
+							"signature": "static void RunReaders(AActor* actor, const MDF::MdfNode& actorNode)",
+							"static": true,
+							"line": 192
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Game/Public/Game/SplitScreenLayout.h",
 			"include": "Game/SplitScreenLayout.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -19153,26 +19659,27 @@
 					"kind": "class",
 					"name": "FVisualScriptRuntime",
 					"namespace": "Mowo",
-					"line": 36,
+					"bases": "public IScriptVariableHost",
+					"line": 37,
 					"members": [
 						{
 							"kind": "method",
 							"name": "FVisualScriptRuntime",
 							"signature": "FVisualScriptRuntime(AActor* owner, const char* nativeClassName, bool gateTick)",
 							"doc": "`nativeClassName` is the backing class whose reflected functions a graph\ncalls on self. `gateTick` lets the runtime switch the owner's tick off when\nthe class has nothing to tick; a backing class whose native base ticks for\nits own reasons (character movement, a controller) passes false and the\nruntime only ever turns ticking on.",
-							"line": 43
+							"line": 44
 						},
 						{
 							"kind": "method",
 							"name": "FVisualScriptRuntime",
 							"signature": "FVisualScriptRuntime(const FVisualScriptRuntime&) = delete",
-							"line": 45
+							"line": 46
 						},
 						{
 							"kind": "method",
 							"name": "operator=",
 							"signature": "FVisualScriptRuntime& operator=(const FVisualScriptRuntime&) = delete",
-							"line": 46
+							"line": 47
 						},
 						{
 							"kind": "method",
@@ -19180,14 +19687,14 @@
 							"signature": "static FVisualScriptRuntime* Of(MObject* object)",
 							"static": true,
 							"doc": "The runtime of a visual-script-backed object, or null for anything else.",
-							"line": 49
+							"line": 50
 						},
 						{
 							"kind": "method",
 							"name": "Of",
 							"signature": "static const FVisualScriptRuntime* Of(const MObject* object)",
 							"static": true,
-							"line": 50
+							"line": 51
 						},
 						{
 							"kind": "method",
@@ -19195,185 +19702,222 @@
 							"signature": "static void InstallHooks()",
 							"static": true,
 							"doc": "Hooks the backing classes cannot do without: the RPC receive dispatch, the\nspawn-pin applier and the visual-script-function RPC invoker. Idempotent.",
-							"line": 54
+							"line": 55
 						},
 						{
 							"kind": "method",
 							"name": "BindVisualScriptClass",
 							"signature": "void BindVisualScriptClass(MClass* synthetic, VisualScriptClass* def)",
-							"line": 56
+							"line": 57
 						},
 						{
 							"kind": "method",
 							"name": "IsVisualScriptBound",
 							"signature": "bool IsVisualScriptBound() const",
-							"line": 57
+							"line": 58
 						},
 						{
 							"kind": "method",
 							"name": "SyntheticClass",
 							"signature": "MClass* SyntheticClass() const",
-							"line": 60
+							"line": 61
 						},
 						{
 							"kind": "method",
 							"name": "NativeClass",
 							"signature": "MClass* NativeClass() const",
-							"line": 63
+							"line": 64
 						},
 						{
 							"kind": "method",
 							"name": "Owner",
 							"signature": "AActor* Owner() const",
-							"line": 64
+							"line": 65
 						},
 						{
 							"kind": "method",
 							"name": "OnConstruct",
 							"signature": "void OnConstruct()",
 							"doc": "Lifecycle, called by the host after its native base's own.",
-							"line": 69
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "BeginPlay",
 							"signature": "void BeginPlay()",
-							"line": 70
+							"line": 71
 						},
 						{
 							"kind": "method",
 							"name": "Tick",
 							"signature": "void Tick(float deltaSeconds)",
-							"line": 71
+							"line": 72
 						},
 						{
 							"kind": "method",
 							"name": "EndPlay",
 							"signature": "void EndPlay()",
-							"line": 72
+							"line": 73
 						},
 						{
 							"kind": "method",
 							"name": "Destroyed",
 							"signature": "void Destroyed()",
-							"line": 73
+							"line": 74
 						},
 						{
 							"kind": "method",
 							"name": "OnDamage",
 							"signature": "void OnDamage(float amount, AActor* instigator)",
-							"line": 74
+							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "IsDead",
 							"signature": "bool IsDead() const",
-							"line": 75
+							"line": 76
 						},
 						{
 							"kind": "method",
 							"name": "NotifyHit",
 							"signature": "void NotifyHit(AActor* other, const Vec3& location, const Vec3& normal, float impulse)",
-							"line": 76
+							"line": 77
 						},
 						{
 							"kind": "method",
 							"name": "CallVisualScriptFunction",
 							"signature": "bool CallVisualScriptFunction(const std::string& functionName, const std::vector<VisualScriptValue>& args, VisualScriptValue* ret)",
-							"line": 78
+							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "AdvanceLatents",
 							"signature": "void AdvanceLatents(float dt)",
-							"line": 79
+							"line": 80
 						},
 						{
 							"kind": "method",
 							"name": "HasPendingLatents",
 							"signature": "bool HasPendingLatents() const",
-							"line": 80
+							"line": 81
 						},
 						{
 							"kind": "method",
 							"name": "ReceivePin",
 							"signature": "void ReceivePin(const std::string& pin, const VisualScriptValue& payload)",
-							"line": 83
+							"line": 84
 						},
 						{
 							"kind": "method",
 							"name": "FindVar",
 							"signature": "const VisualScriptValue* FindVar(const std::string& name) const",
-							"line": 85
+							"line": 86
 						},
 						{
 							"kind": "method",
 							"name": "SetVar",
 							"signature": "void SetVar(const std::string& name, const VisualScriptValue& value)",
-							"line": 90
+							"line": 91
 						},
 						{
 							"kind": "method",
 							"name": "FindVarType",
 							"signature": "bool FindVarType(const std::string& name, FMValueType& outType) const",
-							"line": 93
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "GetHostKey",
+							"signature": "std::string GetHostKey() const override",
+							"doc": "The instance-editable variables, as the Details panel and the serializer\nsee every script's; the overrides keep their own VisualScriptVars node.",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "GetSectionName",
+							"signature": "std::string GetSectionName() const override",
+							"line": 101
+						},
+						{
+							"kind": "method",
+							"name": "GetSerializedNodeName",
+							"signature": "std::string GetSerializedNodeName() const override",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "CollectVariables",
+							"signature": "void CollectVariables(std::vector<FScriptVariableDesc>& out) const override",
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "FindVariable",
+							"signature": "const VisualScriptValue* FindVariable(const std::string& name) const override",
+							"line": 108
+						},
+						{
+							"kind": "method",
+							"name": "SetVariable",
+							"signature": "bool SetVariable(const std::string& name, const VisualScriptValue& value) override",
+							"line": 111
 						},
 						{
 							"kind": "method",
 							"name": "CollectVarOverrides",
 							"signature": "void CollectVarOverrides(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
-							"line": 94
+							"line": 115
 						},
 						{
 							"kind": "method",
 							"name": "CollectDeclaredVars",
 							"signature": "void CollectDeclaredVars(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
 							"doc": "Every declared variable at its current value, overridden or not; the\nengine-fed scratch values (DamageAmount, HitLocation, ...) are left out.",
-							"line": 97
+							"line": 118
 						},
 						{
 							"kind": "method",
 							"name": "IsAuthoredOverride",
 							"signature": "static bool IsAuthoredOverride(const VisualScriptValue& current, const VisualScriptValue* seeded)",
 							"static": true,
-							"line": 98
+							"line": 119
 						},
 						{
 							"kind": "method",
 							"name": "PushReplicatedVars",
 							"signature": "bool PushReplicatedVars(bool forceFull = false)",
-							"line": 100
+							"line": 121
 						},
 						{
 							"kind": "method",
 							"name": "ApplyReplicatedVars",
 							"signature": "void ApplyReplicatedVars(const std::string& blob)",
 							"doc": "The body of every backing class's MulticastVisualScriptVars.",
-							"line": 102
+							"line": 123
 						},
 						{
 							"kind": "method",
 							"name": "SetComponentSlotOverride",
 							"signature": "void SetComponentSlotOverride(const std::string& slotName, const std::string& propertyName, const VisualScriptValue& value)",
-							"line": 104
+							"line": 125
 						},
 						{
 							"kind": "method",
 							"name": "CollectComponentSlotOverrides",
 							"signature": "void CollectComponentSlotOverrides(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
-							"line": 105
+							"line": 126
 						},
 						{
 							"kind": "method",
 							"name": "FindComponentSlotOverride",
 							"signature": "const VisualScriptValue* FindComponentSlotOverride(const std::string& slotName, const std::string& propertyName) const",
-							"line": 106
+							"line": 127
 						},
 						{
 							"kind": "method",
 							"name": "FindSlotEntity",
 							"signature": "EntityID FindSlotEntity(const std::string& slotName) const",
-							"line": 107
+							"line": 128
 						}
 					]
 				},
@@ -19382,19 +19926,19 @@
 					"name": "IVisualScriptHost",
 					"namespace": "Mowo",
 					"doc": "Implemented by every class that can back a Visual Script class.",
-					"line": 159,
+					"line": 180,
 					"members": [
 						{
 							"kind": "method",
 							"name": "~IVisualScriptHost",
 							"signature": "virtual ~IVisualScriptHost() = default",
-							"line": 161
+							"line": 182
 						},
 						{
 							"kind": "method",
 							"name": "GetVisualScriptRuntime",
 							"signature": "virtual FVisualScriptRuntime& GetVisualScriptRuntime() = 0",
-							"line": 163
+							"line": 184
 						}
 					]
 				}
@@ -33466,52 +34010,65 @@
 						},
 						{
 							"kind": "method",
+							"name": "GetBudgetCoarsenedTextures",
+							"signature": "uint32_t GetBudgetCoarsenedTextures() const",
+							"doc": "What the last Update's budget pass took away: how many textures it\ncoarsened below the mip their screen size wanted, and by how many mip\nlevels in total. Zero while everything fits.",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "GetBudgetDroppedMips",
+							"signature": "uint32_t GetBudgetDroppedMips() const",
+							"line": 82
+						},
+						{
+							"kind": "method",
 							"name": "GetBudgetBytes",
 							"signature": "uint64_t GetBudgetBytes() const",
-							"line": 76
+							"line": 85
 						},
 						{
 							"kind": "method",
 							"name": "Update",
 							"signature": "uint32_t Update(const Vec3& cameraPos, float fovYRadians, uint32_t viewportHeightPx)",
 							"doc": "One frame of streaming: apply finished async swaps, recompute\ndesired mips for the camera, enforce the budget, issue requests.\nReturns how many textures changed residency this call.",
-							"line": 83
+							"line": 92
 						},
 						{
 							"kind": "method",
 							"name": "Update",
 							"signature": "uint32_t Update(const std::vector<FTextureStreamingView>& views)",
-							"line": 84
+							"line": 93
 						},
 						{
 							"kind": "method",
 							"name": "GetImage",
 							"signature": "Ref<Image2D> GetImage(uint32_t id) const",
-							"line": 86
+							"line": 95
 						},
 						{
 							"kind": "method",
 							"name": "GetDesiredTopMip",
 							"signature": "uint32_t GetDesiredTopMip(uint32_t id) const",
-							"line": 87
+							"line": 96
 						},
 						{
 							"kind": "method",
 							"name": "GetResidentTopMip",
 							"signature": "uint32_t GetResidentTopMip(uint32_t id) const",
-							"line": 88
+							"line": 97
 						},
 						{
 							"kind": "method",
 							"name": "GetTotalResidentBytes",
 							"signature": "uint64_t GetTotalResidentBytes() const",
-							"line": 89
+							"line": 98
 						},
 						{
 							"kind": "method",
 							"name": "GetStreamer",
 							"signature": "FTextureStreamer& GetStreamer()",
-							"line": 93
+							"line": 102
 						},
 						{
 							"kind": "method",
@@ -33519,7 +34076,7 @@
 							"signature": "static uint32_t ComputeDesiredTopMip(uint32_t topWidth, uint32_t mipCount, float screenPixels)",
 							"static": true,
 							"doc": "Pure mip selection: smallest (finest) top mip whose resolution does\nnot exceed what screenPixels can show — ceil(log2(topWidth/px)),\nclamped to [0, mipCount-1]. Exposed for tests.",
-							"line": 100
+							"line": 109
 						},
 						{
 							"kind": "method",
@@ -33527,7 +34084,7 @@
 							"signature": "static float ComputeScreenPixels(const std::vector<FTextureStreamingInstance>& instances, const std::vector<FTextureStreamingView>& views, float& outNearestDistance)",
 							"static": true,
 							"doc": "The largest on-screen size, in pixels, any instance reaches in any\nview, and the nearest instance distance (the budget pass coarsens the\nfarthest first). Exposed for tests.",
-							"line": 105
+							"line": 114
 						},
 						{
 							"kind": "method",
@@ -33535,7 +34092,7 @@
 							"signature": "static float InstanceWorldSize(float uvDensity, float maxAxisScale, const Vec3& worldExtent)",
 							"static": true,
 							"doc": "The world span one texture repeat covers on an instance: the mesh's UV\ndensity (GPUMesh::GetUvDensity, mesh-local units per repeat) times the\ninstance's largest axis scale; with no density, the largest world\nextent — one repeat across the whole mesh.",
-							"line": 111
+							"line": 120
 						}
 					]
 				}
@@ -33585,43 +34142,51 @@
 						},
 						{
 							"kind": "method",
+							"name": "WithForcedBudget",
+							"signature": "static FGpuMemoryStats WithForcedBudget(const FGpuMemoryStats& live, uint64_t forcedBudgetBytes)",
+							"static": true,
+							"doc": "The driver's sample with the OS budget replaced by `forcedBudgetBytes`\n(0 keeps the live one): r.TextureStreaming.ForceBudgetMB, which makes a\nlarge card behave as a small one so the pressure path can be watched\nand tested on any machine. Usage stays live.",
+							"line": 35
+						},
+						{
+							"kind": "method",
 							"name": "SharedOvershoot",
 							"signature": "static double SharedOvershoot(uint64_t poolResidentBytes, uint64_t allPoolsResidentBytes)",
 							"static": true,
 							"doc": "This pool's share of an overshoot that several pools answer together.",
-							"line": 32
+							"line": 48
 						},
 						{
 							"kind": "method",
 							"name": "Update",
 							"signature": "uint64_t Update(uint64_t configuredBytes, uint64_t streamingResidentBytes, const FGpuMemoryStats& stats, double overshootShare = 1.0)",
 							"doc": "The pool to apply this update (0 = unlimited, as the cvar means it).",
-							"line": 41
+							"line": 57
 						},
 						{
 							"kind": "method",
 							"name": "IsCapping",
 							"signature": "bool IsCapping() const",
-							"line": 74
+							"line": 90
 						},
 						{
 							"kind": "method",
 							"name": "GetCapBytes",
 							"signature": "uint64_t GetCapBytes() const",
-							"line": 77
+							"line": 93
 						},
 						{
 							"kind": "method",
 							"name": "Apply",
 							"signature": "uint64_t Apply(uint64_t configuredBytes) const",
 							"doc": "The configured pool under the cap this governor last decided, for the\nticks between two driver samples.",
-							"line": 83
+							"line": 99
 						},
 						{
 							"kind": "method",
 							"name": "GetPressureUpdates",
 							"signature": "uint32_t GetPressureUpdates() const",
-							"line": 90
+							"line": 106
 						}
 					]
 				}

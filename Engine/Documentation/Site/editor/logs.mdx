@@ -3,10 +3,10 @@ title: Output Log, console and Message Log
 sidebarTitle: Logs and console
 description: Read and filter every log line, jump to the source that printed it, run console commands, and work through the Message Log's actionable issues and Map Check.
 order: 20
-verifiedAt: 3f3a08d31
+verifiedAt: 026f26db8
 ---
 
-The editor has two logs. The **Output Log** is everything the engine printed, in order, with the console at the bottom. The **Message Log** is the curated list of problems you need to act on, each with a link to the asset, actor or source it is about.
+The editor has two logs. The **Output Log** is what the engine and your game printed, in order, with the console at the bottom. The **Message Log** is the curated list of problems you need to act on, each with a link to the asset, actor or source it is about.
 
 ## The Output Log
 
@@ -16,8 +16,20 @@ Open it with **Window ▸ Output Log**, <Kbd>Ctrl+5</Kbd>, or the error and warn
 
 Each row shows the time, the category and the message. The category is the module's log category, or a leading `[Tag]` in the message.
 
+### What it shows by default
+
+Like Unreal's, the Output Log keeps the engine's own detail out of your way. By default it shows:
+
+- every warning and error;
+- **Display** lines, the few the engine writes for you: the project opened, a level opened or saved, Play started, paused or stopped, a game module compiled, an import finished;
+- every line from your own categories at **Log** and above: your game module's (`LogGame` unless you declare your own), and what your scripts print (`Print`, Wolang output and Visual Scripting logpoints, under `LogScriptUser`);
+- the answer to a console command you type here.
+
+The engine's Log-level lines (startup, device and subsystem detail) still go to the log file, where a bug report needs them. Turn on **Show engine logs** in the options menu to see them here too. Verbose lines reach neither the panel nor the file until you lower a category (see [Log verbosity](#log-verbosity)).
+
+Identical consecutive lines from the same place fold into one row with a `×N` count (**Collapse repeats**, on by default).
+
 - **Source links.** Warnings and errors end with the source file and line that printed them, such as `ADoorActor.cpp:42`. For a file of your project, click it or use **Open Source** on the row menu to open your IDE at that line. **Source link on every row** shows links on all lines.
-- **Collapse repeats** folds identical consecutive lines into one row with a `×N` count.
 
 ### Filtering
 
@@ -28,13 +40,33 @@ Each row shows the time, the category and the message. The category is the modul
 | Info, Warnings, Errors | Show or hide each severity; the counts are live |
 | Eraser | Clears the view |
 
-The options menu also holds **Pause on error** (freeze the view on the first error), **Clear on Play** and the verbosity threshold. Your choices and hidden categories are saved per project.
+The options menu also holds **Show engine logs**, **Collapse repeats**, **Pause on error** (freeze the view on the first error), **Clear on Play** and the verbosity threshold (Verbose, Log, warnings and errors, errors only). Your choices and hidden categories are saved per user, for each project, under `Saved/`.
+
+### Log verbosity
+
+Every category has a verbosity: `VeryVerbose`, `Verbose`, `Log`, `Display`, `Warning`, `Error` or `Fatal`. Each starts at `Log`. Lowering a category to `Verbose` writes its Verbose lines to the file and shows them in the Output Log even with engine logs hidden; raising it to `Warning` silences its Log and Display lines everywhere.
+
+| Where | How | Lasts |
+| --- | --- | --- |
+| A row's menu | **Verbosity of LogRender ▸ Verbose**, or **Reset** | This session |
+| The console | `log LogRender Verbose`, `log LogRender reset`, `log global Warning`, `log` to list every category | This session |
+| Command line | `--logcmds="LogRender Verbose, LogAsset Warning"` (Unreal's `-LogCmds=` also works) | This run |
+| Engine.ini | A `[Core.Log]` section, below | Every run |
+
+```ini title="Config/DefaultEngine.ini"
+[Core.Log]
+LogRender=Verbose
+LogAsset=Warning
+global=Log
+```
+
+The command line applies after the INI and wins. A category your game module or a plugin declares takes its level when the module loads.
 
 ### The console
 
 The line at the bottom of the Output Log runs console commands and variables. Typing shows matching variables in a popup: <Kbd>Up</Kbd>/<Kbd>Down</Kbd> move, <Kbd>Tab</Kbd> completes, <Kbd>Enter</Kbd> runs, <Kbd>Esc</Kbd> closes the popup. With the popup closed, <Kbd>Up</Kbd>/<Kbd>Down</Kbd> recall history.
 
-`name` prints a variable's value; `name value` or `name=value` sets it. The command and its result are echoed into the log under `[Cmd]`. Variables marked as cheats are refused when cheats are off, and read-only variables are refused everywhere. Every variable and command is listed in the [console variables](/docs/reference/console-variables/) and [console commands](/docs/reference/console-commands/) references.
+`name` prints a variable's value; `name value` or `name=value` sets it; a console command such as `log` or `stat` runs with its arguments. The command and its result are echoed into the log under `[Cmd]`. Variables marked as cheats are refused when cheats are off, and read-only variables are refused everywhere. Every variable and command is listed in the [console variables](/docs/reference/console-variables/) and [console commands](/docs/reference/console-commands/) references.
 
 ## The Message Log
 
