@@ -33,6 +33,7 @@ What enters the field:
 
 - Static meshes, with masked (cutout) materials counted by their coverage (`r.GI.AlphaTested`).
 - Skinned meshes, so a character occludes and bounces light (`r.GI.SkinnedSdf`, default 1).
+- Moving physics bodies, where they stand this frame. A moving body is re-voxelized in its own box and never rebuilds the whole field or resets the radiance cache.
 - Terrain and tall foliage (`r.GI.TerrainFoliage`, default 1). Foliage shorter than `r.GI.FoliageMinHeight` stays out.
 - Emissive meshes are also injected as small lights, so thin emitters still light the room (`r.GI.EmissiveLights`).
 
@@ -42,7 +43,9 @@ A grid of probes traces the field and stores irradiance and depth. Probes that s
 
 ### Radiance cache
 
-A ray that hits something needs to know how bright that point is. The radiance cache stores the lit radiance of the distance field, including probe indirect and emissive light. It is rebuilt on a tier interval (`r.GI.RadianceInterval`) and only while lighting changes (`r.GI.RadianceDirty`, default 1); a moving camera alone triggers nothing.
+A ray that hits something needs to know how bright that point is. The radiance cache stores the lit radiance of the distance field, including probe indirect and emissive light. It is rebuilt on a tier interval (`r.GI.RadianceInterval`) and only while lighting changes (`r.GI.RadianceDirty`, default 1). When the field scrolls with the camera, only the slab that scrolled in is rebaked. When static geometry changes, or a baked field recentres on the camera (every 2 m of travel in a scene larger than the field), the whole cache is rebaked at once.
+
+Sun and light shadows inside the caches are traced through the distance field. A shadow ray that runs out of steps before it leaves the field counts as shadowed, and the caches add no constant ambient floor: sky reaches them only through probe rays that actually escape.
 
 ### Surface cache
 
@@ -53,15 +56,15 @@ Without a surface cache a ray hit shades from one flat colour per mesh. The surf
 How each pixel collects indirect light is set by `r.GI.FinalGather`:
 
 - **World probes** (Medium): each pixel samples the probe grid directly.
-- **Screen probes** (High and up): probes are placed on the depth buffer, one per 16-pixel tile plus extra 8-pixel probes at depth and normal edges (`r.GI.ScreenProbes.Budget`). Each probe traces first through the depth buffer (`r.GI.ScreenTraces`), then through the distance field, and shades hits from the radiance cache. Rays favour directions that were bright last frame (`r.GI.ImportanceSample`), and probes accumulate over time. A tile probe whose history holds `r.GI.ScreenProbes.HalfRateMinFrames` (8) frames traces on alternate frames in a checkerboard and carries its history forward in between, each traced frame counting twice (`r.GI.ScreenProbes.HalfRateConverged`, default 1); a probe that loses its history traces every frame until it converges again.
+- **Screen probes** (High and up): probes are placed on the depth buffer, one per 16-pixel tile plus extra 8-pixel probes at depth and normal edges (`r.GI.ScreenProbes.Budget`). Each probe traces first through the depth buffer (`r.GI.ScreenTraces`), then through the distance field, and shades hits from the radiance cache. Rays favour directions that were bright last frame (`r.GI.ImportanceSample`), and probes accumulate up to `r.GI.ScreenProbes.TemporalMaxFrames` (32) frames. A probe whose traced light changes by more than `r.GI.ScreenProbes.TemporalReactFloor` (0.08, relative) shortens its history so it follows the change. A tile probe whose history holds `r.GI.ScreenProbes.HalfRateMinFrames` (8) frames traces on alternate frames in a checkerboard and carries its history forward in between, each traced frame counting twice (`r.GI.ScreenProbes.HalfRateConverged`, default 1); a probe that loses its history traces every frame until it converges again.
 
 ### Hardware ray-traced gather
 
-At Epic and Cinematic, screen-probe rays trace the ray-tracing scene with inline ray query instead of marching the distance field, which removes the field's blockiness from nearby indirect light (`r.GI.HWRTGather`). Only the trace changes. Without ray query it falls back to the field trace and logs why once. See [Ray tracing](/docs/rendering/ray-tracing/).
+At Epic and Cinematic, screen-probe rays trace the ray-tracing scene with inline ray query instead of marching the distance field, which removes the field's blockiness from nearby indirect light (`r.GI.HWRTGather`). Only the trace changes: hits shade from the radiance cache. A hit the cache does not cover takes its emissive and sky irradiance but no sun, because there is no shadow ray to tell whether the sun reaches it. Without ray query it falls back to the field trace and logs why once. See [Ray tracing](/docs/rendering/ray-tracing/).
 
 ### Denoising
 
-The gathered light goes through a velocity-aware temporal pass and a variance-guided spatial filter (`r.GI.Denoise`: `0` off, `1` on). By default the filter runs at half resolution and upsamples in the composite (`r.GI.DenoiseHalfRes`), which filters with a 3×3 à-trous over the 5×5 footprint (`r.GI.DenoiseCompositeTaps 3`; `5` is the full kernel).
+The gathered light goes through a velocity-aware temporal pass and a variance-guided spatial filter (`r.GI.Denoise`: `0` off, `1` on). The temporal pass keeps up to `r.GI.TemporalMaxFrames` (20) frames. It sits on top of the screen-probe history, so a lighting change drains through both. By default the filter runs at half resolution and upsamples in the composite (`r.GI.DenoiseHalfRes`), which filters with a 3×3 à-trous over the 5×5 footprint (`r.GI.DenoiseCompositeTaps 3`; `5` is the full kernel).
 
 ### Composite
 
@@ -71,6 +74,10 @@ AO from GTAO or ray-traced AO darkens the indirect light here. `r.GI.AOWeight` (
 
 <Callout type="note">
 In earlier versions metal surfaces such as a mirror floor picked up grey diffuse sky fill, and GTAO's bent normal on open floors pointed into the surface, which occluded most of their indirect light. Both are fixed: scenes tuned against the old look may show brighter non-metal floors and darker metals.
+</Callout>
+
+<Callout type="note">
+Covered areas are darker than in earlier versions. The caches used to add a constant ambient floor, count a shadow ray that ran out of steps as sunlit, and, with the hardware ray-traced gather, light hits outside the cache with an unshadowed sun. All three leaked light under roofs and into galleries. Lighting changes also settle about twice as fast. If an interior tuned against the old look is now too dark, raise its lights or `r.GI.SkyScale` rather than restoring the leak.
 </Callout>
 
 ### Reflections and translucency
