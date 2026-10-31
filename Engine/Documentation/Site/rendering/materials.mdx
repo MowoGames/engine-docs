@@ -6,7 +6,7 @@ sources:
   - Engine/Source/Runtime/Renderer/Public/Renderer/Material.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialGraph.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialFunction.h
-verifiedAt: 7c4a1b166
+verifiedAt: 9cdeba3f9
 ---
 
 A Mowo material is a physically based parameter set: base color, metallic, roughness, normal, emissive, ambient occlusion and opacity, plus a shading model and flags for clear coat, anisotropy, subsurface, hair, detail maps and parallax. You author it as a node graph in the Material Editor and save it as a `.mat` file. Material instances (`.matinst`) override a parent's parameters, and material functions (`.matfunc`) are reusable sub-graphs. The renderer draws opaque materials in the G-Buffer pass and translucent ones in the forward pass.
@@ -82,11 +82,13 @@ The shading model is a per-material setting, not a graph expression (<Source sym
 
 - **Opaque**: opacity 1, drawn in the G-Buffer.
 - **Masked**: turn on alpha-masked and set a cutoff. Masked surfaces stay in the G-Buffer, cast shadows through their mask and are alpha-tested in ray-traced passes.
-- **Translucent**: opacity below 1, drawn in the forward pass, sorted back to front. `EMaterialBlendMode` picks how it combines: `Alpha`, `Additive` (fire, glows) or `Modulate` (stained glass). A translucent mesh with Cast Shadows on casts a partial shadow by its opacity, and it is visible to ray-traced reflections.
+- **Translucent**: opacity below 1, drawn in the forward pass, sorted back to front. `EMaterialBlendMode` picks how it combines: `Alpha`, `Additive` (fire, glows) or `Modulate` (stained glass). A translucent mesh with Cast Shadows on casts a partial shadow by its opacity (water casts none; see [Water](/docs/rendering/water/)), and it is visible to ray-traced reflections.
 
 `r.OIT 1` switches the standard translucent path to weighted-blended order-independent transparency; water keeps the sorted pass.
 
 Translucent surfaces take their ambient light from the Global Illumination probes (without Global Illumination they use the sky-over-ground hemisphere scaled by the material's ambient occlusion, not a flat term), and reflective glass casts one reflection ray from High up. See [Sky, fog and reflections](/docs/rendering/sky-and-reflections/#reflections).
+
+Translucent surfaces are shadowed the way the opaque surfaces beside them are. The sun reaches them through the same cascades, soft shadows, virtual shadow map, far SDF shadows and cloud shadows, and its glint on water and clear coat is shadowed too. They take the sun, point and spot lights through the same surface response and falloff as an opaque surface, so a translucent and an opaque surface of the same colour under the same light match. Point, spot and Rect lights light them, Rect lights through the same area integral, each with its local shadow. A light that MegaLights shades gets a short screen-space shadow ray on translucent surfaces instead. A few light features still reach opaque surfaces only: IES profiles, cookies and light functions, contact and capsule shadows, and light channels. See [Shadows](/docs/rendering/shadows/).
 
 ## Materials from C++
 

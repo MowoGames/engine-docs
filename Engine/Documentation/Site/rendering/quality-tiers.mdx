@@ -9,7 +9,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/QualityAutoTier.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/DeviceProfiles.h
   - Engine/Config/BaseDeviceProfiles.ini
-verifiedAt: 77b5ea1b2
+verifiedAt: 08a23c2e3
 ---
 
 A quality tier is one setting that decides which rendering features run and how much each one may spend. Mowo has five tiers: **Low, Medium, High, Epic and Cinematic** (). High is the code default.
@@ -25,13 +25,13 @@ The rule is **the tier sets, the cvar refines**. A tier writes a whole row of va
 Open **Edit > Engine Quality** and choose Low, Medium, High, Epic or Cinematic. **Auto (GPU-detected)** removes your choice and runs the detection again. The choice is saved to your user config and reapplied at every launch.
 </Step>
 <Step title="From the viewport">
-Click **Quality** on the viewport toolbar. The card shows the active preset, a Low to Cinematic selector, one override row per category (View distance, Shadows, Global illum., Reflections, Textures, Effects, Foliage, Post process), the upscaler, and **Auto**, **Benchmark** and **Reset** buttons.
+Click **Quality** on the viewport toolbar. The card shows the active preset, a Low to Cinematic selector, one override row per category (View distance, Shadows, Global illum., Reflections, Textures, Effects, Foliage, Post process) that offers the same Low to Cinematic tiers, the upscaler, and **Auto**, **Benchmark** and **Reset** buttons.
 </Step>
 <Step title="In Project Settings">
 Open **Project Settings > Engine > Scalability**. It lists the preset and each category with its tier value and lets you pin individual ones.
 </Step>
 <Step title="In a shipped game">
-The player settings screen has a **Quality Preset** row in the **Graphics** category that writes `r.Quality`, and rows for the most important single knobs (). A row the player sets stays where they put it when the preset changes.
+The player settings screen has a **Quality Preset** row in the **Graphics** category that writes `r.Quality`, one row per category that pins it to any tier or leaves it on the preset, and rows for the most important single knobs (). A row the player sets stays where they put it when the preset changes.
 </Step>
 <Step title="From code or the console">
 Set `r.Quality`: `0` is Low, `4` is Cinematic, `-1` means not set.
@@ -218,6 +218,45 @@ One dial is sometimes too blunt: a machine can be short of fill rate and long on
 | `sg.FoliageQuality` | Foliage density |
 
 Each group defaults to `-1` (follow `r.Quality`). Set one to `0` through `4` to pin it. For example, `sg.GlobalIlluminationQuality=0` keeps everything else at the base tier and turns Global Illumination off, because its on/off switch is part of the row.
+
+### Category selectors
+
+Every place that lets you set a category offers the same tiers as the overall preset, Cinematic included, and a pick pins the whole group: every knob in the group's row moves to that tier, not a single value.
+
+| Where | What a category pick writes |
+|---|---|
+| Viewport **Quality** card, one row per category | the group's `sg.*` cvar and a `cvars.sg.*` key in your user config, so it survives a restart and shows again when the card reopens |
+| **Project Settings > Engine > Scalability**, Global Illumination, Reflections and Effects rows | the same `sg.*` pin in the project config; the other rows pin their own cvar to the value in the clicked column |
+| **Settings > Graphics** in a shipped game | one row per group (Shadow Quality, Global Illumination Quality and so on) with **Follow the preset** and the five tiers |
+
+A category set to a tier other than the preset puts the card and the Scalability page in a **Custom** state, and picking the preset's own tier on that row, or **Reset**, hands the category back to the preset. Pinning or releasing a group applies on the next frame without a restart.
+
+### Everything a tier carries
+
+The two tables above list the switches and the headline budgets. These are the remaining values the tier rows set, so the whole ladder is in one place. A value that rises with quality never drops on a higher tier, and the checks that hold the table to that are the `quality-tier-audit` test row.
+
+| Knob | Low | Medium | High | Epic | Cinematic |
+|---|---|---|---|---|---|
+| Global SDF resolution | 64 | 64 | 64 | 64 | 128 |
+| GI probe trace steps | 96 | 128 | 192 | 192 | 256 |
+| GI screen trace steps | 32 | 48 | 64 | 64 | 96 |
+| SDF reflection trace steps | 96 | 128 | 160 | 160 | 224 |
+| Surface-cache atlas edge | 1024 | 1024 | 1024 | 2048 | 2048 |
+| Surface-cache card edge | 64 | 64 | 128 | 256 | 256 |
+| Ray-traced AO rays | 2 | 2 | 2 | 2 | 3 |
+| LOD 1 / LOD 2 coverage | 0.12 / 0.045 | 0.10 / 0.035 | 0.08 / 0.025 | 0.06 / 0.02 | 0.04 / 0.015 |
+| PCSS blocker / filter samples | 8 / 8 | 12 / 12 | 12 / 16 | 16 / 24 | 24 / 32 |
+| Smallest local shadow tile | 128 | 256 | 256 | 256 | 256 |
+| Cheap shadow march for atlas losers | on | on | on | off, MegaLights covers them | off, MegaLights covers them |
+| SDF far shadow steps | 24 | 24 | 24 | 48 | 64 |
+| Foliage shadow cascades | 0 | 2 | 3 | 3 | 4 |
+| Volumetric fog grid | 120 x 68 x 48 | 160 x 90 x 64 | 160 x 90 x 64 | 160 x 90 x 64 | 240 x 135 x 128 |
+| Cloud march / light steps | 32 / 4 | 48 / 5 | 64 / 6 | 80 / 6 | 128 / 8 |
+| Cloud implementation | 2.5D | 2.5D | 2.5D | raymarched | raymarched |
+| Particle overdraw budget (screens) | 6 | 12 | 24 | unlimited | unlimited |
+| Hi-Z occlusion cull | on | on | on | on | off, so a capture never loses a caster |
+
+Low gives up Global Illumination, screen-space reflections, ambient occlusion, bloom and motion blur and renders at 0.75 of the output resolution with Performance upscaling, which is the budget of an RTX 3050 class card at 1440p. The Steam Deck device profile borrows the Medium Global Illumination row on top of Low. Ray-traced passes, the hardware GI gather, virtual shadow maps, MegaLights, volumetric fog and the meshlet path start at Epic, and ray-traced sun shadows only on Cinematic.
 
 ## Scalability.ini
 

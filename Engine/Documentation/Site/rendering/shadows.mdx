@@ -8,7 +8,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ShadowTileCache.h
   - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/LightComponent.h
   - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/MeshRendererComponent.h
-verifiedAt: aee5cfcae
+verifiedAt: 02a961ac2
 ---
 
 Mowo layers several shadow techniques. Every tier has cascaded shadow maps for the sun and an atlas for local lights. Higher tiers add soft penumbrae, virtual shadow maps, stochastic shadows for many lights and ray-traced sun shadows. Each layer falls back to the one below it where it cannot answer.
@@ -150,8 +150,11 @@ Raymarched clouds (Epic and up; lower tiers draw a 2.5D cloud plane) build a sun
 
 The mesh's **Cast Shadows** toggle decides whether it casts in every shadow system. Alpha-masked cutouts cast through their mask. Alpha-blended meshes with Cast Shadows on cast a partial, dithered shadow in proportion to their opacity (`r.Shadow.Translucent`, default 1). A mesh with **Receive Shadows** off skips every shadow term on its pixels.
 
+Translucent surfaces and water receive the same shadows as opaque ones: the sun's cascades with soft shadows, the virtual shadow map where it covers them, SDF far shadows, cloud shadows, and the local shadow of every point, spot and Rect light. MegaLights shades opaque pixels only, so a light it manages shadows a translucent surface with a short screen-space ray (up to 4 m) instead.
+
 ## Limits
 
+- Translucent surfaces get no contact or capsule shadows, and the screen-space ray that stands in for MegaLights only sees occluders that are on screen.
 - The virtual shadow maps do not draw GPU foliage, terrain or materials with world-position offset; those shadows come from the cascades.
 - SDF far shadows only reach as far as the distance field.
 - Area-light shadows are a projection from the light's centre, not a true area solve.

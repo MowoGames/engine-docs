@@ -1,0 +1,63 @@
+---
+title: Water rendering
+sidebarTitle: Water
+description: How water surfaces are lit, reflect, refract, take fog and shadows, and what changes between quality tiers.
+order: 11
+sources:
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/WaterComponent.h
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/WaterBodyComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/AWaterActor.h
+verifiedAt: 9cdeba3f9
+---
+
+Water draws in the translucent pass, after the opaque scene is lit, fogged and reflected. Each water pixel combines four things: the scene behind the surface (refraction), the environment in front of it (reflection), the light falling on it, and foam. This page explains where each comes from, so you can tell what a setting will change. Placing and shaping water is covered in [World building](/docs/editor/world-building/); querying it from gameplay in [World environment](/docs/gameplay/world-environment/).
+
+## Refraction and depth
+
+With `r.Water.Refraction` on (the default), the surface reads a copy of the opaque scene taken just before the translucent pass, offset by the wave normal and the water's depth. The light that comes through is absorbed with distance travelled under water (**Absorption Density** on the water component), so shallow water shows the bed and deep water shows the body colour. **Depth Fade** softens the contact line with geometry, and **Shore Foam Width** sets how far shoreline foam reaches.
+
+The depth behind the surface is read in the view's own coordinates, so depth fade, foam and absorption stay the same when dynamic resolution or `r.RenderScale` renders the view below the output size.
+
+`r.Water.Refraction` is read once, when the renderer starts. With it off, water blends over the scene by its opacity instead and loses the screen-space reflections described below.
+
+## Reflections
+
+The reflection a water pixel shows is chosen in this order:
+
+1. **Screen-space reflection.** The reflected ray is marched against the opaque depth, and where it hits something on screen the water shows exactly what the camera sees there: lit and shadowed by every light, emissive surfaces included. This needs `r.Water.Refraction`, because it reads the same scene copy.
+2. **Traced reflection.** Where the screen has no answer (the ray leaves the screen or passes behind an object), the ray continues through the Global Illumination distance field and shades from its radiance cache, the same source opaque traced reflections use. This runs at High and above with `r.Reflections.Translucent` on and Global Illumination built.
+3. **Sky.** A ray nothing answers reflects the sky. At Low and Medium, or without Global Illumination, the sky follows the screen-space step directly.
+
+The reflected ray never points below the horizon: a wave tilted away from a low camera would otherwise reflect the water bed. The reflection is weighted by Fresnel, so water seen face-on is mostly transparent and grazing water is mostly mirror. `r.Water.Reflections 0` removes the reflection entirely. For a flat mirror-like lake that has to reflect what is behind the camera, add a planar reflection (see [Sky and reflections](/docs/rendering/sky-and-reflections/)).
+
+## Lighting and shadows
+
+The sun lights water through the same shadows it casts on the opaque scene, including cloud shadows. That applies to the diffuse body colour, the sun's glint on the waves and the foam, so water under a roof or in a cliff's shadow keeps none of the sun. Point, spot and rect lights light the surface with the same response and falloff as opaque surfaces, through their shadows, so water beside an opaque bank of the same colour is lit the same. With Global Illumination on (`r.GI.Translucency 1`), the surface and its foam take their ambient light from the probe field just above the water instead of the flat scene ambient.
+
+Water never casts a shadow, whatever its **Cast Shadows** setting says. No shadow pass draws the waves, so a cast water shadow could only be a flat, noisy copy of the surface; this holds for ray-traced shadows too.
+
+## Fog
+
+Water takes height fog, sky-atmosphere haze and volumetric fog at its own depth, like other translucent surfaces. The refracted part of the pixel already carries the fog in front of the bed, so it is not fogged a second time: refracting water fades into fog at the same rate as the bank beside it.
+
+## Under water
+
+When the camera is below a water surface, a full-screen pass tints and fogs the view with the body colour, lit by the sun and the scene ambient, and projects animated caustics onto submerged geometry where the water info texture covers it (`r.Water.Underwater`, `r.Water.Caustics`, `r.Water.CausticStrength`). Caustics follow the sun's colour and strength and fade with the depth of the water column above the point.
+
+## Settings
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `r.Water.Refraction` | 1 | Refraction and screen-space reflections; read at startup |
+| `r.Water.Reflections` | 1 | Environment reflection on the surface |
+| `r.Reflections.Translucent` | 1 | Traced reflections for water and glass at High and above |
+| `r.Water.Foam` | 1 | Shoreline and crest foam |
+| `r.Water.InfoTexture` | 1 | Bed depth, flow and slope read by the surface for colour, foam and tilt |
+| `r.Water.Underwater` | 1 | Tint and fog when the camera is under water |
+| `r.Water.Caustics` | 1 | Caustics on submerged geometry |
+
+## Limitations
+
+- Ray-traced reflections and the path tracer do not include the water surface; it is composited over them with raster shading.
+- Caustics are not shadowed: they also appear on submerged geometry under a roof.
+- The screen-space step cannot reflect what is off screen or hidden behind an object. Those parts come from the traced reflection, which is a lower-resolution, voxel-scale image, or from the sky.
