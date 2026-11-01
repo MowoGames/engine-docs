@@ -8,7 +8,7 @@ sources:
   - Engine/Source/Runtime/RHI/Public/RHI/VendorCapabilityProbe.h
   - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
-verifiedAt: 168a9a11d
+verifiedAt: 280634744
 ---
 
 Mowo can render at a lower internal resolution and reconstruct the output with a temporal upscaler, or render at native resolution and resolve aliasing with TAA or FXAA. One cvar, `r.Upscaler`, picks the method; `r.UpscalerQuality` picks the render resolution, or Auto upscaling (`r.Upscaler.AutoQuality`) picks it from the output resolution.
@@ -117,6 +117,7 @@ Only the vendor runtimes can say whether this GPU runs DLSS, DLSS Ray Reconstruc
 - The editor starts the check while the project loads. Until it finishes, the vendor rows on **Project Settings > Rendering** and **Project Settings > Engine > Frame Generation** read **checking this GPU's vendor runtimes…**, and their controls stay disabled. An open settings window updates when the answer arrives. The viewport's **Upscaling** menu marks those methods **(checking…)**.
 - A game starts the check only when something needs it: the upscaler auto pick with `r.AutoQuality.VendorUpscalers 1`, or the first time the player opens the settings screen. Until the answer arrives, that screen offers every method the graphics API allows. It then drops the ones this GPU cannot run, unless the player has unsaved changes on it; in that case the list updates the next time the screen opens.
 - Low latency starts after the answer arrives. While the check runs, NVIDIA Reflex, Anti-Lag 2 and XeLL get no per-frame calls and a frame-rate cap uses the engine's own limiter.
+- The check never holds up a frame. Frame generation only talks to its runtime once a frame-generation swapchain exists, so the editor keeps presenting while Streamline sets up the device.
 
 Changing the graphics API at runtime asks again for the new device.
 

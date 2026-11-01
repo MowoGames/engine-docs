@@ -6,7 +6,8 @@ sources:
   - Engine/Source/Runtime/Renderer/Public/Renderer/Material.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialGraph.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialFunction.h
-verifiedAt: f87d0d971
+  - Engine/Source/Runtime/Renderer/Public/Renderer/MaterialShaderCompileService.h
+verifiedAt: dc3188855
 ---
 
 A Mowo material is a physically based parameter set: base color, metallic, roughness, normal, emissive, ambient occlusion and opacity, plus a shading model and flags for clear coat, anisotropy, subsurface, hair, detail maps and parallax. You author it as a node graph in the Material Editor and save it as a `.mat` file. Material instances (`.matinst`) override a parent's parameters, and material functions (`.matfunc`) are reusable sub-graphs. The renderer draws opaque materials in the G-Buffer pass and translucent ones in the forward pass.
@@ -15,12 +16,26 @@ A Mowo material is a physically based parameter set: base color, metallic, rough
 
 Each graph produces two things:
 
-<Flow steps={["Material graph", "Fold to flat Material fields", "Emit per-material HLSL on save", "mbt shaders --project", "Per-material shader blobs", "Renderer swaps the pipeline per draw"]} highlight={4} caption="Graph compilation. A missing blob falls back to the folded parameters with a warning." />
+<Flow steps={["Material graph", "Fold to flat Material fields", "Emit per-material HLSL", "Background compile in the editor", "Per-material shader blobs", "Renderer swaps the pipeline per draw"]} highlight={3} caption="Graph compilation. Until a graph's blobs exist, the draw uses the folded parameters." />
 
 - **The fold.** The graph is reduced to the flat `Material` fields and texture slots the G-Buffer already reads. A textured, tinted or blended material renders through this path with no new pipeline.
-- **A compiled permutation.** On save, the editor writes the graph's evaluator next to the asset (`<name>.mat.material.hlsl`, plus one file per static-switch combination), and `mbt shaders --project` compiles it against every pass that draws materials: G-Buffer (static, skinned, instanced), shadows, velocity, post-process, forward translucent and, where mesh shaders exist, the meshlet passes. The renderer finds the blobs by the graph's hash and swaps the pipeline for each draw. A missing blob falls back to the fold with a warning, never to stale code.
+- **A compiled permutation.** The graph's evaluator is compiled against every pass that draws materials: G-Buffer (static, skinned, instanced), shadows, velocity, post-process, decals, forward translucent and, where mesh shaders exist, the meshlet passes. The renderer finds the blobs by the graph's hash and swaps the pipeline for each draw. The blobs are named by that hash, so an edited graph never runs stale code.
 
-In the editor you do not rebuild by hand: when a material finishes its background compile, the editor reloads the changed shader blobs and the viewport updates without a restart.
+### Compiling in the editor
+
+You never run a command to see a material. The first time the editor draws a graph whose shader has not been compiled yet, it compiles it in the background:
+
+1. The material draws with its folded parameters meanwhile, so the viewport keeps running at full speed. The log has one line saying the compile started.
+2. A **Compiling shaders** card, and the status bar, count the materials as they finish. **Cancel** stops the compile; those materials keep the folded look until you save them or open the project again.
+3. Each material switches to its compiled shader as soon as its own blobs land, without a hitch or a restart.
+
+Saving a material in the Material Editor starts its compile straight away. A graph that fails to compile is reported in the **Message Log** and as a notification, and keeps the folded look.
+
+The compiled blobs go into the project's shader cache, `Intermediate/ShaderCache/`, one folder per graphics backend and engine version. The next session reads them from there, so a material compiles once per machine. The cache is disposable: delete it and the editor compiles again on demand. A different backend or an engine update compiles into a new folder rather than reusing blobs built for other shaders.
+
+### Cooking
+
+On save the editor also writes the graph's evaluator next to the asset (`<name>.mat.material.hlsl`, plus one file per static-switch combination). Commit those files: the cook (`mbt cook`, `mbt package`) compiles every one of them into the game's shader archive. A packaged game never compiles shaders. If a material's shader is missing from the cooked archive, the game logs an error naming the material's blob and draws the folded parameters; save the material in the editor so its file exists, then cook again.
 
 <Screenshot id="rendering-materials-graph-editor" alt="Mowo Editor Material Editor with a graph connecting a Texture Sample node to Base Color, a Constant 0.35 to Roughness and a Normal Map node to Normal on the Material Output node, the palette on the left with Constants, Math, Coordinates, Vectors, Scene, Texture, Parameters, Utility, Layers and Substrate groups, the live preview sphere, and the details rail showing the selected Texture Sample's texture picker" caption="The Material Editor: palette, graph, live preview and details rail." />
 
@@ -130,7 +145,7 @@ Substrate replaces "pick one shading model" with "stack two BSDF slabs": a coat,
 Set `r.Substrate 1` in the console, or under `[ConsoleVariables]` in your project's `Config/DefaultEngine.ini`.
 </Step>
 <Step title="Recompile the materials that use it">
-The gate is in the material compiler. Save the material again, or run `mbt shaders --project <project>.mproject`. A graph compiled while Substrate was off has no slab.
+The gate is in the material compiler. Save the material again; the editor compiles it in the background. A graph compiled while Substrate was off has no slab.
 </Step>
 <Step title="Add a slab">
 Add a **Substrate Slab** node and wire it into the Output node's **Substrate** pin. The base slab is the ordinary Base Color, Metallic, Roughness and Normal. Set the slab's **Coverage**, **Roughness**, **Specular (F0)** and **Albedo** mode (None, White, Base Color or Base Sheen). Use **Substrate Layer Blend** to crossfade two slabs under a mask.
