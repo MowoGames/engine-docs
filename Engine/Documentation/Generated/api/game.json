@@ -27102,48 +27102,81 @@
 			"types": [
 				{
 					"kind": "struct",
+					"name": "FScanBvhPendingMesh",
+					"namespace": "Mowo",
+					"doc": "A static mesh Gather found, copied into the hierarchy by BuildStatic.",
+					"line": 22,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Mesh",
+							"signature": "Ref<GPUMesh> Mesh",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "Transform",
+							"signature": "Mat4 Transform",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "Tag",
+							"signature": "FScanTag Tag = kScanTagDefault",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "InstanceId",
+							"signature": "uint32_t InstanceId = 0",
+							"line": 26
+						}
+					]
+				},
+				{
+					"kind": "struct",
 					"name": "FScanBvhGatherRule",
 					"namespace": "Mowo",
 					"doc": "What a level author said about one entity's scan geometry. The scanner's\nScanMeshComponent lives above Game, so it reaches the gather through this\nrule rather than by type.",
-					"line": 22,
+					"line": 32,
 					"members": [
 						{
 							"kind": "field",
 							"name": "exclude",
 							"signature": "bool exclude = false",
-							"line": 23
+							"line": 33
 						},
 						{
 							"kind": "field",
 							"name": "forceDynamic",
 							"signature": "bool forceDynamic = false",
-							"line": 24
+							"line": 34
 						},
 						{
 							"kind": "field",
 							"name": "tag",
 							"signature": "int32_t tag = -1",
 							"doc": "-1 = the collider's surface type (else the default tag).",
-							"line": 26
+							"line": 36
 						},
 						{
 							"kind": "field",
 							"name": "scanMesh",
 							"signature": "std::string scanMesh",
 							"doc": "A stand-in mesh asset traced instead of the render mesh.",
-							"line": 28
+							"line": 38
 						},
 						{
 							"kind": "field",
 							"name": "boneCapsules",
 							"signature": "bool boneCapsules = true",
-							"line": 29
+							"line": 39
 						},
 						{
 							"kind": "field",
 							"name": "capsuleRadiusScale",
 							"signature": "float capsuleRadiusScale = 1.0f",
-							"line": 30
+							"line": 40
 						}
 					]
 				},
@@ -27152,62 +27185,74 @@
 					"name": "FScanBvhWorld",
 					"namespace": "Mowo",
 					"doc": "The level's triangles gathered into an FScanBvhScene: every enabled mesh\nrenderer, static bodies into the static hierarchy once, moving bodies and\none tessellated capsule per animated bone into the dynamic hierarchy on each\nSync. Pure CPU data — the GPU mesh's CPU copy, the same bytes whichever RHI\nloaded it — so a D3D12 client and a Vulkan client build the same scene.",
-					"line": 41,
+					"line": 51,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Build",
 							"signature": "void Build(World& world, const FScanBvhRuleFn& rules = {})",
-							"line": 43
+							"line": 53
 						},
 						{
 							"kind": "method",
 							"name": "Sync",
 							"signature": "void Sync(World& world, const FScanBvhRuleFn& rules = {})",
-							"line": 44
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "FScanBvhWorld",
+							"signature": "FScanBvhWorld()",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "~FScanBvhWorld",
+							"signature": "~FScanBvhWorld()",
+							"line": 57
 						},
 						{
 							"kind": "method",
 							"name": "Gather",
 							"signature": "void Gather(World& world, const FScanBvhRuleFn& rules = {})",
-							"doc": "Build split for a caller that builds off the game thread: Gather reads\nthe world (game thread) and leaves the static hierarchy unbuilt,\nBuildStatic builds it and touches nothing else.",
-							"line": 49
+							"doc": "Build split for a caller that builds off the game thread: Gather reads\nthe world (game thread) and only notes each static mesh with its\ntransform; BuildStatic copies their triangles in and builds the\nhierarchy, touching nothing else. The copy is the costly part: done in\nGather it held the game thread 5 s when Play started on the Intel Sponza.",
+							"line": 64
 						},
 						{
 							"kind": "method",
 							"name": "BuildStatic",
 							"signature": "void BuildStatic()",
-							"line": 50
+							"line": 65
 						},
 						{
 							"kind": "method",
 							"name": "IsAvailable",
 							"signature": "bool IsAvailable() const",
-							"line": 52
+							"line": 67
 						},
 						{
 							"kind": "method",
 							"name": "Scene",
 							"signature": "const FScanBvhScene& Scene() const",
-							"line": 56
+							"line": 71
 						},
 						{
 							"kind": "method",
 							"name": "Scene",
 							"signature": "FScanBvhScene& Scene()",
-							"line": 59
+							"line": 74
 						},
 						{
 							"kind": "method",
 							"name": "DynamicMeshCount",
 							"signature": "uint32_t DynamicMeshCount() const",
-							"line": 63
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "CapsuleCount",
 							"signature": "uint32_t CapsuleCount() const",
-							"line": 66
+							"line": 81
 						},
 						{
 							"kind": "method",
@@ -27215,7 +27260,7 @@
 							"signature": "static void TessellateCapsule(float radius, float halfHeight, uint32_t segments, uint32_t rings, std::vector<Vec3>& outPositions, std::vector<uint32_t>& outIndices)",
 							"static": true,
 							"doc": "A capsule along +Y, centred on the origin, as triangles. Public so the\ndeterminism row can tessellate one without a skeleton.",
-							"line": 72
+							"line": 87
 						}
 					]
 				},
@@ -27225,25 +27270,25 @@
 					"namespace": "Mowo",
 					"bases": "public IAcousticGeometry",
 					"doc": "The deterministic scan hierarchy as acoustic geometry: the walls the players\nscan are the walls sound is stopped by and bounces off. Bone capsules are\npassed through — a body in a doorway does not wall the room off, and a\nlistener stands inside a capsule of its own. Holds the scene by pointer; its\nowner keeps it alive and hands out a new geometry after a rebuild.",
-					"line": 87,
+					"line": 103,
 					"members": [
 						{
 							"kind": "method",
 							"name": "FScanBvhAcousticGeometry",
 							"signature": "explicit FScanBvhAcousticGeometry(const FScanBvhScene* scene) : m_scene(scene)",
-							"line": 89
+							"line": 105
 						},
 						{
 							"kind": "method",
 							"name": "Raycast",
 							"signature": "bool Raycast(const Vec3& origin, const Vec3& direction, float maxDistance, FAcousticHit& outHit) const override",
-							"line": 92
+							"line": 108
 						},
 						{
 							"kind": "method",
 							"name": "GetName",
 							"signature": "const char* GetName() const override",
-							"line": 93
+							"line": 109
 						}
 					]
 				},
@@ -27253,55 +27298,55 @@
 					"namespace": "Mowo",
 					"bases": "public IScanTraceBackend",
 					"doc": "FScanBvhWorld as a scan trace backend, with no level-author rules (those\nlive above Game, in the PointCloud module's tracer, which derives from\nthis). Sound reaches it when the ScanHierarchy plugin is not enabled, so a\nlevel sounds like the hierarchy the scanner traces either way.",
-					"line": 105,
+					"line": 121,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Build",
 							"signature": "void Build(World& world) override",
-							"line": 107
+							"line": 123
 						},
 						{
 							"kind": "method",
 							"name": "Sync",
 							"signature": "void Sync(World& world) override",
-							"line": 110
+							"line": 126
 						},
 						{
 							"kind": "method",
 							"name": "BuildDeferred",
 							"signature": "void BuildDeferred(World& world) override",
-							"line": 113
+							"line": 129
 						},
 						{
 							"kind": "method",
 							"name": "FinishBuild",
 							"signature": "void FinishBuild() override",
-							"line": 116
+							"line": 132
 						},
 						{
 							"kind": "method",
 							"name": "IsAvailable",
 							"signature": "bool IsAvailable() const override",
-							"line": 119
+							"line": 135
 						},
 						{
 							"kind": "method",
 							"name": "Trace",
 							"signature": "uint32_t Trace(const FLidarShot& shot, std::vector<FLidarHit>& outHits) override",
-							"line": 122
+							"line": 138
 						},
 						{
 							"kind": "method",
 							"name": "CreateAcousticGeometry",
 							"signature": "std::shared_ptr<IAcousticGeometry> CreateAcousticGeometry() override",
-							"line": 125
+							"line": 141
 						},
 						{
 							"kind": "method",
 							"name": "GetWorld",
 							"signature": "const FScanBvhWorld& GetWorld() const",
-							"line": 129
+							"line": 145
 						}
 					]
 				}
@@ -27312,7 +27357,7 @@
 					"name": "FScanBvhRuleFn",
 					"signature": "using FScanBvhRuleFn = std::function<bool(World& world, EntityID id, FScanBvhGatherRule& rule)>",
 					"doc": "Fills `rule` for an entity that has one and returns true; false = defaults.",
-					"line": 34
+					"line": 44
 				}
 			]
 		},

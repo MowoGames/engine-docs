@@ -4,7 +4,7 @@ description: Where Mowo caches built textures, meshes and audio, how entries are
 order: 11
 sources:
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/DerivedDataCache.h
-verifiedAt: d510a9760
+verifiedAt: 19e236601
 ---
 
 The Derived Data Cache (DDC) stores the expensive results of processing an asset, such as a texture's compressed mip chain, a decoded audio clip or a cooked mesh, so the work runs once per change instead of once per load. It lives in the project at `Intermediate/DerivedDataCache`. It is safe to delete at any time and is never committed.
@@ -32,6 +32,8 @@ A stale entry is therefore never returned. It simply has a different key. The pl
 | Audio decoded to `.maudio` | `ddc.AudioCook` | On | Cache Audio Decodes |
 
 Each variable takes `-1` for the code default, `0` for off and `1` for on. With the texture cache on, the editor shows a texture from its cooked mip chain, so the max size and compression you set are what you see in the viewport. The first open of a project pays each texture's encode once.
+
+A `.tex` texture package, which a model import writes beside its mesh, is block-compressed as it loads: BC7 for color, BC5 for a normal map. The editor uses the same cache entry as the game's model load, so a texture is encoded once for both. Set the texture's compression to uncompressed to keep its RGBA8 pixels. A large level's first open therefore takes longer while its textures encode, and later opens read them from the cache.
 
 With the mesh cache on, a warm load of an unchanged model skips the translation and the build. Mesh distance fields and GI cards baked after a model loads are cached too.
 

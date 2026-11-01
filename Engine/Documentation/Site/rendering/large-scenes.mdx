@@ -1,0 +1,53 @@
+---
+title: Large models and scenes
+description: What the engine does with a Sponza-size level, where its frame time goes per quality tier, and the settings that decide whether it runs well.
+order: 5
+sources:
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/SceneRenderer.h
+  - Engine/Source/Runtime/Renderer/Public/Renderer/GeometryPool.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/ImageDecode.h
+verifiedAt: 54204cbe1
+---
+
+A level the size of the Intel Sponza (2022, with the Curtains and Ivy add-ons: about 10.8 million triangles in 450 submeshes and 80 4K PBR textures) runs on the same renderer as a small one. On a mid-range GPU its frame time is decided by the [quality tier](/docs/rendering/quality-tiers/) and the resolution far more than by the size of the meshes. This page shows where the time goes and what the engine does so the geometry itself stays cheap.
+
+## What the engine does with a big model
+
+- **Static meshes are drawn by the GPU.** Every static, opaque mesh joins the GPU scene: its vertices and indices are copied once into a shared geometry pool, the GPU culls the instances against the frustum and the previous frame's depth, and all meshes that share a material draw with one indirect call. The pools grow with the level, a pool at a time, so a large level stays on this path. Their total size is capped by `r.GpuScene.GeometryPoolBudgetMB` (by default an eighth of the GPU's memory, between 256 and 2048 MB); a mesh that no longer fits is drawn on its own and the log says so once.
+- **Textures are block-compressed.** An imported texture reaches the GPU as a BC chain with all its mips — BC7 for colour, BC5 for normal maps, BC6H for HDR — as the packaged game ships it. A 4K map takes 21 MB instead of the 85 MB it took uncompressed; on the Sponza that is the difference between 8.5 GB of loaded assets, past what an 8 GB card holds, and a level that fits. An author who sets a texture's compression to none keeps it uncompressed.
+- **The first open cooks, later opens read the cache.** The first time the editor opens a level it compresses every texture into the project's [Derived Data Cache](/docs/content-pipeline/derived-data-cache/) on all CPU cores, in the background: the level is usable at once, untextured surfaces fill in as their maps land, and the status bar counts the assets still importing. On the reference machine the Sponza's 80 textures cook in about a minute; every later open reads them from the cache.
+- **Entering Play does not stall on the level's size.** The sound occlusion and the scanner build their own copy of the level's triangles on a worker thread.
+
+## Where the milliseconds go
+
+The Sponza in Play at 1920×1080, the level's cinematic camera flying through the nave, Global Illumination on, measured on the reference RTX 3050 (8 GB) with a development build, nothing else compiling. *Auto* is the Auto upscaling mode (`r.Upscaler.AutoQuality 1`, Quality at 1080p), *native* renders every pixel.
+
+| Tier | Auto | Native | GPU frame (Auto) | Largest passes (Auto, ms) |
+| --- | --- | --- | --- | --- |
+| Low | 250 fps | 147 fps | 4.4 ms | G-buffer 1.3, post-processing 0.8, transparency 0.6 |
+| Medium | 110 fps | 55 fps | 9.6 ms | GI sampling 1.8, post-processing 1.6, GI denoise 1.4, upscale 1.3 |
+| High | 78 fps | 44 fps | 13.2 ms | GI sampling 3.3, shadows 2.3, transparency 1.4, GI denoise 1.4, SSR 1.4, G-buffer 1.1 |
+| High, GI off | 121 fps | 70 fps | 8.6 ms | shadows 1.8, G-buffer 1.7, SSR 1.3 |
+| Epic | 29 fps | 16 fps | 35.6 ms | GI sampling 9.1, SSR 7.5, shadows 4.9, SDF reflections 4.9, ray-traced GI gather 3.6 |
+| Cinematic | 19 fps | 11 fps | 44.9 ms | GI sampling 7.9, SSR 7.1, volumetric fog 6.1, ray-traced sun shadow 6.0, GTAO 5.1, RTAO 4.5 |
+| High at 2560×1440 | 51 fps | 23 fps | 19.8 ms | GI sampling 4.9, shadows 3.9, SSR 2.2 |
+
+Drawing the geometry — the G-buffer pass with its culling — costs about 1 ms of a High frame. The rest is lighting: Global Illumination, shadows and screen-space reflections, all of which scale with the number of pixels and with the tier. So:
+
+- **Epic and Cinematic are not for a mid-range GPU.** They add ray-traced and SDF features whose cost on a 3050 is three to four times High's whole frame. On such a card use High or Medium.
+- **Render fewer pixels.** Auto upscaling roughly doubles the frame rate at every tier for little visible loss; native rendering on a mid-range GPU is the most expensive single choice after the tier.
+- **Global Illumination is the largest single cost on High** (about 4.6 ms of 13.2). A project that does not need dynamic indirect light can turn it off in Project Settings.
+
+## Check your own settings
+
+The editor keeps the tier and upscaling mode you pick in your user settings, and they apply to every project you open. If a level runs far slower for you than the table above, check the **Quality** preset and the upscaling mode you saved: Epic with native rendering costs a 3050 about five times what High with Auto costs.
+
+To see the numbers for your own level, enable `stat.FrameStats 300` in the console: every 300 frames the log lists the CPU frame, the GPU frame and every GPU pass with its time.
+
+## Settings
+
+| Console variable | Default | What it does |
+| --- | --- | --- |
+| `r.GpuScene.GeometryPoolGrowth` | 1 | 1 adds a geometry pool when a mesh does not fit; 0 keeps one fixed pool per index width and draws the rest one by one (for comparison) |
+| `r.GpuScene.GeometryPoolBudgetMB` | 0 | Total size of the geometry pools in MB; 0 = an eighth of the GPU's dedicated memory, 256 to 2048 MB |
+| `r.Texture.PackageNativeBc` | 1 | Upload a texture as its block-compressed chain; 0 decodes it and compresses it while it loads |
