@@ -5,9 +5,10 @@ order: 12
 sources:
   - Engine/Source/Runtime/RHI/Public/RHI/IUpscaler.h
   - Engine/Source/Runtime/RHI/Public/RHI/FrameGeneration.h
+  - Engine/Source/Runtime/RHI/Public/RHI/VendorCapabilityProbe.h
   - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
-verifiedAt: 77b5ea1b2
+verifiedAt: 168a9a11d
 ---
 
 Mowo can render at a lower internal resolution and reconstruct the output with a temporal upscaler, or render at native resolution and resolve aliasing with TAA or FXAA. One cvar, `r.Upscaler`, picks the method; `r.UpscalerQuality` picks the render resolution, or Auto upscaling (`r.Upscaler.AutoQuality`) picks it from the output resolution.
@@ -105,9 +106,19 @@ Turn it on or off per project with **Project Settings > Rendering > Auto Upscali
 When `r.Upscaler` is `-1`, the auto-tier fills it at startup ():
 
 1. The quality mode comes from the tier. Low, Medium and High upscale automatically (Auto upscaling above); Epic uses Quality and Cinematic Native.
-2. Vendor upscalers are picked only when `r.AutoQuality.VendorUpscalers` is 1. Then an NVIDIA GPU with DLSS gets DLSS, AMD with FSR gets FSR, Intel with XeSS gets XeSS, and Apple with MetalFX gets MetalFX.
+2. Vendor upscalers are picked only when `r.AutoQuality.VendorUpscalers` is 1. Then an NVIDIA GPU whose runtime reports DLSS gets DLSS, AMD with FSR gets FSR, Intel with XeSS gets XeSS, and Apple with MetalFX gets MetalFX. The pick waits at most about one frame for the vendor runtimes to answer (next section). Without an answer it starts on TSR and switches to the vendor upscaler when the answer arrives, unless config, the settings screen or the console set `r.Upscaler` in the meantime.
 3. At a fixed Native mode (Cinematic) the choice is TAA.
 4. Otherwise the choice is TSR.
+
+## Which vendor technologies this GPU runs
+
+Only the vendor runtimes can say whether this GPU runs DLSS, DLSS Ray Reconstruction, FSR, XeSS, MetalFX, a frame-generation backend or a low-latency runtime. Asking them is slow on some machines: Streamline loads and signature-checks its plugins and queries the driver, which can take several seconds on an NVIDIA GPU. So the engine asks once, on a background thread, after the graphics device exists, and keeps the answer for the session. The log line `[VendorProbe] answered in … ms` lists what the runtimes reported.
+
+- The editor starts the check while the project loads. Until it finishes, the vendor rows on **Project Settings > Rendering** and **Project Settings > Engine > Frame Generation** read **checking this GPU's vendor runtimes…**, and their controls stay disabled. An open settings window updates when the answer arrives. The viewport's **Upscaling** menu marks those methods **(checking…)**.
+- A game starts the check only when something needs it: the upscaler auto pick with `r.AutoQuality.VendorUpscalers 1`, or the first time the player opens the settings screen. Until the answer arrives, that screen offers every method the graphics API allows. It then drops the ones this GPU cannot run, unless the player has unsaved changes on it; in that case the list updates the next time the screen opens.
+- Low latency starts after the answer arrives. While the check runs, NVIDIA Reflex, Anti-Lag 2 and XeLL get no per-frame calls and a frame-rate cap uses the engine's own limiter.
+
+Changing the graphics API at runtime asks again for the new device.
 
 <Callout type="engine">
 Vendor upscalers are opt-in for the automatic case because their SDKs sit between the engine and the graphics API and install their own process-exit handlers. TSR hooks nothing, so it carries the automatic case, and DLSS, FSR and XeSS stay one setting away.
@@ -122,7 +133,7 @@ The editor viewport resolves exactly as the game does: the same tier, the same u
 Open **Project Settings**, the **Rendering** page, section **ANTI-ALIASING & UPSCALING**. Set **Anti-Aliasing Method** (Auto, the default, lets the device pick TSR or, when allowed, the vendor upscaler), **Auto Upscaling**, and with Auto Upscaling off a **Screen Percentage** or **Custom Percentage**. A method the graphics API cannot host is not listed; one this GPU cannot run stays listed with the note that it applies to players' hardware, because the setting ships with the game.
 </Step>
 <Step title="From code">
-Check support first, then set the cvars. The renderer applies the change at the next `BeginScene`.
+Check support first, then set the cvars. The renderer applies the change at the next `BeginScene`. Read support from `FVendorCapabilityProbe`, which never blocks. `IUpscaler::IsUpscalerSupported` asks the runtime on the calling thread and can take seconds the first time, so do not call it on the game thread.
 </Step>
 <Step title="For players">
 The game's settings screen has **Anti-Aliasing Method**, **Auto Resolution**, **Screen Percentage** and **Custom Percentage** rows in the **Graphics** category, and lists only the methods this GPU can run.
@@ -131,10 +142,13 @@ The game's settings screen has **Anti-Aliasing Method**, **Auto Resolution**, **
 
 ```cpp title="PickUpscaler.cpp" wrap
 #include "Core/IConsoleManager.h"
-#include "RHI/IUpscaler.h"
+#include "RHI/VendorCapabilityProbe.h"
 #include <string>
 
-const bool dlss = Mowo::IUpscaler::IsUpscalerSupported(Mowo::UpscalerType::DLSS);
+Mowo::FVendorCapabilityProbe::Start();
+
+Mowo::FVendorCapabilities caps;
+const bool dlss = Mowo::FVendorCapabilityProbe::TryGet(caps) && caps.SupportsUpscaler(Mowo::UpscalerType::DLSS);
 const Mowo::UpscalerType type = dlss ? Mowo::UpscalerType::DLSS : Mowo::UpscalerType::TSR;
 
 Mowo::IConsoleManager::Get().SetByName("r.Upscaler", std::to_string(static_cast<int>(type)));
