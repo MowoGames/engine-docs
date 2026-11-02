@@ -8,6 +8,9 @@ sources:
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicsQuery.h
   - Engine/Source/Runtime/Physics/Public/Physics/CollisionChannel.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/RigidBodyComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsBodyTuning.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsForceFields.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/ForceFieldComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/ColliderComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/ConstraintComponent.h
   - Engine/Source/Runtime/Core/Public/Core/Constants.h
@@ -21,7 +24,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/Components/FPhysicsInteractableComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MPhysicsInteractableStatics.h
   - Engine/Source/Runtime/Game/Public/Game/MPhysicsStatics.h
-verifiedAt: 5922e6e5e
+verifiedAt: 0b319fdc0
 ---
 
 Mowo simulates physics with [Jolt Physics](https://github.com/jrouwe/JoltPhysics). You describe bodies with reflected ECS components, a `PhysicsSystem` steps the simulation at a fixed rate, and a `PhysicsWorld` answers ray casts, sweeps and overlaps. Each scene has its own physics world.
@@ -38,11 +41,16 @@ The physics step runs at a fixed 1/60 s. Frame time accumulates, and the system 
 | `p.AsyncTick` | off | Steps Jolt on a worker thread. Poses arrive one frame late, and any call that reaches Jolt in between waits for the step. |
 | `p.Deterministic` | off | Single-threaded Jolt jobs and contact events sorted by body pair, for bit-identical replays on the same binary and CPU |
 | `p.Threads` | -1 | Upper bound on Jolt worker threads; -1 uses the whole engine pool |
+| `p.VelocitySteps` | 10 | Solver velocity iterations per step (Jolt's default). More settle tall stacks and piles harder; fewer make the step cheaper. Read when the world comes up |
+| `p.PositionSteps` | 2 | Solver position iterations per step (Jolt's default): how hard penetrations are pushed apart. Read when the world comes up |
+| `p.CharacterEdgeRemoval` | off | Character controllers spend extra effort removing ghost contacts on the internal edges of a triangle mesh, so a capsule slides over seams instead of catching. Read when a controller is created |
 | `p.OverlapDuringPhysics` | on | Runs the frame's physics steps on a worker while the `DuringPhysics` actor tick group runs |
 | `p.Debug` | off | Master switch for the physics debug visualizer; `p.DebugShapes`, `p.DebugContacts`, `p.DebugCOM`, `p.DebugAABB`, `p.DebugVelocity` and `p.DebugConstraints` pick what it draws |
 | `p.Stats` | 0 | Logs a physics stats snapshot every N frames |
 
-**Max Substeps** and **Async Physics Tick** are also on the **Engine › Physics** page of Project Settings.
+**Max Substeps**, **Async Physics Tick**, **Velocity Steps**, **Position Steps** and **Character Mesh Edge Smoothing** are also on the **Engine › Physics** page of Project Settings.
+
+The solver steps trade stability for cost. The `solver-steps-test` row stacks sixteen 5 kg boxes and measures how far the top box ends up from where it should rest after four seconds: 0.38 m at 2 velocity and 1 position step, 0.038 m at the default 10 and 2, and 0.009 m at 30 and 6. Raise the counts for tall piles and towers; leave them alone for ordinary scenes.
 
 Dynamic bodies render at a pose interpolated between the last two physics steps, so motion stays smooth at any refresh rate. Kinematic bodies, static bodies and character controllers are written without interpolation. <Source symbol="PhysicsSystem" />
 
@@ -56,7 +64,7 @@ A physical object needs a collider for its shape. Add a rigid body to make it mo
 
 <Steps>
 <Step title="Add a Collider">
-Pick a shape: `Box`, `Sphere`, `Capsule`, `Mesh`, `ConvexHull` or `HeightField`, and size it. <Source symbol="ColliderComponent" />
+Pick a shape: `Box`, `Sphere`, `Capsule`, `Cylinder`, `Tapered Capsule`, `Tapered Cylinder`, `Mesh`, `ConvexHull` or `HeightField`, and size it. `Radius` is the top end of a tapered shape and `Bottom Radius` the other; `Height` is the full length including the caps. <Source symbol="ColliderComponent" />
 </Step>
 <Step title="Add a RigidBody">
 Choose `Static`, `Kinematic` or `Dynamic` and set mass, friction, restitution and damping. <Source symbol="RigidBodyComponent" />
@@ -80,6 +88,11 @@ Useful `RigidBodyComponent` fields:
 | `friction`, `restitution` | Override the collider's material only when moved off their defaults (0.5 and 0.2) |
 | `linearDamping`, `angularDamping` | Per second |
 | `useGravity`, `useCCD` | Gravity and continuous collision detection |
+| `gravityScale` | Multiplies gravity for this body: 0 floats, 2 falls twice as hard, negative rises. `useGravity` off still wins |
+| `maxLinearVelocity`, `maxAngularVelocity` | Speed caps in m/s and rad/s. Lower the linear one on a light fast prop so it cannot cross a thin wall in one step |
+| `inertiaScale`, `centerOfMassOffset` | Make a body resist or ease spinning, and move its centre of mass (a low offset self-rights a bottle). Read when the body is created |
+| `allowSleeping`, `startAsleep` | Keep a body awake, or place a settled prop asleep so it costs nothing until touched |
+| `applyGyroscopicForce` | Gyroscopic precession for fast spinners such as a thrown axe |
 | `freezePositionX/Y/Z`, `freezeRotationX/Y/Z` | Lock individual axes |
 
 <Callout type="warning">
@@ -159,6 +172,10 @@ physics->OnCollisionEnterEvents().Add([](uint64_t entityId, const Mowo::Collisio
 `SetOnCollisionEnter` and its siblings hold a single callback each, and engine systems already claim them. Setting your own replaces theirs. Use the multicast event above.
 </Callout>
 
+## Retune a live body
+
+The `RigidBody` fields above are read when the body is created. To change a running body, use `FPhysicsBodyTuning` from C++ (`SetGravityScale`, `SetMaxLinearVelocity`, `SetMaxAngularVelocity`, `SetAllowSleeping`) or, from Visual Scripting and Wolang, `MPhysicsStatics`: `SetActorGravityScale`, `SetActorMaxLinearVelocity` and `SetActorAllowSleeping`. Each updates the component too, so a later body rebuild keeps the value. Raising the gravity scale of a body that settled while it was zero wakes it. <Source symbol="FPhysicsBodyTuning" />
+
 ## Push a body
 
 `PhysicsWorld` applies forces and impulses to a body handle: `AddForce`, `AddImpulse`, `AddForceAtPosition` and `AddImpulseAtPosition`. Combine it with a trace to make a prop react to a shot at the point it was hit. <Source symbol="PhysicsWorld" />
@@ -182,6 +199,31 @@ static void ShootProp(Mowo::PhysicsSystem& physics, const Mowo::Vec3& from, cons
 ```
 
 The prop needs a `Dynamic` rigid body. Static and kinematic bodies ignore impulses.
+
+## Force fields and blasts
+
+A `ForceField` component turns an entity into a volume that pushes the dynamic bodies inside it. Pick a `Type`, a `Shape` (sphere with `Radius`, or a box with `Half Extents` that follows the entity's rotation), a `Strength` and a `Falloff` (`None`, `Linear` or `Quadratic` toward the edge). <Source symbol="ForceFieldComponent" />
+
+| Type | What it does |
+| --- | --- |
+| `Radial` | Pushes bodies away from the centre; a negative strength is a gravity well |
+| `Directional` | A constant push along `Direction`, in the entity's frame: a conveyor, a draft, a current |
+| `Vortex` | Swirls bodies around the entity's up axis; `Inward Strength` pulls them toward it |
+| `Wind` | `Strength` is a wind speed in m/s. Bodies are dragged toward it with `Drag`, so they never exceed it; `Turbulence` adds gusts at `Turbulence Frequency` |
+
+`Strength` is a force in newtons; turn on `As Acceleration` to read it as m/s² so heavy and light bodies move alike. A body is inside when its centre of mass is. Fields act through the persistent-force channel, so the effect does not depend on how many fixed steps a frame runs.
+
+For a one-off blast, `FPhysicsForceFields::ApplyRadialImpulse` in C++ and `MPhysicsStatics::ApplyRadialImpulse` in Visual Scripting and Wolang push every dynamic body in a radius with an impulse that fades to the edge; `upwardsBias` lifts the blast origin so props rise as well as scatter. `MPhysicsStatics::AddActorForce` and `AddActorTorque` push one actor for the current frame. <Source symbol="FPhysicsForceFields" />
+
+## Contact modifiers
+
+A `ContactModifier` component changes how one body behaves in its contacts, without touching the bodies it meets. It works on static, kinematic and dynamic bodies and needs a `Collider`. <Source symbol="ContactModifierComponent" />
+
+- `One Way` lets other bodies pass through the platform from below and from the sides and land on the face pointing along `Up Axis` (local to the body, so a tilted or rotating platform works). A body moving up through the platform faster than 0.5 m/s is let through; one that is dropped onto it or rests on it is blocked.
+- `Surface Velocity` is a conveyor: anything in friction contact with the body is carried at that velocity (in the body's local space) while the body itself stays put. A body that was placed asleep on a belt stays asleep until something wakes it.
+- `Mass Scale` changes the mass the body presents in contacts only. A scale of 100 makes a prop that others cannot shove; 0.1 makes one that yields to a touch. Gravity and the body's own momentum are unchanged.
+
+Character controllers use their own contact path and ignore one-way, surface velocity and mass scale. The modifiers cost nothing in a world that has none.
 
 ## Constraints
 

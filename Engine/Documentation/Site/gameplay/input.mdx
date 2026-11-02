@@ -17,7 +17,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/MInputStatics.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
   - Engine/Source/Runtime/Input/Public/Input/InputBindingsConfig.h
-verifiedAt: 5922e6e5e
+verifiedAt: 78247d651
 ---
 
 Mowo's input system follows Unreal's Enhanced Input. You describe **what** the player can do as input action assets, describe **which hardware** triggers each action in input mapping context assets, and bind gameplay callbacks to actions and trigger events. Gameplay code never polls keys directly.
@@ -223,6 +223,8 @@ An event counts as consumed only when a widget handled it, not when a widget mer
 - **Deadzones** belong to the device, not to each binding: `i.StickDeadzone` (default 0.15) and `i.TriggerDeadzone` (default 0.05) apply to every pad, and `i.Gamepad0.StickDeadzone` to `i.Gamepad3.TriggerDeadzone` override one slot. Project Settings › Engine › Input writes them. Per-binding `DeadZone` modifiers still apply on top.
 - **Gamepad slots**: up to four pads, addressed by player slot. The player's slot choice is remembered per device in the same `InputUser.mdfb` file.
 - **Rumble**: `InputManager::RumbleGamepad(slot, low, high, ms)` and `RumbleGamepadTriggers`. `i.RumbleScale` scales all rumble.
+- **Motion**: pads with a gyro or accelerometer (DualShock 4, DualSense, Switch, Steam Deck) report them through `InputManager::GetGamepadGyro(slot, sample)` (rad/s) and `GetGamepadAccel` (m/s^2). The first read starts the pad's sensor stream, so a game that never asks pays nothing; each call returns false until the pad delivers the sensor. `i.GamepadMotion` turns the sensors off for every pad. Scripts read the same values through `MInputStatics::GetGamepadGyro`, `GetGamepadAccel` and `HasGamepadGyro`.
+- **Light bar**: `InputManager::SetGamepadLed(slot, r, g, b)` (0..1), or `MInputStatics::SetGamepadLightColor`, tints the light of pads that have an RGB LED (DualShock 4, DualSense, Steam Deck) and returns false on the rest. The colour is re-sent when the pad reconnects. Use it for scanner or health state; the colour is always a secondary cue.
 - **Focus loss** releases every held key and zeroes the axes, so nothing stays held after alt-tab.
 
 ### Button prompts

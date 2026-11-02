@@ -13,7 +13,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/SteamTicketValidator.h
   - Engine/Source/Runtime/Networking/Public/Networking/ClientAuth.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-verifiedAt: 65255635a
+verifiedAt: 44a944219
 ---
 
 Steam, Discord and Mowo Online are not built into the engine. Each lives in its own plugin, and all three are **off by default** for a project (`"enabledByDefault": false`). When a plugin loads, it registers an `IOnlineService` with the engine, and engine code talks only to that interface <Source symbol="IOnlineService" />. No engine module includes a platform SDK header. A build without the plugins still hosts and joins over ENet with a direct address.
@@ -21,7 +21,7 @@ Steam, Discord and Mowo Online are not built into the engine. Each lives in its 
 | Plugin | Provides |
 |---|---|
 | **SteamPlatform** | Identity, SDR P2P transport, lobbies and invites, rich presence with party groups, stats and achievements, encrypted session tickets, cloud saves, Workshop items, Remote Play Together, the on-screen keyboard and Steam Input action sets and glyphs |
-| **DiscordPlatform** | Rich presence, Ask to Join and the per-frame callback pump. Does not load on dedicated servers. |
+| **DiscordPlatform** | Rich presence, Ask to Join, friends and join invites, and the per-frame callback pump. Does not load on dedicated servers. |
 | **MowoOnlinePlatform** | Mowo ID identity and token, friends and presence, invites and join requests, achievements, cloud saves of the SaveGames folder and the launcher overlay, through the Mowo Games Launcher. Does not load on dedicated servers. |
 
 ## Build options
@@ -116,10 +116,13 @@ static void OnWaveCleared(Mowo::MPlatformSubsystem& platform, int wave, int kill
 Rich presence goes to every available service, formatted through the project's presence formats. Achievements and stats are recorded locally first and work without any platform; see [Steam features](/docs/multiplayer/steam-features/) for them, presence keys and party groups, Steam Input, Remote Play Together and the Workshop. The subsystem also exposes:
 
 - lobbies: `CreateLobby`, `JoinLobby`, `LeaveLobby`, `RefreshLobbyList` and the `GetLobby…At` getters, `ConnectToHost`;
+- lobby metadata and roster: `SetLobbyData` and `SetLobbyJoinable` (host only; publish the map or difficulty and close the lobby once a run starts), `GetLobbyData`, and the roster through `GetLobbyRosterCount` with `GetLobbyRosterIdAt`, `GetLobbyRosterNameAt` and `IsLobbyRosterHostAt`;
+- leaderboards: `UploadLeaderboardScore(board, score, keepBest)` then poll `WasLeaderboardUploadOk`; `RequestLeaderboard(board, range, first, count)` with range 0 global, 1 around the local player, 2 friends, then poll `IsLeaderboardPending` and read `GetLeaderboardCount` with the `GetLeaderboard…At` getters. One leaderboard call runs at a time. Steam provides them today;
 - session adverts: `AdvertiseSession`, `ClearAdvertisement`;
 - Steam game recording: `AddTimelineEvent`, `SetTimelineMode`, `StartGamePhase`, `EndGamePhase` and related calls;
 - hardware: `GetPlatformHardware`, `GetRecommendedQualityPreset`, `IsRunningUnderProton`;
-- Discord: `IsDiscordReady`, `AuthorizeDiscord`, `IsDiscordAuthorized`.
+- Discord: `IsDiscordReady`, `AuthorizeDiscord`, `IsDiscordAuthorized`;
+- Discord friends and invites: `GetDiscordFriendCount` with `GetDiscordFriend…At` (presence 0 offline, 1 online elsewhere, 2 in this game), `SendDiscordInvite`, `GetPendingDiscordInviteCount`, `GetPendingDiscordInviteSenderAt` and `AcceptDiscordInvite`, which joins through the same path as a Steam invite. They need the player to sign in with the social scopes, which `discord.Social` turns on (off by default: a presence-only game keeps the smaller consent screen). Written against the 1.10 headers and covered by mock rows, but not yet run against a live Discord client.
 
 ## Mowo Online
 
