@@ -15,7 +15,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/AReflectionCapture.h
   - Engine/Source/Runtime/RHI/Public/RHI/IBLGenerator.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ReflectionProbes.h
-verifiedAt: 68067c1d8
+verifiedAt: 903f01eb8
 ---
 
 The environment around a scene is built from a few actors: a sky light for ambient and reflected sky light, a sky atmosphere and clouds for the visible sky, height fog and volumetric fog for the air, and reflection captures for interiors. This page covers how each one renders and the settings that matter. Placing and animating them (time of day, weather) belongs to the [Gameplay](/docs/gameplay/) section.
@@ -30,7 +30,7 @@ The environment around a scene is built from a few actors: a sky light for ambie
 | Specified Cubemap | An HDR environment you pick in **Cubemap** |
 | Procedural Atmosphere | The procedural sky atmosphere |
 
-From that cubemap the renderer derives a diffuse irradiance map and a prefiltered specular map with one mip per roughness step, plus a BRDF lookup table, through `IBLGenerator` (). The irradiance map and the rough specular mips integrate over a box-filtered 16×16-per-face copy of the capture, so a real-time sky light that re-captures under moving clouds costs a fraction of a millisecond instead of a frame spike. **Intensity** and **Tint** scale the result; **Lower Hemisphere Is Black** removes light from below the horizon.
+From that cubemap the renderer derives a diffuse irradiance map and a prefiltered specular map with one mip per roughness step, plus a BRDF lookup table, through `IBLGenerator` (). The irradiance map and the rough specular mips integrate over a box-filtered 16×16-per-face copy of the capture, and a real-time sky light that re-captures under moving clouds spreads each capture over about twenty frames: the capture and its fold, then the irradiance one cube face a frame and the prefilter a fixed GPU budget of faces a frame. Each frame pays a fraction of a millisecond; done whole, the two convolutions cost one frame about 4.5 ms on an RTX 3050 every half second. The new maps crossfade in once the last face is written. **Intensity** and **Tint** scale the result; **Lower Hemisphere Is Black** removes light from below the horizon.
 
 **Sky Rotation** turns the visible cubemap sky and its lighting together, in degrees; `r.Sky.Rotation` adds to it. A procedural atmosphere ignores rotation, because its sun disc follows the directional light.
 
