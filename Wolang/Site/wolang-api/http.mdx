@@ -4,7 +4,7 @@ sidebarTitle: "http"
 description: "The http package: http."
 order: 4
 generated: "wolang"
-verifiedAt: "0de42958a"
+verifiedAt: "906b9ed67"
 ---
 
 ## http
@@ -38,7 +38,7 @@ var limits: Limits
 #### method `Get`
 
 ```wolang
-fun Get(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Get(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 A route for `GET`. The same names a router has, so an application
@@ -47,37 +47,37 @@ can be built without reaching inside it.
 #### method `Post`
 
 ```wolang
-fun Post(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Post(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Put`
 
 ```wolang
-fun Put(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Put(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Patch`
 
 ```wolang
-fun Patch(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Patch(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Delete`
 
 ```wolang
-fun Delete(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Delete(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Any`
 
 ```wolang
-fun Any(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Any(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Otherwise`
 
 ```wolang
-fun Otherwise(handle: fun(Request) -> Response) uses unsafe
+fun Otherwise(handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Mount`
@@ -89,7 +89,7 @@ fun Mount(prefix: text, inner: &Router) uses unsafe
 #### method `Use`
 
 ```wolang
-fun Use(run: fun(&mut Request) -> Response?) uses unsafe
+fun Use(run: keep fun(&mut Request) -> Response?) uses unsafe
 ```
 
 A layer that runs before every handler, and may answer instead.
@@ -97,7 +97,7 @@ A layer that runs before every handler, and may answer instead.
 #### method `Then`
 
 ```wolang
-fun Then(run: fun(&Request, Response) -> Response) uses unsafe
+fun Then(run: keep fun(&Request, Response) -> Response) uses unsafe
 ```
 
 A layer that runs after every handler.
@@ -192,7 +192,7 @@ var secure: bool = false
 ### function `ParseUrl`
 
 ```wolang
-offer fun ParseUrl(url: text) -> Url! uses unsafe
+offer fun ParseUrl(url: text) -> Url!BadUrl uses unsafe
 ```
 
 `http://host:port/path?query` taken apart.
@@ -241,7 +241,7 @@ The header called `name`, or `fallback`. Case does not matter.
 ### function `Fetch`
 
 ```wolang
-offer fun Fetch(url: text) -> Reply! uses io, net, time, unsafe
+offer fun Fetch(url: text) -> Reply!(BadUrl, Unreachable, Truncated, NotHttp) uses io, net, time, unsafe
 ```
 
 `GET url`.
@@ -249,7 +249,7 @@ offer fun Fetch(url: text) -> Reply! uses io, net, time, unsafe
 ### function `PostJson`
 
 ```wolang
-offer fun PostJson(url: text, body: text) -> Reply! uses io, net, time, unsafe
+offer fun PostJson(url: text, body: text) -> Reply!(BadUrl, Unreachable, Truncated, NotHttp) uses io, net, time, unsafe
 ```
 
 `POST url` with a JSON body.
@@ -257,7 +257,7 @@ offer fun PostJson(url: text, body: text) -> Reply! uses io, net, time, unsafe
 ### function `PutJson`
 
 ```wolang
-offer fun PutJson(url: text, body: text) -> Reply! uses io, net, time, unsafe
+offer fun PutJson(url: text, body: text) -> Reply!(BadUrl, Unreachable, Truncated, NotHttp) uses io, net, time, unsafe
 ```
 
 `PUT`, `PATCH` and `DELETE`, for an API that uses them.
@@ -265,19 +265,19 @@ offer fun PutJson(url: text, body: text) -> Reply! uses io, net, time, unsafe
 ### function `PatchJson`
 
 ```wolang
-offer fun PatchJson(url: text, body: text) -> Reply! uses io, net, time, unsafe
+offer fun PatchJson(url: text, body: text) -> Reply!(BadUrl, Unreachable, Truncated, NotHttp) uses io, net, time, unsafe
 ```
 
 ### function `Delete`
 
 ```wolang
-offer fun Delete(url: text) -> Reply! uses io, net, time, unsafe
+offer fun Delete(url: text) -> Reply!(BadUrl, Unreachable, Truncated, NotHttp) uses io, net, time, unsafe
 ```
 
 ### function `PostForm`
 
 ```wolang
-offer fun PostForm(url: text, body: text) -> Reply! uses io, net, time, unsafe
+offer fun PostForm(url: text, body: text) -> Reply!(BadUrl, Unreachable, Truncated, NotHttp) uses io, net, time, unsafe
 ```
 
 A form submission: `a=1&b=two`, escaped, as a browser sends it.
@@ -285,7 +285,7 @@ A form submission: `a=1&b=two`, escaped, as a browser sends it.
 ### function `Perform`
 
 ```wolang
-offer fun Perform(call: Call) -> Reply! uses io, net, time, unsafe
+offer fun Perform(call: Call) -> Reply!(BadUrl, Unreachable, Truncated, NotHttp) uses io, net, time, unsafe
 ```
 
 What a built call does. `Perform`, because `Request` is what a
@@ -309,7 +309,7 @@ relative to the directory the request was in.
 ### function `Once`
 
 ```wolang
-offer fun Once(call: Call) -> Reply! uses io, net, time, unsafe
+offer fun Once(call: Call) -> Reply!(BadUrl, Unreachable, Truncated, NotHttp) uses io, net, time, unsafe
 ```
 
 One request, one answer, no redirects.
@@ -330,7 +330,7 @@ The bytes of a request.
 ### function `Open`
 
 ```wolang
-offer fun Open(url: text) -> Socket! uses io, net, unsafe
+offer fun Open(url: text) -> Socket!(BadUrl, NeedsTls, Unreachable) uses io, net, unsafe
 ```
 
 A connection held open, for a program making several calls.
@@ -347,7 +347,7 @@ offer fun Ask(
     method: text,
     body: text,
     kind: text,
-    keep_alive: bool) -> Reply! uses io, time, unsafe
+    keep_alive: bool) -> Reply!(Unreachable, Truncated, NotHttp) uses io, time, unsafe
 ```
 
 One request on a connection the caller owns.
@@ -356,7 +356,7 @@ One request on a connection the caller owns.
 ### function `Plain`
 
 ```wolang
-offer fun Plain(connection: &mut Socket, timeout: int) -> Reply! uses io, time, unsafe
+offer fun Plain(connection: &mut Socket, timeout: int) -> Reply!(Truncated, NotHttp) uses io, time, unsafe
 ```
 
 Reads an answer off a plain connection.
@@ -364,7 +364,7 @@ Reads an answer off a plain connection.
 ### function `Secure`
 
 ```wolang
-offer fun Secure(stream: &mut Stream, timeout: int) -> Reply! uses io, time, unsafe
+offer fun Secure(stream: &mut Stream, timeout: int) -> Reply!(Truncated, NotHttp) uses io, time, unsafe
 ```
 
 The same, over TLS.
@@ -393,7 +393,7 @@ stops wherever it likes, which is why this is asked after every one.
 ### function `Finish`
 
 ```wolang
-offer fun Finish(whole: text, head: int, length: int, chunked: bool) -> Reply! uses unsafe
+offer fun Finish(whole: text, head: int, length: int, chunked: bool) -> Reply!(Truncated, NotHttp) uses unsafe
 ```
 
 The answer, with a chunked body put back together.
@@ -431,7 +431,7 @@ Whether the head says the body comes in chunks.
 ### function `ParseReply`
 
 ```wolang
-offer fun ParseReply(whole: text, head: int, length: int) -> Reply! uses unsafe
+offer fun ParseReply(whole: text, head: int, length: int) -> Reply!NotHttp uses unsafe
 ```
 
 What a response's bytes mean.
@@ -527,7 +527,7 @@ var fd: int = -1
 #### field `buffer`
 
 ```wolang
-var buffer: []u8
+var buffer: []mut u8
 ```
 
 #### field `filled`
@@ -594,7 +594,7 @@ A pool of connection buffers, one slot per connection held at once.
 #### field `slots`
 
 ```wolang
-var slots: []Held
+var slots: []mut Held
 ```
 
 #### field `limits`
@@ -855,7 +855,7 @@ Whether the body says it is JSON.
 ### function `JsonBody`
 
 ```wolang
-offer fun JsonBody(request: &Request) -> Value! uses unsafe
+offer fun JsonBody(request: &Request) -> Value!json.Malformed uses unsafe
 ```
 
 The body as JSON, or the error the parser gave.
@@ -1254,8 +1254,9 @@ offer fun ParseInt(value: text) -> int uses unsafe
 
 The number `value` spells, or zero. Stops at the first byte that is
 not a digit, which is what a `Content-Length` with anything after it
-deserves. More than nine digits is `-1`: `int` is 32 bits, so the
-product would trap (D223).
+deserves. More than nine digits is `-1`. Nine digits is this parser's own cap,
+not the width of `int` (64 bits, D238); it keeps `total * 10` far from
+overflow (D223).
 
 ### function `ParseLength`
 
@@ -1266,7 +1267,8 @@ offer fun ParseLength(value: text) -> int uses unsafe
 The number a `Content-Length` spells, or `-1` when it spells anything
 else: no digits, or garbage such as `5, 10`. Spaces and tabs around
 the digits are allowed. A run of more than nine digits is a length, but
-no server's: it answers the largest `int`, which every limit refuses
+no server's: it answers 2147483647, the largest `s32` and a cap this
+parser keeps although `int` is 64 bits (D238), which every limit refuses
 with 413 rather than the 400 that garbage gets (D223).
 
 ### function `Serve`
@@ -1295,7 +1297,9 @@ The same, with limits of the caller's choosing.
 
 One connection, served until the client stops asking or breaks the
 rules: every request is read whole before the handler sees it, and
-what arrived after it stays for the next turn (D122).
+what arrived after it stays for the next turn (D122). A client that
+says nothing for longer than `limits.head_timeout`, or
+`limits.idle_timeout` between requests, is closed (D223).
 
 ### function `Turn`
 
@@ -1462,7 +1466,7 @@ var closing: List<After>
 #### method `Use`
 
 ```wolang
-fun Use(run: fun(&mut Request) -> Response?) uses unsafe
+fun Use(run: keep fun(&mut Request) -> Response?) uses unsafe
 ```
 
 Adds a layer that runs before the handler.
@@ -1470,7 +1474,7 @@ Adds a layer that runs before the handler.
 #### method `Then`
 
 ```wolang
-fun Then(run: fun(&Request, Response) -> Response) uses unsafe
+fun Then(run: keep fun(&Request, Response) -> Response) uses unsafe
 ```
 
 Adds a layer that runs after it.
@@ -1661,7 +1665,7 @@ fun IsOpen() -> bool
 #### method `Watch`
 
 ```wolang
-fun Watch(fd: int) -> bool uses unsafe
+fun Watch(fd: s32) -> bool uses unsafe
 ```
 
 #### method `Forget`
@@ -1696,7 +1700,7 @@ A poller that can report up to `most` ready descriptors at a time.
 ### function `SetNonBlocking`
 
 ```wolang
-offer fun SetNonBlocking(fd: int) -> bool uses net, unsafe
+offer fun SetNonBlocking(fd: s32) -> bool uses net, unsafe
 ```
 
 Stops a descriptor from blocking: a read with nothing to read returns
@@ -2085,7 +2089,7 @@ var has_fallback: bool = false
 #### method `Add`
 
 ```wolang
-fun Add(method: text, pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Add(method: text, pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 Adds a route. Answers nothing: a router is built once, at the top of
@@ -2094,37 +2098,37 @@ a program, so the calls read as a list rather than as a chain.
 #### method `Get`
 
 ```wolang
-fun Get(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Get(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Post`
 
 ```wolang
-fun Post(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Post(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Put`
 
 ```wolang
-fun Put(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Put(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Delete`
 
 ```wolang
-fun Delete(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Delete(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Patch`
 
 ```wolang
-fun Patch(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Patch(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Head`
 
 ```wolang
-fun Head(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Head(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 A route for `HEAD`. Rarely needed: a `GET` route answers `HEAD` by
@@ -2133,13 +2137,13 @@ itself, with the body left off (D122).
 #### method `Options`
 
 ```wolang
-fun Options(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Options(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 #### method `Any`
 
 ```wolang
-fun Any(pattern: text, handle: fun(Request) -> Response) uses unsafe
+fun Any(pattern: text, handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 One handler for every method on a pattern.
@@ -2147,7 +2151,7 @@ One handler for every method on a pattern.
 #### method `Otherwise`
 
 ```wolang
-fun Otherwise(handle: fun(Request) -> Response) uses unsafe
+fun Otherwise(handle: keep fun(Request) -> Response) uses unsafe
 ```
 
 What answers when nothing else matches. Without one, `404`.
@@ -2281,7 +2285,7 @@ offer fun Close(fd: s32) -> s32 uses net, unsafe
 ### function `Read`
 
 ```wolang
-offer fun Read(fd: s32, buffer: *mut u8, capacity: int) -> int uses net, unsafe
+offer unsafe fun Read(fd: s32, buffer: *mut u8, capacity: int) -> int uses net
 ```
 
 Reads into `buffer` and returns how many bytes arrived, or a negative

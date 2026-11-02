@@ -4,7 +4,7 @@ sidebarTitle: "std"
 description: "The std package: std.compress, std.crypto, std.csv, std.deque, std.doc, std.encoding and more."
 order: 1
 generated: "wolang"
-verifiedAt: "0de42958a"
+verifiedAt: "906b9ed67"
 ---
 
 ## std.compress
@@ -20,7 +20,7 @@ What a stream that is not one answers with.
 ### function `Inflate`
 
 ```wolang
-offer fun Inflate(bytes: []u8) -> []u8! uses unsafe
+offer fun Inflate(bytes: []u8) -> []mut u8!Malformed uses unsafe
 ```
 
 Reads a deflate stream. There is no cap on the output, so a hostile
@@ -30,7 +30,7 @@ that came from outside (D227).
 ### function `InflateLimited`
 
 ```wolang
-offer fun InflateLimited(bytes: []u8, most: int) -> []u8! uses unsafe
+offer fun InflateLimited(bytes: []u8, most: int) -> []mut u8!Malformed uses unsafe
 ```
 
 Reads a deflate stream, failing with `Malformed` once the output would
@@ -39,7 +39,7 @@ pass `most` bytes -- the guard against a decompression bomb (D227).
 ### function `Deflate`
 
 ```wolang
-offer fun Deflate(bytes: []u8) -> []u8 uses unsafe
+offer fun Deflate(bytes: []u8) -> []mut u8 uses unsafe
 ```
 
 Compresses with fixed Huffman codes and a window of matches.
@@ -51,7 +51,7 @@ a program reaching for this needs first (D177).
 ### function `Gzip`
 
 ```wolang
-offer fun Gzip(bytes: []u8) -> []u8 uses unsafe
+offer fun Gzip(bytes: []u8) -> []mut u8 uses unsafe
 ```
 
 Wraps deflated bytes in a gzip container, which is what a `.gz` is.
@@ -59,7 +59,7 @@ Wraps deflated bytes in a gzip container, which is what a `.gz` is.
 ### function `Gunzip`
 
 ```wolang
-offer fun Gunzip(bytes: []u8) -> []u8! uses unsafe
+offer fun Gunzip(bytes: []u8) -> []mut u8!Malformed uses unsafe
 ```
 
 Reads a gzip container. Unlimited output; see `GunzipLimited` (D227).
@@ -67,7 +67,7 @@ Reads a gzip container. Unlimited output; see `GunzipLimited` (D227).
 ### function `GunzipLimited`
 
 ```wolang
-offer fun GunzipLimited(bytes: []u8, most: int) -> []u8! uses unsafe
+offer fun GunzipLimited(bytes: []u8, most: int) -> []mut u8!Malformed uses unsafe
 ```
 
 Reads a gzip container, failing with `Malformed` once the output would
@@ -136,7 +136,7 @@ one byte at a time.
 ### function `RandomBytes`
 
 ```wolang
-offer fun RandomBytes(count: int) -> []u8 uses rand, unsafe
+offer fun RandomBytes(count: int) -> []mut u8 uses rand, unsafe
 ```
 
 `count` bytes from the system's own source.
@@ -251,7 +251,7 @@ offer class Deque<T>
 #### field `items`
 
 ```wolang
-var items: []T
+var items: []mut T
 ```
 
 #### field `first`
@@ -924,7 +924,7 @@ fun Close() uses unsafe
 #### method `Read`
 
 ```wolang
-fun Read(buffer: []u8) -> int uses unsafe
+fun Read(buffer: []mut u8) -> int uses unsafe
 ```
 
 Fills `buffer` and says how many bytes arrived: zero at the end of
@@ -1264,7 +1264,7 @@ offer class Heap<T>
 #### field `items`
 
 ```wolang
-var items: []T
+var items: []mut T
 ```
 
 #### field `count`
@@ -1339,7 +1339,7 @@ fun Reserve(wanted: int) uses unsafe
 ### function `HeapNew`
 
 ```wolang
-offer fun HeapNew<T>(before: fun(T, T) -> bool) -> Heap<T> uses unsafe
+offer fun HeapNew<T>(before: keep fun(T, T) -> bool) -> Heap<T> uses unsafe
 ```
 
 ## std.ini
@@ -1355,7 +1355,7 @@ What a document that is not one answers with.
 ### function `Parse`
 
 ```wolang
-offer fun Parse(input: text) -> Value! uses unsafe
+offer fun Parse(input: text) -> Value!Malformed uses unsafe
 ```
 
 Reads a document. Every value is text.
@@ -1587,15 +1587,16 @@ Every value of `items`, in a list.
 ### error `Malformed`
 
 ```wolang
-offer error Malformed
+offer error Malformed(line: int, column: int)
 ```
 
-What a document that is not one answers with.
+What a document that is not one answers with, and where: the line and
+the column, both counted from one (D235).
 
 ### function `Parse`
 
 ```wolang
-offer fun Parse(input: text) -> Value! uses unsafe
+offer fun Parse(input: text) -> Value!Malformed uses unsafe
 ```
 
 Reads one value from `input`.
@@ -1626,7 +1627,7 @@ out of scope leaves nothing behind.
 #### field `items`
 
 ```wolang
-var items: []T
+var items: []mut T
 ```
 
 #### field `count`
@@ -1658,7 +1659,7 @@ What `for value in list` walks with.
 #### method `Items`
 
 ```wolang
-fun Items() -> []T uses unsafe
+fun Items() -> []mut T uses unsafe
 ```
 
 The elements, as a slice of exactly what is in the list.
@@ -1829,7 +1830,7 @@ Folds `items` into one value, left to right.
 ### function `MapInPlace`
 
 ```wolang
-offer fun MapInPlace<T>(items: []T, change: fun(T) -> T)
+offer fun MapInPlace<T>(items: []mut T, change: fun(T) -> T)
 ```
 
 Replaces each element with what `change` makes of it, in place.
@@ -1840,7 +1841,7 @@ something to free, and a caller that wants both keeps a copy.
 ### function `Keep`
 
 ```wolang
-offer fun Keep<T>(items: []T, holds: fun(T) -> bool) -> int
+offer fun Keep<T>(items: []mut T, holds: fun(T) -> bool) -> int
 ```
 
 Moves everything that satisfies `holds` to the front, and answers how
@@ -1976,19 +1977,19 @@ gives the three arrays back.
 #### field `keys`
 
 ```wolang
-var keys: []K
+var keys: []mut K
 ```
 
 #### field `values`
 
 ```wolang
-var values: []V
+var values: []mut V
 ```
 
 #### field `filled`
 
 ```wolang
-var filled: []bool
+var filled: []mut bool
 ```
 
 #### field `count`
@@ -2124,7 +2125,7 @@ fun Value() -> K
 ### function `MapNew`
 
 ```wolang
-offer fun MapNew<K, V>(hash: fun(K) -> int, equals: fun(K, K) -> bool) -> Map<K, V> uses unsafe
+offer fun MapNew<K, V>(hash: keep fun(K) -> int, equals: keep fun(K, K) -> bool) -> Map<K, V> uses unsafe
 ```
 
 ### function `IntHash`
@@ -2140,6 +2141,22 @@ Hashing and comparing for `int` keys, which is most of them.
 ```wolang
 offer fun IntEquals(left: int, right: int) -> bool
 ```
+
+### function `IntMapNew`
+
+```wolang
+offer fun IntMapNew<V>() -> Map<int, V> uses unsafe
+```
+
+A map keyed by `int`, with the hashing already chosen.
+
+### function `TextMapNew`
+
+```wolang
+offer fun TextMapNew<V>() -> Map<text, V> uses unsafe
+```
+
+A map keyed by `text`: what a symbol table is (D250).
 
 ## std.math
 
@@ -2341,7 +2358,7 @@ offer fun WrappingMul(a: u64, b: u64) -> u64
 ### function `BytesFromRaw`
 
 ```wolang
-offer fun BytesFromRaw(data: *u8, length: int) -> []u8 uses unsafe
+offer unsafe fun BytesFromRaw(data: *u8, length: int) -> []mut u8
 ```
 
 A view of `length` bytes at `data`.
@@ -2352,7 +2369,7 @@ that they stay there. The caller promises both.
 ### function `SoaNew`
 
 ```wolang
-offer fun SoaNew<T>(count: int) -> soa []T uses unsafe
+offer unsafe fun SoaNew<T>(count: int) -> soa []mut T
 ```
 
 Storage for `count` records, laid out as one array per field.
@@ -2367,7 +2384,7 @@ question only a tier can answer, so the compiler answers it at the call.
 ### function `ArrayNew`
 
 ```wolang
-offer fun ArrayNew<T>(count: int) -> []T uses unsafe
+offer unsafe fun ArrayNew<T>(count: int) -> []mut T
 ```
 
 Storage for `count` records, one after another.
@@ -2379,7 +2396,7 @@ the one that reads well when it touches one field of it.
 ### function `Free`
 
 ```wolang
-offer fun Free<T>(items: []T) uses unsafe
+offer unsafe fun Free<T>(items: []T)
 ```
 
 Gives back storage `ArrayNew` or `SoaNew` handed out.
@@ -2395,7 +2412,7 @@ on how the tier laid it out, so the compiler answers at the call.
 ### function `ViewFromRaw`
 
 ```wolang
-offer fun ViewFromRaw<T>(data: *u8, count: int) -> []T uses unsafe
+offer unsafe fun ViewFromRaw<T>(data: *u8, count: int) -> []mut T
 ```
 
 A view of `count` values of `T` at `data`.
@@ -2407,7 +2424,7 @@ that there are that many values there, or that they stay.
 ### function `Prefix`
 
 ```wolang
-offer fun Prefix<T>(items: []T, count: int) -> []T uses unsafe
+offer unsafe fun Prefix<T>(items: []T, count: int) -> []T
 ```
 
 The first `count` elements of `items`, as a view.
@@ -2416,6 +2433,15 @@ A view and not a copy: writing through it writes the storage. What a
 container with room to spare hands out -- `List.Items()` is this with
 the count filled in -- and the one place that knows a slice is a
 pointer and a length (D138).
+
+### function `PrefixMut`
+
+```wolang
+offer unsafe fun PrefixMut<T>(items: []mut T, count: int) -> []mut T
+```
+
+`Prefix` of a view that may be written, as a view that may be written
+(D251). The same instruction: only what the caller is promised differs.
 
 ### function `SizeOf`
 
@@ -2432,7 +2458,7 @@ tier laid it out, so the compiler answers at the call (D100).
 ### function `Suffix`
 
 ```wolang
-offer fun Suffix<T>(items: []T, at: int) -> []T uses unsafe
+offer unsafe fun Suffix<T>(items: []T, at: int) -> []T
 ```
 
 The elements of `items` from `at` onwards, as a view.
@@ -2645,7 +2671,7 @@ Sends the bytes of `message`; see `SendTo`.
 #### method `ReceiveFrom`
 
 ```wolang
-fun ReceiveFrom(buffer: []u8) -> Datagram? uses net, unsafe
+fun ReceiveFrom(buffer: []mut u8) -> Datagram? uses net, unsafe
 ```
 
 Takes one datagram into `buffer`, never writing past its length. Null
@@ -2693,6 +2719,146 @@ offer fun BindUdpOn(address: s64, port: int) -> UdpSocket uses net, unsafe
 Like `BindUdp` but on one local `address` (e.g. 127.0.0.1 from
 `ParseAddress`), so a test or a LAN-only game stays off other
 interfaces.
+
+## std.ops
+
+### ability `Add`
+
+```wolang
+@Operator
+offer ability Add
+```
+
+`a + b` and `a += b`.
+
+#### method `Plus`
+
+```wolang
+fun Plus(other: Self) -> Self
+```
+
+### ability `Sub`
+
+```wolang
+@Operator
+offer ability Sub
+```
+
+`a - b` and `a -= b`.
+
+#### method `Minus`
+
+```wolang
+fun Minus(other: Self) -> Self
+```
+
+### ability `Mul`
+
+```wolang
+@Operator
+offer ability Mul
+```
+
+`a * b` and `a *= b`.
+
+#### method `Times`
+
+```wolang
+fun Times(other: Self) -> Self
+```
+
+### ability `Div`
+
+```wolang
+@Operator
+offer ability Div
+```
+
+`a / b` and `a /= b`.
+
+#### method `Divide`
+
+```wolang
+fun Divide(other: Self) -> Self
+```
+
+### ability `Neg`
+
+```wolang
+@Operator
+offer ability Neg
+```
+
+`-a`.
+
+#### method `Negate`
+
+```wolang
+fun Negate() -> Self
+```
+
+### ability `Eq`
+
+```wolang
+@Operator
+offer ability Eq
+```
+
+`a == b` and `a != b`. The other side is borrowed, so comparing two
+counted values neither copies nor frees either.
+
+#### method `Equals`
+
+```wolang
+fun Equals(other: &Self) -> bool
+```
+
+### ability `Ord`
+
+```wolang
+@Operator
+offer ability Ord
+```
+
+`a < b`, `a <= b`, `a > b` and `a >= b`: `Compare` answers a negative
+number, zero or a positive one for less, equal and greater.
+
+#### method `Compare`
+
+```wolang
+fun Compare(other: &Self) -> int
+```
+
+### ability `Hash`
+
+```wolang
+offer ability Hash
+```
+
+A number a table can file the value under. Not an operator: it is what
+`std.map` and `std.set` ask of a key that is not a number or text.
+
+#### method `Hash`
+
+```wolang
+fun Hash() -> int
+```
+
+### function `Max`
+
+```wolang
+offer fun Max<T: Ord>(a: T, b: T) -> T
+```
+
+The greater of two, by `Ord`.
+
+### function `Min`
+
+```wolang
+offer fun Min<T: Ord>(a: T, b: T) -> T
+```
+
+The lesser of two, by `Ord`.
 
 ## std.own
 
@@ -3313,7 +3479,7 @@ the first `(`.
 ### function `Compile`
 
 ```wolang
-offer fun Compile(pattern: text, flags: text) -> Regex! uses unsafe
+offer fun Compile(pattern: text, flags: text) -> Regex!BadPattern uses unsafe
 ```
 
 Compiles `pattern`. `flags` holds `i` and `s`.
@@ -3420,7 +3586,7 @@ Takes `value` out. Answers whether it was there.
 ### function `SetNew`
 
 ```wolang
-offer fun SetNew<T>(hash: fun(T) -> int, equals: fun(T, T) -> bool) -> Set<T> uses unsafe
+offer fun SetNew<T>(hash: keep fun(T) -> int, equals: keep fun(T, T) -> bool) -> Set<T> uses unsafe
 ```
 
 ## std.sort
@@ -3428,7 +3594,7 @@ offer fun SetNew<T>(hash: fun(T) -> int, equals: fun(T, T) -> bool) -> Set<T> us
 ### function `Sort`
 
 ```wolang
-offer fun Sort<T>(items: []T, before: fun(T, T) -> bool)
+offer fun Sort<T>(items: []mut T, before: fun(T, T) -> bool)
 ```
 
 Sorts `items` in place, with `before(a, b)` saying whether `a` comes
@@ -3437,6 +3603,15 @@ first.
 The comparison has to be a strict order: `before(a, a)` false, and
 `before(a, b)` and `before(b, a)` never both true. A comparison that
 is not one leaves the elements in some order rather than looping.
+
+### function `SortBy`
+
+```wolang
+offer fun SortBy<T: Ord>(items: []mut T)
+```
+
+Sorts `items` in place by their own order, the one `<` gives them
+(D239): `Sort` with the comparison already written.
 
 ### function `LowerBound`
 
@@ -3530,13 +3705,12 @@ offer fun IsEmpty(value: text) -> bool
 ### function `Bytes`
 
 ```wolang
-@Exposes
 offer fun Bytes(value: text) -> []u8 uses unsafe
 ```
 
-The bytes of `value`, as a view. Nothing is copied. The view is of text
-that may be a literal, so it must only be read: the caller declares
-`uses unsafe` for it (D233).
+The bytes of `value`, as a view. Nothing is copied. The view is
+read-only: it is of text that may be a literal, and `[]u8` cannot be
+written through (D251).
 
 ### function `Equals`
 
@@ -3577,7 +3751,7 @@ destructor is for, and why this is a class and not a function.
 #### field `bytes`
 
 ```wolang
-var bytes: []u8
+var bytes: []mut u8
 ```
 
 #### field `count`
@@ -3637,6 +3811,14 @@ fun Clear()
 fun Append(value: text) uses unsafe
 ```
 
+#### method `AppendLine`
+
+```wolang
+fun AppendLine(value: text) uses unsafe
+```
+
+`value` and a newline: what a printer that builds a dump line by line writes (D250).
+
 #### method `AppendByte`
 
 ```wolang
@@ -3658,7 +3840,7 @@ offer fun BuilderNew() -> Builder uses unsafe
 ### function `TextFromRaw`
 
 ```wolang
-offer fun TextFromRaw(data: *u8, length: int) -> text uses unsafe
+offer unsafe fun TextFromRaw(data: *u8, length: int) -> text
 ```
 
 ### function `EndsWith`
@@ -3996,7 +4178,7 @@ offer fun MutexNew() -> Mutex uses unsafe
 ### function `AtomicAdd`
 
 ```wolang
-offer fun AtomicAdd(counter: *mut s64, delta: s64) -> s64 uses unsafe
+offer unsafe fun AtomicAdd(counter: *mut s64, delta: s64) -> s64
 ```
 
 Adds `delta` to the number at `counter` and gives back what was there
@@ -4006,7 +4188,7 @@ before, with no other thread able to see a half-done sum.
 
 ```wolang
 @Thread(captures)
-offer fun ParallelFor(count: int, threads: int, body: fun(int, int)) uses unsafe
+offer unsafe fun ParallelFor(count: int, threads: int, body: fun(int, int))
 ```
 
 Runs `body` over `[0, count)` on `threads` threads, in chunks.
@@ -4299,15 +4481,16 @@ How long ago, in words a person reads: `just now`, `3 minutes ago`,
 ### error `Malformed`
 
 ```wolang
-offer error Malformed
+offer error Malformed(line: int, column: int)
 ```
 
-What a document that is not one answers with.
+What a document that is not one answers with, and where: the line and
+the column, both counted from one (D235).
 
 ### function `Parse`
 
 ```wolang
-offer fun Parse(input: text) -> Value! uses unsafe
+offer fun Parse(input: text) -> Value!Malformed uses unsafe
 ```
 
 Reads a document.
@@ -4467,15 +4650,16 @@ Writes one code point into a builder.
 ### error `Malformed`
 
 ```wolang
-offer error Malformed
+offer error Malformed(line: int, column: int)
 ```
 
-What a document that is not one answers with.
+What a document that is not one answers with, and the line it went wrong
+on and a column in it, both counted from one (D235).
 
 ### function `Parse`
 
 ```wolang
-offer fun Parse(input: text) -> Value! uses unsafe
+offer fun Parse(input: text) -> Value!Malformed uses unsafe
 ```
 
 Reads the first document of `input`.
@@ -4483,7 +4667,7 @@ Reads the first document of `input`.
 ### function `ParseAll`
 
 ```wolang
-offer fun ParseAll(input: text) -> List<Value>! uses unsafe
+offer fun ParseAll(input: text) -> List<Value>!Malformed uses unsafe
 ```
 
 Every document in a stream, which is what `---` separates.
