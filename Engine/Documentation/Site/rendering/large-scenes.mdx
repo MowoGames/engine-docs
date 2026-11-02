@@ -5,8 +5,9 @@ order: 5
 sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/SceneRenderer.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/GeometryPool.h
+  - Engine/Source/Runtime/Renderer/Public/Renderer/MeshletPool.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/ImageDecode.h
-verifiedAt: 4312aef10
+verifiedAt: 457b4317b
 ---
 
 A level the size of the Intel Sponza (2022, with the Curtains and Ivy add-ons: about 10.8 million triangles in 450 submeshes and 80 4K PBR textures) runs on the same renderer as a small one. On a mid-range GPU its frame time is decided by the [quality tier](/docs/rendering/quality-tiers/) and the resolution far more than by the size of the meshes. This page shows where the time goes and what the engine does so the geometry itself stays cheap.
@@ -34,11 +35,42 @@ The Sponza in Play at 1920×1080, the level's cinematic camera flying through th
 
 \* Measured before Epic traced its screen-space reflections at half resolution, as High does: that cut the reflection passes from 7.9 to 4.1 ms (Auto 27-30 fps before, 32 after) with an image inside the noise of two full-resolution captures of the same view.
 
-Drawing the geometry — the G-buffer pass with its culling — costs about 1 ms of a High frame. The meshlet G-buffer (Epic and up) does not lower it: on High it drew the Sponza in the same 1.2 ms at the same frame rate, so High keeps the classic indirect draws. The rest is lighting: Global Illumination, shadows and screen-space reflections, all of which scale with the number of pixels and with the tier. So:
+Drawing the geometry — the G-buffer pass with its culling — costs about 1 ms of a High frame. The meshlet G-buffer (Epic and up) did not lower it on the Sponza: forced on at High it drew the level in the same 1.2 ms, but at that time its cluster pool held only 38 of the level's 446 meshes, so High keeps the classic indirect draws (see [Very dense meshes on Epic](#very-dense-meshes-on-epic)). The rest is lighting: Global Illumination, shadows and screen-space reflections, all of which scale with the number of pixels and with the tier. So:
 
 - **Epic and Cinematic are not for a mid-range GPU.** They add ray-traced and SDF features whose cost on a 3050 is three to four times High's whole frame. On such a card use High or Medium.
 - **Render fewer pixels.** Auto upscaling roughly doubles the frame rate at every tier for little visible loss; native rendering on a mid-range GPU is the most expensive single choice after the tier.
 - **Global Illumination is the largest single cost on High** (about 4.6 ms of 13.2). A project that does not need dynamic indirect light can turn it off in Project Settings.
+
+## Very dense meshes on Epic
+
+On Epic and Cinematic, static meshes with an import-built cluster hierarchy draw through the meshlet G-buffer: the GPU picks, per cluster, the coarsest level whose error stays under a pixel and culls clusters against the frustum and the previous frame's depth. Two things decide whether a large level gets that benefit:
+
+- **The cluster pool grows with the level.** It starts at about 63 MB. When it is full of meshes that are all still on screen, the arena that ran short doubles at the start of the next frame and the meshes come back with their page layouts. It never grows past `r.Meshlet.PoolBudgetMB` (by default a sixteenth of the GPU's memory) and never into the last tenth of the GPU's memory budget, so a level that already fills the card keeps the classic path for what does not fit instead of running out of memory. Before, the pool stopped at 65 536 clusters; the Intel Sponza fit 38 of its 446 meshes.
+- **Page layouts are built on worker threads.** The first frame that draws a mesh used to build its page layout on the render thread; the mesh now draws through the classic path for the frame or two until a worker has it ready.
+
+A synthetic field of 32 unique rocks (4.7 million unique triangles, 18.9 million submitted, the `huge-scene-test` row) at 1920×1080 on the reference RTX 3050, development build, nothing compiling:
+
+| | GPU frame | G-buffer | Shadows | Worst CPU frame while meshes arrive |
+| --- | --- | --- | --- | --- |
+| Classic indirect draws | 28.9 ms | 8.6 ms | 17.7 ms | — |
+| Meshlet, pool fixed at 63 MB (18 of 32 rocks) | 9.0 ms | 3.5 ms | 2.7 ms | — |
+| Meshlet, pool grown to 128 MB (all rocks) | 5.5 ms | 1.1 ms | 0.8 ms | 24 ms (202 ms with layouts built on the render thread) |
+
+On Vulkan the same field takes 30.2 ms classic and 8.1 ms on the grown pool. The pool's growth cost 66 MB of VRAM here.
+
+The Sponza on Epic is the opposite case: on an 8 GB card it already uses about 98 % of the VRAM budget, so the pool stops growing at 124 MB and the rest of the level keeps the classic path. Letting it grow to 328 MB there took the frame rate from 24 to 9 fps, which is why growth reads the live budget.
+
+A pool that is full and still asked for more (a big level, a fast camera) evicts and admits meshes every frame. Before November 2026 that could shred meshes: each page-in's vertex gather read its page table from an upload buffer that the next eviction, or the next frame, had already rewritten, so the gather filled the wrong slices. Every frame now writes its own tables, and the `meshlet-pool-churn-test` row reads the whole pool back while groups of meshes churn through it on D3D12 and Vulkan: 1.2 million of 1.8 million checked vertices were wrong before the fix, none after.
+
+### Not yet: pages streamed from disk
+
+The cluster hierarchy of every mesh still lives in system memory once the mesh is loaded (179 MB for the Sponza), and the pool pages from that copy. Streaming the pages from the cooked package instead is planned after 1.0:
+
+- The cook writes each mesh's pages as they are already laid out at run time (a coarse-to-fine suffix closed over cluster groups, page-relative indices), each page one separately readable range of the package, plus a resident root of the coarsest pages that is always loaded.
+- The pool requests the pages the cut asks for through the asynchronous file reader, a budget of bytes per frame, and keeps drawing the coarser resident pages until a request lands, so a missing page is a coarser surface, never a hole.
+- Eviction keeps both a VRAM and a system-memory budget, oldest-used first.
+
+It was not built for 1.0 because no measured level needs it yet: the Sponza's 179 MB of cluster data is 2 % of the editor's working set on Epic, and the pool, not the system copy, is what limits large levels on an 8 GB card.
 
 ## Check your own settings
 
@@ -53,3 +85,6 @@ To see the numbers for your own level, enable `stat.FrameStats 300` in the conso
 | `r.GpuScene.GeometryPoolGrowth` | 1 | 1 adds a geometry pool when a mesh does not fit; 0 keeps one fixed pool per index width and draws the rest one by one (for comparison) |
 | `r.GpuScene.GeometryPoolBudgetMB` | 0 | Total size of the geometry pools in MB; 0 = an eighth of the GPU's dedicated memory, 256 to 2048 MB |
 | `r.Texture.PackageNativeBc` | 1 | Upload a texture as its block-compressed chain; 0 decodes it and compresses it while it loads |
+| `r.Meshlet.PoolBudgetMB` | 0 | Most VRAM the meshlet cluster pool may grow to, in MB; 0 = a sixteenth of the GPU's dedicated memory, 64 to 1024 MB; 64 or less keeps the starting pool. Growth also stops short of the last tenth of the GPU's memory budget |
+| `r.Meshlet.AsyncLayouts` | 1 | Build a mesh's meshlet page layout on a worker thread the first time it is drawn; 0 builds it on the render thread (for comparison) |
+| `r.MeshletResidencyStats` | 0 | Every N frames log the meshlet pool's residency, capacity, rejections and the system memory the meshes' cluster hierarchies hold |

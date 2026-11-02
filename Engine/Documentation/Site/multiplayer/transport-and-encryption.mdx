@@ -9,7 +9,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/NetworkTypes.h
   - Engine/Source/Runtime/Networking/Public/Networking/GnsTransport.h
   - Engine/Source/Runtime/Networking/Public/Networking/NetTransportFactory.h
-verifiedAt: 65255635a
+verifiedAt: c74f75b83
 ---
 
 Under the session layer, a transport moves bytes between peers. Mowo has three: **ENet** over UDP for direct and LAN play, **Steam P2P** through the SteamPlatform plugin, and **GameNetworkingSockets** (GNS), Valve's open-source connection library, over IP. By default a composite transport picks between ENet and Steam for each connection, and ENet sessions are encrypted at the application layer.
@@ -23,9 +23,13 @@ Under the session layer, a transport moves bytes between peers. Mowo has three: 
 | GameNetworkingSockets | `gns` | Dedicated and listen servers over IP in builds without Steam, when you want the library to pace traffic and split large messages | Always encrypted by GNS; the same join key or `net.psk` as ENet decides who gets in |
 | Steam relay | `steam` | Every connection through Steam, never a direct socket | Steam's own |
 
-`net.Transport` is read when the network module starts and when a session finds no transport, so set it in your project's config or on the command line (`--cvar=net.Transport=gns`), not mid-session. A value the build cannot honour (GNS on a platform it is not built for, `steam` without the Steam client running, an unknown name) logs why and uses the composite transport <Source symbol="FNetTransportFactory" />.
+`net.Transport` is followed until a session hosts or joins: the transport is remade when the value differs from the one it was made from, so set it in your project's config (a packaged game applies that file after the network module started) or, outside a shipped build, on the command line (`--cvar=net.Transport=gns`). A change during a session waits for the next one, and a transport your code set with `NetworkManager::SetTransport` is never replaced. A value the build cannot honour (GNS on a platform it is not built for, `steam` without the Steam client running, an unknown name) logs why and uses the composite transport <Source symbol="FNetTransportFactory" />.
 
-Steam builds already reach GNS: the Steam relay *is* GameNetworkingSockets inside the Steam client. Choose `gns` for builds that ship without Steam.
+Steam builds already reach GNS: the Steam relay *is* GameNetworkingSockets inside the Steam client. Choose `gns` for builds that ship without Steam. A game can still ship both: with the SteamPlatform plugin enabled, a monolithic package links the Steam SDK and GNS into one executable, and each transport keeps calling its own library.
+
+### ENet
+
+ENet's packet throttle, which drops unreliable packets at random once acknowledgements arrive later than the first round trips it measured, is turned off on every connection <Source symbol="ENetTransport" />. A single hitch of a few dozen milliseconds on either machine used to bring it to zero, after which every snapshot and high-rate RPC to that peer was dropped until acknowledgements came back on time. Unreliable traffic is paced by the replication layer's per-peer byte budget (`net.peer_byte_budget`) instead.
 
 ### GameNetworkingSockets
 

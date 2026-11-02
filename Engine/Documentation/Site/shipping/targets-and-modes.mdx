@@ -5,7 +5,7 @@ description: Which target a package builds, how a dedicated server package diffe
 order: 2
 sources:
   - Templates/TP_Coop/Source/TP_Coop.Target.cs
-verifiedAt: 3f3a08d31
+verifiedAt: a6697f089
 ---
 
 Two choices shape every package: which **target** you build, and how the engine is **linked** into it. The target decides which executable ships and what code it contains. The link mode decides whether the engine arrives as many libraries or inside one executable.
@@ -62,7 +62,9 @@ The server listens on `--port` (7777 by default) and ticks at `--tickrate` (60 b
 
 The link mode resolves in this order: an explicit `--monolithic` or `--modular`, then a server package (modular), then `monolithic` in the project's `Config/Packaging.ini`, then the configuration: `release` and `profile` are monolithic, everything else modular. Passing both options is an error.
 
-Monolithic mode defines `MOWO_MONOLITHIC`, builds every first-party library module as a static library and links it into the host, the model Unreal uses for its shipping builds. ThinLTO then optimizes across what would otherwise be dozens of DLL boundaries. Your project's C++ modules link the same way, with their whole archive forced in so their reflection registrations survive. The engine's feature modules, which the player loads by name in a modular build, are linked in too.
+Monolithic mode defines `MOWO_MONOLITHIC`, builds every first-party library module as a static library and links it into the host, the model Unreal uses for its shipping builds. ThinLTO then optimizes across what would otherwise be dozens of DLL boundaries. Your project's C++ modules link the same way, with their whole archive forced in so their reflection registrations survive. The engine's feature modules, which the player loads by name in a modular build, are linked in too. Which plugins and feature modules go in is read from your project's `Config/Plugins.ini`, whether or not the project has C++ of its own, so a content-only game that enables SteamPlatform gets Steam in its executable.
+
+Some third-party libraries ship in two editions: the Steam SDK and GameNetworkingSockets are both Valve's networking code. In a monolithic build they share one executable, so the engine keeps their symbols apart (see [Transport and encryption](/docs/multiplayer/transport-and-encryption/)); a library you add yourself must not define the same external names as one the engine links, or the linker silently keeps one of them.
 
 
 <Callout type="note" title="Which one to pick">

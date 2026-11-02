@@ -20,7 +20,7 @@ sources:
   - Engine/Source/Runtime/Arc/Public/Arc/Widgets/AEditableTextBox.h
   - Engine/Source/Runtime/Arc/Public/Arc/Text/CArcTextEditing.h
   - Engine/Source/Runtime/Arc/Public/Arc/Widgets/CArcCaretBlink.h
-verifiedAt: df96684dd
+verifiedAt: 3f308b653
 ---
 
 Arc is a retained-mode widget framework in the `Arcf` namespace. Widgets are C++ classes prefixed with `A`, built with a declarative `ArcNew(...)` syntax, and laid out in slots. This page lists the widget set, explains the three layout passes, and shows how focus decides where keyboard shortcuts and gamepad input go.
@@ -117,6 +117,19 @@ Change only what is painted (hover, check state, a swatch color) without calling
 Arrange has its own cache. A widget opts in with `CanSkipArrange()`. The default is "skippable only when it has no children", so any widget that overrides `ArrangeChildren` must answer for itself <Source symbol="AWidget" />. A skip is safe only when the arrange is a pure function of the allotted geometry, the widget's attributes and its children's cached sizes. Scroll offsets, animation clocks and virtualized row windows disqualify a widget.
 
 If you suspect a stale-layout bug, `AWidget::SetArrangeSkipEnabled(false)` turns the arrange skip off in-process <Source symbol="AWidget" />.
+
+### Skipping unchanged windows
+
+A window whose widgets raised no invalidation, received no input and drew the same picture on its last two paints skips its layout, paint and upload, and shows its last batch again (`arc.SkipUnchangedWindows`). Every few skipped frames it paints anyway and compares; a difference makes it paint every frame for a while.
+
+A widget whose picture changes with the clock, with nothing written that the window could see, has to tell the window:
+
+| Call | When | Effect |
+| --- | --- | --- |
+| `AWidget::NoteLivePaint()` | The picture changes on every frame (a fade, a scroll animation) | The window paints every frame while the widget keeps calling it |
+| `AWidget::NoteRepaintIn(seconds)` | The picture changes at one known moment (a caret's next blink, the end of a scroll bar's hide delay) | The window may skip until then and paints again at that moment |
+
+Prefer `NoteRepaintIn` whenever the change is a single step: a focused text field and a scroll bar waiting to hide used to repaint the whole window on every frame of the wait <Source symbol="AWidget" />. A widget that advances its own timer from the paint's frame delta must measure real elapsed time instead, because the frames in between may have been skipped.
 
 
 
