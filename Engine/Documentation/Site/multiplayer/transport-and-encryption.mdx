@@ -1,18 +1,50 @@
 ---
 title: Transport and encryption
-description: How Mowo picks ENet or Steam P2P per address, and how ENet sessions are encrypted with an X25519 handshake and XChaCha20-Poly1305 via Monocypher.
+description: The three transports (ENet, Steam P2P, GameNetworkingSockets), choosing one with net.Transport, and how ENet sessions are encrypted.
 order: 8
 sources:
   - Engine/Source/Runtime/Networking/Public/Networking/CompositeTransport.h
   - Engine/Source/Runtime/Networking/Public/Networking/NetCrypto.h
   - Engine/Source/Runtime/Networking/Public/Networking/ENetTransport.h
   - Engine/Source/Runtime/Networking/Public/Networking/NetworkTypes.h
-verifiedAt: 3f3a08d31
+  - Engine/Source/Runtime/Networking/Public/Networking/GnsTransport.h
+  - Engine/Source/Runtime/Networking/Public/Networking/NetTransportFactory.h
+verifiedAt: 65255635a
 ---
 
-Under the session layer, a transport moves bytes between peers. Mowo has two: **ENet** over UDP for direct and LAN play, and **Steam P2P** through the SteamPlatform plugin. A composite transport picks between them for each connection, and ENet sessions are encrypted at the application layer.
+Under the session layer, a transport moves bytes between peers. Mowo has three: **ENet** over UDP for direct and LAN play, **Steam P2P** through the SteamPlatform plugin, and **GameNetworkingSockets** (GNS), Valve's open-source connection library, over IP. By default a composite transport picks between ENet and Steam for each connection, and ENet sessions are encrypted at the application layer.
 
-## Choosing a transport
+## Transports
+
+| Transport | `net.Transport` | Use it for | Encryption and who may join |
+|---|---|---|---|
+| Composite (ENet + Steam) | `composite` (default) | Most games: direct IP and LAN through ENet, Steam friends through the relay | ENet: the engine's handshake below. Steam: Steam's own, with ticket authentication |
+| ENet | `enet` | Direct IP only, no platform relay even when Steam runs | The engine's handshake below |
+| GameNetworkingSockets | `gns` | Dedicated and listen servers over IP in builds without Steam, when you want the library to pace traffic and split large messages | Always encrypted by GNS; the same join key or `net.psk` as ENet decides who gets in |
+| Steam relay | `steam` | Every connection through Steam, never a direct socket | Steam's own |
+
+`net.Transport` is read when the network module starts and when a session finds no transport, so set it in your project's config or on the command line (`--cvar=net.Transport=gns`), not mid-session. A value the build cannot honour (GNS on a platform it is not built for, `steam` without the Steam client running, an unknown name) logs why and uses the composite transport <Source symbol="FNetTransportFactory" />.
+
+Steam builds already reach GNS: the Steam relay *is* GameNetworkingSockets inside the Steam client. Choose `gns` for builds that ship without Steam.
+
+### GameNetworkingSockets
+
+`FGnsTransport` connects a client and a host over UDP <Source symbol="FGnsTransport" />. What it adds over ENet:
+
+- **Encryption on every connection.** Each connection runs its own key exchange and encrypts with AES-GCM. A connection that would run unencrypted is closed.
+- **Pacing.** Each connection's send rate starts from its round trip and is capped by `net.gns.MaxSendRate` (KB per second, default 4096; the floor is 256). The open-source library does not probe for more bandwidth after that.
+- **Large messages.** A message up to 512 KB is split and reassembled for you, on reliable and unreliable channels alike. A larger send is dropped with an error in the log.
+- **Lanes.** The four [network channels](/docs/multiplayer/#channels) are four lanes of one connection, so a bulk transfer never holds a snapshot or a voice frame behind it. Reliable and bulk are reliable and ordered; unreliable is sequenced (an older update than one already delivered is dropped); voice is unreliable.
+
+Who may join works as on ENet. GNS on its own only knows the other end by IP address, so every GNS connection first runs the engine's join-key exchange described under [The handshake](#the-handshake), and neither side reports the peer as connected until it passes. Players on the same machine need no key, players from other machines need the host's join key, and a configured `net.psk` is everybody's key. When a key is in use, payloads are additionally sealed with the keys that exchange derived, so even someone who sits between the two machines and completes GNS's own handshake with each side cannot read or change them. Peer ids are the transport's own counter, as on ENet; player identity, rejoin tokens and platform tickets stay in the session layer.
+
+`net.sim.*` drives GNS's own packet loss, latency, jitter, reordering and duplication settings, so the [network emulation](/docs/multiplayer/sessions-and-hosting/#simulate-a-bad-network) sliders work the same. The connection statistics in the network graph (round trip, loss, bytes) come from GNS.
+
+Not covered: peer-to-peer connections through NAT (ICE), which need a signalling service the engine does not run. Use the Steam relay for that.
+
+GNS is available on Windows x64. Linux and macOS builds of the library are not shipped yet; there `net.Transport=gns` falls back to the composite transport.
+
+## Choosing between ENet and Steam
 
 `FCompositeTransport` is the default transport. It always owns an ENet backend and creates a Steam backend only when the Steam client is available <Source symbol="FCompositeTransport" />. It decides from the form of the address alone, with no network calls:
 
@@ -29,9 +61,16 @@ Under the session layer, a transport moves bytes between peers. Mowo has two: **
 
 ### Hosting on both
 
-When the Steam backend is up, a development build hosts on ENet and Steam P2P at the same time, so an IP client and a Steam client can join the same session. Steam peer ids carry a high bit so the two id spaces never collide <Source symbol="FCompositeTransport" />.
+A listen server with Steam running hosts through the Steam relay only, in every build configuration, so peers never see the host's IP address. If the relay listen fails, hosting fails; it does not fall back to a direct UDP listener.
 
-A **release** or **profile** listen server with Steam running hosts through the Steam relay only, so peers never see the host's IP address. Set `net.ShipExposeEnetHost 1` to open the ENet listener as well, for example to allow direct `--connect ip:port` joins.
+Direct hosting opens the ENet listener beside the relay, so an IP client and a Steam client can join the same session. Steam peer ids carry a high bit so the two id spaces never collide <Source symbol="FCompositeTransport" />. Every peer then sees the host's IP address. Direct hosting is on when any of these asks for it:
+
+- the session, with `FNetSessionSettings::directListen` (a LAN or direct-IP game);
+- the project, with **Network Privacy** set to **Allow direct** on the Project › Platform page (`platform.allowDirectHosting`);
+- the console variable `net.AllowDirectHost 1`;
+- a dedicated server, whose address is public anyway.
+
+Without Steam, a host listens on ENet as before.
 
 ### Channels on each transport
 
@@ -93,4 +132,4 @@ A client that connects from another machine without the key, or with the wrong o
 
 - [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/) for the session layer above the transport.
 - [Online platforms](/docs/multiplayer/online-platforms/) for the Steam backend, relay and ticket authentication.
-- API: [`FCompositeTransport`](/docs/api/networking/fcompositetransport/), [`INetworkTransport`](/docs/api/networking/inetworktransport/), [`FNetCrypto`](/docs/api/networking/fnetcrypto/), [`FNetCryptoSession`](/docs/api/networking/fnetcryptosession/), [`ENetEncryptionMode`](/docs/api/networking/enetencryptionmode/).
+- API: [`FCompositeTransport`](/docs/api/networking/fcompositetransport/), [`FGnsTransport`](/docs/api/networking/fgnstransport/), [`FNetTransportFactory`](/docs/api/networking/fnettransportfactory/), [`INetworkTransport`](/docs/api/networking/inetworktransport/), [`FNetCrypto`](/docs/api/networking/fnetcrypto/), [`FNetCryptoSession`](/docs/api/networking/fnetcryptosession/), [`ENetEncryptionMode`](/docs/api/networking/enetencryptionmode/).

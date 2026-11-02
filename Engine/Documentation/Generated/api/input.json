@@ -1316,6 +1316,49 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/Input/Public/Input/InputActionSource.h",
+			"include": "Input/InputActionSource.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "IInputActionSource",
+					"namespace": "Mowo",
+					"doc": "A platform that reads controllers by ACTION rather than by button (Steam\nInput): the player's own bindings, action sets and the pad's glyphs live\nin the platform, and the game asks \"is Scan pressed\", not \"is RT down\".\nThe Input module cannot see the platform layer, so the layer that can\ninstalls one of these on InputActionSystem.\n\nWhile IsActive() the action system stops reading gamepad bindings itself —\nthe platform has the pads, and reading them twice would double every\npress — and asks ReadAction instead. Keyboard and mouse bindings are read\nas always. Inactive (no platform, no controller under its control), the\nengine's own gamepad path is the fallback and nothing changes.",
+					"line": 23,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IInputActionSource",
+							"signature": "virtual ~IInputActionSource() = default",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "IsActive",
+							"signature": "virtual bool IsActive() const = 0",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "BeginFrame",
+							"signature": "virtual void BeginFrame(const std::vector<std::string>& enabledContexts) = 0",
+							"doc": "Once per InputActionSystem::Update, before any action is read: the\nenabled contexts bottom first, so a source maps the bottom one onto its\naction set and the rest onto layers.",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "ReadAction",
+							"signature": "virtual bool ReadAction(const std::string& actionName, InputActionType type, Vec3& outValue) = 0",
+							"doc": "The action's value from the platform; false when the platform has no\nsuch action, which leaves the action to its keyboard/mouse bindings.",
+							"line": 36
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Input/Public/Input/InputActionSystem.h",
 			"include": "Input/InputActionSystem.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -1325,37 +1368,37 @@
 					"name": "FInputBindingConflict",
 					"namespace": "Mowo",
 					"doc": "Two actions listening to the same physical source. The editor's bindings\npage surfaces these; chorded combinations are still reported — whether the\noverlap is intentional is a design call, not an engine one.",
-					"line": 19,
+					"line": 20,
 					"members": [
 						{
 							"kind": "field",
 							"name": "ContextA",
 							"signature": "std::string ContextA",
-							"line": 20
+							"line": 21
 						},
 						{
 							"kind": "field",
 							"name": "ActionA",
 							"signature": "std::string ActionA",
-							"line": 21
+							"line": 22
 						},
 						{
 							"kind": "field",
 							"name": "ContextB",
 							"signature": "std::string ContextB",
-							"line": 22
+							"line": 23
 						},
 						{
 							"kind": "field",
 							"name": "ActionB",
 							"signature": "std::string ActionB",
-							"line": 23
+							"line": 24
 						},
 						{
 							"kind": "field",
 							"name": "Binding",
 							"signature": "InputBinding Binding",
-							"line": 24
+							"line": 25
 						}
 					]
 				},
@@ -1364,37 +1407,37 @@
 					"name": "FInputActionDebugRow",
 					"namespace": "Mowo",
 					"doc": "One evaluated action for the input debug overlay / tooling.",
-					"line": 28,
+					"line": 29,
 					"members": [
 						{
 							"kind": "field",
 							"name": "Context",
 							"signature": "std::string Context",
-							"line": 29
+							"line": 30
 						},
 						{
 							"kind": "field",
 							"name": "Action",
 							"signature": "std::string Action",
-							"line": 30
+							"line": 31
 						},
 						{
 							"kind": "field",
 							"name": "State",
 							"signature": "InputActionState State",
-							"line": 31
+							"line": 32
 						},
 						{
 							"kind": "field",
 							"name": "Actuated",
 							"signature": "bool Actuated = false",
-							"line": 32
+							"line": 33
 						},
 						{
 							"kind": "field",
 							"name": "Suppressed",
 							"signature": "bool Suppressed = false",
-							"line": 33
+							"line": 34
 						}
 					]
 				},
@@ -1403,7 +1446,7 @@
 					"name": "InputActionSystem",
 					"namespace": "Mowo",
 					"doc": "Singleton that evaluates input actions each frame based on raw InputManager state.\nManages a stack of InputContexts with priority ordering.",
-					"line": 38,
+					"line": 39,
 					"members": [
 						{
 							"kind": "method",
@@ -1411,7 +1454,7 @@
 							"signature": "static InputActionSystem& Get()",
 							"static": true,
 							"doc": "The process-wide instance: player 0 (keyboard, mouse and every pad the\nbindings name) and every single-player game.",
-							"line": 42
+							"line": 43
 						},
 						{
 							"kind": "method",
@@ -1419,153 +1462,153 @@
 							"signature": "static std::unique_ptr<InputActionSystem> CreatePlayerInstance(InputManager* inputManager, int32_t gamepadIndex, bool keyboardMouse)",
 							"static": true,
 							"doc": "One more local player's own instance (split-screen co-op). It owns its\ncontext stack, trigger state and rebinds, and reads only the devices it\nis routed to: every gamepad binding reads `gamepadIndex` whatever pad\nthe binding names (so one mapping context serves every player), and\nkeyboard / mouse bindings read nothing unless `keyboardMouse`. The\ncontexts the global instance holds right now are copied in.",
-							"line": 50
+							"line": 51
 						},
 						{
 							"kind": "method",
 							"name": "~InputActionSystem",
 							"signature": "~InputActionSystem()",
-							"line": 52
+							"line": 53
 						},
 						{
 							"kind": "method",
 							"name": "SetDeviceRouting",
 							"signature": "void SetDeviceRouting(int32_t gamepadIndex, bool keyboardMouse)",
 							"doc": "Device routing for this instance; -1 / true = read what each binding\nnames (the global instance's default).",
-							"line": 56
+							"line": 57
 						},
 						{
 							"kind": "method",
 							"name": "GetRoutedGamepad",
 							"signature": "int32_t GetRoutedGamepad() const",
-							"line": 57
+							"line": 58
 						},
 						{
 							"kind": "method",
 							"name": "ReadsKeyboardMouse",
 							"signature": "bool ReadsKeyboardMouse() const",
-							"line": 60
+							"line": 61
 						},
 						{
 							"kind": "method",
 							"name": "CopyContextsFrom",
 							"signature": "void CopyContextsFrom(const InputActionSystem& other)",
 							"doc": "Copies every context definition and the stack order from `other`.",
-							"line": 65
+							"line": 66
 						},
 						{
 							"kind": "method",
 							"name": "Initialize",
 							"signature": "void Initialize(InputManager* inputManager)",
-							"line": 67
-						},
-						{
-							"kind": "method",
-							"name": "Update",
-							"signature": "void Update()",
 							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "Update",
-							"signature": "void Update(float deltaSeconds)",
+							"signature": "void Update()",
 							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "Update",
+							"signature": "void Update(float deltaSeconds)",
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "Shutdown",
 							"signature": "void Shutdown()",
-							"line": 70
+							"line": 71
 						},
 						{
 							"kind": "method",
 							"name": "GetInputManager",
 							"signature": "InputManager* GetInputManager() const",
 							"doc": "The raw device state this system evaluates against. Null in headless\nhosts that never called Initialize.",
-							"line": 74
+							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "CreateContext",
 							"signature": "InputContext* CreateContext(const std::string& name)",
 							"doc": "Create a new context (not on the stack yet)",
-							"line": 79
+							"line": 80
 						},
 						{
 							"kind": "method",
 							"name": "GetContext",
 							"signature": "InputContext* GetContext(const std::string& name)",
-							"line": 81
+							"line": 82
 						},
 						{
 							"kind": "method",
 							"name": "PushContext",
 							"signature": "void PushContext(const std::string& name)",
 							"doc": "Push a context onto the stack, inserted by InputContext::GetPriority\n(stack stays sorted ascending, back = highest = evaluated first; equal\npriorities keep push order).",
-							"line": 86
+							"line": 87
 						},
 						{
 							"kind": "method",
 							"name": "PopContext",
 							"signature": "void PopContext(const std::string& name)",
 							"doc": "Remove a context from the stack (does not destroy it). Its actions are\ncancel-evaluated so nothing resumes from stale mid-episode state on the\nnext push (a held Tap would otherwise fire on re-push's first release).",
-							"line": 91
+							"line": 92
 						},
 						{
 							"kind": "method",
 							"name": "EnableContext",
 							"signature": "void EnableContext(const std::string& name, bool enabled)",
-							"line": 93
+							"line": 94
 						},
 						{
 							"kind": "method",
 							"name": "GetContextNames",
 							"signature": "std::vector<std::string> GetContextNames() const",
-							"line": 95
+							"line": 96
 						},
 						{
 							"kind": "method",
 							"name": "IsContextStacked",
 							"signature": "bool IsContextStacked(const std::string& name) const",
 							"doc": "On the stack right now, and therefore able to fire. A context that\nexists but was never pushed — a UI context waiting for its menu, a\nproject tier declared alongside the mapping-context assets that\nsupersede it — cannot produce input, so its bindings cannot collide\nwith anything.",
-							"line": 102
+							"line": 103
 						},
 						{
 							"kind": "method",
 							"name": "IsActionActive",
 							"signature": "bool IsActionActive(const std::string& actionName) const",
-							"line": 104
+							"line": 105
 						},
 						{
 							"kind": "method",
 							"name": "IsActionStarted",
 							"signature": "bool IsActionStarted(const std::string& actionName) const",
-							"line": 106
+							"line": 107
 						},
 						{
 							"kind": "method",
 							"name": "IsActionCanceled",
 							"signature": "bool IsActionCanceled(const std::string& actionName) const",
-							"line": 108
+							"line": 109
 						},
 						{
 							"kind": "method",
 							"name": "GetActionValue",
 							"signature": "float GetActionValue(const std::string& actionName) const",
-							"line": 110
+							"line": 111
 						},
 						{
 							"kind": "method",
 							"name": "GetActionValue2D",
 							"signature": "Vec2 GetActionValue2D(const std::string& actionName) const",
-							"line": 112
+							"line": 113
 						},
 						{
 							"kind": "method",
 							"name": "GetActionValue3D",
 							"signature": "Vec3 GetActionValue3D(const std::string& actionName) const",
 							"doc": "Axis3D value; an Axis2D action reads with Z = 0.",
-							"line": 115
+							"line": 116
 						},
 						{
 							"kind": "method",
@@ -1573,42 +1616,42 @@
 							"signature": "static void SwizzlePermutation(float order, uint8_t out[3])",
 							"static": true,
 							"doc": "Swizzle order code (EInputSwizzleOrder, kept in InputModifier::param0)\nto a permutation: output axis i reads input axis out[i].",
-							"line": 119
+							"line": 120
 						},
 						{
 							"kind": "method",
 							"name": "GetActionState",
 							"signature": "const InputActionState* GetActionState(const std::string& actionName) const",
 							"doc": "Searches all active contexts.",
-							"line": 122
+							"line": 123
 						},
 						{
 							"kind": "method",
 							"name": "GetTriggerEvent",
 							"signature": "bool GetTriggerEvent(const std::string& actionName, ETriggerEvent event) const",
 							"doc": "Enhanced-Input trigger event query — true when the action raised the\ngiven UE5-style event this frame. Backs MPlayerInput's BindAction.",
-							"line": 126
+							"line": 127
 						},
 						{
 							"kind": "method",
 							"name": "RebindAction",
 							"signature": "void RebindAction(const std::string& contextName, const std::string& actionName, const std::vector<InputBinding>& newBindings)",
 							"doc": "Replace all bindings for an action in a given context",
-							"line": 129
+							"line": 130
 						},
 						{
 							"kind": "method",
 							"name": "LoadBindings",
 							"signature": "void LoadBindings(const std::string& filepath)",
 							"doc": "Load bindings from MDF (creates contexts and pushes them onto the stack)",
-							"line": 133
+							"line": 134
 						},
 						{
 							"kind": "method",
 							"name": "SaveBindings",
 							"signature": "void SaveBindings(const std::string& filepath)",
 							"doc": "Persists every registered non-runtime-only context (runtime-only ones\nmirror asset data and are rebuilt each session).",
-							"line": 137
+							"line": 138
 						},
 						{
 							"kind": "method",
@@ -1616,91 +1659,91 @@
 							"signature": "static std::string UserBindingsPath()",
 							"static": true,
 							"doc": "<project>/Saved/Config/InputUser.mdfb, or the per-user product dir when\nno project is open.",
-							"line": 149
+							"line": 150
 						},
 						{
 							"kind": "method",
 							"name": "LoadUserBindings",
 							"signature": "bool LoadUserBindings()",
 							"doc": "Reads the player tier and applies whatever part of it names a context\nthat exists right now. Overrides naming a context that does not exist\nyet are kept — the Enhanced-Input subsystem mirrors its contexts long\nafter startup, and ApplyUserBindings picks them up then.",
-							"line": 155
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "LoadUserBindings",
 							"signature": "bool LoadUserBindings(const std::string& filepath)",
-							"line": 156
+							"line": 157
 						},
 						{
 							"kind": "method",
 							"name": "SaveUserBindings",
 							"signature": "bool SaveUserBindings()",
-							"line": 158
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "SaveUserBindings",
 							"signature": "bool SaveUserBindings(const std::string& filepath)",
-							"line": 159
+							"line": 160
 						},
 						{
 							"kind": "method",
 							"name": "ApplyUserBindings",
 							"signature": "void ApplyUserBindings()",
 							"doc": "Re-applies the whole override set over the contexts as they stand.",
-							"line": 162
+							"line": 163
 						},
 						{
 							"kind": "method",
 							"name": "SetUserBinding",
 							"signature": "void SetUserBinding(const std::string& contextName, const std::string& actionName, const std::vector<InputBinding>& bindings)",
 							"doc": "Record and apply one rebind. The bindings the action carried before its\nfirst override are remembered as the reset target.",
-							"line": 166
+							"line": 167
 						},
 						{
 							"kind": "method",
 							"name": "ClearUserBinding",
 							"signature": "void ClearUserBinding(const std::string& contextName, const std::string& actionName)",
 							"doc": "Drop an override and restore what the project data supplied.",
-							"line": 170
+							"line": 171
 						},
 						{
 							"kind": "method",
 							"name": "ClearUserBindings",
 							"signature": "void ClearUserBindings(const std::string& contextName)",
-							"line": 171
+							"line": 172
 						},
 						{
 							"kind": "method",
 							"name": "ClearAllUserBindings",
 							"signature": "void ClearAllUserBindings()",
-							"line": 172
+							"line": 173
 						},
 						{
 							"kind": "method",
 							"name": "HasUserBinding",
 							"signature": "bool HasUserBinding(const std::string& contextName, const std::string& actionName) const",
-							"line": 174
+							"line": 175
 						},
 						{
 							"kind": "method",
 							"name": "GetDefaultBindings",
 							"signature": "std::vector<InputBinding> GetDefaultBindings(const std::string& contextName, const std::string& actionName) const",
 							"doc": "What the action was bound to before any override — empty when the\naction has never been overridden.",
-							"line": 178
+							"line": 179
 						},
 						{
 							"kind": "method",
 							"name": "GetUserBindings",
 							"signature": "const std::vector<FInputBindingOverride>& GetUserBindings() const",
-							"line": 180
+							"line": 181
 						},
 						{
 							"kind": "method",
 							"name": "FindBindingConflicts",
 							"signature": "std::vector<FInputBindingConflict> FindBindingConflicts() const",
 							"doc": "Pairs of actions bound to the same physical source, across every\nregistered non-runtime-only context. Backing data for the editor's\nconflict warnings; the engine never blocks a conflicting bind.",
-							"line": 187
+							"line": 188
 						},
 						{
 							"kind": "method",
@@ -1708,7 +1751,7 @@
 							"signature": "static std::vector<FInputBindingConflict> FindBindingConflictsIn(const std::vector<const InputContext*>& contexts)",
 							"static": true,
 							"doc": "The same check over an explicit context list, in the order given. The\neditor runs it over a context mirrored from the asset it is editing —\nan unsaved mapping context is registered nowhere, so the member form\ncould never see it.",
-							"line": 193
+							"line": 194
 						},
 						{
 							"kind": "method",
@@ -1716,29 +1759,57 @@
 							"signature": "static bool SameBindingSource(const InputBinding& a, const InputBinding& b)",
 							"static": true,
 							"doc": "True when two bindings read the same hardware source (key, button,\naxis + pad slot, touch slot); scale, axis index and modifiers are\nignored — they shape the value, not where it comes from.",
-							"line": 198
+							"line": 199
 						},
 						{
 							"kind": "method",
 							"name": "GetDebugSnapshot",
 							"signature": "std::vector<FInputActionDebugRow> GetDebugSnapshot() const",
 							"doc": "Post-Update view of every stacked action (top of stack first),\nincluding actions a consuming context or duplicate name suppressed —\nexactly what an on-screen input debug overlay needs to draw.",
-							"line": 203
+							"line": 204
+						},
+						{
+							"kind": "method",
+							"name": "SetExternalActionSource",
+							"signature": "static void SetExternalActionSource(IInputActionSource* source)",
+							"static": true,
+							"doc": "`i.DebugOverlay` — the switch the on-screen action overlay reads. A\ncvar rather than editor state so the runtime host and the console can\nflip the same thing (`--cvar=i.DebugOverlay=1`).\nThe platform action source (Steam Input) the main instance reads\ngamepad actions from while it is active; null restores the engine's own\ngamepad path. Per-player instances keep their routed pad and never use it.",
+							"line": 212
+						},
+						{
+							"kind": "method",
+							"name": "GetExternalActionSource",
+							"signature": "static IInputActionSource* GetExternalActionSource()",
+							"static": true,
+							"line": 213
+						},
+						{
+							"kind": "method",
+							"name": "GetActionBindingText",
+							"signature": "std::string GetActionBindingText(const std::string& actionName, bool gamepad) const",
+							"doc": "The first binding of the action for the device family asked about, as\nthe bindings file spells it (\"E\", \"MouseLeft\", \"RightTrigger\"); empty\nwhen the action has none. The fallback text of a button prompt.",
+							"line": 218
+						},
+						{
+							"kind": "method",
+							"name": "IsUsingExternalSource",
+							"signature": "bool IsUsingExternalSource() const",
+							"doc": "True when the last Update read gamepad actions from the external source.",
+							"line": 221
 						},
 						{
 							"kind": "method",
 							"name": "IsDebugOverlayEnabled",
 							"signature": "static bool IsDebugOverlayEnabled()",
 							"static": true,
-							"doc": "`i.DebugOverlay` — the switch the on-screen action overlay reads. A\ncvar rather than editor state so the runtime host and the console can\nflip the same thing (`--cvar=i.DebugOverlay=1`).",
-							"line": 208
+							"line": 225
 						},
 						{
 							"kind": "method",
 							"name": "SetDebugOverlayEnabled",
 							"signature": "static void SetDebugOverlayEnabled(bool enabled)",
 							"static": true,
-							"line": 209
+							"line": 226
 						},
 						{
 							"kind": "method",
@@ -1746,28 +1817,28 @@
 							"signature": "static float MouseSensitivity()",
 							"static": true,
 							"doc": "Player look preferences, backed by `i.MouseSensitivity` and\n`i.MouseInvertY` and applied to both mouse-delta sources before any\nbinding modifier — a game that ships several look actions gets them on\nall of them, and a mapping context authored without them cannot opt the\nplayer out by omission. Sensitivity is clamped to 0.05..10 because a zero\nis a dead mouse the player cannot undo from inside the game.",
-							"line": 217
+							"line": 234
 						},
 						{
 							"kind": "method",
 							"name": "SetMouseSensitivity",
 							"signature": "static void SetMouseSensitivity(float sensitivity)",
 							"static": true,
-							"line": 218
+							"line": 235
 						},
 						{
 							"kind": "method",
 							"name": "IsMouseYInverted",
 							"signature": "static bool IsMouseYInverted()",
 							"static": true,
-							"line": 219
+							"line": 236
 						},
 						{
 							"kind": "method",
 							"name": "SetMouseYInverted",
 							"signature": "static void SetMouseYInverted(bool inverted)",
 							"static": true,
-							"line": 220
+							"line": 237
 						}
 					]
 				}

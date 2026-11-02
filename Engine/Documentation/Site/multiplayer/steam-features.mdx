@@ -1,0 +1,246 @@
+---
+title: Steam features
+description: Achievements and stats, rich presence and friends-list parties, Steam Input, Remote Play Together, the Workshop and relay-only hosting.
+order: 10
+sources:
+  - Engine/Plugins/SteamPlatform/SteamPlatform.mplugin
+  - Engine/Source/Runtime/Networking/Public/Networking/OnlineService.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Achievements.h
+  - Engine/Source/Runtime/Networking/Public/Networking/PlatformInit.h
+  - Engine/Source/Runtime/Networking/Public/Networking/CompositeTransport.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Subsystems/MPlatformSubsystem.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionPlatform.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
+  - Engine/Source/Runtime/Input/Public/Input/InputActionSource.h
+  - Engine/Source/Runtime/Input/Public/Input/InputActionSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/PlatformActionInput.h
+  - Engine/Source/Runtime/Game/Public/Game/MInputStatics.h
+  - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+verifiedAt: 65255635a
+---
+
+The Steam plugin covers more than lobbies and invites. This page covers the parts a co-op game uses most: achievements and stats, rich presence with friends-list parties, Steam Input, Remote Play Together, the Workshop, and hosting through the Steam relay without exposing the host's IP address.
+
+Every feature goes through `IOnlineService`, so game code calls `MPlatformSubsystem` <Source symbol="MPlatformSubsystem" /> from C++ or from a Visual Scripting graph and never includes a Steam header. Discord and Mowo Online answer the same calls with a safe no-op where they have no equivalent. Set up the plugin first: see [Online platforms](/docs/multiplayer/online-platforms/).
+
+<Callout type="warning">
+<Status /> These features are covered by tests that use a stand-in platform, not a live Steam client. The two-machine live run has not been done yet.
+</Callout>
+
+## Achievements and stats
+
+### Declare them
+
+Achievements and stats are declared in `Config/Achievements.ini` in your project. A packaged game reads the copy in its own `Config/` folder. The ids are the API names you create on the Steamworks partner site.
+
+```ini title="Config/Achievements.ini"
+[Settings]
+; Seconds without a new write before the values are uploaded.
+StoreDelaySeconds=2
+
+[Achievement ACH_FIRST_SCAN]
+Name=First Light
+Description=Fire the scanner once.
+
+[Achievement ACH_CARTOGRAPHER]
+Name=Cartographer
+Description=Scan 1000 surfaces.
+ProgressStat=STAT_SCANS
+ProgressMax=1000
+
+[Achievement ACH_IT_SAW_YOU]
+Name=It Saw You
+Hidden=True
+
+[Stat STAT_SCANS]
+Type=Int
+Default=0
+
+[Stat STAT_DISTANCE]
+Type=Float
+Default=0
+```
+
+An achievement with a `ProgressStat` unlocks itself once that stat reaches `ProgressMax`. `Hidden` marks it secret for your own achievement screen; Steam keeps its own hidden flag on the partner site.
+
+### Unlock and count
+
+```cpp title="ScanRules.cpp" nocompile
+#include "Networking/Subsystems/MPlatformSubsystem.h"
+
+static void OnSurfaceScanned(Mowo::MPlatformSubsystem& platform) {
+	platform.UnlockAchievement("ACH_FIRST_SCAN");
+	platform.AddStatInt("STAT_SCANS", 1);
+}
+```
+
+| Function | Does |
+|---|---|
+| `UnlockAchievement`, `ClearAchievement`, `IsAchievementUnlocked` | Achievements by API name |
+| `SetStatInt`, `SetStatFloat`, `AddStatInt`, `GetStatInt`, `GetStatFloat` | Stats |
+| `IndicateAchievementProgress` | Shows Steam's "3 / 10" popup. It does not unlock. |
+| `StoreStats` | Uploads now instead of after the debounce, for example at the end of a run |
+| `PopUnlockedAchievement` | The next achievement this session unlocked, oldest first; empty when none |
+| `GetPendingAchievementWrites` | Writes waiting for Steam |
+
+### How the values reach Steam
+
+Every write lands in a local store first, so your game reads its own values back with no Steam client running, and you can test unlock logic in Play in Editor. The store is `AchievementProgress.ini` beside the player's save games; in the editor it is in the project's `Saved/SaveGames`, so a test never touches a player's store.
+
+<Flow steps={["UnlockAchievement", "Local store", "Queue", "Steam has the player's values", "Debounced StoreStats"]} highlight={2} caption="Writes wait in the queue until Steam has loaded the player's values." />
+
+- **Offline queue.** Writes made before Steam is up, or before it has the player's values, wait in a queue. Repeated writes to one stat keep only the last value.
+- **Merge.** When Steam's values arrive, achievements and stats earned offline are pushed up, and ones earned on another machine are pulled down. For stats the larger value wins.
+- **Debounce.** The upload runs after `StoreDelaySeconds` without a new write, and no later than four times that after the first write. Steam rate-limits uploads, so an upload per write would start failing.
+- **Exit.** Shutting down the online services uploads what is left. A write still offline at exit stays in the local store and goes up on the next run with Steam.
+- **Unknown names.** A name the partner site does not define is refused by Steam once and dropped, with a warning in the log.
+
+For a toast of your own, poll `PopUnlockedAchievement` from a graph, or set a handler in C++ with `FAchievements::Get().SetUnlockHandler`.
+
+## Rich presence and parties
+
+`SetRichPresence(details, state)` still sets the status line on every service. Steam's friends list, however, shows only the `steam_display` key, a `#Token` from a presence localisation file you upload on the partner site. Set **Steam Display Token** on the Project › Platform page and the two lines travel as `%details%` and `%state%`:
+
+```text title="english.vdf (uploaded on the partner site)"
+"lang"
+{
+	"Language"	"english"
+	"Tokens"
+	{
+		"#Status"	"%details%: %state%"
+	}
+}
+```
+
+`SetRichPresenceValue(key, value)` sets any other key, for tokens of your own. Steam allows only a fixed set of characters in keys; see Valve's rich presence documentation.
+
+A session keeps the friends-list party current by itself: while you host or are joined, the party is named after the host's Steam id and its size is the number of players, so the friends list shows the crew as one group with a count. A client that joined through Steam also publishes the host's join string, so its friends can join the same host. A client that joined by IP address publishes nothing, because that would show the host's address to the client's friends. Turn all of this off with `FNetSessionSettings::advertiseRichPresence = false`, or set a party yourself with `SetPresenceGroup(groupId, size)`.
+
+## Steam Input
+
+With **Steam Input** on in Project Settings (`platform.steamInputEnabled`), Steam reads the controllers and the engine asks it for actions instead of buttons. The player's own Steam bindings apply, and glyphs match the controller in their hands.
+
+The engine maps its input system onto Steam's:
+
+| Engine | Steam |
+|---|---|
+| The bottom enabled input context | The active action set |
+| Each enabled context above it | An action set layer |
+| A Button action | A digital action of the same name |
+| An Axis1D or Axis2D action | An analog action of the same name (a digital one also works) |
+
+Keyboard and mouse bindings are read as usual. While Steam Input owns the pads, the engine skips its own gamepad bindings, so a press is not counted twice. When Steam is not running, the setting is off or no controller is under Steam's control, the engine reads the pad itself as before.
+
+### The action manifest
+
+Steam needs an action manifest, `in_game_actions.vdf`, with the same names as your contexts and actions. For development, put it at `Config/SteamInput/in_game_actions.vdf` in your project; the engine points Steam at it. For release, upload it on the partner site (Steam Input configuration). A minimal manifest for a `Gameplay` context with a `Scanner` context pushed over it:
+
+```text title="Config/SteamInput/in_game_actions.vdf"
+"In Game Actions"
+{
+	"actions"
+	{
+		"Gameplay"
+		{
+			"title"	"#Set_Gameplay"
+			"StickPadGyro"
+			{
+				"Move"
+				{
+					"title"	"#Action_Move"
+					"input_mode"	"joystick_move"
+				}
+				"Look"
+				{
+					"title"	"#Action_Look"
+					"input_mode"	"absolute_mouse"
+				}
+			}
+			"AnalogTrigger"
+			{
+				"Zoom"	"#Action_Zoom"
+			}
+			"Button"
+			{
+				"Scan"	"#Action_Scan"
+				"Jump"	"#Action_Jump"
+			}
+		}
+	}
+	"action_layers"
+	{
+		"Scanner"
+		{
+			"title"	"#Layer_Scanner"
+			"legacy_set"	"1"
+			"set_layer"	"1"
+			"parent_set_name"	"Gameplay"
+			"Button"
+			{
+				"Pulse"	"#Action_Pulse"
+			}
+		}
+	}
+	"localization"
+	{
+		"english"
+		{
+			"Set_Gameplay"	"Gameplay"
+			"Layer_Scanner"	"Scanner"
+			"Action_Move"	"Move"
+			"Action_Look"	"Look"
+			"Action_Zoom"	"Zoom"
+			"Action_Scan"	"Scan"
+			"Action_Jump"	"Jump"
+			"Action_Pulse"	"Pulse"
+		}
+	}
+}
+```
+
+Write one block per input context, one entry per action: Axis2D actions under `StickPadGyro`, Axis1D under `AnalogTrigger`, Button under `Button`.
+
+### Button prompts
+
+`MInputStatics` has two prompt nodes for HUD hints by action:
+
+- `GetActionPromptGlyph(action)`: the image path of the input the player bound in Steam. Empty when Steam Input is not in control, so your UI falls back to its own art by `GetGamepadFamily`.
+- `GetActionPromptText(action)`: Steam's name for that input ("Right Trigger"), or the action's binding for the last used device ("E", "RightTrigger") when Steam Input is not in control.
+
+Bind them to an Arc text or image through an attribute, so the prompt follows the device the player picks up.
+
+`MPlatformSubsystem` also has `IsSteamInputActive`, `ActivateActionSet`, `ActivateActionSetLayer`, `DeactivateActionSetLayer`, `DeactivateAllActionSetLayers` (for a game that drives sets by hand), `GetActionGlyphPath`, `GetActionOriginText`, `TriggerRumble(low, high)` and `ShowControllerBindingPanel`.
+
+## Remote Play Together and the overlay
+
+| Function | Does |
+|---|---|
+| `GetRemotePlaySessionCount`, `GetRemotePlaySessionUserAt(index)` | Guests streaming the game from the host's machine, by Steam id |
+| `InviteToRemotePlayTogether(friendId)` | Sends a Remote Play Together invite |
+| `ShowInviteDialog` | Opens the overlay's invite dialog for the current lobby, or for the host's join string without a lobby |
+| `IsOverlayEnabled` | False when the player turned the overlay off, so you show your own invite UI |
+
+Remote Play Together streams one game instance, so guests play through the host's local players, not through a network session.
+
+## Workshop
+
+The player's subscribed and installed Workshop items load as mods, verified like a local mod. An item that finishes installing while the game runs joins the mod list at once and mounts on the next start, because swapping packs under a running level mixes two versions of a mod.
+
+`RefreshWorkshopItems` reads the subscribed list and returns its length. Read it by index with `GetWorkshopItemIdAt`, `IsWorkshopItemInstalledAt`, `GetWorkshopItemFolderAt` and `GetWorkshopItemProgressAt` (0 to 1). `SubscribeWorkshopItem`, `UnsubscribeWorkshopItem` and `DownloadWorkshopItem` take an item id. Uploading items from the game is not supported yet; publish them with Steam's own tools.
+
+## Network privacy
+
+A listen server with Steam running hosts through the Steam relay only, so no player learns the host's IP address. **Network Privacy** on the Project › Platform page decides it for the project:
+
+| Setting | Effect |
+|---|---|
+| **Relay only** (default) | Hosting opens no UDP port. Friends join through Steam. |
+| **Allow direct** | The host also opens its UDP port, so players can join by IP address on a LAN or over the internet. Every player sees the host's IP. |
+
+A single session can ask for direct hosting with `FNetSessionSettings::directListen`, for a LAN game. Dedicated servers always listen directly. See [Hosting on both](/docs/multiplayer/transport-and-encryption/#hosting-on-both).
+
+## Related
+
+- [Online platforms](/docs/multiplayer/online-platforms/)
+- [Transport and encryption](/docs/multiplayer/transport-and-encryption/)
+- [Uploading to Steam](/docs/shipping/steam/)

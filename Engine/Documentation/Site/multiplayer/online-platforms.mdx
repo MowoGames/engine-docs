@@ -13,14 +13,14 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/SteamTicketValidator.h
   - Engine/Source/Runtime/Networking/Public/Networking/ClientAuth.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-verifiedAt: 7c4a1b166
+verifiedAt: 65255635a
 ---
 
 Steam, Discord and Mowo Online are not built into the engine. Each lives in its own plugin, and all three are **off by default** for a project (`"enabledByDefault": false`). When a plugin loads, it registers an `IOnlineService` with the engine, and engine code talks only to that interface <Source symbol="IOnlineService" />. No engine module includes a platform SDK header. A build without the plugins still hosts and joins over ENet with a direct address.
 
 | Plugin | Provides |
 |---|---|
-| **SteamPlatform** | Identity, SDR P2P transport, lobbies and invites, rich presence, stats and achievements, encrypted session tickets, cloud saves, Workshop items, the on-screen keyboard and Steam Input glyphs |
+| **SteamPlatform** | Identity, SDR P2P transport, lobbies and invites, rich presence with party groups, stats and achievements, encrypted session tickets, cloud saves, Workshop items, Remote Play Together, the on-screen keyboard and Steam Input action sets and glyphs |
 | **DiscordPlatform** | Rich presence, Ask to Join and the per-frame callback pump. Does not load on dedicated servers. |
 | **MowoOnlinePlatform** | Mowo ID identity and token, friends and presence, invites and join requests, achievements, cloud saves of the SaveGames folder and the launcher overlay, through the Mowo Games Launcher. Does not load on dedicated servers. |
 
@@ -75,8 +75,11 @@ The `platform` settings and their defaults:
 | `platform.defaultLobbyType` | `FriendsOnly` | Visibility for new lobbies |
 | `platform.defaultMaxPlayers` | `4` | Session capacity the runtime and lobbies fall back to |
 | `platform.requireTicketAuth` | `false` | Clients send an encrypted app ticket on connect |
+| `platform.allowDirectHosting` | `false` | **Network Privacy**: `false` hosts through the Steam relay only; `true` also opens the direct UDP listener and exposes the host's IP |
+| `platform.steamInputEnabled` | `false` | Controllers through Steam Input action sets instead of the engine reading the pad |
 | `platform.presenceDetailsFormat`, `platform.presenceStateFormat` | empty | Rich presence lines, with `{details}` and `{state}` tokens |
 | `platform.defaultLargeImageKey` | empty | Default large image for rich presence |
+| `platform.steamDisplayToken` | empty | The `#Token` Steam shows in the friends list, from your presence localisation file |
 
 ## Lobbies, invites and joining
 
@@ -90,7 +93,7 @@ Discord's Ask to Join and a Mowo Online join request whose connect string is a S
 
 ### Relay hosting
 
-The Steam plugin initializes Steam Datagram Relay network access at startup, so the first connection does not wait for the relay configuration. A `release` or `profile` listen server with Steam running hosts through the relay only and does not expose the host's IP. See [Hosting on both](/docs/multiplayer/transport-and-encryption/#hosting-on-both) for the `net.ShipExposeEnetHost` override.
+The Steam plugin initializes Steam Datagram Relay network access at startup, so the first connection does not wait for the relay configuration. A listen server with Steam running hosts through the relay only and does not expose the host's IP. See [Hosting on both](/docs/multiplayer/transport-and-encryption/#hosting-on-both) for the ways to allow direct hosting.
 
 ## Presence, stats and achievements from code
 
@@ -110,7 +113,7 @@ static void OnWaveCleared(Mowo::MPlatformSubsystem& platform, int wave, int kill
 }
 ```
 
-Rich presence goes to every available service, formatted through the project's presence formats. The subsystem also exposes:
+Rich presence goes to every available service, formatted through the project's presence formats. Achievements and stats are recorded locally first and work without any platform; see [Steam features](/docs/multiplayer/steam-features/) for them, presence keys and party groups, Steam Input, Remote Play Together and the Workshop. The subsystem also exposes:
 
 - lobbies: `CreateLobby`, `JoinLobby`, `LeaveLobby`, `RefreshLobbyList` and the `GetLobby…At` getters, `ConnectToHost`;
 - session adverts: `AdvertiseSession`, `ClearAdvertisement`;
@@ -143,9 +146,9 @@ A game not built with the engine can link `mos_sdk` directly: include `mos/mos_s
 
 ## Steam extras
 
-- **Workshop.** The player's subscribed, installed Workshop items load as mod folders. Each one is verified like a local mod, so a Workshop item gets no more trust than one in `Saved/Mods`. See [Shipping](/docs/shipping/) for mods.
+- **Workshop.** The player's subscribed, installed Workshop items load as mod folders. Each one is verified like a local mod, so a Workshop item gets no more trust than one in `Saved/Mods`. See [Steam features](/docs/multiplayer/steam-features/#workshop).
 - **On-screen keyboard.** `IOnlineService::ShowTextInput` opens the Big Picture keyboard, or the Steam Deck's floating keyboard over a focused Arc text field.
-- **Steam Input glyphs.** `GetGamepadFamily` and `GetGamepadGlyphPath` report the controller family (including Steam Deck) and a glyph image per button.
+- **Steam Input.** Action sets, the player's own bindings and glyphs per action; see [Steam features](/docs/multiplayer/steam-features/#steam-input). `GetGamepadFamily` and `GetGamepadGlyphPath` still report the controller family (including Steam Deck) and a glyph image per button.
 
 ## Encrypted app tickets
 
@@ -172,11 +175,12 @@ Without `--appid` and a key, the dedicated server accepts every connection witho
 ## Status
 
 <Callout type="warning">
-<Status /> The Steam integration is complete in code, but the two-machine live Steam runbook (lobbies, invites, tickets and cloud saves between two real accounts) has not been run yet. Treat Steam sessions as untested outside Play in Editor until it has.
+<Status /> The Steam integration is complete in code, but the two-machine live Steam runbook (lobbies, invites, tickets, cloud saves, achievements, presence and Steam Input between two real accounts) has not been run yet. Treat Steam sessions as untested outside Play in Editor until it has.
 </Callout>
 
 ## Related
 
+- [Steam features](/docs/multiplayer/steam-features/) for achievements, presence, Steam Input, Remote Play Together and the Workshop.
 - [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/) for `--join-steam`.
 - [Dedicated server](/docs/multiplayer/dedicated-server/) for the Steam game server.
 - [Voice chat](/docs/multiplayer/voice-chat/) for following Discord mute and deafen.
