@@ -5,7 +5,7 @@ description: Import, create, find and organize your project's assets, keep refer
 order: 4
 sources:
   - Engine/Source/Runtime/AssetSystem/Public/Scene/ExternalActorFiles.h
-verifiedAt: 5922e6e5e
+verifiedAt: 7996072c5
 ---
 
 The Content Browser is your project's asset library. The left side is the **Sources** rail with the folder tree and your collections; the right side is a grid or list of the assets in the current folder. Double-click an asset to open it in its editor, drag it into the viewport to place it, or right-click for everything else.
@@ -178,13 +178,30 @@ Drag one collection onto another. Shared and local collections cannot nest under
 
 ## Thumbnails
 
-Tiles show live thumbnails for textures, audio waveforms, meshes (skeletal meshes in bind pose), materials, prefabs, scenes, particle systems, physics assets, animation graphs, Arc widgets and sound cues. Rendering is spread over frames so browsing does not stall, and a tile refreshes when its source file or one of its dependencies changes.
+Tiles show live thumbnails for textures, audio waveforms, meshes (skeletal meshes in bind pose), materials, prefabs, levels, particle systems, physics assets, animation graphs, Arc widgets and sound cues. Every thumbnail is a square 256-pixel image, drawn at its own aspect ratio inside the tile, so it stays sharp at the largest tile size and at 150 % display scaling.
 
-A tile is in one of four states: a finished thumbnail, a pending bar over the type icon, a red failed state, or the plain type icon when no thumbnail applies.
+- **Meshes, prefabs, physics assets and animation graphs** are rendered in a preview scene of their own, lit by a fixed studio light rig. The camera looks from the same three-quarter angle every time and is placed so the asset fills the same share of the tile, whether it is a pebble, a tall pole or a whole building.
+- **Materials** are drawn on a sphere. Decal, post-process and light-function materials are drawn on a flat card facing the camera instead.
+- **Textures** are drawn at their own proportions, averaged down to the tile. Transparent areas show a checkerboard.
+- **Levels** show a capture of the level viewport, described below.
 
-A level's tile is drawn from its actors. A level saved one file per actor keeps only its world settings in the `.mmap`, so the thumbnail assembles the actor files under `__ExternalActors__` back in, as loading the level does. A level that holds nothing a tile can draw, such as one with only terrain, keeps the plain level icon instead of the failed state.
+The open level never affects a thumbnail: its lights, sky, fog, exposure, post-process volumes and Global Illumination stay out of the preview scene, so an asset looks the same in every level and every project.
 
-Thumbnails are cached in `Intermediate/ThumbCache`; you can delete that folder at any time.
+Thumbnails are drawn a few at a time, so browsing does not stall the editor, and the tiles you can see are drawn before the ones you scrolled past. A tile is redrawn when its source file or one of its dependencies changes, for example a texture used by a material.
+
+A tile is in one of four states: a finished thumbnail, a pending bar over the type icon, a red failed state, or the plain type icon when no thumbnail applies. To draw an asset's thumbnail again, right-click it and choose **Refresh Thumbnail**.
+
+### Level thumbnails
+
+When you save a level, the editor captures the level viewport and stores the middle square of that picture beside the level as `<Level>.mmap.mthumb`. The level's tile shows that capture. Rename, move, duplicate and delete take the capture along with its level; commit it with the level so everyone on your team sees the same thumbnail.
+
+To take a new capture without saving, open the level, frame the view you want and choose **Update Thumbnail** from the level's right-click menu.
+
+A level that has no capture yet, such as one saved by an older version of the editor, gets one the first time you open it, once its assets have finished loading. Until then its tile shows the plain level icon.
+
+### The thumbnail cache
+
+Drawn thumbnails are kept in memory for the tiles you have looked at recently and on disk in `Intermediate/ThumbCache`, so reopening a folder or the project does not draw them again. You can delete that folder at any time; the editor draws the thumbnails again as you browse.
 
 ## Migrating assets to another project
 

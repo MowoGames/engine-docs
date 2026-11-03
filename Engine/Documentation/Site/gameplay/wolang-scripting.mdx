@@ -12,12 +12,13 @@ sources:
   - Engine/Source/Runtime/Scripting/Public/Scripting/AWolangScriptActor.h
   - Engine/Source/Runtime/Scripting/Public/Scripting/WolangScripting.h
   - Engine/Source/Runtime/Scripting/Public/Scripting/WolangObjectBridge.h
+  - Engine/Source/Runtime/Scripting/Public/Scripting/WolangSaveGame.h
   - Samples/SampleProject/Scripts/Mover/wolang.toml
   - Samples/SampleProject/Scripts/Mover/src/mover.wo
   - Samples/SampleProject/Content/Scenes/WolangDemo.mmap
   - Samples/SampleProject/Config/Plugins.ini
   - Templates/TP_Wolang/Scripts/Starter/src/starter.wo
-verifiedAt: be2410976
+verifiedAt: 85a4008d1
 ---
 
 Wolang is the engine's scripting language. A Wolang class that derives from `AActor` is an actor class like a C++ or Visual Scripting one: it is in Place Actors, the level saves it by name, its `@Editable` fields are rows in Details, and it spawns by class from C++ and Visual Scripting. A class that derives from `MActorComponent` is a component any actor can carry. Scripts call the engine through the `mowo` package, which the build generates from the engine's reflection. Saving a script while the level plays reloads it and keeps its state; a debugger attaches from VS Code. <Source symbol="AWolangActor" />
@@ -236,6 +237,7 @@ The hand-written half of `mowo` adds:
 | `SetMesh(owner, path)` | Shows a mesh on the actor's static mesh component |
 | `DestroyActor(owner)` | Destroys the actor |
 | `DamageActor(target, amount, instigator)` | Deals damage; the target's `OnDamage` runs |
+| `SaveState(owner, slot, key)`, `LoadState(owner, slot, key)` | Writes / reads the owner's `@Save` fields in a save game slot (see below) |
 
 A property written through a generated `Set` accessor reaches what the engine draws, plays and simulates the same frame: setting a light's intensity from a script changes the light.
 
@@ -308,9 +310,44 @@ A task started during a frame takes its first step on the next one. All of a wor
 
 A call into a script that spends more than `wolang.CallBudget` ticks (20 million by default; a tick is one entry into a script function or one jump back to an earlier block) stops with an error in the Message Log's Scripts page, with the file and line it was on, and the frame goes on. `0` turns the limit off. A script error that traps (a division by zero, an index out of range) is reported the same way, with the call stack in the log.
 
-## Saving script state, replication and mods
+## Saving script state
 
-- A field marked `@Save` is written by name by `std.save.Save(value)` and read back by `std.save.Load`, with shared references kept and a field added or removed since the save tolerated. The engine does not write these bytes into a save game slot by itself yet.
+Mark the fields that make up a script's progress with `@Save`, and the engine keeps them in a save game slot, next to the rest of the player's progress:
+
+```wolang
+@Native("AActor")
+offer class Chest {
+  @Save
+  var opened: bool = false
+
+  @Save
+  var loot: int = 3
+
+  var glow: f32 = 0.0
+
+  fun Open(owner: AActor) uses World {
+    opened = true
+    const _saved = SaveState(owner, "profile", "chest-1")
+  }
+
+  fun OnLoaded() {
+    if opened {
+      glow = 1.0
+    } else {
+      glow = 0.0
+    }
+  }
+}
+```
+
+- `SaveState(owner, slot, key)` writes every `@Save` field of the owner's script object, and of every object they reach, into the slot's progress object and the slot to disk; it answers whether that worked. `LoadState(owner, slot, key)` reads it back: the object is replaced by one built from the slot, and its `OnLoaded` method runs if it has one. A script that calls `LoadState` from one of its own methods sees the new object on its next `Tick`.
+- C++ and Visual Script code call `SaveScriptState(slot, key)` and `LoadScriptState(slot, key)` on the actor (or its script component), and the slot is the ordinary save game slot of `Get Save Game`, so one slot can hold the script's state and the values a graph keeps. The state is stored under the name `Wolang:<key>`; use one key for each script object.
+- Only the marked fields are stored. Anything else comes back at zero, which is what `OnLoaded` is for: it rebuilds what is derived (the glow above). A class-typed field is set in `BeginPlay`, not by an initializer, because a loaded object is built without running initializers.
+- Shared references and cycles survive, and the save tolerates change: after you edit the script and add a `@Save` field, an older save still loads and the new field reads zero; a removed field is dropped. This also holds across a hot reload while playing.
+- The scripts still run in a packaged game, and so does saving: the slot lives in the game's save folder. A class with a virtual method, or a marked field of a kind Wolang cannot write, is refused and the Message Log says why. Avoid naming a class like one of Wolang's standard-library examples (`Mover`, `Counter`, `Event`, `Money`, ...): see Current limits.
+
+## Replication and mods
+
 - `@Replicated` on a field and `@Server`, `@Client`, `@Multicast` on a method are checked by the compiler and reported to the engine, but nothing replicates them yet: they have no effect in a networked session today.
 - A package loaded as a mod is granted only the capabilities the engine lists for it, never `unsafe`, and cannot declare `extern`; nothing in the editor loads mods yet.
 
@@ -340,7 +377,7 @@ When play stops, the script machine is destroyed and every reference its program
 
 These wait on the Wolang compiler or on the engine:
 
-- **A free function that states `uses World` and calls the engine does not compile** with Wolang 1.3.0 (`error[E0701]: ... does `World`, which it does not declare`): the compiler does not carry the `World` effect declared in the `mowo` package into the `uses` clause of another file. A class method that says `uses World` is not affected, so write engine calls inside classes. The free-function entry points of the older `AWolangScriptActor` (`BeginPlay`, `Tick` and `EndPlay` as `offer fun`) wait on the same fix.
+- **Standard-library names.** Wolang's `std` has classes named `Mover`, `Counter`, `Event`, `Entry`, `List`, `Map`, `Money` and others in its examples, and a script class of the same name that holds no objects of its own can crash when the engine lets go of it (Wolang defect W6, `Engine/Source/ThirdParty/Wolang/KNOWN_ISSUES.md`). Name your classes for your game. A function called `Tick` or `Create` is fine in your package.
 - `self` inside a class is the script object, not the actor: inherited engine methods are reached through the `owner` parameter. A script class cannot derive from an engine class, which is why `@Native` names the engine class it backs.
 - `after` delays in a `machine` run from the generated `Tick(dt)` of the machine; the engine does not call it for you, so drive the machine from your own `Tick` or use `@Every`, `SetTimer` or a `task`.
 - A field whose initializer is not a literal shows the type's zero as its Details default.

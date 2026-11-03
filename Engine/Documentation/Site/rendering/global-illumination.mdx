@@ -6,7 +6,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/DdgiBake.h
-verifiedAt: 903f01eb8
+verifiedAt: 28d30be51
 ---
 
 Global Illumination is Mowo's real-time indirect lighting. It combines a camera-centred signed distance field, a grid of irradiance probes, a radiance cache, a mesh-card surface cache and a screen-space probe gather, with temporal denoising on top. At Epic it can also trace its gather rays through the hardware ray-tracing scene. Nothing has to be baked for it to work; a baked field is only a fallback for tiers that turn the live system off.
@@ -27,7 +27,7 @@ The world-space builds run first, and on D3D12, Vulkan and Metal they can run on
 
 ### Distance field
 
-Every ray marches a camera-centred distance field: a 3D volume built on the GPU from the scene's triangles and signed, so that thin walls do not leak light. Meshes can carry a field baked at cook time, which the runtime composites instead of voxelizing them. The field is a clipmap: moving the camera only rebuilds the slab that scrolled into view. A coarser far cascade covers more distance (`r.GiCascades`, default 2; `r.GI.FarCascadeScale` sets its reach).
+Every ray marches a camera-centred distance field: a 3D volume built on the GPU from the scene's triangles and signed, so that thin walls do not leak light. Meshes can carry a field baked at cook time, which the runtime composites instead of voxelizing them. A baked field is signed from the connectivity of the open space around the mesh, not by ray parity, so an open mesh such as a single-sided wall or gallery does not turn its air into solid; fields baked by an older build heal on load. Outside its own box a mesh's field is a bound built from the value at the nearest point of the box, so the box of a large, mostly empty mesh never reads as a surface. The nearest small meshes additionally march their own baked field at its baked resolution (`r.GI.BakedSdf.DetailTrace`), which resolves wires and grilles the clipmap fattens. The field of a mesh larger than 64 clipmap cells (16 m at the 0.25 m near cell) is never put in that detail atlas, because its fixed 64-cell slot would be coarser than the clipmap and only cost fetches; the atlas itself is one persistent volume that is rewritten in place when the nearest set changes. The field is a clipmap: moving the camera only rebuilds the slab that scrolled into view. A coarser far cascade covers more distance (`r.GiCascades`, default 2; `r.GI.FarCascadeScale` sets its reach).
 
 What enters the field:
 
