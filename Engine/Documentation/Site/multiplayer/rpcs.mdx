@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetEventCodec.h
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h
-verifiedAt: 7bc02f92d
+verifiedAt: 5f421cb37
 ---
 
 Replication keeps state in sync. RPCs and events carry the other kind of traffic: "this happened". A client asks the host to fire, the host checks the request, and the host tells every peer. RPCs and gameplay events ride the same packet type, so they share one authority gate and one set of rate limits.
@@ -157,7 +157,7 @@ The default bucket suits actions a player triggers by hand. A continuously swept
 
 ## Large RPCs
 
-An RPC whose arguments reach 64 KiB does not fit the normal RPC packet. It goes through the **blob lane** instead: the packet is cut into 1 KiB chunks and sent on the reliable unordered channel, the receiver acknowledges them, and the sender keeps at most a window of unacknowledged chunks in flight at a set byte rate per peer <Source symbol="FNetBlobChannel" />. A large payload therefore neither stalls the ordered reliable channel nor floods the link. When the last chunk arrives, the receiver handles the RPC exactly as if it had come in one packet, so a client RPC still passes the [authority gate](#the-authority-gate).
+An RPC whose arguments reach 64 KiB does not fit the normal RPC packet. It goes through the **blob lane** instead: the packet is compressed with zstd when that shrinks it, cut into chunks (1 KiB by default) and sent on the reliable unordered channel, the receiver acknowledges them, and the sender keeps at most a window of unacknowledged chunks in flight at a set byte rate per peer <Source symbol="FNetBlobChannel" />. The receiver decompresses and follows whatever chunk size the sender used. A large payload therefore neither stalls the ordered reliable channel nor floods the link. When the last chunk arrives, the receiver handles the RPC exactly as if it had come in one packet, so a client RPC still passes the [authority gate](#the-authority-gate).
 
 A blob is not ordered against the rest of the reliable stream. That is why smaller RPCs stay on their own channel by default; set `net.RpcBlobThreshold` to route every RPC packet above that many bytes through the lane as well. A client paces its blob lane to at most half the host's incoming byte budget, so the host's flood guard does not drop a large client RPC chunk by chunk.
 
@@ -165,7 +165,11 @@ A blob is not ordered against the rest of the reliable stream. That is why small
 |---|---|---|
 | `net.RpcBlobThreshold` | `0` | RPC packets larger than this many bytes take the blob lane. `0` sends only arguments of 64 KiB or more there. |
 | `net.BlobBytesPerSecond` | `32768` | Bytes per second the lane sends to one peer. `0` is unlimited; the window still bounds what is in flight. |
-| `net.BlobWindowChunks` | `32` | Unacknowledged 1 KiB chunks a sender may have per peer. |
+| `net.BlobWindowChunks` | `32` | Unacknowledged chunks a sender may have per peer, across all its queued blobs. |
+| `net.BlobChunkBytes` | `1024` | Payload bytes per chunk (256 to 16384). Keep chunk plus 40 bytes of headers under the transport MTU. |
+| `net.BlobZstdLevel` | `3` | zstd level for blobs queued from now on. `0` sends them as they are; a blob that does not shrink by 5% is sent as it is anyway. |
+| `net.BlobBytesPerTick` | `0` | Most blob bytes one replication tick sends across all peers. `0` is no cap. |
+| `net.BlobMaxQueuedBytes` | `16777216` | Payload bytes queued for one peer before further blobs are refused, so a stalled client costs the host a bounded amount of memory. |
 | `net.MaxBlobBytes` | `4194304` | Largest RPC the lane sends (4 MiB), and the largest a client accepts from the host. |
 | `net.MaxClientBlobBytes` | `262144` | Largest blob the host reassembles from one client (256 KiB). A larger announcement is refused before any memory is reserved. |
 

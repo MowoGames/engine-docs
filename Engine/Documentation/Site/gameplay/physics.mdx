@@ -25,11 +25,13 @@ sources:
   - Engine/Source/Runtime/Physics/Public/Physics/SurfaceType.h
   - Engine/Source/Runtime/Physics/Public/Physics/MeshCollision.h
   - Engine/Source/Runtime/Physics/Public/Physics/CollisionCooking.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsShapeCook.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsVoxel.h
   - Engine/Source/Runtime/Game/Public/Game/Components/FPhysicsInteractableComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MPhysicsInteractableStatics.h
   - Engine/Source/Runtime/Game/Public/Game/MPhysicsStatics.h
   - Engine/Source/Runtime/Game/Public/Game/MConstraintStatics.h
-verifiedAt: 57ea8e727
+verifiedAt: 72eec6f7f
 ---
 
 Mowo simulates physics with [Jolt Physics](https://github.com/jrouwe/JoltPhysics). You describe bodies with reflected ECS components, a `PhysicsSystem` steps the simulation at a fixed rate, and a `PhysicsWorld` answers ray casts, sweeps and overlaps. Each scene has its own physics world.
@@ -313,6 +315,40 @@ A `Mesh` or `ConvexHull` collider with no vertices of its own takes its geometry
 | `UCP_` | A capsule along local Y |
 
 A hull collider on a concave mesh with no authored collision is split into several hulls automatically. Set the hull budget in the Static Mesh editor's collision view. Cooked shapes are shared between every instance of the same mesh. <Source path="Engine/Source/Runtime/Physics/Public/Physics/CollisionCooking.h" />
+
+## Voxel colliders and async cooking
+
+A game that builds its world from a grid of cells (a block terrain, a destructible wall) should not turn every chunk into a triangle mesh: the mesh costs milliseconds to build on the game thread and has to be rebuilt on every edit. A voxel chunk body collides against the grid itself. <Source path="Engine/Source/Runtime/Physics/Public/Physics/PhysicsVoxel.h" />
+
+```cpp
+Mowo::FVoxelColliderDesc chunk;
+chunk.origin = Vec3(0, 0, 0);      // minimum corner of the grid
+chunk.voxelSize = 0.25f;           // metres
+chunk.Resize(32, 32, 32);          // cells, all empty
+chunk.SetSolid(3, 0, 5, true);     // one bit per cell
+
+FPhysicsBodyId body = world.CreateVoxelChunkBody(chunk);   // static
+world.UpdateVoxelChunk(body, editedChunk);                 // after an edit
+```
+
+Rays, sweeps, overlaps, point queries, dynamic bodies and character capsules all work against it. Under the hood each exposed cell face is two triangles with the silhouette edges marked active, the same flag a baked mesh carries, so a character walking across a flat floor of cells meets one flat surface, not a diagonal normal at every seam. A cell enclosed on all six sides is skipped. `UpdateVoxelChunk` swaps the bit grid on the existing body, moves its bounds in the broad phase and wakes the bodies resting on it; nothing is remeshed. The body is static and must not be scaled.
+
+A chunk edge is treated as open: two chunks that meet at the same height have a silhouette edge along the border. Cloth does not collide with voxel chunks.
+
+Hull, mesh and compound shapes can be cooked ahead of their bodies on the job system at background priority. <Source path="Engine/Source/Runtime/Physics/Public/Physics/PhysicsShapeCook.h" />
+
+```cpp
+FPhysicsShapeCookTicket ticket = FPhysicsShapeCooker::CookTriangleMesh(vertices, indices);
+
+// later, on the game thread
+if (ticket.IsReady()) {
+    FPhysicsShapeBodyDesc desc;
+    desc.shape = ticket.Get();
+    world.CreateBodyFromShape(desc);
+}
+```
+
+`CreateBodiesFromShapes` and `CreateVoxelChunkBodies` add a whole set through Jolt's prepare and finalize pair, and rebuild the broad phase once when the batch has 64 bodies or more (the threshold is a parameter). The bodies a `ColliderComponent` creates still build their shape on the game thread.
 
 ## Physics interactables
 

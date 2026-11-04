@@ -14,7 +14,7 @@ sources:
   - Engine/Source/Runtime/Reflection/Public/Reflection/PropertyInfo.h
   - Engine/Source/Runtime/Reflection/Public/Reflection/NetBitStream.h
   - Engine/Source/Runtime/Components/Public/Components/TransformComponent.h
-verifiedAt: 7bc02f92d
+verifiedAt: 5f421cb37
 ---
 
 Replication is how the host keeps each client's copy of the world in sync. Every networked entity has an authoritative version on the host and a **ghost** on each client. The host sends only the fields that changed, and the client applies them to its ghost. Which fields travel is decided by reflection: you mark a field, and it replicates.
@@ -192,7 +192,7 @@ On the host, `AddItem` adds and marks an item, `MarkItemDirty` marks an item you
 
 ## What the wire carries
 
-The replication protocol is version 8 <Source symbol="ReplicationPacketType" />. The host sends:
+The replication protocol is version 9 <Source symbol="ReplicationPacketType" />. The host sends:
 
 - **Spawn** when an object becomes known to a client: network id, owner, full pose, `netState`, prefab path and placed-object id.
 - **Destroy** when an object is removed or leaves a client's relevancy.
@@ -200,6 +200,9 @@ The replication protocol is version 8 <Source symbol="ReplicationPacketType" />.
 - **StateSnapshot** with discrete field deltas, on the reliable channel.
 - **FastArrayDelta** with fast-array changes, on the reliable channel after the snapshot.
 - **OwnerChange** when an object's owner changes, on the reliable channel.
+- **SpatialData** with keyed deltas for the [spatial stream](/docs/multiplayer/spatial-streams/), acknowledged by the client with **SpatialAck**; a client sends **SpatialInterest** to declare what it wants.
+
+Positions travel in absolute world space, so a client or host that has rebased its origin still agrees with the other side; see [Large worlds](/docs/multiplayer/spatial-streams/#large-worlds-and-origin-rebasing).
 
 Clients send input, RPCs and acknowledgements. Either side sends **Blob** and **BlobAck** packets, which carry a large RPC in chunks (see [RPCs and events](/docs/multiplayer/rpcs/#large-rpcs)). The host drops any spawn, destroy, snapshot or owner change that arrives from a client, so a client cannot create entities, overwrite replicated state or take ownership.
 

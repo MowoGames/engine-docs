@@ -1,0 +1,83 @@
+---
+title: Spatial streams and large worlds
+description: Replicate keyed, versioned deltas such as voxel chunk edits to only the clients that care, and keep positions correct when the world origin is rebased.
+order: 9
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/SpatialStream.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/NetBlobChannel.h
+  - Engine/Source/Runtime/ECS/Public/ECS/World.h
+verifiedAt: 5f421cb37
+---
+
+Entity replication suits things that move. A sandbox world is different: the terrain is generated on every machine from a shared seed, and only the **edits** made to it need to travel. A spatial stream carries exactly that: versioned deltas, each filed under a key (a chunk coordinate, a navigation tile), delivered only to the clients whose interest set contains that key.
+
+This page covers the stream, the blob lane that carries bulk data, and how replication stays correct in a world large enough to rebase its origin.
+
+## The model
+
+A key is three 64-bit integers <Source symbol="FSpatialKey" />. The host **publishes** an opaque payload under a key and gets back that key's next version (1, 2, 3, ...). Mowo does not look inside a payload: your game decides what a delta means, how to apply it and what a snapshot replaces.
+
+```cpp title="Publishing a block edit"
+auto& stream = replication->GetSpatialServer();
+
+FSpatialKey chunk{ cx, cy, cz };
+std::vector<uint8_t> edit = EncodeEdit(voxelIndex, blockId);
+uint32_t version = stream.Publish(chunk, std::move(edit));
+```
+
+Each peer registered with the replication manager is a stream client. The host tells the stream what each client should know, and the stream does the rest.
+
+<Steps>
+  <Step title="Declare interest">
+    `SetInterest` takes an explicit key list, nearest first. `SetInterestRadius` takes a distance function and two radii: a key enters the set within the enter radius and leaves only beyond the leave radius, so a player walking along a border does not make a chunk flap in and out. Both order the send queue nearest first.
+  </Step>
+  <Step title="Stream the difference">
+    For each key in the set, the stream sends the entries newer than the version the client last acknowledged. A client that has never seen a key gets its whole history; a client that reconnects with a cache says which versions it holds and receives only what changed.
+  </Step>
+  <Step title="Apply on the client">
+    The client's apply callback receives each entry in version order, once per key, with a flag for snapshot entries. A delta whose predecessor has not arrived is dropped and resent, so a lost packet never makes a client apply edits out of order.
+  </Step>
+</Steps>
+
+A client can also declare its own interest with `ClientSetSpatialInterest`, sending the keys together with the version it already holds for each. The host cuts the list to `maxClientInterestKeys`; a game that does not trust clients to choose can set interest on the host from the player's position instead.
+
+### Join flow, budgets and loss
+
+A late joiner receives the full delta history for its set, nearest key first, under the per-client byte budget. Terrain needs no transfer, so a player can move as soon as the seed arrives and the first nearby chunks fill in.
+
+The stream acknowledges and resends on its own, so it works over the unreliable channel; a packet larger than one MTU (a big snapshot) goes on the bulk reliable channel instead. These limits are in `FSpatialStreamConfig`:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `maxPacketBytes` | `1200` | Wire size of one packet, after compression. A single entry larger than this travels alone. |
+| `bytesPerSecond` | `262144` | Sustained send rate per client. The burst is a quarter second, and `0` removes the limit. |
+| `maxInFlightBytes` | `65536` | Sent but unacknowledged bytes per client. A client that stops acknowledging stalls only itself. |
+| `resendSeconds` | `0.25` | How long an unacknowledged entry waits before it is sent again. |
+| `zstdLevel` | `3` | Packet bodies are compressed with zstd when that makes them smaller. `0` turns it off. |
+
+`GetClientStats` reports, per client, the bytes sent (wire and before compression), packets, entries, resends, the queue depth in keys and bytes, and the bytes in flight. Use them to see which client is falling behind.
+
+### Compaction
+
+A key that is edited often accumulates a long history. `Compact(key, throughVersion, snapshot)` replaces every entry up to that version with one snapshot payload that you built. Clients past that version are unaffected, and a client behind it receives the snapshot followed by the newer deltas. Compact when a chunk is saved or when its history outgrows a snapshot.
+
+## Large worlds and origin rebasing
+
+A scene rebases its origin by default once the main camera drifts 8192 m from it (`wp.RebaseDistance`), so rendering and physics keep float precision. Each machine rebases independently, so replication cannot send positions in a local frame.
+
+Replicated transforms travel in **absolute world space**: the sender adds its world's origin offset to each position, the receiver subtracts its own. The two sides may rebase at different times and by different amounts and still agree, and a rebase that moves the local position and the offset together changes no bytes on the wire, so it costs no bandwidth.
+
+- **Precision.** Positions are single-precision floats on the wire, with 1 mm steps from `MNET_QUANTIZE(Milli)`. At 20 km a float resolves about 2 mm and at 80 km about 8 mm; stay inside roughly 100 km of the absolute origin to keep ghosts within a centimetre.
+- **Prediction.** The predicted positions a client keeps for reconciliation shift with each rebase, so the first acknowledgement after a rebase is not mistaken for a misprediction a whole grid cell wide.
+- **Reading a ghost's pose.** `TryGetAuthoritativeTransform` returns the position in the client's current local frame.
+- **Your own caches.** Anything else that stores a world position across frames (particles in world space, audio emitters with velocity history) should be shifted by the same amount when the scene rebases. `World::GetOriginOffset` holds the accumulated offset.
+
+## Bulk data on the blob lane
+
+Payloads of 64 KiB and up, and any RPC above `net.RpcBlobThreshold`, travel on the blob lane described in [RPCs and events](/docs/multiplayer/rpcs/#large-rpcs). The lane compresses each blob with zstd (`net.BlobZstdLevel`, default 3) unless it would not shrink by 5%, so voxel-like data typically shrinks more than tenfold. The lane also protects the host:
+
+- A peer's queue is capped in bytes (`net.BlobMaxQueuedBytes`, 16 MiB); a producer whose `Queue` is refused should wait, and `IsPeerCongested` says when.
+- `net.BlobBytesPerTick` caps what one tick sends across all peers, and peers take turns being served first.
+- Chunk size follows the link (`net.BlobChunkBytes`), and a receiver follows whatever the sender chose.
+- `FNetBlobOptions::priority` orders blobs queued for one peer; a lower number sends first and can preempt a larger blob already under way.
