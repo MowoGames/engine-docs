@@ -1,0 +1,444 @@
+{
+	"name": "MowoEngine.Filesystem",
+	"displayName": "Filesystem",
+	"slug": "filesystem",
+	"category": "Runtime",
+	"scope": "headers",
+	"publicDir": "Engine/Source/Runtime/Filesystem/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Filesystem/Public/Filesystem/VFS.h",
+			"include": "Filesystem/VFS.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "AsyncReadHandle",
+					"namespace": "Mowo",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "completed",
+							"signature": "std::shared_ptr<std::atomic<bool>> completed",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "result",
+							"signature": "std::shared_ptr<std::vector<uint8_t>> result",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "IsComplete",
+							"signature": "bool IsComplete() const",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Result",
+							"signature": "const std::vector<uint8_t>& Result() const",
+							"line": 27
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "VFS",
+					"namespace": "Mowo",
+					"doc": "Mount points, LRU cache, async I/O. Mounting a file system at a virtual path\nmakes its files reachable under that prefix:\nMount(\"Content\", new NativeFileSystem(\"C:/Game/Content\"))\nOpen(\"Content/Textures/player.png\") -> C:/Game/Content/Textures/player.png",
+					"line": 38,
+					"members": [
+						{
+							"kind": "method",
+							"name": "VFS",
+							"signature": "VFS()",
+							"line": 40
+						},
+						{
+							"kind": "method",
+							"name": "~VFS",
+							"signature": "~VFS()",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static VFS& Get()",
+							"static": true,
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "TryGet",
+							"signature": "static VFS* TryGet()",
+							"static": true,
+							"doc": "Null-safe variant for code that may run before the engine (or a\ntest) constructs the instance.",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "Initialize",
+							"signature": "void Initialize()",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "Shutdown",
+							"signature": "void Shutdown()",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "Mount",
+							"signature": "void Mount(const std::string& mountPoint, Ref<IFileSystem> fileSystem, int priority = 0)",
+							"doc": "Higher priority mounts are checked first, which is how overlays win\nover the archive they shadow.",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "Unmount",
+							"signature": "void Unmount(const std::string& mountPoint)",
+							"doc": "Drop EVERY file system at this mount point.",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Unmount",
+							"signature": "void Unmount(const std::string& mountPoint, const Ref<IFileSystem>& fileSystem)",
+							"doc": "Drop one file system from a shared mount point — \"Content\" carries\nboth the engine archive and the open project's loose files, and a\nproject close must not take the engine's with it.",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "UnmountAll",
+							"signature": "void UnmountAll()",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "MountEmbeddedContent",
+							"signature": "void MountEmbeddedContent(const FEmbeddedContentRegistry::FRegistration& registration)",
+							"doc": "Mounts one embedded content set at FEmbeddedContentRegistry::kMountPriority.\nInitialize mounts every registered set; FEmbeddedContentRegistry::Register\ncalls this for a set that arrives once the VFS is up. A set already\nmounted is not mounted twice.",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "RemoveNativeRootFallback",
+							"signature": "void RemoveNativeRootFallback()",
+							"doc": "Initialize mounts the working directory at the root as the lowest\npriority fallback, so any relative key no archive holds is read loose\noff the disk. A shipped game must read its content only from the signed\npaks: a loose file beside the package would otherwise shadow nothing yet\nstill load, unsigned and uncompressed, for every key the cook missed.\nAbsolute paths (saves, the per-user config) keep their passthrough.",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "HasNativeRootFallback",
+							"signature": "bool HasNativeRootFallback() const",
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "GetMounts",
+							"signature": "std::vector<FMountInfo> GetMounts() const",
+							"line": 86
+						},
+						{
+							"kind": "method",
+							"name": "DumpMounts",
+							"signature": "void DumpMounts() const",
+							"doc": "Logs the mount table and cache occupancy — `vfs.DumpMounts` at the\nconsole; `vfs.LogMisses 1` additionally logs every failed Open with\nthe mounts that were tried.",
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "Open",
+							"signature": "Scope<IFile> Open(const std::string& path, FileMode mode = FileMode::Read)",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "Exists",
+							"signature": "bool Exists(const std::string& path) const",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "IsDirectory",
+							"signature": "bool IsDirectory(const std::string& path) const",
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "IsFile",
+							"signature": "bool IsFile(const std::string& path) const",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "GetFileInfo",
+							"signature": "FileInfo GetFileInfo(const std::string& path) const",
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "ListDirectory",
+							"signature": "std::vector<FileInfo> ListDirectory(const std::string& path) const",
+							"doc": "The union of every matching mount's listing, one entry per name with\nthe highest-priority mount's winning, sorted by name. A single mount's\nview was wrong for anything layered — engine locales plus project\nlocales under one prefix, a DLC's files next to the base archive's.",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "ReadFile",
+							"signature": "std::vector<uint8_t> ReadFile(const std::string& path)",
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "TryReadFile",
+							"signature": "bool TryReadFile(const std::string& path, std::vector<uint8_t>& outData)",
+							"doc": "False when the file cannot be opened; an existing empty file fills\noutData with nothing and returns true. ReadFile/ReadTextFile cannot\ntell those two apart.",
+							"line": 110
+						},
+						{
+							"kind": "method",
+							"name": "ReadFileShared",
+							"signature": "std::shared_ptr<const std::vector<uint8_t>> ReadFileShared(const std::string& path)",
+							"doc": "Zero-copy variant — a cache hit shares the cached buffer instead\nof copying the whole file. Returns nullptr only when the file can't\nbe opened; an existing empty file yields an empty (cached) buffer, so\nit is not re-read from disk on every call. Prefer on hot paths that\nonly need to LOOK at the bytes.",
+							"line": 117
+						},
+						{
+							"kind": "method",
+							"name": "ReadFileRange",
+							"signature": "size_t ReadFileRange(const std::string& path, uint64_t offset, size_t size, void* outBuffer)",
+							"doc": "Partial read — the bytes at [offset, offset+size) without pulling the\nwhole file into memory. A native file seeks; a MEAF entry that was\ncooked block-compressed (the Streamable hint) decompresses only the\nblocks the range touches, and one that was not still answers correctly\nby inflating the entry. Returns the byte count actually read.\n\nDeliberately NOT cached: the callers are streamers pulling large spans\nthey immediately hand to the GPU, and putting those through the LRU\nwould evict everything else to hold bytes nobody reads twice. An\narchive entry's open handle IS kept between calls (a small per-path\ntable), so a sequence of ranges over one entry reuses the MEAF block\ncache instead of reopening and re-decompressing the same block every\ncall; a native file reopens (IFile::ShouldKeepOpenForRanges).",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "GetFileSize",
+							"signature": "int64_t GetFileSize(const std::string& path)",
+							"doc": "Size in bytes through the same kept handle ReadFileRange uses, so a\nstreamer asking \"how big, then give me [a, b)\" opens once. -1 when\nthe file cannot be opened.",
+							"line": 137
+						},
+						{
+							"kind": "method",
+							"name": "ReadTextFile",
+							"signature": "std::string ReadTextFile(const std::string& path)",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "WriteFile",
+							"signature": "bool WriteFile(const std::string& path, const void* data, size_t size)",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "WriteTextFile",
+							"signature": "bool WriteTextFile(const std::string& path, const std::string& text)",
+							"line": 141
+						},
+						{
+							"kind": "method",
+							"name": "ReadFileAsync",
+							"signature": "AsyncReadHandle ReadFileAsync(const std::string& path)",
+							"doc": "Whole-file reads on the compute JobSystem. Streaming and asset loads\ngo through StreamingIOQueue instead (priorities, cancellation, a\nbandwidth budget, dedicated IO workers); these are kept for one-off\ncallers with no such needs.",
+							"line": 147
+						},
+						{
+							"kind": "method",
+							"name": "ReadFileAsync",
+							"signature": "void ReadFileAsync(const std::string& path, AsyncReadCallback callback)",
+							"line": 148
+						},
+						{
+							"kind": "method",
+							"name": "ResolvePhysical",
+							"signature": "bool ResolvePhysical(const std::string& path, FPhysicalLocation& out) const",
+							"doc": "Where `path`'s bytes sit on disk, resolved the way Open resolves it: the\nfirst mount holding the file answers, and false when that mount cannot\nname a plain slice of a native file (a compressed or encrypted archive\nentry) — a lower mount is never consulted behind it.",
+							"line": 154
+						},
+						{
+							"kind": "method",
+							"name": "ResolvePhysicalStored",
+							"signature": "bool ResolvePhysicalStored(const std::string& path, FPhysicalLocation& out) const",
+							"doc": "The same lookup through IFileSystem::ResolvePhysicalStored: an encrypted,\ncompressed or block-verified archive entry also resolves, carrying the\ndecoder an async reader runs on the bytes it read.",
+							"line": 159
+						},
+						{
+							"kind": "method",
+							"name": "MountGeneration",
+							"signature": "uint64_t MountGeneration() const",
+							"doc": "Moves on every Mount / Unmount, so a holder of a physical location can\ntell the mount table it was resolved against is gone.",
+							"line": 163
+						},
+						{
+							"kind": "method",
+							"name": "StorageReads",
+							"signature": "uint64_t StorageReads() const",
+							"doc": "Reads the VFS served from storage — read-cache misses and range reads,\nthe IO queue's synchronous path included — and the bytes they returned,\nsince start. The async backend's reads never pass here; with the queue's\nAsyncBytesRead they are a level load's whole IO.",
+							"line": 171
+						},
+						{
+							"kind": "method",
+							"name": "StorageBytesRead",
+							"signature": "uint64_t StorageBytesRead() const",
+							"line": 174
+						},
+						{
+							"kind": "method",
+							"name": "SetOpenOrderRecording",
+							"signature": "void SetOpenOrderRecording(bool enabled)",
+							"doc": "Open-order recording (`--record-open-order`): the first time a play\nsession asks for each relative key — an open, a whole read, a range\nread or the streaming queue resolving it — the key is appended. A\npackage lays its paks out in that order (Config/OpenOrder.txt, `mbt\npackage --promote-open-order`), so a level load reads forward through\nthe archive instead of hopping across it. Native absolute paths (saves,\nper-user config) are not content and are never recorded.",
+							"line": 185
+						},
+						{
+							"kind": "method",
+							"name": "IsRecordingOpenOrder",
+							"signature": "bool IsRecordingOpenOrder() const",
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "GetOpenOrder",
+							"signature": "std::vector<std::string> GetOpenOrder() const",
+							"line": 189
+						},
+						{
+							"kind": "method",
+							"name": "WriteOpenOrder",
+							"signature": "bool WriteOpenOrder(const std::string& path) const",
+							"doc": "One key per line, first open first; false when the file cannot be written.",
+							"line": 191
+						},
+						{
+							"kind": "method",
+							"name": "ResolveNativePath",
+							"signature": "std::string ResolveNativePath(const std::string& path) const",
+							"doc": "Resolve VFS path to an absolute native filesystem path (skips pak mounts).\nReturns empty string if the file doesn't exist on any native mount.",
+							"line": 195
+						},
+						{
+							"kind": "method",
+							"name": "SetCacheEnabled",
+							"signature": "void SetCacheEnabled(bool enabled)",
+							"line": 197
+						},
+						{
+							"kind": "method",
+							"name": "IsCacheEnabled",
+							"signature": "bool IsCacheEnabled() const",
+							"line": 200
+						},
+						{
+							"kind": "method",
+							"name": "SetCacheMaxEntries",
+							"signature": "void SetCacheMaxEntries(size_t maxEntries)",
+							"line": 203
+						},
+						{
+							"kind": "method",
+							"name": "SetCacheMaxMemory",
+							"signature": "void SetCacheMaxMemory(size_t maxBytes)",
+							"line": 206
+						},
+						{
+							"kind": "method",
+							"name": "InvalidateCache",
+							"signature": "void InvalidateCache(const std::string& path)",
+							"line": 209
+						},
+						{
+							"kind": "method",
+							"name": "ClearCache",
+							"signature": "void ClearCache()",
+							"line": 210
+						},
+						{
+							"kind": "method",
+							"name": "GetCacheSize",
+							"signature": "size_t GetCacheSize() const",
+							"line": 211
+						},
+						{
+							"kind": "method",
+							"name": "GetCacheMemoryUsage",
+							"signature": "size_t GetCacheMemoryUsage() const",
+							"line": 214
+						},
+						{
+							"kind": "method",
+							"name": "NormalizePath",
+							"signature": "static std::string NormalizePath(const std::string& path)",
+							"static": true,
+							"line": 218
+						},
+						{
+							"kind": "method",
+							"name": "GetExtension",
+							"signature": "static std::string GetExtension(const std::string& path)",
+							"static": true,
+							"line": 219
+						},
+						{
+							"kind": "method",
+							"name": "GetFileName",
+							"signature": "static std::string GetFileName(const std::string& path)",
+							"static": true,
+							"line": 220
+						},
+						{
+							"kind": "method",
+							"name": "GetDirectory",
+							"signature": "static std::string GetDirectory(const std::string& path)",
+							"static": true,
+							"line": 221
+						},
+						{
+							"kind": "method",
+							"name": "JoinPath",
+							"signature": "static std::string JoinPath(const std::string& a, const std::string& b)",
+							"static": true,
+							"line": 222
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "VFS::FMountInfo",
+					"namespace": "Mowo",
+					"doc": "The mount table in resolution order (first entry answers first).",
+					"line": 81,
+					"members": [
+						{
+							"kind": "field",
+							"name": "prefix",
+							"signature": "std::string prefix",
+							"line": 82
+						},
+						{
+							"kind": "field",
+							"name": "priority",
+							"signature": "int priority = 0",
+							"line": 83
+						},
+						{
+							"kind": "field",
+							"name": "backend",
+							"signature": "std::string backend",
+							"line": 84
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "alias",
+					"name": "AsyncReadCallback",
+					"signature": "using AsyncReadCallback = std::function<void(const std::string& path, std::vector<uint8_t> data)>",
+					"line": 32
+				}
+			]
+		}
+	]
+}

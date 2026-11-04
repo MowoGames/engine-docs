@@ -1,0 +1,2257 @@
+{
+	"name": "MowoEngine.Renderer",
+	"displayName": "Renderer",
+	"slug": "renderer",
+	"category": "Runtime",
+	"scope": "headers",
+	"publicDir": "Engine/Source/Runtime/Renderer/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Runtime/Renderer/Public/Renderer/Material.h",
+			"include": "Renderer/Material.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EShadingModel",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Explicit surface shading model (G2). Values are the GBuffer wire IDs\n(RT3.A bits 5..7) — renumbering breaks every already-rendered frame's\ndecode AND the CPU codec tests. 0 must remain DefaultLit: impostors,\ndecal-neutral writes and material-less draws all emit a zero alpha.",
+					"line": 18,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "DefaultLit",
+							"signature": "DefaultLit = 0",
+							"doc": "GGX; also \"legacy auto\" — derives Hair/Subsurface from the old scalar knobs",
+							"line": 19
+						},
+						{
+							"kind": "enumerator",
+							"name": "Unlit",
+							"signature": "Unlit = 1",
+							"doc": "emissive passthrough, lighting skipped entirely",
+							"line": 20
+						},
+						{
+							"kind": "enumerator",
+							"name": "Subsurface",
+							"signature": "Subsurface = 2",
+							"doc": "Penner wrap-diffuse, strength in the custom lane, blurred by the SSS pass",
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "ClearCoat",
+							"signature": "ClearCoat = 3",
+							"doc": "second specular lobe (intensity/roughness keep their RT3 R/G lanes)",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "Hair",
+							"signature": "Hair = 4",
+							"doc": "Kajiya-Kay strands over the aniso tangent frame",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "TwoSidedFoliage",
+							"signature": "TwoSidedFoliage = 5",
+							"doc": "adds albedo-tinted back-light transmission, strength in the custom lane",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "Cloth",
+							"signature": "Cloth = 6",
+							"doc": "Charlie sheen lobe over the base diffuse — velvet, felt, brushed fabric",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "ThinTranslucent",
+							"signature": "ThinTranslucent = 7",
+							"doc": "Coloured glass: the surface TINTS what is behind it by Beer-Lambert\nabsorption instead of fading it. Transmission strength is the thickness.\nNOTE: this fills the classic tier of RT3.A's surface code (0-6 plus this\none). Ids past it go through tier 7's escape, which names an extended\nslot and moves that surface's payload to RT3.R/G — see FSurfaceCode.",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "Eye",
+							"signature": "Eye = 8",
+							"doc": "The first EXTENDED model — it rides tier 7's escape, so RT3.R/G stop\nbeing the clear coat's lanes and become a 16-bit record index into the\nframe's surface-parameter buffer. Eye is the model that forced the\nindirection: its defining input is a per-pixel iris normal, a float3\nthat no packed lane of any width was ever going to carry.",
+							"line": 37
+						},
+						{
+							"kind": "enumerator",
+							"name": "Count",
+							"signature": "Count",
+							"line": 38
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FEyeSurfaceParams",
+					"namespace": "Mowo",
+					"doc": "Eye's surface parameters. None of them reach the G-Buffer directly — the\nrenderer writes one FSurfaceRecord per drawn Eye material into the frame's\nsurface-parameter buffer and RT3 stores only that record's index, which is\nwhat buys a lit pixel a whole struct instead of five bits.",
+					"line": 45,
+					"members": [
+						{
+							"kind": "field",
+							"name": "IrisTint",
+							"signature": "Vec3 IrisTint = Vec3(1.0f, 1.0f, 1.0f)",
+							"doc": "Linear multiplier on the iris diffuse seen THROUGH the cornea. Kept\nseparate from base color so a single albedo texture can cover sclera\nand iris while only the iris takes the tint.",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "CorneaIoR",
+							"signature": "float CorneaIoR = 1.376f",
+							"doc": "Refractive index of the cornea (~1.376 in vivo). It sets both the\ncorneal Fresnel and how far the view ray bends before it reaches the\niris — the bend is the whole reason the iris needs its own normal.",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "CorneaRoughness",
+							"signature": "float CorneaRoughness = 0.05f",
+							"line": 54
+						},
+						{
+							"kind": "field",
+							"name": "IrisDepth",
+							"signature": "float IrisDepth = 0.004f",
+							"doc": "Anterior-chamber depth in world units: how far the iris sits behind the\ncorneal surface. 0 collapses the eye to a painted sphere, because\nnothing is left for the refraction to travel through.",
+							"line": 58
+						},
+						{
+							"kind": "field",
+							"name": "IrisConcavity",
+							"signature": "float IrisConcavity = 0.65f",
+							"doc": "How far the iris has flattened out of the cornea's curvature, 0..1.\n0 shades the iris with the corneal normal (indistinguishable from\nDefaultLit); 1 faces it straight down the refracted ray.",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "GazeAxis",
+							"signature": "Vec3 GazeAxis = Vec3(0.0f, 0.0f, 1.0f)",
+							"doc": "The eyeball's LOCAL pupil axis. Every field above is shared by every\ndraw of the material; this one is not, because the renderer transforms\nit by each draw's own model matrix. That is the whole reason the record\nis keyed per draw: two eyeballs on one material differ only by their\ntransform, and a material-keyed record made both eyes stare the same\nway no matter where the heads were looking.",
+							"line": 70
+						},
+						{
+							"kind": "field",
+							"name": "IrisConeDegrees",
+							"signature": "float IrisConeDegrees = 0.0f",
+							"doc": "Half-angle of the iris disc about the gaze axis, in degrees, measured\nfrom the eyeball's pivot. 0 disables the mask and the whole escaped\nsurface is iris — exactly what shipped before the mask existed, which\nis why it is the default.",
+							"line": 75
+						},
+						{
+							"kind": "field",
+							"name": "LimbalWidthDegrees",
+							"signature": "float LimbalWidthDegrees = 2.0f",
+							"doc": "Angular width of the limbal transition in degrees: the iris fades out\nacross it and the ring darkens within it. Never applied at zero width —\na hard angular step aliases along the limbus at any resolution.",
+							"line": 79
+						},
+						{
+							"kind": "field",
+							"name": "LimbalDarkening",
+							"signature": "float LimbalDarkening = 0.0f",
+							"doc": "Absorption in the limbal band, 0..1. 0 leaves the surface untouched, so\nan eye authored before the ring existed is unmoved.",
+							"line": 82
+						},
+						{
+							"kind": "field",
+							"name": "IrisRoughness",
+							"signature": "float IrisRoughness = 0.0f",
+							"doc": "Roughness of the iris' OWN specular lobe, behind the cornea. 0 disables\nit: the iris shipped diffuse-only, and a lobe that appeared by default\nwould move every existing eye.",
+							"line": 86
+						},
+						{
+							"kind": "field",
+							"name": "CausticStrength",
+							"signature": "float CausticStrength = 0.0f",
+							"doc": "Light the corneal lens focuses onto the iris — the bright crescent\nopposite a key light. 0 = off.",
+							"line": 89
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FWorldGridParams",
+					"namespace": "Mowo",
+					"doc": "The world-aligned procedural grid (UE's WorldGridMaterial). It is drawn by\nthe uber GBuffer shader from the pixel's world position and needs no texture\nand no cooked graph shader, which is why it can be the material every mesh\nwithout one falls back to. Base colour fills the cells; the shades multiply\nit on the lines, so one value under 1 darkens the lines and one over 1\nbrightens them.",
+					"line": 98,
+					"members": [
+						{
+							"kind": "field",
+							"name": "MajorCellSize",
+							"signature": "float MajorCellSize = 1.0f",
+							"line": 99
+						},
+						{
+							"kind": "field",
+							"name": "MinorCellSize",
+							"signature": "float MinorCellSize = 0.1f",
+							"line": 100
+						},
+						{
+							"kind": "field",
+							"name": "MajorLineShade",
+							"signature": "float MajorLineShade = 0.45f",
+							"line": 101
+						},
+						{
+							"kind": "field",
+							"name": "MinorLineShade",
+							"signature": "float MinorLineShade = 0.75f",
+							"line": 102
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "EMaterialBlendMode",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "How a TRANSLUCENT surface combines with the scene behind it. Opaque and\nmasked surfaces are expressed by opacity + alphaMasked and never reach\nhere. Values are serialized by index — append only.",
+					"line": 108,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Alpha",
+							"signature": "Alpha = 0",
+							"doc": "src over dst — what every translucent did before this existed",
+							"line": 109
+						},
+						{
+							"kind": "enumerator",
+							"name": "Additive",
+							"signature": "Additive",
+							"doc": "dst + src: fire, glows, holograms",
+							"line": 110
+						},
+						{
+							"kind": "enumerator",
+							"name": "Modulate",
+							"signature": "Modulate",
+							"doc": "dst * src: stained glass, smoked plastic",
+							"line": 111
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "MaterialOverride",
+					"namespace": "Mowo",
+					"bases": "uint32_t",
+					"line": 114,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "None",
+							"signature": "None = 0",
+							"line": 115
+						},
+						{
+							"kind": "enumerator",
+							"name": "BaseColor",
+							"signature": "BaseColor = 1 << 0,",
+							"line": 116
+						},
+						{
+							"kind": "enumerator",
+							"name": "Metallic",
+							"signature": "Metallic = 1 << 1,",
+							"line": 117
+						},
+						{
+							"kind": "enumerator",
+							"name": "Roughness",
+							"signature": "Roughness = 1 << 2,",
+							"line": 118
+						},
+						{
+							"kind": "enumerator",
+							"name": "AO",
+							"signature": "AO = 1 << 3,",
+							"line": 119
+						},
+						{
+							"kind": "enumerator",
+							"name": "EmissiveColor",
+							"signature": "EmissiveColor = 1 << 4,",
+							"line": 120
+						},
+						{
+							"kind": "enumerator",
+							"name": "EmissiveStrength",
+							"signature": "EmissiveStrength = 1 << 5,",
+							"line": 121
+						},
+						{
+							"kind": "enumerator",
+							"name": "DiffuseTexture",
+							"signature": "DiffuseTexture = 1 << 6,",
+							"line": 122
+						},
+						{
+							"kind": "enumerator",
+							"name": "NormalMap",
+							"signature": "NormalMap = 1 << 7,",
+							"line": 123
+						},
+						{
+							"kind": "enumerator",
+							"name": "MetallicMap",
+							"signature": "MetallicMap = 1 << 8,",
+							"line": 124
+						},
+						{
+							"kind": "enumerator",
+							"name": "RoughnessMap",
+							"signature": "RoughnessMap = 1 << 9,",
+							"line": 125
+						},
+						{
+							"kind": "enumerator",
+							"name": "MetallicRoughnessMap",
+							"signature": "MetallicRoughnessMap = 1 << 10,",
+							"line": 126
+						},
+						{
+							"kind": "enumerator",
+							"name": "AOMap",
+							"signature": "AOMap = 1 << 11,",
+							"line": 127
+						},
+						{
+							"kind": "enumerator",
+							"name": "EmissiveMap",
+							"signature": "EmissiveMap = 1 << 12,",
+							"line": 128
+						},
+						{
+							"kind": "enumerator",
+							"name": "DetailAlbedoMap",
+							"signature": "DetailAlbedoMap = 1 << 13,",
+							"line": 129
+						},
+						{
+							"kind": "enumerator",
+							"name": "DetailNormalMap",
+							"signature": "DetailNormalMap = 1 << 14,",
+							"line": 130
+						},
+						{
+							"kind": "enumerator",
+							"name": "MaskMap",
+							"signature": "MaskMap = 1 << 15,",
+							"line": 131
+						},
+						{
+							"kind": "enumerator",
+							"name": "DetailTiling",
+							"signature": "DetailTiling = 1 << 16,",
+							"line": 132
+						},
+						{
+							"kind": "enumerator",
+							"name": "DetailAlbedoStrength",
+							"signature": "DetailAlbedoStrength = 1 << 17,",
+							"line": 133
+						},
+						{
+							"kind": "enumerator",
+							"name": "DetailNormalStrength",
+							"signature": "DetailNormalStrength = 1 << 18,",
+							"line": 134
+						},
+						{
+							"kind": "enumerator",
+							"name": "HeightMap",
+							"signature": "HeightMap = 1 << 19,",
+							"line": 135
+						},
+						{
+							"kind": "enumerator",
+							"name": "ParallaxHeightScale",
+							"signature": "ParallaxHeightScale = 1 << 20,",
+							"line": 136
+						},
+						{
+							"kind": "enumerator",
+							"name": "ClearCoatIntensity",
+							"signature": "ClearCoatIntensity = 1 << 21,",
+							"line": 137
+						},
+						{
+							"kind": "enumerator",
+							"name": "ClearCoatRoughness",
+							"signature": "ClearCoatRoughness = 1 << 22,",
+							"line": 138
+						},
+						{
+							"kind": "enumerator",
+							"name": "Anisotropy",
+							"signature": "Anisotropy = 1 << 23,",
+							"line": 139
+						},
+						{
+							"kind": "enumerator",
+							"name": "SubsurfaceStrength",
+							"signature": "SubsurfaceStrength = 1 << 24,",
+							"line": 140
+						},
+						{
+							"kind": "enumerator",
+							"name": "IridescenceIntensity",
+							"signature": "IridescenceIntensity = 1 << 25,",
+							"line": 141
+						},
+						{
+							"kind": "enumerator",
+							"name": "Hair",
+							"signature": "Hair = 1 << 26,",
+							"line": 142
+						},
+						{
+							"kind": "enumerator",
+							"name": "OpacityMap",
+							"signature": "OpacityMap = 1 << 27,",
+							"line": 143
+						},
+						{
+							"kind": "enumerator",
+							"name": "ShadingModel",
+							"signature": "ShadingModel = 1 << 28,",
+							"line": 144
+						},
+						{
+							"kind": "enumerator",
+							"name": "TransmissionStrength",
+							"signature": "TransmissionStrength = 1 << 29,",
+							"line": 145
+						},
+						{
+							"kind": "enumerator",
+							"name": "SheenIntensity",
+							"signature": "SheenIntensity = 1 << 30,",
+							"line": 146
+						},
+						{
+							"kind": "enumerator",
+							"name": "EyeParams",
+							"signature": "EyeParams = 1u << 31,",
+							"doc": "The last free bit, so Eye's five parameters share ONE override: they\nare a single surface's description and are always authored together.",
+							"line": 149
+						},
+						{
+							"kind": "enumerator",
+							"name": "All",
+							"signature": "All = 0xFFFFFFFF",
+							"line": 150
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMaterialIdentity",
+					"namespace": "Mowo",
+					"doc": "Process-unique material identity. Copies mint a FRESH id (a copy is a new\nmaterial object), assignment keeps the target's own — so an id never names\ntwo live materials and, unlike the raw address it replaced as the DS-cache\nkey, is never reused after a delete (address reuse handed a new material\nthe previous occupant's cached descriptor set: wrong textures).",
+					"line": 176,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Value",
+							"signature": "uint64_t Value = Next()",
+							"line": 177
+						},
+						{
+							"kind": "method",
+							"name": "FMaterialIdentity",
+							"signature": "FMaterialIdentity() = default",
+							"line": 179
+						},
+						{
+							"kind": "method",
+							"name": "FMaterialIdentity",
+							"signature": "FMaterialIdentity(const FMaterialIdentity&)",
+							"line": 180
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FMaterialIdentity& operator=(const FMaterialIdentity&)",
+							"line": 182
+						},
+						{
+							"kind": "method",
+							"name": "Next",
+							"signature": "static uint64_t Next()",
+							"static": true,
+							"line": 186
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMaterialTransparentDepth",
+					"namespace": "Mowo",
+					"doc": "Nesting depth of Material::FTransparentWriteScope. Copying a material never\ncopies an in-flight scope: the scope belongs to the operation running on the\nORIGINAL, and a render proxy that inherited a non-zero count would stop\nrecording override bits for the rest of its life.",
+					"line": 193,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Value",
+							"signature": "int32_t Value = 0",
+							"line": 194
+						},
+						{
+							"kind": "method",
+							"name": "FMaterialTransparentDepth",
+							"signature": "FMaterialTransparentDepth() = default",
+							"line": 196
+						},
+						{
+							"kind": "method",
+							"name": "FMaterialTransparentDepth",
+							"signature": "FMaterialTransparentDepth(const FMaterialTransparentDepth&)",
+							"line": 197
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FMaterialTransparentDepth& operator=(const FMaterialTransparentDepth&)",
+							"line": 199
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMaterialStateVersion",
+					"namespace": "Mowo",
+					"doc": "Count of surface changes on ONE material object, moved by every setter. The\nrender-proxy cache reuses last frame's snapshot while (identity, version)\nstill match, so a copy that carried the source's count would let a material\nthat was just overwritten by CopyFrom/ResetInPlace keep matching a snapshot\nof what it used to be. Copying therefore never transfers it.",
+					"line": 209,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Value",
+							"signature": "uint64_t Value = 1",
+							"line": 210
+						},
+						{
+							"kind": "method",
+							"name": "FMaterialStateVersion",
+							"signature": "FMaterialStateVersion() = default",
+							"line": 212
+						},
+						{
+							"kind": "method",
+							"name": "FMaterialStateVersion",
+							"signature": "FMaterialStateVersion(const FMaterialStateVersion&)",
+							"line": 213
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FMaterialStateVersion& operator=(const FMaterialStateVersion&)",
+							"line": 215
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMaterialState",
+					"namespace": "Mowo",
+					"doc": "Everything a material IS, kept apart from the object that carries the\nreference count. Material derives from RefCounted, whose count must never be\ncopied — but the render proxy still snapshots a surface every frame and\nClone() still needs a field-wise duplicate. Holding the surface in a plainly\ncopyable base is what lets both of those exist without a hand-written\nmember list that silently skips the next field somebody adds.",
+					"line": 228,
+					"members": [
+						{
+							"kind": "field",
+							"name": "m_baseColor",
+							"signature": "Vec4 m_baseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f)",
+							"line": 229
+						},
+						{
+							"kind": "field",
+							"name": "m_metallic",
+							"signature": "float m_metallic = 0.0f",
+							"doc": "0 = dielectric, 1 = metal",
+							"line": 231
+						},
+						{
+							"kind": "field",
+							"name": "m_roughness",
+							"signature": "float m_roughness = 0.5f",
+							"doc": "0 = smooth/mirror, 1 = rough/diffuse",
+							"line": 232
+						},
+						{
+							"kind": "field",
+							"name": "m_ao",
+							"signature": "float m_ao = 1.0f",
+							"doc": "Ambient occlusion (1 = no occlusion)",
+							"line": 233
+						},
+						{
+							"kind": "field",
+							"name": "m_opacity",
+							"signature": "float m_opacity = 1.0f",
+							"doc": "1 = opaque, < 1 = transparent",
+							"line": 234
+						},
+						{
+							"kind": "field",
+							"name": "m_blendMode",
+							"signature": "EMaterialBlendMode m_blendMode = EMaterialBlendMode::Alpha",
+							"line": 235
+						},
+						{
+							"kind": "field",
+							"name": "m_emissiveColor",
+							"signature": "Vec3 m_emissiveColor = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 237
+						},
+						{
+							"kind": "field",
+							"name": "m_emissiveStrength",
+							"signature": "float m_emissiveStrength = 0.0f",
+							"line": 238
+						},
+						{
+							"kind": "field",
+							"name": "m_specularColor",
+							"signature": "Vec3 m_specularColor = Vec3(1.0f, 1.0f, 1.0f)",
+							"doc": "Legacy specular (for backward compatibility with non-PBR shaders)",
+							"line": 241
+						},
+						{
+							"kind": "field",
+							"name": "m_shininess",
+							"signature": "float m_shininess = 32.0f",
+							"line": 242
+						},
+						{
+							"kind": "field",
+							"name": "m_albedoTex",
+							"signature": "Ref<Texture2D> m_albedoTex",
+							"line": 244
+						},
+						{
+							"kind": "field",
+							"name": "m_normalTex",
+							"signature": "Ref<Texture2D> m_normalTex",
+							"line": 245
+						},
+						{
+							"kind": "field",
+							"name": "m_metallicRoughnessTex",
+							"signature": "Ref<Texture2D> m_metallicRoughnessTex",
+							"doc": "Combined: R=metallic, G=roughness",
+							"line": 246
+						},
+						{
+							"kind": "field",
+							"name": "m_aoTex",
+							"signature": "Ref<Texture2D> m_aoTex",
+							"line": 247
+						},
+						{
+							"kind": "field",
+							"name": "m_emissiveTex",
+							"signature": "Ref<Texture2D> m_emissiveTex",
+							"line": 248
+						},
+						{
+							"kind": "field",
+							"name": "m_opacityTex",
+							"signature": "Ref<Texture2D> m_opacityTex",
+							"doc": "R = coverage (standalone cutout mask)",
+							"line": 249
+						},
+						{
+							"kind": "field",
+							"name": "m_detailAlbedoTex",
+							"signature": "Ref<Texture2D> m_detailAlbedoTex",
+							"doc": "overlay albedo",
+							"line": 250
+						},
+						{
+							"kind": "field",
+							"name": "m_detailNormalTex",
+							"signature": "Ref<Texture2D> m_detailNormalTex",
+							"doc": "overlay tangent-space normal",
+							"line": 251
+						},
+						{
+							"kind": "field",
+							"name": "m_maskMapTex",
+							"signature": "Ref<Texture2D> m_maskMapTex",
+							"doc": "R=metallic, G=AO, B=detail mask, A=smoothness",
+							"line": 252
+						},
+						{
+							"kind": "field",
+							"name": "m_heightTex",
+							"signature": "Ref<Texture2D> m_heightTex",
+							"doc": "R = height (0=surface, 1=deepest)",
+							"line": 253
+						},
+						{
+							"kind": "field",
+							"name": "m_detailTiling",
+							"signature": "Vec2 m_detailTiling = Vec2(4.0f, 4.0f)",
+							"doc": "UV multiplier for detail textures",
+							"line": 254
+						},
+						{
+							"kind": "field",
+							"name": "m_detailAlbedoStrength",
+							"signature": "float m_detailAlbedoStrength = 1.0f",
+							"doc": "0..1 — blend amount over primary albedo",
+							"line": 255
+						},
+						{
+							"kind": "field",
+							"name": "m_detailNormalStrength",
+							"signature": "float m_detailNormalStrength = 1.0f",
+							"doc": "0..1 — strength of detail normal influence",
+							"line": 256
+						},
+						{
+							"kind": "field",
+							"name": "m_parallaxHeightScale",
+							"signature": "float m_parallaxHeightScale = 0.05f",
+							"doc": "POM displacement amount; 0.02-0.08 typical",
+							"line": 257
+						},
+						{
+							"kind": "field",
+							"name": "m_displacementMagnitude",
+							"signature": "float m_displacementMagnitude = -1.0f",
+							"doc": "Meshlet-path geometric displacement from the height map, object-space\nunits; < 0 = not set here (an instance then takes its parent's; a root\nreads 0 = off). No override bit is left in MaterialOverride, so the\nsentinel is what carries \"inherit\".",
+							"line": 262
+						},
+						{
+							"kind": "field",
+							"name": "m_displacementCenter",
+							"signature": "float m_displacementCenter = -1.0f",
+							"doc": "height that stays put; < 0 = inherit / 0.5",
+							"line": 263
+						},
+						{
+							"kind": "field",
+							"name": "m_clearCoatIntensity",
+							"signature": "float m_clearCoatIntensity = 0.0f",
+							"doc": "0 = disabled, 1 = full lobe",
+							"line": 264
+						},
+						{
+							"kind": "field",
+							"name": "m_clearCoatRoughness",
+							"signature": "float m_clearCoatRoughness = 0.0f",
+							"doc": "0 = mirror coat (glossy), 1 = matte coat",
+							"line": 265
+						},
+						{
+							"kind": "field",
+							"name": "m_anisotropy",
+							"signature": "float m_anisotropy = 0.0f",
+							"doc": "-1..1; 0 = isotropic GGX",
+							"line": 266
+						},
+						{
+							"kind": "field",
+							"name": "m_subsurfaceStrength",
+							"signature": "float m_subsurfaceStrength = 0.0f",
+							"doc": "0 = no SSS, 1 = max wrap",
+							"line": 267
+						},
+						{
+							"kind": "field",
+							"name": "m_iridescenceIntensity",
+							"signature": "float m_iridescenceIntensity = 0.0f",
+							"doc": "0 = no shift, 1 = full rainbow Fresnel",
+							"line": 268
+						},
+						{
+							"kind": "field",
+							"name": "m_hair",
+							"signature": "bool m_hair = false",
+							"doc": "anisotropic Kajiya-Kay strand shading (hair/fur)",
+							"line": 269
+						},
+						{
+							"kind": "field",
+							"name": "m_shadingModel",
+							"signature": "EShadingModel m_shadingModel = EShadingModel::DefaultLit",
+							"line": 270
+						},
+						{
+							"kind": "field",
+							"name": "m_transmissionStrength",
+							"signature": "float m_transmissionStrength = 0.0f",
+							"doc": "TwoSidedFoliage back-light bleed, 0..1",
+							"line": 271
+						},
+						{
+							"kind": "field",
+							"name": "m_sheenIntensity",
+							"signature": "float m_sheenIntensity = 0.0f",
+							"doc": "Cloth sheen lobe strength, 0..1",
+							"line": 272
+						},
+						{
+							"kind": "field",
+							"name": "m_eyeParams",
+							"signature": "FEyeSurfaceParams m_eyeParams",
+							"doc": "Eye: transported by record, never by a GBuffer lane",
+							"line": 273
+						},
+						{
+							"kind": "field",
+							"name": "m_textureVersion",
+							"signature": "uint32_t m_textureVersion = 0",
+							"line": 274
+						},
+						{
+							"kind": "field",
+							"name": "m_graphShaderId",
+							"signature": "std::string m_graphShaderId",
+							"line": 275
+						},
+						{
+							"kind": "field",
+							"name": "m_graphShaderHash",
+							"signature": "uint64_t m_graphShaderHash = 0",
+							"line": 276
+						},
+						{
+							"kind": "field",
+							"name": "m_graphHasWpo",
+							"signature": "bool m_graphHasWpo = false",
+							"line": 277
+						},
+						{
+							"kind": "field",
+							"name": "m_graphWpoBound",
+							"signature": "float m_graphWpoBound = 0.0f",
+							"line": 278
+						},
+						{
+							"kind": "field",
+							"name": "m_substrateTop",
+							"signature": "uint32_t m_substrateTop = 0",
+							"line": 279
+						},
+						{
+							"kind": "field",
+							"name": "m_graphParams",
+							"signature": "Vec4 m_graphParams[4] =",
+							"line": 280
+						},
+						{
+							"kind": "field",
+							"name": "m_graphParamsExt",
+							"signature": "std::vector<Vec4> m_graphParamsExt",
+							"doc": "Lanes 4.. of a graph whose parameters outgrew the legacy four (see\nMaterialGraph::FGraphParam). Empty for every material that fits, so the\nper-frame proxy copy of such a material costs exactly what it did.",
+							"line": 284
+						},
+						{
+							"kind": "field",
+							"name": "m_graphTextures",
+							"signature": "std::vector<Ref<Texture2D>> m_graphTextures",
+							"line": 285
+						},
+						{
+							"kind": "field",
+							"name": "m_terrainSplat",
+							"signature": "bool m_terrainSplat = false",
+							"line": 286
+						},
+						{
+							"kind": "field",
+							"name": "m_foliageWind",
+							"signature": "bool m_foliageWind = false",
+							"line": 287
+						},
+						{
+							"kind": "field",
+							"name": "m_alphaMasked",
+							"signature": "bool m_alphaMasked = false",
+							"line": 288
+						},
+						{
+							"kind": "field",
+							"name": "m_alphaBlended",
+							"signature": "bool m_alphaBlended = false",
+							"line": 289
+						},
+						{
+							"kind": "field",
+							"name": "m_alphaCutoff",
+							"signature": "float m_alphaCutoff = 0.5f",
+							"line": 290
+						},
+						{
+							"kind": "field",
+							"name": "m_doubleSided",
+							"signature": "bool m_doubleSided = false",
+							"line": 291
+						},
+						{
+							"kind": "field",
+							"name": "m_windDirection",
+							"signature": "Vec2 m_windDirection = Vec2(1.0f, 0.0f)",
+							"line": 292
+						},
+						{
+							"kind": "field",
+							"name": "m_windStrength",
+							"signature": "float m_windStrength = 0.0f",
+							"line": 293
+						},
+						{
+							"kind": "field",
+							"name": "m_windSpeed",
+							"signature": "float m_windSpeed = 1.0f",
+							"line": 294
+						},
+						{
+							"kind": "field",
+							"name": "m_water",
+							"signature": "bool m_water = false",
+							"line": 295
+						},
+						{
+							"kind": "field",
+							"name": "m_reflective",
+							"signature": "bool m_reflective = false",
+							"doc": "forward transparent reflection opt-in",
+							"line": 296
+						},
+						{
+							"kind": "field",
+							"name": "m_waveDirection",
+							"signature": "Vec2 m_waveDirection = Vec2(1.0f, 0.0f)",
+							"line": 297
+						},
+						{
+							"kind": "field",
+							"name": "m_waveAmplitude",
+							"signature": "float m_waveAmplitude = 0.4f",
+							"line": 298
+						},
+						{
+							"kind": "field",
+							"name": "m_waveLength",
+							"signature": "float m_waveLength = 24.0f",
+							"line": 299
+						},
+						{
+							"kind": "field",
+							"name": "m_waveSteepness",
+							"signature": "float m_waveSteepness = 0.6f",
+							"line": 300
+						},
+						{
+							"kind": "field",
+							"name": "m_waveSpeed",
+							"signature": "float m_waveSpeed = 4.0f",
+							"line": 301
+						},
+						{
+							"kind": "field",
+							"name": "m_waveTime",
+							"signature": "float m_waveTime = 0.0f",
+							"line": 302
+						},
+						{
+							"kind": "field",
+							"name": "m_worldGrid",
+							"signature": "bool m_worldGrid = false",
+							"line": 303
+						},
+						{
+							"kind": "field",
+							"name": "m_worldGridParams",
+							"signature": "FWorldGridParams m_worldGridParams",
+							"line": 304
+						},
+						{
+							"kind": "field",
+							"name": "m_physicsMaterial",
+							"signature": "std::string m_physicsMaterial",
+							"doc": "What the surface is made of once something collides with it. The path\nnames a `.physmat`, which is where friction, restitution and the\nsurface type are already authored together; the inline name is the\nfallback for a material that only wants to say \"this is metal\".\n\nThe surface is held as a NAME rather than the enum because ESurfaceType\nlives in Physics, well above the renderer in the module order — the same\nreason it serializes by name everywhere else.",
+							"line": 314
+						},
+						{
+							"kind": "field",
+							"name": "m_physicsSurface",
+							"signature": "std::string m_physicsSurface",
+							"line": 315
+						},
+						{
+							"kind": "field",
+							"name": "m_name",
+							"signature": "std::string m_name",
+							"line": 317
+						},
+						{
+							"kind": "field",
+							"name": "m_parent",
+							"signature": "Material* m_parent = nullptr",
+							"doc": "null = base material",
+							"line": 319
+						},
+						{
+							"kind": "field",
+							"name": "m_overrideFlags",
+							"signature": "MaterialOverride m_overrideFlags = MaterialOverride::All",
+							"doc": "Which properties are overridden (All = standalone material)",
+							"line": 320
+						},
+						{
+							"kind": "field",
+							"name": "m_transparentWrites",
+							"signature": "FMaterialTransparentDepth m_transparentWrites",
+							"line": 321
+						},
+						{
+							"kind": "field",
+							"name": "m_identity",
+							"signature": "FMaterialIdentity m_identity",
+							"line": 322
+						},
+						{
+							"kind": "field",
+							"name": "m_stateVersion",
+							"signature": "FMaterialStateVersion m_stateVersion",
+							"line": 323
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "Material",
+					"namespace": "Mowo",
+					"bases": "public RefCounted, private FMaterialState",
+					"doc": "An instance can inherit from a parent material and override only specific\nproperties.\n\nOwnership: a Material is RefCounted and lives behind Ref<Material>. Assets\n(ModelResource, MaterialAsset) hold the Ref; a component's raw `Material*`\nis a VIEW derived from a Ref somebody else holds, never an owner. The last\nRef to drop frees the material and, through it, its GPU texture refs —\nexactly once, however many components shared it. Creation goes through\nCreate()/CreatePBR()/Clone(): every allocation AND the deleting destructor\nbelow run inside the Renderer image, so a Ref released from any other DLL\nfrees through the same heap that allocated.",
+					"line": 337,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Material",
+							"signature": "Material() = default",
+							"line": 339
+						},
+						{
+							"kind": "method",
+							"name": "~Material",
+							"signature": "~Material() override",
+							"line": 340
+						},
+						{
+							"kind": "method",
+							"name": "Material",
+							"signature": "Material(const Material&) = delete",
+							"doc": "A material is never copied as a value: the count belongs to one object.\nClone() is the field-wise duplicate; CopyFrom() writes another material's\nsurface into THIS one without touching its identity or its count.",
+							"line": 345
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "Material& operator=(const Material&) = delete",
+							"line": 346
+						},
+						{
+							"kind": "method",
+							"name": "Create",
+							"signature": "static Ref<Material> Create()",
+							"static": true,
+							"line": 348
+						},
+						{
+							"kind": "method",
+							"name": "Clone",
+							"signature": "Ref<Material> Clone() const",
+							"doc": "New object, same surface: textures are shared by Ref, the parent pointer\nis shared, the identity is fresh — the DS cache treats it as a different\nmaterial, which it is.",
+							"line": 353
+						},
+						{
+							"kind": "method",
+							"name": "CopyFrom",
+							"signature": "void CopyFrom(const Material& other)",
+							"doc": "Overwrites the surface with `other`'s. Keeps this object's identity and\nits in-flight transparent-write depth, and never lets the texture\nversion step backwards: the DS cache keys on it, and a version that\nre-reached an old value would hand back the old descriptor set.",
+							"line": 359
+						},
+						{
+							"kind": "method",
+							"name": "ResetInPlace",
+							"signature": "void ResetInPlace()",
+							"doc": "Back to a default-constructed surface IN PLACE — the object, its address\nand its identity survive, so every Ref and every view keeps working.\nThis is the reimport contract: an asset reloads its material's contents,\nit does not replace the material. The texture version moves forward for\nthe same reason CopyFrom's does.",
+							"line": 366
+						},
+						{
+							"kind": "method",
+							"name": "GetStableId",
+							"signature": "uint64_t GetStableId() const",
+							"line": 391
+						},
+						{
+							"kind": "method",
+							"name": "GetStateVersion",
+							"signature": "uint64_t GetStateVersion() const",
+							"doc": "Moves on every write to the surface (any setter, CopyFrom, ResetInPlace,\nResetToParent), including writes inside an FTransparentWriteScope. It\nsays nothing about the parent: a cache that snapshots an instance must\nalso check the parent chain.",
+							"line": 399
+						},
+						{
+							"kind": "method",
+							"name": "SetBaseColor",
+							"signature": "void SetBaseColor(const Vec4& color)",
+							"line": 403
+						},
+						{
+							"kind": "method",
+							"name": "GetBaseColor",
+							"signature": "Vec4 GetBaseColor() const",
+							"line": 408
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalBaseColor",
+							"signature": "const Vec4& GetLocalBaseColor() const",
+							"line": 409
+						},
+						{
+							"kind": "method",
+							"name": "GetAverageTextureColor",
+							"signature": "Vec3 GetAverageTextureColor() const",
+							"doc": "Linear-space average of the albedo texture (white when untextured\nor the average is unknown). The GI voxelizer multiplies the flat base\ncolor by this — matching the GBuffer's baseColor * texture composition\nat 1-texel resolution — so GI bounce and SDF/RT reflections carry the\ntexture's actual tint instead of the bare base color.",
+							"line": 418
+						},
+						{
+							"kind": "method",
+							"name": "GetAverageTextureAlpha",
+							"signature": "float GetAverageTextureAlpha() const",
+							"doc": "Linear average of the albedo texture's ALPHA channel (1 when\nuntextured/unknown). For alpha-masked materials this is the cutout\ncoverage — the GI voxelizer dithers occupancy by it and the RT ray\nqueries use it as the stochastic any-hit accept probability.",
+							"line": 424
+						},
+						{
+							"kind": "method",
+							"name": "SetMetallic",
+							"signature": "void SetMetallic(float metallic)",
+							"line": 426
+						},
+						{
+							"kind": "method",
+							"name": "GetMetallic",
+							"signature": "float GetMetallic() const",
+							"line": 431
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalMetallic",
+							"signature": "float GetLocalMetallic() const",
+							"line": 432
+						},
+						{
+							"kind": "method",
+							"name": "SetRoughness",
+							"signature": "void SetRoughness(float roughness)",
+							"line": 436
+						},
+						{
+							"kind": "method",
+							"name": "GetRoughness",
+							"signature": "float GetRoughness() const",
+							"line": 441
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalRoughness",
+							"signature": "float GetLocalRoughness() const",
+							"line": 442
+						},
+						{
+							"kind": "method",
+							"name": "SetAO",
+							"signature": "void SetAO(float ao)",
+							"line": 446
+						},
+						{
+							"kind": "method",
+							"name": "GetAO",
+							"signature": "float GetAO() const",
+							"line": 451
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalAO",
+							"signature": "float GetLocalAO() const",
+							"line": 452
+						},
+						{
+							"kind": "method",
+							"name": "SetOpacity",
+							"signature": "void SetOpacity(float opacity)",
+							"line": 456
+						},
+						{
+							"kind": "method",
+							"name": "GetOpacity",
+							"signature": "float GetOpacity() const",
+							"line": 460
+						},
+						{
+							"kind": "method",
+							"name": "IsTransparent",
+							"signature": "bool IsTransparent() const",
+							"doc": "Translucent when the surface lets anything through OR when its blend\nmode is not plain alpha: a FULLY opaque additive material (glow cards,\nholograms) still has to leave the GBuffer and draw in the blended pass,\nand inferring translucency from opacity alone silently made those\nopaque.",
+							"line": 468
+						},
+						{
+							"kind": "method",
+							"name": "SetAlphaBlended",
+							"signature": "void SetAlphaBlended(bool blended)",
+							"doc": "Blended by the source's alpha (glTF alphaMode BLEND): the coverage lives\nin the base-colour texture's alpha, so opacity alone reads 1 and would\nleave the surface in the G-Buffer as a solid quad.",
+							"line": 475
+						},
+						{
+							"kind": "method",
+							"name": "IsAlphaBlended",
+							"signature": "bool IsAlphaBlended() const",
+							"line": 479
+						},
+						{
+							"kind": "method",
+							"name": "SetBlendMode",
+							"signature": "void SetBlendMode(EMaterialBlendMode mode)",
+							"doc": "How a translucent surface combines with what is behind it. Alpha is\nthe historical (and default) behaviour; Additive adds light (fire,\nglows), Modulate multiplies (stained glass, smoked plastic). The RHI\nhas carried all three since G5 — this is the material-level choice\nthat was missing, so authors could only ever get alpha.",
+							"line": 488
+						},
+						{
+							"kind": "method",
+							"name": "GetBlendMode",
+							"signature": "EMaterialBlendMode GetBlendMode() const",
+							"line": 492
+						},
+						{
+							"kind": "method",
+							"name": "SetAlphaMasked",
+							"signature": "void SetAlphaMasked(bool masked)",
+							"doc": "Alpha-masked (cutout) rendering — foliage/fences: the GBuffer and\nshadow passes clip pixels whose albedo alpha falls below the cutoff\ninstead of blending. Independent of IsTransparent (which routes to\nthe blended pass).",
+							"line": 500
+						},
+						{
+							"kind": "method",
+							"name": "IsAlphaMasked",
+							"signature": "bool IsAlphaMasked() const",
+							"line": 504
+						},
+						{
+							"kind": "method",
+							"name": "SetAlphaCutoff",
+							"signature": "void SetAlphaCutoff(float cutoff)",
+							"line": 507
+						},
+						{
+							"kind": "method",
+							"name": "GetAlphaCutoff",
+							"signature": "float GetAlphaCutoff() const",
+							"line": 511
+						},
+						{
+							"kind": "method",
+							"name": "SetDoubleSided",
+							"signature": "void SetDoubleSided(bool doubleSided)",
+							"doc": "Double-sided: rendered with backface culling off (leaf cards, cloth).",
+							"line": 516
+						},
+						{
+							"kind": "method",
+							"name": "IsDoubleSided",
+							"signature": "bool IsDoubleSided() const",
+							"line": 520
+						},
+						{
+							"kind": "method",
+							"name": "SetEmissiveColor",
+							"signature": "void SetEmissiveColor(const Vec3& color)",
+							"line": 524
+						},
+						{
+							"kind": "method",
+							"name": "GetEmissiveColor",
+							"signature": "Vec3 GetEmissiveColor() const",
+							"line": 529
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalEmissiveColor",
+							"signature": "const Vec3& GetLocalEmissiveColor() const",
+							"line": 530
+						},
+						{
+							"kind": "method",
+							"name": "SetEmissiveStrength",
+							"signature": "void SetEmissiveStrength(float strength)",
+							"line": 534
+						},
+						{
+							"kind": "method",
+							"name": "GetEmissiveStrength",
+							"signature": "float GetEmissiveStrength() const",
+							"line": 539
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalEmissiveStrength",
+							"signature": "float GetLocalEmissiveStrength() const",
+							"line": 540
+						},
+						{
+							"kind": "method",
+							"name": "SetSpecularColor",
+							"signature": "void SetSpecularColor(const Vec3& color)",
+							"doc": "Legacy specular properties (for backward compatibility)",
+							"line": 545
+						},
+						{
+							"kind": "method",
+							"name": "GetSpecularColor",
+							"signature": "const Vec3& GetSpecularColor() const",
+							"line": 549
+						},
+						{
+							"kind": "method",
+							"name": "SetShininess",
+							"signature": "void SetShininess(float shininess)",
+							"line": 553
+						},
+						{
+							"kind": "method",
+							"name": "GetShininess",
+							"signature": "float GetShininess() const",
+							"line": 557
+						},
+						{
+							"kind": "method",
+							"name": "SetAlbedoTex",
+							"signature": "void SetAlbedoTex(Ref<Texture2D> tex)",
+							"doc": "Instance inheritance: a texture setter marks its override flag, and\nthe getter falls back to the parent when this instance hasn't overridden\nthe slot — so an instance with no texture override renders the parent's\ntexture instead of nothing. Base materials (no parent) always use local.",
+							"line": 565
+						},
+						{
+							"kind": "method",
+							"name": "GetAlbedoTex",
+							"signature": "Ref<Texture2D> GetAlbedoTex() const",
+							"line": 571
+						},
+						{
+							"kind": "method",
+							"name": "SetNormalTex",
+							"signature": "void SetNormalTex(Ref<Texture2D> tex)",
+							"line": 577
+						},
+						{
+							"kind": "method",
+							"name": "GetNormalTex",
+							"signature": "Ref<Texture2D> GetNormalTex() const",
+							"line": 583
+						},
+						{
+							"kind": "method",
+							"name": "SetMetallicRoughnessTex",
+							"signature": "void SetMetallicRoughnessTex(Ref<Texture2D> tex)",
+							"line": 589
+						},
+						{
+							"kind": "method",
+							"name": "GetMetallicRoughnessTex",
+							"signature": "Ref<Texture2D> GetMetallicRoughnessTex() const",
+							"line": 595
+						},
+						{
+							"kind": "method",
+							"name": "SetAOTex",
+							"signature": "void SetAOTex(Ref<Texture2D> tex)",
+							"line": 601
+						},
+						{
+							"kind": "method",
+							"name": "GetAOTex",
+							"signature": "Ref<Texture2D> GetAOTex() const",
+							"line": 607
+						},
+						{
+							"kind": "method",
+							"name": "SetEmissiveTex",
+							"signature": "void SetEmissiveTex(Ref<Texture2D> tex)",
+							"line": 613
+						},
+						{
+							"kind": "method",
+							"name": "GetEmissiveTex",
+							"signature": "Ref<Texture2D> GetEmissiveTex() const",
+							"line": 619
+						},
+						{
+							"kind": "method",
+							"name": "SetOpacityTex",
+							"signature": "void SetOpacityTex(Ref<Texture2D> tex)",
+							"doc": "Standalone opacity/cutout mask — the DCC-FBX foliage convention, where\ncoverage lives in its own grayscale map instead of the albedo's alpha.\nWhen bound, the masked passes clip against THIS texture's red channel\nrather than the albedo's alpha (an opaque albedo would clip nothing and\nleave the card a solid quad). Unbound = clip against albedo alpha.",
+							"line": 631
+						},
+						{
+							"kind": "method",
+							"name": "GetOpacityTex",
+							"signature": "Ref<Texture2D> GetOpacityTex() const",
+							"line": 637
+						},
+						{
+							"kind": "method",
+							"name": "SetDetailAlbedoTex",
+							"signature": "void SetDetailAlbedoTex(Ref<Texture2D> tex)",
+							"doc": "Detail maps — overlaid on primary albedo / normal at close range. Used\nto add high-frequency surface detail without 4K source textures.\ndetailTiling multiplies the UVs (typically 4-8x). The overlay strength\nis gated by the mask map's B channel when a mask map is set, so the\ndetail can be limited to specific regions (e.g. dirt-mask only on the\nbottom half of a wall).",
+							"line": 650
+						},
+						{
+							"kind": "method",
+							"name": "GetDetailAlbedoTex",
+							"signature": "Ref<Texture2D> GetDetailAlbedoTex() const",
+							"line": 656
+						},
+						{
+							"kind": "method",
+							"name": "SetDetailNormalTex",
+							"signature": "void SetDetailNormalTex(Ref<Texture2D> tex)",
+							"line": 662
+						},
+						{
+							"kind": "method",
+							"name": "GetDetailNormalTex",
+							"signature": "Ref<Texture2D> GetDetailNormalTex() const",
+							"line": 668
+						},
+						{
+							"kind": "method",
+							"name": "SetMaskMapTex",
+							"signature": "void SetMaskMapTex(Ref<Texture2D> tex)",
+							"doc": "Mask map — single RGBA8 replaces metallic + AO + smoothness + detail\nmask, packed HDRP-style:\nR = metallic, G = AO, B = detail mask, A = smoothness (1 - roughness)\nWhen set, the shader uses the mask map values instead of the scalar\nmetallic/AO/roughness in BaseColor/PBRParams. Saves descriptor slots\nand bandwidth vs separate textures.",
+							"line": 681
+						},
+						{
+							"kind": "method",
+							"name": "GetMaskMapTex",
+							"signature": "Ref<Texture2D> GetMaskMapTex() const",
+							"line": 687
+						},
+						{
+							"kind": "method",
+							"name": "SetDetailTiling",
+							"signature": "void SetDetailTiling(const Vec2& tiling)",
+							"line": 694
+						},
+						{
+							"kind": "method",
+							"name": "GetDetailTiling",
+							"signature": "const Vec2& GetDetailTiling() const",
+							"line": 699
+						},
+						{
+							"kind": "method",
+							"name": "SetDetailAlbedoStrength",
+							"signature": "void SetDetailAlbedoStrength(float v)",
+							"line": 706
+						},
+						{
+							"kind": "method",
+							"name": "GetDetailAlbedoStrength",
+							"signature": "float GetDetailAlbedoStrength() const",
+							"line": 711
+						},
+						{
+							"kind": "method",
+							"name": "SetDetailNormalStrength",
+							"signature": "void SetDetailNormalStrength(float v)",
+							"line": 718
+						},
+						{
+							"kind": "method",
+							"name": "GetDetailNormalStrength",
+							"signature": "float GetDetailNormalStrength() const",
+							"line": 723
+						},
+						{
+							"kind": "method",
+							"name": "SetHeightTex",
+							"signature": "void SetHeightTex(Ref<Texture2D> tex)",
+							"doc": "Parallax Occlusion Mapping. Height map is a single-channel R8 texture\nwhere 0 = surface, 1 = deepest point. The shader ray-marches along the\ntangent-space view direction to find the intersection with the height\nfield and displaces UVs accordingly — adds genuine 3D-looking detail\nat silhouettes without changing geometry.\n\nheightScale ~0.02-0.08 for typical floor/wall textures. Larger values\nexaggerate but break at grazing view angles (\"swimming texels\"). The\nshader uses adaptive step count (8-32) based on view-angle perpendicular-\nness to keep grazing angles sharp without wasting samples head-on.",
+							"line": 740
+						},
+						{
+							"kind": "method",
+							"name": "GetHeightTex",
+							"signature": "Ref<Texture2D> GetHeightTex() const",
+							"line": 746
+						},
+						{
+							"kind": "method",
+							"name": "SetParallaxHeightScale",
+							"signature": "void SetParallaxHeightScale(float v)",
+							"line": 753
+						},
+						{
+							"kind": "method",
+							"name": "GetParallaxHeightScale",
+							"signature": "float GetParallaxHeightScale() const",
+							"line": 758
+						},
+						{
+							"kind": "method",
+							"name": "SetDisplacementMagnitude",
+							"signature": "void SetDisplacementMagnitude(float v)",
+							"line": 765
+						},
+						{
+							"kind": "method",
+							"name": "GetDisplacementMagnitude",
+							"signature": "float GetDisplacementMagnitude() const",
+							"line": 769
+						},
+						{
+							"kind": "method",
+							"name": "SetDisplacementCenter",
+							"signature": "void SetDisplacementCenter(float v)",
+							"line": 776
+						},
+						{
+							"kind": "method",
+							"name": "GetDisplacementCenter",
+							"signature": "float GetDisplacementCenter() const",
+							"line": 780
+						},
+						{
+							"kind": "method",
+							"name": "SetClearCoatIntensity",
+							"signature": "void SetClearCoatIntensity(float v)",
+							"doc": "Clear coat — a second specular lobe on top of the base BRDF, modeling\na thin transparent lacquer layer (car paint, painted wood, soda cans).\nFixed F0 = 0.04 (IOR 1.5 lacquer), per-material intensity scalar\nattenuates the lobe. Clear coat roughness is independent of base\nroughness — a rough base under a glossy coat is the classic look.\n\nIntensity 0 disables the lobe entirely; 1 = full strength. Typical\nvalues: 0.6-0.9 for shiny car paint, 0.3-0.5 for satin lacquer.",
+							"line": 796
+						},
+						{
+							"kind": "method",
+							"name": "GetClearCoatIntensity",
+							"signature": "float GetClearCoatIntensity() const",
+							"line": 801
+						},
+						{
+							"kind": "method",
+							"name": "SetClearCoatRoughness",
+							"signature": "void SetClearCoatRoughness(float v)",
+							"line": 808
+						},
+						{
+							"kind": "method",
+							"name": "GetClearCoatRoughness",
+							"signature": "float GetClearCoatRoughness() const",
+							"line": 813
+						},
+						{
+							"kind": "method",
+							"name": "SetAnisotropy",
+							"signature": "void SetAnisotropy(float v)",
+							"doc": "Anisotropy — stretches the specular highlight along the surface tangent\n(positive) or bitangent (negative). The signature look for brushed\nmetal, hair, vinyl records, satin. Zero = isotropic (standard GGX).\n\nThe lighting pass derives the tangent direction from screen-space\nposition derivatives — no per-mesh tangent texture support yet, so the\nanisotropy direction approximately follows the surface's screen-space\nU/V flow. For authored brush direction, a future iteration would store\na tangent map in G-Buffer or sample it here.",
+							"line": 829
+						},
+						{
+							"kind": "method",
+							"name": "GetAnisotropy",
+							"signature": "float GetAnisotropy() const",
+							"line": 834
+						},
+						{
+							"kind": "method",
+							"name": "SetSubsurfaceStrength",
+							"signature": "void SetSubsurfaceStrength(float v)",
+							"doc": "Subsurface scattering — fakes the warm glow on the shadow-side of skin /\nwax / foliage by softening the diffuse terminator and tinting with\nalbedo. Strength 0 = standard Lambert; 1 = full wrap with curvature.\nNot real Jimenez-style blur SSS — this is a Penner-style curvature\napproximation that costs only a fwidth + a few mul-adds per pixel.",
+							"line": 846
+						},
+						{
+							"kind": "method",
+							"name": "GetSubsurfaceStrength",
+							"signature": "float GetSubsurfaceStrength() const",
+							"line": 851
+						},
+						{
+							"kind": "method",
+							"name": "SetIridescenceIntensity",
+							"signature": "void SetIridescenceIntensity(float v)",
+							"doc": "Iridescence — thin-film interference giving hue shifts based on view\nangle. Approximated as an HSV rainbow swept by NdotV, mixed with the\nstandard Fresnel by `intensity`. 0 = disabled. Used for soap bubbles,\noil slicks, peacock feathers, beetle wings.",
+							"line": 862
+						},
+						{
+							"kind": "method",
+							"name": "GetIridescenceIntensity",
+							"signature": "float GetIridescenceIntensity() const",
+							"line": 867
+						},
+						{
+							"kind": "method",
+							"name": "SetHair",
+							"signature": "void SetHair(bool v)",
+							"doc": "Hair shading model — switches the lighting pass to an anisotropic\nKajiya-Kay strand model (dual shifted specular lobes) instead of GGX, for\nhair/fur cards. Mutually exclusive with iridescence in the GBuffer pack\n(the hair flag rides the sign of the iridescence lane). Pair with a\nnegative Anisotropy so the highlight stretches across the strand width.",
+							"line": 879
+						},
+						{
+							"kind": "method",
+							"name": "IsHair",
+							"signature": "bool IsHair() const",
+							"line": 884
+						},
+						{
+							"kind": "method",
+							"name": "SetShadingModel",
+							"signature": "void SetShadingModel(EShadingModel m)",
+							"doc": "Explicit shading model (G2). DefaultLit doubles as \"legacy auto\":\nGetEffectiveShadingModel derives Hair/Subsurface from the older\nper-scalar knobs so every existing asset keeps its look without a\nresave. IDs are the GBuffer wire format (RT3.A high 3 bits) — 0 MUST\nstay DefaultLit, because impostors and material-less draws write a\nzero alpha and must remain plain-lit.",
+							"line": 897
+						},
+						{
+							"kind": "method",
+							"name": "GetShadingModel",
+							"signature": "EShadingModel GetShadingModel() const",
+							"line": 902
+						},
+						{
+							"kind": "method",
+							"name": "GetEffectiveShadingModel",
+							"signature": "EShadingModel GetEffectiveShadingModel() const",
+							"line": 908
+						},
+						{
+							"kind": "method",
+							"name": "SetTransmissionStrength",
+							"signature": "void SetTransmissionStrength(float v)",
+							"doc": "TwoSidedFoliage transmission: how much light bleeds through the\nsurface from behind, tinted by albedo. Only sampled when the shading\nmodel is TwoSidedFoliage (it is that model's custom GBuffer lane).",
+							"line": 925
+						},
+						{
+							"kind": "method",
+							"name": "GetTransmissionStrength",
+							"signature": "float GetTransmissionStrength() const",
+							"line": 930
+						},
+						{
+							"kind": "method",
+							"name": "SetSheenIntensity",
+							"signature": "void SetSheenIntensity(float v)",
+							"doc": "Cloth sheen: how much of the Charlie retro-reflective lobe rides on top\nof the base diffuse. It is the Cloth model's custom lane, so it only\nreaches the GBuffer when the material asks for that shading model.",
+							"line": 939
+						},
+						{
+							"kind": "method",
+							"name": "GetSheenIntensity",
+							"signature": "float GetSheenIntensity() const",
+							"line": 944
+						},
+						{
+							"kind": "method",
+							"name": "SetEyeParams",
+							"signature": "void SetEyeParams(const FEyeSurfaceParams& p)",
+							"doc": "Eye's parameters. They reach the shader through the frame's\nsurface-parameter record, not through a G-Buffer lane, so they are only\nread when the effective shading model is Eye.",
+							"line": 954
+						},
+						{
+							"kind": "method",
+							"name": "GetEyeParams",
+							"signature": "const FEyeSurfaceParams& GetEyeParams() const",
+							"line": 959
+						},
+						{
+							"kind": "method",
+							"name": "GetTextureVersion",
+							"signature": "uint32_t GetTextureVersion() const",
+							"line": 966
+						},
+						{
+							"kind": "method",
+							"name": "HasAnyTexture",
+							"signature": "bool HasAnyTexture() const",
+							"doc": "Uses the fallback getters so an instance counts textures inherited from\nits parent (not just its own overrides).",
+							"line": 971
+						},
+						{
+							"kind": "method",
+							"name": "SetTerrainSplat",
+							"signature": "void SetTerrainSplat(bool on)",
+							"doc": "Terrain splat: the GBuffer draws this material through the\nTERRAIN_SPLAT pipeline — vertex color = 4 layer weights over the\nalbedo/detailAlbedo/detailNormal/maskMap image slots.",
+							"line": 978
+						},
+						{
+							"kind": "method",
+							"name": "IsTerrainSplat",
+							"signature": "bool IsTerrainSplat() const",
+							"line": 982
+						},
+						{
+							"kind": "method",
+							"name": "SetFoliageWind",
+							"signature": "void SetFoliageWind(bool on)",
+							"doc": "Foliage wind: the GBuffer draws this material through the FOLIAGE\npipeline — vertex color alpha = bend weight, DetailParams repurposed\nas wind direction/strength/speed (foliage has no detail maps).",
+							"line": 989
+						},
+						{
+							"kind": "method",
+							"name": "IsFoliageWind",
+							"signature": "bool IsFoliageWind() const",
+							"line": 993
+						},
+						{
+							"kind": "method",
+							"name": "SetWindParams",
+							"signature": "void SetWindParams(const Vec2& direction, float strength, float speed)",
+							"line": 996
+						},
+						{
+							"kind": "method",
+							"name": "GetWindDirection",
+							"signature": "const Vec2& GetWindDirection() const",
+							"line": 1002
+						},
+						{
+							"kind": "method",
+							"name": "GetWindStrength",
+							"signature": "float GetWindStrength() const",
+							"line": 1005
+						},
+						{
+							"kind": "method",
+							"name": "GetWindSpeed",
+							"signature": "float GetWindSpeed() const",
+							"line": 1008
+						},
+						{
+							"kind": "method",
+							"name": "SetReflective",
+							"signature": "void SetReflective(bool on)",
+							"doc": "Reflective translucent surface: the forward transparent pass casts a\nsingle mirror reflection ray through the world SDF clipmap (shaded from\nthe radiance cache, sky on miss) and composites it Fresnel-weighted over\nthe glass. Off by default — a non-reflective transparent keeps the plain\nambient+refraction look (bit-identical). High/Epic + the\nr.Reflections.Translucent cvar gate it globally. Clear-coat transparents\ndraw a coat reflection from the same source regardless of this flag.",
+							"line": 1019
+						},
+						{
+							"kind": "method",
+							"name": "IsReflective",
+							"signature": "bool IsReflective() const",
+							"line": 1023
+						},
+						{
+							"kind": "method",
+							"name": "SetWater",
+							"signature": "void SetWater(bool on)",
+							"doc": "Water: the transparent pass draws this material through the WATER\npipeline — Gerstner vertex displacement + fresnel shading. The material\nmust also be transparent (opacity < 1) to reach that pass at all.",
+							"line": 1030
+						},
+						{
+							"kind": "method",
+							"name": "IsWater",
+							"signature": "bool IsWater() const",
+							"line": 1034
+						},
+						{
+							"kind": "method",
+							"name": "SetWaterWaveParams",
+							"signature": "void SetWaterWaveParams(const Vec2& direction, float amplitude, float wavelength, float steepness, float speed)",
+							"line": 1037
+						},
+						{
+							"kind": "method",
+							"name": "SetWaterTime",
+							"signature": "void SetWaterTime(float time)",
+							"line": 1045
+						},
+						{
+							"kind": "method",
+							"name": "GetWaterTime",
+							"signature": "float GetWaterTime() const",
+							"line": 1049
+						},
+						{
+							"kind": "method",
+							"name": "GetWaveDirection",
+							"signature": "const Vec2& GetWaveDirection() const",
+							"line": 1052
+						},
+						{
+							"kind": "method",
+							"name": "GetWaveAmplitude",
+							"signature": "float GetWaveAmplitude() const",
+							"line": 1055
+						},
+						{
+							"kind": "method",
+							"name": "GetWaveLength",
+							"signature": "float GetWaveLength() const",
+							"line": 1058
+						},
+						{
+							"kind": "method",
+							"name": "GetWaveSteepness",
+							"signature": "float GetWaveSteepness() const",
+							"line": 1061
+						},
+						{
+							"kind": "method",
+							"name": "GetWaveSpeed",
+							"signature": "float GetWaveSpeed() const",
+							"line": 1064
+						},
+						{
+							"kind": "method",
+							"name": "SetWorldGrid",
+							"signature": "void SetWorldGrid(bool on)",
+							"doc": "World grid: the albedo becomes the procedural grid and the albedo\ntexture is ignored. MaterialOverride has no bit left, so an instance\ninherits the grid from its parent unless it switches it on itself.",
+							"line": 1071
+						},
+						{
+							"kind": "method",
+							"name": "IsWorldGrid",
+							"signature": "bool IsWorldGrid() const",
+							"line": 1075
+						},
+						{
+							"kind": "method",
+							"name": "SetWorldGridParams",
+							"signature": "void SetWorldGridParams(const FWorldGridParams& params)",
+							"line": 1078
+						},
+						{
+							"kind": "method",
+							"name": "GetWorldGridParams",
+							"signature": "const FWorldGridParams& GetWorldGridParams() const",
+							"line": 1082
+						},
+						{
+							"kind": "field",
+							"name": "kWorldGridAlbedoLane",
+							"signature": "static constexpr float kWorldGridAlbedoLane = -2.0f",
+							"static": true,
+							"doc": "The GBuffer push block's bindless-albedo lane names a table slot when it\nis >= 0 and the per-material set at -1; this value below both selects\nthe grid, so no pipeline or push-constant byte had to be added for it.",
+							"line": 1093
+						},
+						{
+							"kind": "method",
+							"name": "PackWorldGridDetailParams",
+							"signature": "static Vec4 PackWorldGridDetailParams(const FWorldGridParams& params)",
+							"static": true,
+							"doc": "DetailParams of a grid draw: x = major cell, y = minor cell (metres,\nclamped away from zero), z/w = major/minor line shades.",
+							"line": 1097
+						},
+						{
+							"kind": "method",
+							"name": "SetPhysicsMaterialPath",
+							"signature": "void SetPhysicsMaterialPath(const std::string& path)",
+							"doc": "The physics surface. Empty on an instance means \"whatever the parent\nsays\": MaterialOverride has no bit left to spend on this, and an\ninstance that wanted to differ physically authors one of these fields.",
+							"line": 1102
+						},
+						{
+							"kind": "method",
+							"name": "SetPhysicsSurfaceName",
+							"signature": "void SetPhysicsSurfaceName(const std::string& name)",
+							"line": 1106
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalPhysicsMaterialPath",
+							"signature": "const std::string& GetLocalPhysicsMaterialPath() const",
+							"line": 1111
+						},
+						{
+							"kind": "method",
+							"name": "GetLocalPhysicsSurfaceName",
+							"signature": "const std::string& GetLocalPhysicsSurfaceName() const",
+							"line": 1114
+						},
+						{
+							"kind": "method",
+							"name": "GetPhysicsMaterialPath",
+							"signature": "const std::string& GetPhysicsMaterialPath() const",
+							"line": 1118
+						},
+						{
+							"kind": "method",
+							"name": "GetPhysicsSurfaceName",
+							"signature": "const std::string& GetPhysicsSurfaceName() const",
+							"line": 1126
+						},
+						{
+							"kind": "method",
+							"name": "HasAuthoredPhysics",
+							"signature": "bool HasAuthoredPhysics() const",
+							"doc": "Whether anyone authored a physics answer at all. A material that did not\nhas to leave the collider exactly as it was, which is what keeps every\nscene predating this block behaving identically.",
+							"line": 1137
+						},
+						{
+							"kind": "method",
+							"name": "SetName",
+							"signature": "void SetName(const std::string& name)",
+							"line": 1141
+						},
+						{
+							"kind": "method",
+							"name": "GetName",
+							"signature": "const std::string& GetName() const",
+							"line": 1145
+						},
+						{
+							"kind": "method",
+							"name": "SetParent",
+							"signature": "void SetParent(Material* parent)",
+							"line": 1149
+						},
+						{
+							"kind": "method",
+							"name": "GetParent",
+							"signature": "Material* GetParent() const",
+							"line": 1153
+						},
+						{
+							"kind": "method",
+							"name": "IsInstance",
+							"signature": "bool IsInstance() const",
+							"line": 1156
+						},
+						{
+							"kind": "method",
+							"name": "GetOverrideFlags",
+							"signature": "MaterialOverride GetOverrideFlags() const",
+							"line": 1160
+						},
+						{
+							"kind": "method",
+							"name": "HasOverride",
+							"signature": "bool HasOverride(MaterialOverride flag) const",
+							"line": 1163
+						},
+						{
+							"kind": "method",
+							"name": "SetOverride",
+							"signature": "void SetOverride(MaterialOverride flag, bool enabled)",
+							"line": 1166
+						},
+						{
+							"kind": "method",
+							"name": "ClearAllOverrides",
+							"signature": "void ClearAllOverrides()",
+							"line": 1175
+						},
+						{
+							"kind": "method",
+							"name": "ResetToParent",
+							"signature": "void ResetToParent(MaterialOverride flag)",
+							"line": 1180
+						},
+						{
+							"kind": "method",
+							"name": "CreateInstance",
+							"signature": "static Ref<Material> CreateInstance(Material* parent)",
+							"static": true,
+							"doc": "The instance points at its parent but does not own it: whoever holds\nthe parent's Ref (its asset) must outlive the instance, as before.",
+							"line": 1184
+						},
+						{
+							"kind": "method",
+							"name": "CreateDefault",
+							"signature": "static Ref<Material> CreateDefault()",
+							"static": true,
+							"line": 1186
+						},
+						{
+							"kind": "method",
+							"name": "CreateColored",
+							"signature": "static Ref<Material> CreateColored(const Vec4& color)",
+							"static": true,
+							"line": 1187
+						},
+						{
+							"kind": "method",
+							"name": "CreateMetallic",
+							"signature": "static Ref<Material> CreateMetallic(const Vec4& baseColor, float shininess = 64.0f)",
+							"static": true,
+							"line": 1188
+						},
+						{
+							"kind": "method",
+							"name": "CreateMatte",
+							"signature": "static Ref<Material> CreateMatte(const Vec4& baseColor)",
+							"static": true,
+							"line": 1189
+						},
+						{
+							"kind": "method",
+							"name": "CreatePBR",
+							"signature": "static Ref<Material> CreatePBR(const Vec4& baseColor, float metallic, float roughness, float ao = 1.0f)",
+							"static": true,
+							"line": 1191
+						},
+						{
+							"kind": "method",
+							"name": "CreatePBRMetal",
+							"signature": "static Ref<Material> CreatePBRMetal(const Vec4& baseColor, float roughness = 0.3f)",
+							"static": true,
+							"line": 1192
+						},
+						{
+							"kind": "method",
+							"name": "CreatePBRDielectric",
+							"signature": "static Ref<Material> CreatePBRDielectric(const Vec4& baseColor, float roughness = 0.5f)",
+							"static": true,
+							"line": 1193
+						},
+						{
+							"kind": "method",
+							"name": "CreateWorldGrid",
+							"signature": "static Ref<Material> CreateWorldGrid()",
+							"static": true,
+							"doc": "The engine default surface: a mid-grey world grid, rough dielectric.\nEvery mesh that has no material of its own draws with this.",
+							"line": 1197
+						},
+						{
+							"kind": "method",
+							"name": "SetGraphShaderId",
+							"signature": "void SetGraphShaderId(std::string hexId)",
+							"doc": "Compiled material graph (UE5-gap Q1). A non-empty id names the\nper-material GBuffer permutation in the shader archive\n(\"Materials/<hex>\"); GraphTextures carries the graph's slot-ordered\ntexture bindings for the material descriptor set. Empty id = the\nclassic uber-shader path, untouched.",
+							"line": 1204
+						},
+						{
+							"kind": "method",
+							"name": "GetGraphShaderId",
+							"signature": "const std::string& GetGraphShaderId() const",
+							"line": 1210
+						},
+						{
+							"kind": "method",
+							"name": "HasGraphShader",
+							"signature": "bool HasGraphShader() const",
+							"line": 1213
+						},
+						{
+							"kind": "method",
+							"name": "GetGraphShaderHash",
+							"signature": "uint64_t GetGraphShaderHash() const",
+							"doc": "The id as the number it was printed from, so the renderer's ten graph\npipeline caches key on a word instead of rebuilding a 16-character\nstring per draw per pass per cascade — one character past MSVC's small\nstring buffer, so every one of those copies allocated.",
+							"line": 1221
+						},
+						{
+							"kind": "method",
+							"name": "HashGraphShaderId",
+							"signature": "static uint64_t HashGraphShaderId(const std::string& hexId)",
+							"static": true,
+							"doc": "The canonical id is \"%016llx\" of the graph's content hash, so parsing it\nrecovers that hash exactly and adds no collision the hash did not\nalready carry. Anything else — a hand-written id in a test — is folded\ninstead, which keeps it distinct without pretending it round-trips.",
+							"line": 1229
+						},
+						{
+							"kind": "method",
+							"name": "SetGraphHasWpo",
+							"signature": "void SetGraphHasWpo(bool v)",
+							"doc": "G4: whether the graph links a World Position Offset. Drives the\nshadow/velocity pipeline swaps — a no-WPO graph keeps the cheap uber\nvertex path there (the pixel splice is independent of this flag).",
+							"line": 1270
+						},
+						{
+							"kind": "method",
+							"name": "HasGraphWpo",
+							"signature": "bool HasGraphWpo() const",
+							"line": 1274
+						},
+						{
+							"kind": "method",
+							"name": "SetGraphWpoBound",
+							"signature": "void SetGraphWpoBound(float v)",
+							"doc": "Conservative world-space bound on |WPO| from the graph compile (0 = no\nWPO; a huge sentinel = unboundable subtree). The meshlet path inflates\nits per-cluster cull spheres by it — or, at the sentinel, stops\ntrusting geometric kills for the draw entirely.",
+							"line": 1282
+						},
+						{
+							"kind": "method",
+							"name": "GetGraphWpoBound",
+							"signature": "float GetGraphWpoBound() const",
+							"line": 1286
+						},
+						{
+							"kind": "method",
+							"name": "SetSubstrateTop",
+							"signature": "void SetSubstrateTop(uint32_t packed)",
+							"doc": "The graph's Substrate slab folded to one packed G-Buffer word, 0 when the\nmaterial has no slab or when its slab moves per pixel. Read by the paths\nthat cache ONE answer per surface and therefore cannot carry a per-pixel\ncoat: the GI surface cache's card capture and the ray-traced hit shading.\nEverything that shades per pixel reads the slab out of the G-Buffer and\nmust ignore this.",
+							"line": 1296
+						},
+						{
+							"kind": "method",
+							"name": "GetSubstrateTop",
+							"signature": "uint32_t GetSubstrateTop() const",
+							"line": 1300
+						},
+						{
+							"kind": "method",
+							"name": "SetGraphTextures",
+							"signature": "void SetGraphTextures(std::vector<Ref<Texture2D>> textures)",
+							"line": 1303
+						},
+						{
+							"kind": "method",
+							"name": "GetGraphTextures",
+							"signature": "const std::vector<Ref<Texture2D>>& GetGraphTextures() const",
+							"line": 1308
+						},
+						{
+							"kind": "method",
+							"name": "SetGraphParamLane",
+							"signature": "void SetGraphParamLane(uint32_t lane, const Vec4& v)",
+							"doc": "R4: the runtime parameter lanes the graph pipelines push per draw.\nMaterialAsset seeds the graph's defaults and maps names to lanes;\ngameplay writes lanes through it (SetScalarParameter/SetVectorParameter).\nThe first four lanes are the legacy block every graph pipeline reads;\na graph that needs more sizes the extension once at GPU-create time\n(SetGraphParamLaneCount, from CompiledShader::paramLanes) and the\nupload copies GetGraphParamLaneCount() lanes instead of four.",
+							"line": 1319
+						},
+						{
+							"kind": "method",
+							"name": "GetGraphParamLane",
+							"signature": "Vec4 GetGraphParamLane(uint32_t lane) const",
+							"line": 1327
+						},
+						{
+							"kind": "method",
+							"name": "SetGraphParamLaneCount",
+							"signature": "void SetGraphParamLaneCount(uint32_t lanes)",
+							"line": 1333
+						},
+						{
+							"kind": "method",
+							"name": "GetGraphParamLaneCount",
+							"signature": "uint32_t GetGraphParamLaneCount() const",
+							"line": 1337
+						},
+						{
+							"kind": "method",
+							"name": "GetGraphParams",
+							"signature": "const Vec4* GetGraphParams() const",
+							"line": 1340
+						},
+						{
+							"kind": "method",
+							"name": "GetGraphParamsExt",
+							"signature": "const std::vector<Vec4>& GetGraphParamsExt() const",
+							"line": 1343
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "Material::FTransparentWriteScope",
+					"namespace": "Mowo",
+					"doc": "Writes that REPRODUCE a material rather than author it — the .mat\nloader replaying a saved document, the graph compiler folding its result\nonto the flat fields, a GPU re-resolve rebinding textures — must not read\nas user edits. Inside this scope the setters still write their fields but\nstop raising override bits, so an instance keeps inheriting exactly what\nits stored mask says it inherits instead of freezing at whatever its\nparent happened to hold the last time the file was opened.",
+					"line": 375,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FTransparentWriteScope",
+							"signature": "explicit FTransparentWriteScope(Material& material) : m_material(material)",
+							"line": 377
+						},
+						{
+							"kind": "method",
+							"name": "~FTransparentWriteScope",
+							"signature": "~FTransparentWriteScope()",
+							"line": 380
+						},
+						{
+							"kind": "method",
+							"name": "FTransparentWriteScope",
+							"signature": "FTransparentWriteScope(const FTransparentWriteScope&) = delete",
+							"line": 384
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FTransparentWriteScope& operator=(const FTransparentWriteScope&) = delete",
+							"line": 385
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMaterialRenderProxy",
+					"namespace": "Mowo",
+					"bases": "public RefCounted",
+					"doc": "Render-thread snapshot of a Material (+ its resolved parent chain), the\nUE5 FMaterialRenderProxy analog. The game thread builds one per frame; the\nrender thread reads only this copy, never the live Material. Ref-counted so\nthe frame packet keeps it alive past the game thread freeing the source.",
+					"line": 1368,
+					"members": [
+						{
+							"kind": "field",
+							"name": "data",
+							"signature": "Material data",
+							"line": 1369
+						},
+						{
+							"kind": "field",
+							"name": "parentProxy",
+							"signature": "Ref<FMaterialRenderProxy> parentProxy",
+							"line": 1370
+						},
+						{
+							"kind": "field",
+							"name": "sourceKey",
+							"signature": "uint64_t sourceKey = 0",
+							"doc": "original Material's stable id — DS-cache key across frames (0 = no material)",
+							"line": 1371
+						},
+						{
+							"kind": "field",
+							"name": "sourceVersion",
+							"signature": "uint64_t sourceVersion = 0",
+							"doc": "FMaterialRenderProxyCache bookkeeping, read and written by the game\nthread only (the render thread reads the fields above). They live on the\nproxy so a holder that kept one across frames can prove it is still the\ncache's current snapshot without a map lookup (Revalidate).",
+							"line": 1377
+						},
+						{
+							"kind": "field",
+							"name": "lastUsedPacket",
+							"signature": "uint32_t lastUsedPacket = 0",
+							"line": 1378
+						},
+						{
+							"kind": "field",
+							"name": "retired",
+							"signature": "bool retired = false",
+							"line": 1379
+						}
+					]
+				}
+			],
+			"free": [
+				{
+					"kind": "function",
+					"name": "operator|",
+					"signature": "inline MaterialOverride operator|(MaterialOverride a, MaterialOverride b)",
+					"line": 153
+				},
+				{
+					"kind": "function",
+					"name": "operator&",
+					"signature": "inline MaterialOverride operator&(MaterialOverride a, MaterialOverride b)",
+					"line": 156
+				},
+				{
+					"kind": "function",
+					"name": "operator|=",
+					"signature": "inline MaterialOverride& operator|=(MaterialOverride& a, MaterialOverride b)",
+					"line": 159
+				},
+				{
+					"kind": "function",
+					"name": "operator&=",
+					"signature": "inline MaterialOverride& operator&=(MaterialOverride& a, MaterialOverride b)",
+					"line": 163
+				},
+				{
+					"kind": "function",
+					"name": "operator~",
+					"signature": "inline MaterialOverride operator~(MaterialOverride a)",
+					"line": 167
+				}
+			]
+		}
+	]
+}

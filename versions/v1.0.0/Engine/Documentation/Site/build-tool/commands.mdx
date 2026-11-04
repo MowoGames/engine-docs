@@ -1,0 +1,92 @@
+---
+title: Commands
+sidebarTitle: Commands
+description: What each mbt command is for, grouped by task, with the common invocations. Every option is listed in the generated mbt command reference.
+order: 1
+sources:
+  - Engine/Documentation/Generated/cli.json
+tracks:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/RootCommandFactory.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/GenerateCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/OpenCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/InitCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/NewClassCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/CleanCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DoctorCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Docs/PublishedReference.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/DdcCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/ShadersCommand.cs
+verifiedAt: dc3188855
+---
+
+`mbt` has one command per job. This page groups the commands a game project uses by task and shows the common invocations. The [mbt command reference](/docs/reference/mbt-cli/) is generated from the tool itself and lists every option with its default; `mbt <command> --help` prints the same.
+
+Run every command through the wrapper at the root of the install, `./mbt.cmd`.
+
+## Check the machine
+
+| Command | Use |
+|---|---|
+| `mbt doctor` | Checks the toolchain against `Engine/Config/Toolchains.ini`, the Windows SDK and Visual C++ libraries, and the optional tools. Exits 1 when a required one is missing. |
+| `mbt info` | Lists the modules and targets the build sees. |
+
+## Build the game module
+
+```powershell
+./mbt.cmd build -t MyGame --extra-source D:/Projects/MyGame/Source
+./mbt.cmd build -t MyGame --extra-source D:/Projects/MyGame/Source -o MOWO_ENABLE_STEAM=false
+```
+
+`-t` names the module to build and `--extra-source <Project>/Source` adds the project's modules. Engine modules are prebuilt, so only your modules compile, in the configuration the engine shipped as. `-o KEY=VALUE` passes a build option to the rules (see [Modules and targets](/docs/build-tool/modules-and-targets/#build-options)). `--hot-reload` links the module to a versioned library a running editor loads, and `mbt livecoding` patches changed functions into a running editor or game. The editor runs both for you; see [Working with C++](/docs/editor/working-with-cpp/) and [Live coding](/docs/programming/live-coding/). `--shared-cache` shares compiled objects across a team; see [Build tool](/docs/build-tool/).
+
+`mbt clean` removes build output; `--all` also removes the intermediate caches.
+
+## Content
+
+| Command | Use |
+|---|---|
+| `mbt shaders --project <p>.mproject` | Compiles the project's material and plugin shaders into the shader archive. You do not need it for materials in the editor: the editor compiles a material graph in the background the first time it draws it (with `--material-sources` and `--material-cache`, into the project's `Intermediate/ShaderCache/`); see [Materials](/docs/rendering/materials/#compiling-in-the-editor). |
+| `mbt cook` | Cooks a project's `Content/` into `.meaf` archives. See [Cooking content](/docs/content-pipeline/cooking/). |
+| `mbt ddc info\|prune\|purge\|serve` | Inspects, trims, empties or serves a project's derived data cache. |
+| `mbt asset diff\|dump\|merge\|migrate\|primary` | Inspects and merges asset packages, migrates text assets, lists primary assets. |
+| `mbt mdf validate\|convert\|fmt\|retype-refs` | Validates, converts and formats MDF documents. |
+| `mbt localize extract\|export\|import` | Extracts localizable strings and exchanges them with translators as PO or XLIFF. |
+
+## Projects, classes and IDE files
+
+```powershell
+./mbt.cmd init MyGame -o D:/Projects/MyGame
+./mbt.cmd newclass ADoorActor --project D:/Projects/MyGame
+./mbt.cmd generate vs --project D:/Projects/MyGame/MyGame.mproject
+./mbt.cmd open
+```
+
+| Command | Use |
+|---|---|
+| `mbt init <name>` | Creates a project from a template, with its `Source/<Name>.Build.cs` and `.Target.cs` files. `--no-source` makes a content-only project. |
+| `mbt newclass <name>` | Adds a C++ class to a project's game module (an actor, a component, or a subclass of a reflected class), scaffolding the module the first time. |
+| `mbt generate vs` | A Visual Studio solution, `.slnx` by default (`--format sln` for the older format). `--project <p>.mproject` writes a solution inside the project that builds its game modules against the prebuilt engine. |
+| `mbt generate vscode` | `compile_commands.json` and `tasks.json` for VS Code. |
+| `mbt generate compile-commands` | `compile_commands.json` only, for clangd and other tools. |
+| `mbt open` | Generates the solution if needed and opens it; `--ide vs\|rider` picks the IDE. |
+
+## Package and ship
+
+| Command | Use |
+|---|---|
+| `mbt package` | Builds, cooks and stages a game package. |
+| `mbt crypto generate\|show\|import-signing-key\|migrate` | Manages a project's content keys. |
+| `mbt patch` | Builds or applies a binary patch between two packages. |
+| `mbt symbols` | Uploads debug symbols to the crash server. |
+| `mbt steam-upload` | Uploads a package to Steamworks. |
+| `mbt mod new\|edit`, `mbt package-mod`, `mbt workshop-upload` | Makes, packages and publishes mods. |
+| `mbt liveops sign\|report` | Signs remote config and renders the telemetry dashboard. |
+| `mbt package-android` | Builds an Android Gradle project. Experimental; Android is not a supported product platform. |
+
+The [Packaging and shipping](/docs/shipping/) section covers each of these.
+
+## Related
+
+- [mbt command reference](/docs/reference/mbt-cli/)
+- [Exit codes](/docs/build-tool/exit-codes/)

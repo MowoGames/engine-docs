@@ -1,0 +1,103 @@
+---
+title: Arc styling
+sidebarTitle: Styling
+description: How game screens resolve colors, fonts and metrics through .theme themes, and how the editor's themes, density and motion settings apply to Arc widgets.
+order: 2
+sources:
+  - Engine/Source/Runtime/Arc/Public/Arc/Mowo/ArcMowoStyle.gen.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Style/CArcStyle.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUITheme.h
+  - Engine/Source/Runtime/ArcUI/Public/ArcUI/CArcUIScreenStack.h
+  - Engine/Source/Runtime/Arc/Public/Arc/Style/CArcDensity.h
+tracks:
+  - Engine/Source/Runtime/Arc/Design/arc-style.json
+  - Engine/Source/Runtime/Arc/Private/Mowo/ArcMowoStyle.gen.cpp
+  - Engine/Source/Runtime/Arc/Private/Mowo/ArcMowoBridge.cpp
+  - Engine/Source/Runtime/Arc/Private/Framework/CArcWindowManager.cpp
+  - Engine/Source/Runtime/ArcUI/Private/FArcUITheme.cpp
+  - Engine/Source/Developer/MowoTestKit/Fixtures/TestProject/Content/UI/Game.theme
+  - Engine/Source/Runtime/Arc/Private/Mowo/CArcMowoTheme.cpp
+  - Engine/Source/Runtime/Arc/Content/Themes/High Contrast.json
+  - Engine/Source/Runtime/Arc/Private/Animation/CArcAnimationManager.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Settings/EditorAppearancePage.cpp
+verifiedAt: 3f3a08d31
+---
+
+Arc has two styling layers. **Game themes** (`.theme` assets) let each game screen resolve color, font and metric tokens against its own palette. The **editor style** ("Mowo Graphite") is the editor's own palette, with Dark, Light and High Contrast themes; editor extensions draw with its tokens. This page covers both.
+
+## Game themes (.theme)
+
+Game screens do not use the editor palette directly. A `.ui` screen resolves color tokens such as `"accent"` or `"textbright"` through an `FArcUITheme`, stored as an MDF `.theme` asset <Source path="Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUITheme.h" />.
+
+```mdf title="Content/UI/Game.theme"
+ArcTheme "Sample Game" {
+    Colors {
+        accent: vec4(0.20784314, 0.64705884, 0.8980392, 1.0)
+        textbright: vec4(0.9098039, 0.91764706, 0.9254902, 1.0)
+        scanner: vec4(0.32000002, 0.96, 0.72, 1.0)
+    }
+    Fonts {
+        Font "body" {
+            family: "Geist"
+            size: 14.0
+        }
+    }
+    Metrics {
+        corner_radius: 4.0
+    }
+}
+```
+
+This is an excerpt of the sample theme. A theme can add any token name, like `scanner` above, and screens can reference it.
+
+### Resolution order
+
+<Flow steps={["Screen's own theme:", "Project theme", "Built-in default theme"]} caption="The first theme that defines the token wins." />
+
+1. The `theme:` property at the root of the `.ui`.
+2. The host's project theme, set with `CArcUIScreenStack::SetProjectTheme(path)` <Source path="Engine/Source/Runtime/ArcUI/Public/ArcUI/CArcUIScreenStack.h" />.
+3. The built-in default theme ("Mowo Default").
+
+The default theme defines eight colors taken from the editor palette: `accent`, `success`, `warning`, `error`, `info`, `text`, `textbright` and `surface`, plus the fonts `body` (Geist 14) and `heading` (Sora 22).
+
+Token names are normalized before lookup. A path prefix is dropped and the rest is lowercased, so `token/accent`, `Content/UI/Game.theme.accent` and the legacy name `AccentColor` all resolve to `accent` <Source path="Engine/Source/Runtime/ArcUI/Public/ArcUI/FArcUITheme.h" />.
+
+<Callout type="tip">
+In the [ArcUI Designer](/docs/ui/arcui-designer/), color rows offer the theme's token list before a raw color picker. Prefer tokens: a screen authored in raw colors stops following the theme when the theme changes.
+</Callout>
+
+## Editor themes
+
+The editor's default theme is **Dark**. The editor's **Preferences > Appearance > Theme** also offers **Light** and **High Contrast**, which replace the colour tokens; a project can add its own theme as a JSON file of colour tokens under `Config/Themes`. High Contrast drops elevation shadows, because popups there rely on their outline.
+
+## Using tokens in C++
+
+An editor extension that draws its own widgets reads the editor palette from the `Arcf::Mowo` namespace. `ToFontInfo` turns a typography entry into an Arc font description <Source path="Engine/Source/Runtime/Arc/Public/Arc/Mowo/ArcMowoStyle.gen.h" />.
+
+```cpp title="StatusLabel.cpp" wrap
+#include <Arc/Widgets/ATextBlock.h>
+#include <Arc/Widgets/ABorder.h>
+#include <Arc/Mowo/ArcMowoStyle.gen.h>
+
+const Arcf::ArcColor warningText = Arcf::Mowo::MowoColors::WarningText;
+const float radius = Arcf::Mowo::MowoMetrics.Radius.Small;
+const float fadeMs = Arcf::Mowo::MowoMotion.Fade.DurationMs;
+
+Arcf::TSharedPtr<Arcf::AWidget> label = ArcNew(Arcf::ATextBlock).Text(Arcf::CText::FromString("Unsaved changes")).Font(Arcf::Mowo::ToFontInfo(Arcf::Mowo::MowoTypography.Caption)).ColorAndOpacity(warningText);
+```
+
+At run time, `CArcStyle::Get()` is the registry of style sets: `RegisterStyleSet`, `SetActiveStyleSet`, `GetColor(key)`, and a change listener <Source path="Engine/Source/Runtime/Arc/Public/Arc/Style/CArcStyle.h" />. With no set registered it falls back to a built-in dark theme, so widgets can resolve defaults before initialization.
+
+## Density
+
+The editor's **Preferences > Appearance > Density** offers Compact, Default and Comfortable. Metric tokens hold the Default values. A widget that lays out from a row height, control height or padding asks `CArcDensity` for the value at the current density, and a density change re-lays out the whole UI without a restart <Source symbol="CArcDensity" />. Rows move by 4 pixels, control heights by 2, and padding scales by 3/4 or 5/4, so the 4-pixel grid holds.
+
+## Motion and reduced motion
+
+Transitions read their duration and easing from the `motion` tokens. When **Reduced Motion** is on (the `ui.ReducedMotion` setting, see [Settings and accessibility](/docs/ui/settings-and-accessibility/)), Arc skips decorative transitions: non-looping animations jump to their end and popups open without sliding. **High Contrast UI** (`ui.HighContrast`) switches the Mowo theme to its high-contrast colours.
+
+## Related
+
+- [ArcUI screens](/docs/ui/arcui-screens/) for where `theme:` sits in a `.ui`.
+- [Settings and accessibility](/docs/ui/settings-and-accessibility/) for the high-contrast UI setting.
+- API pages: [CArcStyle](/docs/api/arc/carcstyle/), [CArcStyleSet](/docs/api/arc/carcstyleset/), [FArcUITheme](/docs/api/arcui/farcuitheme/).

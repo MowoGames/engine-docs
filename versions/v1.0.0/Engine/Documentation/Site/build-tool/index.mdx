@@ -1,0 +1,87 @@
+---
+title: Build tool
+description: mbt builds your project's C++ modules, cooks and packages your game from C# rules files. How to run it and what a build does in the installed editor build.
+order: 10
+icon: Hammer
+sources:
+  - Templates/TP_Coop/Source/TP_Coop/TP_Coop.Build.cs
+tracks:
+  - mbt.cmd
+  - mbt.sh
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/RootCommandFactory.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/BuildCommand.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Build/BuildOrchestrator.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/InstalledEngine.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/RulesAssembly.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Graph/BuildCache.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/BuildLock.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Utils/ProgressReporter.cs
+verifiedAt: 3f3a08d31
+---
+
+**MowoBuildTool**, run as `mbt`, is Mowo's build tool, modeled on Unreal Build Tool. It compiles your project's C++ modules against the prebuilt engine, cooks and packs content, packages the game, generates IDE projects and scaffolds projects and classes. The editor runs it for you when you compile or package from the UI; you run it yourself from a terminal or a build machine. There is no CMake and no configure step.
+
+## Rules are C# files
+
+Every module has a `<Module>.Build.cs` next to its sources, and every binary a `<Target>.Target.cs`: small C# classes that say what the module needs and what the binary is. Because the build description is ordinary C#, platform checks and feature switches are plain `if` statements.
+
+```csharp title="Source/MyGame/MyGame.Build.cs"
+public class MyGame : ModuleRules
+{
+	public MyGame(ReadOnlyTargetRules Target) : base(Target)
+	{
+		PublicDependencyModuleNames.Add("EngineLoop");
+
+		bUseHeaderTool = true;
+		HeaderToolDirectories.Add("Public/MyGame");
+	}
+}
+```
+
+Folders replace most lines: `Public/` and `Classes/` are public include paths, `Private/` holds the sources, and new `.cpp` files are picked up automatically. `mbt` compiles the rules files with Roslyn and caches the result, so a build that changed no rules runs no compiler for them. [Modules and targets](/docs/build-tool/modules-and-targets/) covers the files.
+
+## Running mbt
+
+Run `mbt` through the wrapper at the root of the install: `mbt.cmd` on Windows. The `mbt` it starts is self-contained, so you do not need the .NET SDK.
+
+```powershell
+./mbt.cmd doctor
+./mbt.cmd build -t MyGame --extra-source D:/Projects/MyGame/Source
+./mbt.cmd package --project D:/Projects/MyGame/MyGame.mproject
+```
+
+In the installed build the engine's modules are prebuilt. `mbt build` compiles only the module you name with `-t`, against the engine's libraries, and refuses a build without `-t`. It always builds in the configuration the engine shipped as, because C runtime flavors cannot mix across the engine's DLLs; another `-c` is corrected with a log line.
+
+### Global options
+
+Every command takes these:
+
+| Option | Meaning |
+|---|---|
+| `-v, --verbose` | Verbose output |
+| `--dry-run` | Show what would be done without doing it |
+| `--progress console\|json` | `json` writes one JSON object per line (`progress`, `diagnostic`, `stage`, `complete`) for tools that drive `mbt`, such as the editor |
+
+## What a build does
+
+<Flow steps={["Compile rules", "Resolve modules", "Header tool", "Compile", "Link"]} highlight={2} caption="One mbt build of a game module." />
+
+1. **Compile rules.** Every `.Build.cs` and `.Target.cs` in scope, or the cached assembly.
+2. **Resolve modules.** `-t <name>` names the module to build. Its engine dependencies resolve to the prebuilt libraries. A module that depends on one its target type or configuration rules out fails the build, such as an editor module in a game.
+3. **Header tool.** For every module with `bUseHeaderTool`, the reflection code generator runs inside `mbt` and writes the code the module compiles with.
+4. **Compile.** Each translation unit is fingerprinted from its source, its flags and the headers it included last time, and only changed units recompile.
+5. **Link** the module into a shared library the editor and the game load.
+
+Only one build runs at a time: a second `mbt` waits for the first, because concurrent builds share the object cache.
+
+`--shared-cache <folder or https bucket>` (or `MBT_SHARED_CACHE`) shares compiled objects across a team: a changed translation unit is pulled from the cache when another machine already compiled it with the same source, headers and flags, and published there otherwise. `--shared-cache-read-only` pulls without publishing.
+
+## In this section
+
+<CardGrid>
+  <Card title="Commands" href="/docs/build-tool/commands/" icon="Hammer">What each mbt command is for, by task.</Card>
+  <Card title="Modules and targets" href="/docs/build-tool/modules-and-targets/" icon="Boxes">Write .Build.cs and .Target.cs rules.</Card>
+  <Card title="Build configurations" href="/docs/build-tool/configurations/" icon="Layers">debug, debuggame, dev, profile and release.</Card>
+  <Card title="Toolchains and platforms" href="/docs/build-tool/toolchains-and-platforms/" icon="Workflow">The clang toolchain a game module needs.</Card>
+  <Card title="Exit codes" href="/docs/build-tool/exit-codes/" icon="FileText">What each exit code means, for scripts and CI.</Card>
+</CardGrid>

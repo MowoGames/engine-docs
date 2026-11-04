@@ -1,0 +1,180 @@
+---
+title: Modules and targets
+description: Write your module's .Build.cs and your project's .Target.cs, depend on engine modules and prebuilt libraries, and see which modules may link where.
+order: 2
+sources:
+  - Templates/TP_Coop/Source/TP_Coop.Target.cs
+  - Templates/TP_Coop/Source/TP_Coop/TP_Coop.Build.cs
+tracks:
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/ModuleRules.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/TargetRules.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/RulesAssembly.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/RulesMigrator.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Rules/ModuleScopes.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleResolver.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleCategory.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ShipCondition.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Modules/ModuleOptimization.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool.Core/Config/TargetType.cs
+  - Engine/Source/Programs/MowoBuildTool/src/MowoBuildTool/Commands/MigrateRulesCommand.cs
+  - Engine/Source/Runtime/GameHost/GameHost.Build.cs
+  - Engine/Source/ThirdParty/zstd/zstd.Build.cs
+  - Engine/Source/MowoGame.Target.cs
+  - Engine/Source/MowoServer.Target.cs
+verifiedAt: 3f3a08d31
+---
+
+The build is described by two kinds of C# file, shaped like Unreal Build Tool's. A **module** (`<Module>.Build.cs`) is a unit of code: one folder of sources that builds into one library. A **target** (`<Target>.Target.cs`) is one executable: which module it launches, what kind of binary it is, and the definitions every module in it compiles with.
+
+This page is the reference for both files. For a game project's own module, start with the [programming section](/docs/programming/), which walks through it from a game programmer's side.
+
+## A module
+
+```csharp title="Source/MyGame/MyGame.Build.cs"
+public class MyGame : ModuleRules
+{
+	public MyGame(ReadOnlyTargetRules Target) : base(Target)
+	{
+		bExplicitBuildOnly = true;
+
+		PublicDependencyModuleNames.Add("EngineLoop");
+
+		CompilerFlags.Add("/FIstdafx.h");
+
+		bUseHeaderTool = true;
+		HeaderToolDirectories.Add("Public/MyGame");
+	}
+}
+```
+
+This is the module a template creates <Source path="Templates/TP_Coop/Source/TP_Coop/TP_Coop.Build.cs" />. The file is named after the module, declares a class of the same name deriving from `ModuleRules`, and takes a `ReadOnlyTargetRules` in its constructor. A name C# cannot spell has those characters turned into `_` (`metal-cpp.Build.cs` declares `metal_cpp`). A misnamed class, a rules file that does not compile, and two modules of the same name in one scope stop the build.
+
+### What the folders already say
+
+Folders replace most lines:
+
+| Convention | Effect |
+|---|---|
+| `Public/`, `Classes/` | Public include paths: every module that depends on this one sees them |
+| `Private/` | The sources, and a private include path |
+| `Internal/` | Visible to modules of the same scope only |
+| A folder named after another platform (`Windows/`, `Linux/`, `Mac/`, …) | Skipped when building for a different platform |
+| The module's place in the binaries | `MOWO_BUILD_<MODULE>` (private) and `MW_DYNAMIC_LINK` (public), which switch its export macro |
+| New `.cpp` files | Picked up without editing anything |
+
+Dependencies use short names (`"Core"`, `"EngineLoop"`). An engine library's run-time name stays `MowoEngine.<Name>`, which is what plugin manifests and the module manager use.
+
+### Common fields
+
+| Field | Meaning |
+|---|---|
+| `PublicDependencyModuleNames` | Linked, and their public headers re-exported to this module's dependents |
+| `PrivateDependencyModuleNames` | Linked, headers visible to this module only |
+| `DynamicallyLoadedModuleNames` | Built and staged with this module, never linked; loaded by name at run time. A monolithic build links them in |
+| `PublicIncludePathModuleNames`, `PrivateIncludePathModuleNames` | Headers only, no link |
+| `PublicIncludePaths`, `PrivateIncludePaths`, `InternalIncludePaths`, `PublicSystemIncludePaths` | Extra include folders, relative to the module folder or absolute |
+| `PublicDefinitions`, `PrivateDefinitions` | Preprocessor definitions |
+| `PublicAdditionalLibraries`, `PublicSystemLibraries` | Libraries every consumer links; system libraries by name (`ole32`, `dl`) |
+| `RuntimeDependencies` | Files staged next to every executable that loads the module, each with a ship condition |
+| `CompilerFlags`, `LinkerFlags` | Raw flags |
+| `SourceDirectories`, `ExcludeSourcePatterns` | Compile other folders than `Private/`, or drop sources by name |
+| `bUseUnity`, `UnityChunkSize`, `UnityExclude` | Unity (jumbo) builds |
+| `PrivatePCHHeaderFile` | A precompiled header |
+| `OptimizeCode` | `Default`, `Never` (always debuggable) or `Always` (optimized even in `debug`) |
+| `bUseHeaderTool`, `HeaderToolDirectories` | Run the reflection code generator over these folders (`Public/` when empty) |
+| `ShaderDirectories`, `ShaderArchive`, `AddShaderSourceDirectoryMapping` | Shaders this module compiles; see [Writing a plugin](/docs/programming/plugins/#shaders) |
+| `EmbeddedContentDirectory` | A folder (`Content` by default) linked into the binary as read-only data |
+| `IconPath`, `bIsWindowsApp`, `bIsMacOSBundle` | Executable icon and windowed or bundle form |
+| `bExplicitBuildOnly` | Built only when named with `-t` or needed by something that is |
+| `BinaryType` | Overrides the binary kind the conventions pick |
+| `Category` | Set only where the folder cannot say it; see below |
+
+The rules can read the target through `Target`: `Target.Platform`, `Target.Configuration`, `Target.Type`, `Target.bIsMonolithic`, `Target.bWithOnline`, `Target.bIsServer`, the SDK switches and `Target.GetOption<T>(key, default)` for a custom `-o` option. Helpers name the folders: `EngineDirectory`, `ProjectDirectory`, `BrandingFile(path)`.
+
+## Module types
+
+| `Type` | What it is |
+|---|---|
+| `ModuleType.CPlusPlus` (default) | Compiled from the module's sources. A target's launch module is an executable, a module with no sources is header-only, anything else a shared library (a static one in a monolithic build). |
+| `ModuleType.External` | A prebuilt library: include paths, libraries and runtime files only. |
+
+A library you bring yourself is an external module in your project: a folder with its headers, its libraries and a `.Build.cs` that sets `Type = ModuleType.External`:
+
+```csharp title="Source/ThirdParty/MyLib/MyLib.Build.cs"
+public class MyLib : ModuleRules
+{
+	public MyLib(ReadOnlyTargetRules Target) : base(Target)
+	{
+		Type = ModuleType.External;
+		PublicIncludePaths.Add("Include");
+
+		if (Target.Platform == TargetPlatform.Win64)
+		{
+			PublicAdditionalLibraries.Add("Lib/win-x64/MyLib.lib");
+		}
+	}
+}
+```
+
+A runtime file added with a ship condition decides whether a game package carries it: `Always`, `SteamEnabled`, `DiscordEnabled`, `Upscalers`, `EditorOnly`, or `AutoSubtitles`.
+
+## Module categories
+
+Every engine module has a category, as in Unreal, and the category decides where it may link:
+
+| Category | Engine modules | May link into |
+|---|---|---|
+| Runtime | everything a game ships: `Core`, `Game`, `Physics`, `Audio`, `ArcUI`, … | Anything |
+| Editor | `EditorFramework` and the editor's own modules | Editor targets; never a Game or Server target, never the `release` or `profile` configuration |
+| Game | your project's and your plugins' modules | Anything their dependencies allow |
+
+A build that links a module its target type or configuration rules out fails with the reason, for example `Editor modules never link into a Game target`. An editor-only module of your own is a separate module of an `Editor`-typed plugin; see [Writing a plugin](/docs/programming/plugins/). A module named like a configuration is a rules error.
+
+## Targets
+
+A target file is named `<Target>.Target.cs` and declares `<Target>Target : TargetRules` with a `TargetInfo` constructor. Its fields:
+
+| Field | Meaning |
+|---|---|
+| `Type` | `Game`, `Editor`, `Server`, `Program` or `Test` |
+| `LaunchModuleName` | The module whose binary is the executable |
+| `OutputName` | The executable's name; empty uses the launch module's |
+| `ExtraModuleNames` | Further modules built with the target; an executable here builds beside the launch module |
+| `GlobalDefinitions` | Definitions every module of the target compiles with |
+| `LinkType` | `Default` (monolithic when the build asks for it or the platform is mobile), `Modular` or `Monolithic` |
+| `Configurations`, `Platforms` | Where the target builds; empty is everywhere |
+| `bWithOnline` | `false` leaves the session, replication and transport layer out |
+| `bBuildEnabledPlugins` | Build the enabled engine plugins with the target |
+| `bEnableSteam`, `bEnableDiscord`, `bEnableMowoOnline`, `bEnableTracy`, `bEnableFSR`, `bEnableXeSS`, `bEnableStreamline`, `bEnableAntiLag2` | SDK switches |
+| `bStaticThirdParty` | Link third-party static archives instead of their DLLs where both exist |
+| `LogFloor` | The lowest log level compiled in |
+
+The engine's player is the `MowoGame` module; a project's game target launches it under the project's name. Run `mbt info` to list the targets the build sees.
+
+### A project's targets
+
+A project created from a template carries a game target and an editor target in its `Source/` folder <Source path="Templates/TP_Coop/Source/TP_Coop.Target.cs" />:
+
+```csharp title="Source/MyGame.Target.cs"
+public class MyGameTarget : TargetRules
+{
+	public MyGameTarget(TargetInfo Target) : base(Target)
+	{
+		Type = TargetType.Game;
+		LaunchModuleName = "MowoGame";
+		OutputName = "MyGame";
+		ExtraModuleNames.Add("MyGame");
+	}
+}
+```
+
+The game target launches the engine's player, `MowoGame`, under the project's name, with the game module built beside it. A project's module or target shadows a template's of the same name, so a project scaffolded from a template loads beside it.
+
+## Build options
+
+`-o KEY=VALUE` on `mbt build` passes an option to the rules, and your rules read it through `Target.GetOption<T>(key, default)`. The engine and the engine plugins are prebuilt in the installed build, so engine options (the SDK switches, the link mode) are fixed by the build you installed; what an option changes is how your own modules compile.
+
+## Related
+
+- [Build configurations](/docs/build-tool/configurations/)
+- [Targets and link modes](/docs/shipping/targets-and-modes/) for packages

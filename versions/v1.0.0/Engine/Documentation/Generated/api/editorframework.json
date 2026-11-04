@@ -1,0 +1,1724 @@
+{
+	"name": "MowoEngine.EditorFramework",
+	"displayName": "EditorFramework",
+	"slug": "editorframework",
+	"category": "Editor",
+	"scope": "full",
+	"publicDir": "Engine/Source/Editor/EditorFramework/Public",
+	"headers": [
+		{
+			"path": "Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorExtensionRegistry.h",
+			"include": "EditorFramework/EditorExtensionRegistry.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EEditorMenu",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "The editor's top-level menus a plugin can extend. Entries land at the end of\nthe menu, after a separator, in registration order.",
+					"line": 36,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "File",
+							"signature": "File",
+							"line": 37
+						},
+						{
+							"kind": "enumerator",
+							"name": "Edit",
+							"signature": "Edit",
+							"line": 38
+						},
+						{
+							"kind": "enumerator",
+							"name": "Tools",
+							"signature": "Tools",
+							"line": 39
+						},
+						{
+							"kind": "enumerator",
+							"name": "Window",
+							"signature": "Window",
+							"line": 40
+						},
+						{
+							"kind": "enumerator",
+							"name": "Build",
+							"signature": "Build",
+							"line": 41
+						},
+						{
+							"kind": "enumerator",
+							"name": "Help",
+							"signature": "Help",
+							"line": 42
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FEditorMenuExtension",
+					"namespace": "Mowo",
+					"line": 45,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Id",
+							"signature": "std::string Id",
+							"doc": "Unique across the editor (\"MyPlugin.Reimport\"); a second registration of\nthe same id replaces the first.",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "Menu",
+							"signature": "EEditorMenu Menu = EEditorMenu::Tools",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "Label",
+							"signature": "std::string Label",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "Icon",
+							"signature": "std::string Icon",
+							"doc": "Lucide glyph (Arc/Text/ArcLucideIcons.h). Empty = no icon.",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "Execute",
+							"signature": "std::function<void()> Execute",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "CanExecute",
+							"signature": "std::function<bool()> CanExecute",
+							"doc": "Null = always enabled / never checked.",
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "IsChecked",
+							"signature": "std::function<bool()> IsChecked",
+							"line": 56
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FEditorToolbarExtension",
+					"namespace": "Mowo",
+					"doc": "A button on the level editor toolbar, right of the play controls.",
+					"line": 60,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Id",
+							"signature": "std::string Id",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "Icon",
+							"signature": "std::string Icon",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "Tooltip",
+							"signature": "std::string Tooltip",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "Execute",
+							"signature": "std::function<void()> Execute",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "CanExecute",
+							"signature": "std::function<bool()> CanExecute",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "IsChecked",
+							"signature": "std::function<bool()> IsChecked",
+							"line": 66
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FDetailsCustomizationContext",
+					"namespace": "Mowo",
+					"doc": "What a Details customization sees for one component of the selection.",
+					"line": 70,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Type",
+							"signature": "const TypeDescriptor* Type = nullptr",
+							"line": 71
+						},
+						{
+							"kind": "field",
+							"name": "Component",
+							"signature": "void* Component = nullptr",
+							"line": 72
+						},
+						{
+							"kind": "field",
+							"name": "Entity",
+							"signature": "EntityID Entity = INVALID_ENTITY",
+							"line": 73
+						},
+						{
+							"kind": "field",
+							"name": "ActiveWorld",
+							"signature": "World* ActiveWorld = nullptr",
+							"line": 74
+						},
+						{
+							"kind": "field",
+							"name": "EditComponent",
+							"signature": "std::function<void(const char* label, const std::function<void(void* component)>& mutate)> EditComponent",
+							"doc": "One undoable edit of this component: the editor snapshots it, runs\n`mutate` on the live component, snapshots again and records the pair as\none transaction labelled `label`. Null when the component cannot be\nedited (no scene, a PIE world).",
+							"line": 80
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FDetailsCustomRow",
+					"namespace": "Mowo",
+					"doc": "A row a customization appends under the component's reflected fields.",
+					"line": 84,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Label",
+							"signature": "std::string Label",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "Value",
+							"signature": "std::string Value",
+							"doc": "Read-only text shown when MakeWidget is null or returns nothing.",
+							"line": 87
+						},
+						{
+							"kind": "field",
+							"name": "MakeWidget",
+							"signature": "std::function<Arcf::TSharedPtr<Arcf::AWidget>()> MakeWidget",
+							"doc": "The value column's widget, built every time the Details view rebuilds.",
+							"line": 89
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "IEditorDetailsCustomization",
+					"namespace": "Mowo",
+					"doc": "UE5's IDetailCustomization, sized to what a plugin can reach: rows appended\nto one component type's block, optionally in place of its reflected fields.",
+					"line": 94,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IEditorDetailsCustomization",
+							"signature": "virtual ~IEditorDetailsCustomization() = default",
+							"line": 96
+						},
+						{
+							"kind": "method",
+							"name": "AddRows",
+							"signature": "virtual void AddRows(const FDetailsCustomizationContext& context, std::vector<FDetailsCustomRow>& rows) = 0",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "SuppressesReflectedRows",
+							"signature": "virtual bool SuppressesReflectedRows() const",
+							"doc": "True when the component draws itself entirely and its reflected fields\nmust not also be listed.",
+							"line": 102
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FEditorViewportModeDesc",
+					"namespace": "Mowo",
+					"doc": "A mode on the level viewport's modes bar, after the built-in ones.",
+					"line": 108,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Id",
+							"signature": "std::string Id",
+							"line": 109
+						},
+						{
+							"kind": "field",
+							"name": "Label",
+							"signature": "std::string Label",
+							"line": 110
+						},
+						{
+							"kind": "field",
+							"name": "Icon",
+							"signature": "std::string Icon",
+							"line": 111
+						},
+						{
+							"kind": "field",
+							"name": "Tooltip",
+							"signature": "std::string Tooltip",
+							"line": 112
+						},
+						{
+							"kind": "field",
+							"name": "Mode",
+							"signature": "std::shared_ptr<IEditorViewportMode> Mode",
+							"line": 113
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FEditorExtensionRegistry",
+					"namespace": "Mowo",
+					"line": 116,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FEditorExtensionRegistry& Get()",
+							"static": true,
+							"line": 118
+						},
+						{
+							"kind": "method",
+							"name": "AddMenuEntry",
+							"signature": "void AddMenuEntry(FEditorMenuExtension entry)",
+							"line": 120
+						},
+						{
+							"kind": "method",
+							"name": "RemoveMenuEntry",
+							"signature": "void RemoveMenuEntry(const std::string& id)",
+							"line": 121
+						},
+						{
+							"kind": "method",
+							"name": "AddToolbarButton",
+							"signature": "void AddToolbarButton(FEditorToolbarExtension button)",
+							"line": 123
+						},
+						{
+							"kind": "method",
+							"name": "RemoveToolbarButton",
+							"signature": "void RemoveToolbarButton(const std::string& id)",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "AddDetailsCustomization",
+							"signature": "void AddDetailsCustomization(const std::string& typeName, std::shared_ptr<IEditorDetailsCustomization> customization)",
+							"doc": "Keyed by TypeDescriptor::typeName (\"DestructibleComponent\"). One\ncustomization per type: a second registration replaces the first.",
+							"line": 128
+						},
+						{
+							"kind": "method",
+							"name": "RemoveDetailsCustomization",
+							"signature": "void RemoveDetailsCustomization(const std::string& typeName)",
+							"line": 129
+						},
+						{
+							"kind": "method",
+							"name": "AddViewportMode",
+							"signature": "void AddViewportMode(FEditorViewportModeDesc desc)",
+							"doc": "A second registration of an id replaces the first. Removing the active\nmode switches the viewport back to Select first, which ends any gesture\nthrough the mode's OnExit and drops its settings card.",
+							"line": 134
+						},
+						{
+							"kind": "method",
+							"name": "RemoveViewportMode",
+							"signature": "void RemoveViewportMode(const std::string& id)",
+							"line": 135
+						},
+						{
+							"kind": "method",
+							"name": "MenuEntryIds",
+							"signature": "std::vector<std::string> MenuEntryIds(EEditorMenu menu) const",
+							"doc": "Editor side. Ids, not callbacks: the editor's own widgets capture an id\nand dispatch through these, so they never hold plugin code.",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "ToolbarButtonIds",
+							"signature": "std::vector<std::string> ToolbarButtonIds() const",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "CustomizedTypes",
+							"signature": "std::vector<std::string> CustomizedTypes() const",
+							"line": 141
+						},
+						{
+							"kind": "method",
+							"name": "Describe",
+							"signature": "bool Describe(const std::string& id, std::string& outLabel, std::string& outIcon, std::string& outTooltip) const",
+							"line": 143
+						},
+						{
+							"kind": "method",
+							"name": "Execute",
+							"signature": "bool Execute(const std::string& id) const",
+							"line": 144
+						},
+						{
+							"kind": "method",
+							"name": "CanExecute",
+							"signature": "bool CanExecute(const std::string& id) const",
+							"line": 145
+						},
+						{
+							"kind": "method",
+							"name": "IsChecked",
+							"signature": "bool IsChecked(const std::string& id) const",
+							"line": 146
+						},
+						{
+							"kind": "method",
+							"name": "FindDetailsCustomization",
+							"signature": "IEditorDetailsCustomization* FindDetailsCustomization(const std::string& typeName) const",
+							"line": 148
+						},
+						{
+							"kind": "method",
+							"name": "ViewportModeIds",
+							"signature": "std::vector<std::string> ViewportModeIds() const",
+							"line": 150
+						},
+						{
+							"kind": "method",
+							"name": "FindViewportMode",
+							"signature": "const FEditorViewportModeDesc* FindViewportMode(const std::string& id) const",
+							"line": 151
+						},
+						{
+							"kind": "method",
+							"name": "Revision",
+							"signature": "uint32_t Revision() const",
+							"doc": "Bumped by every add and remove, so a menu or toolbar built from the\nregistry can tell it is stale.",
+							"line": 155
+						},
+						{
+							"kind": "method",
+							"name": "SetChangeHandler",
+							"signature": "void SetChangeHandler(std::function<void()> handler)",
+							"doc": "Installed by the editor. Runs inside every Remove*, before it returns,\nso the editor drops widgets built from plugin code while that code is\nstill loaded.",
+							"line": 162
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorLayoutMigration.h",
+			"include": "EditorFramework/EditorLayoutMigration.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FEditorLayoutMigrationReport",
+					"namespace": "Mowo",
+					"line": 27,
+					"members": [
+						{
+							"kind": "field",
+							"name": "FromVersion",
+							"signature": "int32_t FromVersion = 0",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "ToVersion",
+							"signature": "int32_t ToVersion = 0",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "Regrouped",
+							"signature": "bool Regrouped = false",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "SeamsResized",
+							"signature": "int32_t SeamsResized = 0",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "TabsAdded",
+							"signature": "std::vector<std::string> TabsAdded",
+							"line": 32
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FEditorLayoutMigration",
+					"namespace": "Mowo",
+					"line": 35,
+					"members": [
+						{
+							"kind": "field",
+							"name": "CurrentVersion",
+							"signature": "static constexpr int32_t CurrentVersion = 3",
+							"static": true,
+							"doc": "The layout file version this editor writes. 2 was the pre-redesign frame.",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "ModesWidth",
+							"signature": "static constexpr float ModesWidth = 300.0f",
+							"static": true,
+							"doc": "The main-window column sizes of the redesign (editor-main layout.json).",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "RightColumnWidth",
+							"signature": "static constexpr float RightColumnWidth = 540.0f",
+							"static": true,
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "OutlinerHeight",
+							"signature": "static constexpr float OutlinerHeight = 520.0f",
+							"static": true,
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "BottomDockHeight",
+							"signature": "static constexpr float BottomDockHeight = 440.0f",
+							"static": true,
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "BottomRightWidth",
+							"signature": "static constexpr float BottomRightWidth = 765.0f",
+							"static": true,
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "LegacyModesWidth",
+							"signature": "static constexpr float LegacyModesWidth = 210.0f",
+							"static": true,
+							"doc": "The defaults the version-2 frame wrote; a seam still at one of them was\nnever sized by the user.",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "LegacyRightColumnWidth",
+							"signature": "static constexpr float LegacyRightColumnWidth = 340.0f",
+							"static": true,
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "LegacyBottomDockHeight",
+							"signature": "static constexpr float LegacyBottomDockHeight = 260.0f",
+							"static": true,
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "LegacyBottomRightWidth",
+							"signature": "static constexpr float LegacyBottomRightWidth = 560.0f",
+							"static": true,
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "LegacyOutlinerRatio",
+							"signature": "static constexpr float LegacyOutlinerRatio = 4.0f / 9.0f",
+							"static": true,
+							"line": 53
+						},
+						{
+							"kind": "alias",
+							"name": "FTabFactory",
+							"signature": "using FTabFactory = std::function<std::shared_ptr<Arcf::ADockTab>(const std::string&)>",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Migrate",
+							"signature": "static FEditorLayoutMigrationReport Migrate(Arcf::CDockLayout& layout, int32_t fromVersion, const FTabFactory& tabFor, const std::unordered_set<std::string>& placedElsewhere)",
+							"static": true,
+							"doc": "Migrates in place. tabFor mints a tab the new frame adds by default;\nplacedElsewhere names tabs the user keeps in a sidebar or a floating\nwindow, which are never docked a second time. A layout already at\nCurrentVersion is left alone.",
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "SubtreeHasTab",
+							"signature": "static bool SubtreeHasTab(const std::shared_ptr<Arcf::CDockNode>& node, const std::string& tabId)",
+							"static": true,
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "FindAreaWithTab",
+							"signature": "static Arcf::SDockArea* FindAreaWithTab(const std::shared_ptr<Arcf::CDockNode>& node, const std::string& tabId)",
+							"static": true,
+							"line": 64
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorPanelRegistry.h",
+			"include": "EditorFramework/EditorPanelRegistry.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FEditorPanelDesc",
+					"namespace": "Mowo",
+					"line": 24,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Kind",
+							"signature": "std::string Kind",
+							"doc": "Tab kind / FAssetDocument::EditorType, e.g. \"Sequencer\".",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "TitleLabel",
+							"signature": "std::string TitleLabel",
+							"doc": "Human titlebar label (\"Level Sequence\"). Empty = the kind verbatim.",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "GetSurface",
+							"signature": "std::function<Arcf::TSharedPtr<Arcf::AWidget>()> GetSurface",
+							"doc": "The panel's dock surface for an ACTIVE document tab. Read at dispatch\ntime (surfaces are built after registration); null or a null result =\nthe default document surface.",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "OnDocumentClosed",
+							"signature": "std::function<void(const std::string& path)> OnDocumentClosed",
+							"doc": "Called when a document tab of this kind closes. Null = nothing to do.\nOne kind may fan out to several panels (a .mmodel document feeds both\nmesh editors) — that stays inside the panel's own closure.",
+							"line": 39
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FEditorPanelRegistry",
+					"namespace": "Mowo",
+					"doc": "Find hands out a pointer INTO the storage and the callers dispatch through\nit — `desc->OnDocumentClosed(path)`, `desc->GetSurface()`. A vector made\nthat pointer a liability twice over: a registration after the pointer was\ntaken reallocated and left it dangling (a plugin registering its panels the\nfirst time a document of its kind closes is exactly that shape), and\nreplacing a descriptor in place destroyed the very std::function running\nthrough the old pointer. So descriptors live in a deque — push_back never\nmoves the elements already handed out — and a re-registration retires the\nold entry instead of overwriting it, which keeps every pointer Find ever\nreturned readable for the life of the registry. Retired entries are bounded\nby the number of re-registrations and never freed on purpose.",
+					"line": 53,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "void Register(FEditorPanelDesc desc)",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "const FEditorPanelDesc* Find(const std::string& kind) const",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "Count",
+							"signature": "size_t Count() const",
+							"line": 78
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FEditorDockPanelInstance",
+					"namespace": "Mowo",
+					"doc": "One live dock-panel instance. The surface is what the tab hosts; the hooks\nare what the shell needs to keep an instance the engine does not own as a\nmember alive and answerable — a Tick nothing else calls for it, and the\nstate it must carry across a restart.",
+					"line": 102,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Surface",
+							"signature": "Arcf::TSharedPtr<Arcf::AWidget> Surface",
+							"line": 103
+						},
+						{
+							"kind": "field",
+							"name": "Tick",
+							"signature": "std::function<void()> Tick",
+							"line": 104
+						},
+						{
+							"kind": "field",
+							"name": "CaptureState",
+							"signature": "std::function<std::string()> CaptureState",
+							"line": 105
+						},
+						{
+							"kind": "field",
+							"name": "ApplyState",
+							"signature": "std::function<void(const std::string&)> ApplyState",
+							"line": 106
+						},
+						{
+							"kind": "field",
+							"name": "SetLocked",
+							"signature": "std::function<void(bool)> SetLocked",
+							"line": 107
+						},
+						{
+							"kind": "field",
+							"name": "IsLocked",
+							"signature": "std::function<bool()> IsLocked",
+							"line": 108
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FEditorDockPanelDesc",
+					"namespace": "Mowo",
+					"doc": "A dock panel that can exist more than once. Separate from\nFEditorPanelDesc above, which describes an asset-editor DOCUMENT kind:\nthis one describes a docked tool panel and the shape the audit's R9 asked\nfor — a declared ceiling and a factory, instead of one by-value member\nreached through a hardcoded id.",
+					"line": 116,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Kind",
+							"signature": "std::string Kind",
+							"doc": "Tab kind, e.g. \"ContentBrowser\". Instance 0 is spelled exactly this;\nextras are \"<Kind>#<n>\".",
+							"line": 119
+						},
+						{
+							"kind": "field",
+							"name": "Title",
+							"signature": "std::string Title",
+							"doc": "Base title. Extras append their 1-based instance number.",
+							"line": 122
+						},
+						{
+							"kind": "field",
+							"name": "Icon",
+							"signature": "std::string Icon",
+							"doc": "Lucide glyph for the Window menu row.",
+							"line": 125
+						},
+						{
+							"kind": "field",
+							"name": "Neighbour",
+							"signature": "std::string Neighbour",
+							"doc": "Tab an extra instance docks beside when the layout has no home for it.\nEmpty = the kind itself.",
+							"line": 129
+						},
+						{
+							"kind": "field",
+							"name": "MaxInstances",
+							"signature": "int32_t MaxInstances = 1",
+							"doc": "1 = the singleton every dock panel used to be, and the Window menu\nnever offers a second one. A kind raises this only once a second\ninstance is genuinely driven end to end — a tab that exists but is\nnever ticked or never rendered is worse than no command at all.",
+							"line": 135
+						},
+						{
+							"kind": "field",
+							"name": "CreatesPrimary",
+							"signature": "bool CreatesPrimary = true",
+							"doc": "Instance 0 comes from Create as well. True for every panel a plugin\nregisters — the shell has no member for it, so without this the kind\ncould only ever have had \"extra\" instances of a first one that never\nexists. The editor's own dock panels build instance 0 as a shell member\nand set it false.",
+							"line": 142
+						},
+						{
+							"kind": "field",
+							"name": "Create",
+							"signature": "std::function<FEditorDockPanelInstance(int32_t instanceIndex)> Create",
+							"line": 144
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FEditorDockPanelRegistry",
+					"namespace": "Mowo",
+					"doc": "Same stable-address contract as the registry above: Find hands out a\npointer into the storage and callers dispatch through it, so descriptors\nlive in a deque and a re-registration retires the old entry rather than\ndestroying a std::function that may be running.\n\nThe instance is defined in the EditorFramework library. It used to be a\nfunction-local static in this header, which is one instance per image that\nincludes it: a plugin DLL would have registered into its own copy and the\neditor would never have seen the panel.",
+					"line": 156,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FEditorDockPanelRegistry& Get()",
+							"static": true,
+							"line": 158
+						},
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "void Register(FEditorDockPanelDesc desc)",
+							"line": 160
+						},
+						{
+							"kind": "method",
+							"name": "Unregister",
+							"signature": "void Unregister(const std::string& kind)",
+							"doc": "A plugin calls this from its ShutdownModule. The factory is code inside\nthe plugin's DLL, so it has to be destroyed while that DLL is still\nmapped — a std::function destroyed after the unload calls into freed\npages. The entry itself is retired, not erased, so a pointer Find handed\nout earlier stays readable; its Create is simply empty.\n\nLive panels go first, through the handler the editor installs: their\nwidgets, and the shared-pointer control blocks that own them, were\nallocated by the plugin's code too.",
+							"line": 183
+						},
+						{
+							"kind": "method",
+							"name": "SetUnregisterHandler",
+							"signature": "void SetUnregisterHandler(std::function<void(const std::string& kind)> handler)",
+							"doc": "Installed by the editor: closes and releases every live instance of a\nkind that is about to be unregistered.",
+							"line": 200
+						},
+						{
+							"kind": "method",
+							"name": "Revision",
+							"signature": "uint32_t Revision() const",
+							"doc": "Bumped by every registration, so a menu built from All() can tell that a\nplugin enabled after startup added a panel it does not list yet.",
+							"line": 206
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "const FEditorDockPanelDesc* Find(const std::string& kind) const",
+							"line": 210
+						},
+						{
+							"kind": "method",
+							"name": "All",
+							"signature": "std::vector<const FEditorDockPanelDesc*> All() const",
+							"line": 220
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorViewportMode.h",
+			"include": "EditorFramework/EditorViewportMode.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FEditorViewportModeContext",
+					"namespace": "Mowo",
+					"line": 26,
+					"members": [
+						{
+							"kind": "field",
+							"name": "ActiveScene",
+							"signature": "Scene* ActiveScene = nullptr",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "ActiveWorld",
+							"signature": "World* ActiveWorld = nullptr",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "Selection",
+							"signature": "const std::vector<EntityID>* Selection = nullptr",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "SelectionPrimary",
+							"signature": "EntityID SelectionPrimary = INVALID_ENTITY",
+							"line": 31
+						},
+						{
+							"kind": "field",
+							"name": "CameraNavigating",
+							"signature": "bool CameraNavigating = false",
+							"doc": "RMB/MMB held: the author is flying or panning, not editing.",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "EditComponent",
+							"signature": "std::function<void(const char* label, EntityID entity, ComponentID componentId, const std::function<void(void* component)>& mutate)> EditComponent",
+							"doc": "One undoable edit of a component: snapshot, `mutate` on the live\ncomponent, snapshot, recorded as one transaction. Null in a PIE world.",
+							"line": 38
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FEditorViewportPointer",
+					"namespace": "Mowo",
+					"line": 41,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Button",
+							"signature": "int32_t Button = 0",
+							"doc": "0 left, 1 right, 2 middle.",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "LocalPos",
+							"signature": "Vec2 LocalPos = Vec2(0.0f, 0.0f)",
+							"doc": "Viewport-local pixels, and the pane size in the same space.",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "ViewportSize",
+							"signature": "Vec2 ViewportSize = Vec2(0.0f, 0.0f)",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "Delta",
+							"signature": "Vec2 Delta = Vec2(0.0f, 0.0f)",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "Wheel",
+							"signature": "float Wheel = 0.0f",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "Ctrl",
+							"signature": "bool Ctrl = false",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "Shift",
+							"signature": "bool Shift = false",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "Alt",
+							"signature": "bool Alt = false",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "RayOrigin",
+							"signature": "Vec3 RayOrigin = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 55
+						},
+						{
+							"kind": "field",
+							"name": "RayDirection",
+							"signature": "Vec3 RayDirection = Vec3(0.0f, 0.0f, 1.0f)",
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "ClosestEntity",
+							"signature": "std::function<EntityID()> ClosestEntity",
+							"doc": "Scene hits along the ray, resolved on first ask — most modes only need\nthe ray, and a sweep per pixel of cursor motion is not free.",
+							"line": 60
+						},
+						{
+							"kind": "field",
+							"name": "ClosestHitPoint",
+							"signature": "std::function<bool(Vec3& outWorld)> ClosestHitPoint",
+							"line": 61
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "IEditorViewportMode",
+					"namespace": "Mowo",
+					"line": 64,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IEditorViewportMode",
+							"signature": "virtual ~IEditorViewportMode() = default",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "OnEnter",
+							"signature": "virtual void OnEnter(const FEditorViewportModeContext&)",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "OnExit",
+							"signature": "virtual void OnExit(const FEditorViewportModeContext&)",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "OnTick",
+							"signature": "virtual void OnTick(const FEditorViewportModeContext&, float)",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "OnPointerDown",
+							"signature": "virtual bool OnPointerDown(const FEditorViewportModeContext&, const FEditorViewportPointer&)",
+							"doc": "True when the mode consumed the event. An unconsumed press falls through\nto the viewport's own camera handling.",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "OnPointerMove",
+							"signature": "virtual bool OnPointerMove(const FEditorViewportModeContext&, const FEditorViewportPointer&)",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "OnPointerUp",
+							"signature": "virtual bool OnPointerUp(const FEditorViewportModeContext&, const FEditorViewportPointer&)",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "OnDrawOverlay",
+							"signature": "virtual void OnDrawOverlay(const FEditorViewportModeContext&, DebugDraw&)",
+							"doc": "World-space overlay for this frame, drawn with the viewport's debug lines.",
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "BuildSettingsPanel",
+							"signature": "virtual Arcf::TSharedPtr<Arcf::AWidget> BuildSettingsPanel()",
+							"doc": "The card the viewport shows while the mode is active. Built on entry.",
+							"line": 92
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Editor/EditorFramework/Public/EditorFramework/HelpDialogHost.h",
+			"include": "EditorFramework/HelpDialogHost.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FHelpDialogLayer",
+					"namespace": "Mowo",
+					"bases": "public Arcf::ACompoundWidget",
+					"line": 12,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Show",
+							"signature": "void Show(FHelpDialogParts parts)",
+							"line": 14
+						},
+						{
+							"kind": "method",
+							"name": "Close",
+							"signature": "void Close()",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "IsOpen",
+							"signature": "bool IsOpen() const",
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "ComputeDesiredSize",
+							"signature": "Arcf::ArcVec2 ComputeDesiredSize(float scale) const override",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "ArrangeChildren",
+							"signature": "void ArrangeChildren(const Arcf::CGeometry& geo) override",
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "OnPaint",
+							"signature": "int32_t OnPaint(const Arcf::CArcPaintArgs& args, const Arcf::CGeometry& geo, Arcf::CArcUIRenderer& renderer, int32_t layerId) const override",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "OnMouseButtonDown",
+							"signature": "Arcf::CReply OnMouseButtonDown(const Arcf::CGeometry& geo, const Arcf::CPointerEvent& event) override",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "OnMouseButtonUp",
+							"signature": "Arcf::CReply OnMouseButtonUp(const Arcf::CGeometry& geo, const Arcf::CPointerEvent& event) override",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "OnMouseWheel",
+							"signature": "Arcf::CReply OnMouseWheel(const Arcf::CGeometry& geo, const Arcf::CPointerEvent& event) override",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "OnKeyDown",
+							"signature": "Arcf::CReply OnKeyDown(const Arcf::CGeometry& geo, const Arcf::CKeyEvent& event) override",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "OwnsKeyboard",
+							"signature": "bool OwnsKeyboard() const override",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "CanRetainPaint",
+							"signature": "bool CanRetainPaint() const override",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "GetTypeName",
+							"signature": "const char* GetTypeName() const override",
+							"line": 34
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Editor/EditorFramework/Public/EditorFramework/HelpDialogs.h",
+			"include": "EditorFramework/HelpDialogs.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FHelpBuildInfo",
+					"namespace": "Mowo",
+					"line": 15,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Product",
+							"signature": "std::string Product",
+							"line": 16
+						},
+						{
+							"kind": "field",
+							"name": "Version",
+							"signature": "std::string Version",
+							"line": 17
+						},
+						{
+							"kind": "field",
+							"name": "Build",
+							"signature": "std::string Build",
+							"line": 18
+						},
+						{
+							"kind": "field",
+							"name": "Renderer",
+							"signature": "std::string Renderer",
+							"line": 19
+						},
+						{
+							"kind": "field",
+							"name": "Gpu",
+							"signature": "std::string Gpu",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "Driver",
+							"signature": "std::string Driver",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "LogsPath",
+							"signature": "std::string LogsPath",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "Platform",
+							"signature": "std::string Platform",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "Cpu",
+							"signature": "std::string Cpu",
+							"line": 24
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FHelpLicenseFile",
+					"namespace": "Mowo",
+					"line": 27,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "Text",
+							"signature": "std::string Text",
+							"line": 29
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FHelpLicense",
+					"namespace": "Mowo",
+					"line": 32,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "Version",
+							"signature": "std::string Version",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "License",
+							"signature": "std::string License",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "Files",
+							"signature": "std::vector<FHelpLicenseFile> Files",
+							"line": 36
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FHelpDialogParts",
+					"namespace": "Mowo",
+					"line": 39,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Icon",
+							"signature": "std::string Icon",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "Title",
+							"signature": "std::string Title",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "Subtitle",
+							"signature": "std::string Subtitle",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "Width",
+							"signature": "float Width = 560.0f",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "Body",
+							"signature": "Arcf::TSharedPtr<Arcf::AWidget> Body",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "InitialFocus",
+							"signature": "Arcf::TSharedPtr<Arcf::AWidget> InitialFocus",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "FooterLeft",
+							"signature": "std::vector<Arcf::TSharedPtr<Arcf::AWidget>> FooterLeft",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "FooterRight",
+							"signature": "std::vector<Arcf::TSharedPtr<Arcf::AWidget>> FooterRight",
+							"line": 47
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FHelpDialogs",
+					"namespace": "Mowo",
+					"line": 50,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kContactAddress",
+							"signature": "static constexpr const char* kContactAddress = \"contact@mowogames.com\"",
+							"static": true,
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "FillPlatform",
+							"signature": "static void FillPlatform(FHelpBuildInfo& info)",
+							"static": true,
+							"line": 54
+						},
+						{
+							"kind": "method",
+							"name": "Summary",
+							"signature": "static std::string Summary(const FHelpBuildInfo& info)",
+							"static": true,
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "PercentEncode",
+							"signature": "static std::string PercentEncode(const std::string& text)",
+							"static": true,
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "MailtoUrl",
+							"signature": "static std::string MailtoUrl(const FHelpBuildInfo& info, const std::string& description)",
+							"static": true,
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "CreditsText",
+							"signature": "static std::string CreditsText()",
+							"static": true,
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "ParseLicenses",
+							"signature": "static std::vector<FHelpLicense> ParseLicenses(const std::string& data)",
+							"static": true,
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "Licenses",
+							"signature": "static const std::vector<FHelpLicense>& Licenses()",
+							"static": true,
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "SendBugReport",
+							"signature": "static bool SendBugReport(const FHelpBuildInfo& info, const std::string& description)",
+							"static": true,
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "ShowLogsFolder",
+							"signature": "static bool ShowLogsFolder(const FHelpBuildInfo& info)",
+							"static": true,
+							"line": 65
+						},
+						{
+							"kind": "method",
+							"name": "BuildAbout",
+							"signature": "static FHelpDialogParts BuildAbout(const FHelpBuildInfo& info, std::function<void()> onClose)",
+							"static": true,
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "BuildBugReport",
+							"signature": "static FHelpDialogParts BuildBugReport(const FHelpBuildInfo& info, std::function<void()> onClose)",
+							"static": true,
+							"line": 68
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Editor/EditorFramework/Public/EditorFramework/McpServer.h",
+			"include": "EditorFramework/McpServer.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FMcpJson",
+					"namespace": "Mowo",
+					"doc": "A JSON value: a tool's arguments, its input schema, its result content.\nCopies are deep. A key that is missing, or holds another type, reads as the\nfallback, so a handler never throws on a malformed call.",
+					"line": 48,
+					"members": [
+						{
+							"kind": "method",
+							"name": "FMcpJson",
+							"signature": "FMcpJson()",
+							"line": 50
+						},
+						{
+							"kind": "method",
+							"name": "FMcpJson",
+							"signature": "FMcpJson(const FMcpJson& other)",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FMcpJson& operator=(const FMcpJson& other)",
+							"line": 52
+						},
+						{
+							"kind": "method",
+							"name": "~FMcpJson",
+							"signature": "~FMcpJson()",
+							"line": 53
+						},
+						{
+							"kind": "method",
+							"name": "Object",
+							"signature": "static FMcpJson Object()",
+							"static": true,
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "Array",
+							"signature": "static FMcpJson Array()",
+							"static": true,
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Parse",
+							"signature": "static FMcpJson Parse(const std::string& text)",
+							"static": true,
+							"doc": "JSON text in; text that does not parse gives a null value.",
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "Dump",
+							"signature": "std::string Dump() const",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "IsNull",
+							"signature": "bool IsNull() const",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "Contains",
+							"signature": "bool Contains(const std::string& key) const",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "FMcpJson Get(const std::string& key) const",
+							"doc": "The member `key` of an object, null when there is none.",
+							"line": 66
+						},
+						{
+							"kind": "method",
+							"name": "Value",
+							"signature": "std::string Value(const std::string& key, const std::string& fallback) const",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "Value",
+							"signature": "std::string Value(const std::string& key, const char* fallback) const",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "Value",
+							"signature": "double Value(const std::string& key, double fallback) const",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "Value",
+							"signature": "int64_t Value(const std::string& key, int64_t fallback) const",
+							"line": 71
+						},
+						{
+							"kind": "method",
+							"name": "Value",
+							"signature": "int32_t Value(const std::string& key, int32_t fallback) const",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "Value",
+							"signature": "bool Value(const std::string& key, bool fallback) const",
+							"line": 73
+						},
+						{
+							"kind": "method",
+							"name": "Impl",
+							"signature": "FImpl* Impl() const",
+							"line": 76
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMcpToolResult",
+					"namespace": "Mowo",
+					"line": 84,
+					"members": [
+						{
+							"kind": "field",
+							"name": "IsError",
+							"signature": "bool IsError = false",
+							"line": 85
+						},
+						{
+							"kind": "field",
+							"name": "Pending",
+							"signature": "bool Pending = false",
+							"line": 86
+						},
+						{
+							"kind": "field",
+							"name": "Content",
+							"signature": "FMcpJson Content = FMcpJson::Array()",
+							"line": 87
+						},
+						{
+							"kind": "method",
+							"name": "Text",
+							"signature": "static FMcpToolResult Text(const std::string& text)",
+							"static": true,
+							"line": 89
+						},
+						{
+							"kind": "method",
+							"name": "Error",
+							"signature": "static FMcpToolResult Error(const std::string& text)",
+							"static": true,
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "Json",
+							"signature": "static FMcpToolResult Json(const FMcpJson& value)",
+							"static": true,
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "Image",
+							"signature": "static FMcpToolResult Image(const std::vector<uint8_t>& png, const std::string& caption)",
+							"static": true,
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "Wait",
+							"signature": "static FMcpToolResult Wait()",
+							"static": true,
+							"line": 93
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "EMcpToolAccess",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "What a tool can do to the project, for Editor Preferences › AI agents\n\"Commands agents may run\": read only, read and edit without deleting, or\neverything (deleting, running scripts and tests, quitting the editor).",
+					"line": 99,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Read",
+							"signature": "Read = 0",
+							"line": 100
+						},
+						{
+							"kind": "enumerator",
+							"name": "Edit",
+							"signature": "Edit",
+							"line": 101
+						},
+						{
+							"kind": "enumerator",
+							"name": "Full",
+							"signature": "Full",
+							"line": 102
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FMcpTool",
+					"namespace": "Mowo",
+					"line": 105,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Name",
+							"signature": "std::string Name",
+							"line": 106
+						},
+						{
+							"kind": "field",
+							"name": "Description",
+							"signature": "std::string Description",
+							"line": 107
+						},
+						{
+							"kind": "field",
+							"name": "InputSchema",
+							"signature": "FMcpJson InputSchema = FMcpJson::Object()",
+							"line": 108
+						},
+						{
+							"kind": "field",
+							"name": "Access",
+							"signature": "EMcpToolAccess Access = EMcpToolAccess::Full",
+							"doc": "A tool that does not say is treated as able to do anything.",
+							"line": 110
+						},
+						{
+							"kind": "field",
+							"name": "Handler",
+							"signature": "std::function<FMcpToolResult(const FMcpJson& args, uint32_t frame)> Handler",
+							"doc": "`frame` counts the calls of one invocation from 0, so a Pending tool\nknows how long it has been waiting.",
+							"line": 114
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMcpToolRegistry",
+					"namespace": "Mowo",
+					"line": 117,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FMcpToolRegistry& Get()",
+							"static": true,
+							"line": 119
+						},
+						{
+							"kind": "method",
+							"name": "Register",
+							"signature": "void Register(FMcpTool tool)",
+							"doc": "A tool of the same name is replaced.",
+							"line": 122
+						},
+						{
+							"kind": "method",
+							"name": "Unregister",
+							"signature": "void Unregister(const std::string& name)",
+							"line": 123
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "bool Find(const std::string& name, FMcpTool& out) const",
+							"line": 125
+						},
+						{
+							"kind": "method",
+							"name": "Snapshot",
+							"signature": "std::vector<FMcpTool> Snapshot() const",
+							"line": 126
+						},
+						{
+							"kind": "method",
+							"name": "Count",
+							"signature": "size_t Count() const",
+							"line": 127
+						},
+						{
+							"kind": "method",
+							"name": "Schema",
+							"signature": "static FMcpJson Schema(const std::vector<std::pair<std::string, std::string>>& properties)",
+							"static": true,
+							"doc": "A one-property-per-argument object schema: {\"name\": \"string\", ...};\nevery listed property is required unless its type ends in '?'.",
+							"line": 131
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FMcpPathPolicy",
+					"namespace": "Mowo",
+					"doc": "Where a tool may touch the disk. A path an agent sends is resolved against\nthe project root and must stay inside it after `..` is folded AND after\nevery symlink or junction on the way is followed; a network path is refused\nbefore anything resolves it, since merely opening \\\\host\\share hands that\nhost the user's NTLM hash. `extensions` (lower-case, with the dot) limits\nwhat the file may be, so a screenshot cannot overwrite an INI or the\npreferences that hold the access level; empty allows any.",
+					"line": 145,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Confine",
+							"signature": "static bool Confine(const std::filesystem::path& root, const std::string& path, const std::vector<std::string>& extensions, std::filesystem::path& out, std::string& error)",
+							"static": true,
+							"line": 147
+						}
+					]
+				}
+			],
+			"free": []
+		}
+	]
+}

@@ -1,0 +1,79 @@
+---
+title: Editor automation
+sidebarTitle: Automation
+description: Drive the editor from a script for batch edits, reproduction steps, checks and screenshots.
+order: 23
+tracks:
+  - Engine/Source/Editor/MowoEditor/Private/Automation/EditorAutomation.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Automation/AutomationReflection.cpp
+  - Engine/Source/Editor/MowoEditor/Private/Mcp/EditorMcpTools.cpp
+verifiedAt: 2991e0c70
+---
+
+The editor can be driven by a script instead of by hand, for repeatable work: batch edits, reproduction steps, checks and screenshots.
+
+## Editor scripts
+
+An editor script is a list of commands that run through the editor's real operations: the same level, undo history, asset manager, Play and screen capture the UI uses. A script edit is an ordinary, undoable editor edit.
+
+Run a script in a live editor through the [MCP server](/docs/editor/mcp-server/)'s `run_script` tool. The editor executable has no command-line switch for scripts.
+
+### Script format
+
+One command per line. `#` starts a comment. Tokens are separated by spaces; wrap a token in double quotes to include spaces. Commands that span frames, such as `play`, `wait` and `screenshot`, yield to the editor's frame loop and resume, so Play and GPU readback happen at valid points. A run reports success when every command and assertion passed.
+
+```text title="rock.txt"
+# Spawn an actor, position it, verify, and capture a figure
+new-scene
+spawn AStaticMeshActor Rock
+set MeshRenderer.meshType sphere
+set Transform.position 0,1,0
+set Transform.position.y 2.5
+assert-prop Transform.position.y 2.5
+assert-exists Rock
+focus-panel Details
+screenshot-ui Saved/Docs/rock_details.png
+save-scene Content/Demos/Rock.mmap
+quit
+```
+
+### Common commands
+
+| Command | Arguments | Effect |
+| --- | --- | --- |
+| `echo` | `<text…>` | Log a line |
+| `new-scene`, `open-scene`, `save-scene` | `[path]` | Create, open or save a level |
+| `spawn` | `<class> [name]` | Spawn an actor; it becomes the current actor |
+| `select`, `select-add`, `delete` | `<name>` | Select, add to the selection, or delete an actor |
+| `set` | `<Component.field> <value>` | Set a property on the current actor; `Script.<field>`, `Script:<component>.<field>` and `Vars.<field>` set a Wolang field, a Wolang component's field and a Visual Script variable as a Details edit does (an actor reference by the actor's name) |
+| `assert-prop` | `<Component.field> <value>` | Fail on mismatch; numbers compare with a tolerance; the same script paths read script variables |
+| `assert-exists`, `assert-not-exists` | `<name>` | Fail unless the actor does (not) exist |
+| `cvar` | `<name> <value>` | Set a console variable |
+| `console` | `<line…>` | Run a console line |
+| `open-asset`, `open-refs` | `<path>` | Open an asset's editor, or the Reference Viewer on it |
+| `import` | `<source> [folder]` | Import an asset |
+| `run` | `<build\|cook\|package\|shaders> [args…]` | Run `mbt` with those arguments |
+| `play`, `play-start`, `play-stop` | `[frames]` | Play for N frames, or start and stop Play |
+| `wait` | `<frames>` | Idle N frames |
+| `wait-loaded` | `<frames>` | Idle until everything the open level needs has finished loading (its models, materials and textures), failing after N frames. A large level's first open can take minutes, which no fixed `wait` covers. When the level settles the log line gives the seconds since the last `open-scene`, the working set and the VRAM in use |
+| `camera-set`, `camera-frame` | `<x y z fx fy fz>` / `[name]` | Place the viewport camera, or frame an actor or the whole level |
+| `screenshot` | `<path> [scale\|WxH]` | Capture the viewport's 3D image |
+| `screenshot-ui` | `<path>` | Capture the whole editor window |
+| `hires-screenshot` | `<folder> <multiplier> [options]` | The High Resolution Screenshot capture |
+| `focus-panel`, `layout` | `<tabId>` / `<name>` | Bring a panel forward, or apply a saved layout |
+| `click`, `right-click`, `hover`, `key` | `<x> <y>` / `<chord>` | Drive the mouse and keyboard through the editor's real input routing |
+| `pie-key`, `pie-mouse` | `<key>` / `<left\|right\|middle>` `[tap\|down\|up]` | Press a key or mouse button in the running Play session through the game's own input manager; `tap` holds it two frames, `down` and `up` let a script hold it across `wait`s. Names are the ones `Input.ini` uses (`E`, `Space`, `Left Shift`) |
+| `pie-look` | `<dx> <dy>` | Feed one mouse movement (pixels) to the running Play session |
+| `pie-call` | `<Class> <Function> [actor]` | Call a reflected function that takes nothing or one actor on a play-world actor by name, for example `pie-call MInteractionStatics TriggerInteract Door` to run the door's `OnInteract`; a `false` result fails the step |
+| `assert-frame-time` | `<maxMs> <frames> [until-stage]` | Fail if any of N frames took longer than `maxMs`; with `until-stage`, keep watching until that staged state is live, and fail if it never goes live |
+| `assert-cb-tiles` | | Fail if a laid-out Content Browser tile is taller than the tallest tile asks to be, or a level tile shows the failed thumbnail |
+| `browse-content` | `<folder> [scrollPx] [tileWidth]` | Open a folder in the Content Browser, scroll its grid and set its tile size |
+| `save-thumbnail` | `<asset> <png> [frames]` | Write the thumbnail an asset's Content Browser tile shows to a PNG, waiting up to N frames (600 by default) for it to be drawn |
+| `refresh-thumbnail` | `<asset>` | Draw an asset's thumbnail again, as **Refresh Thumbnail** does |
+| `mark-validation`, `assert-validation-clean` | | Remember the graphics debug layer's error count, then fail if it has grown since. Needs the debug layer (`--gpu-validation`) |
+| `quit` | | End the script with success |
+
+`set` and `assert-prop` take a `Component.field` path resolved through the same reflection tables the Details panel uses. The component matches by display name (`Transform`) or type name (`TransformComponent`), and the field by its C++ name or serialized key. Vectors take a comma list (`1,2,3`) or one component (`Transform.position.x`).
+
+A failed assertion marks the run failed but the script continues, so one run reports every assertion. A refused command (no level, bad path, unknown component) stops the script at once.
+
