@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetEventCodec.h
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h
-verifiedAt: 5922e6e5e
+verifiedAt: 7bc02f92d
 ---
 
 Replication keeps state in sync. RPCs and events carry the other kind of traffic: "this happened". A client asks the host to fire, the host checks the request, and the host tells every peer. RPCs and gameplay events ride the same packet type, so they share one authority gate and one set of rate limits.
@@ -115,6 +115,10 @@ The host uses `SendRpcToAllClients` or `SendRpcToClient` for the other direction
 <Callout type="engine">
 While a session is running, `FNetSession` owns the RPC receiver. For component RPCs it looks up the entity and calls `DispatchComponentRpcByIndex` itself, then runs any fallback you installed with `SetRpcFallback`. You do not need to install a receiver of your own; the sandbox uses the fallback to turn a received `ServerFire` into a `MulticastFire`.
 </Callout>
+
+## Script actor RPCs
+
+A Wolang actor declares RPCs with `@Server`, `@Client` and `@Multicast` (`(unreliable)` for a droppable one) and the engine sends them over the script actor lane, a reserved method id that sits beside the named actor lane. The session grants a client that lane for an actor it owns only; the script layer then requires the named method to be declared `@Server`, the right number and kind of arguments, no more than `wolang.RpcMaxBytes` bytes and no more than `wolang.RpcRate` calls a second per method. A `@Client` or `@Multicast` method named by a client is refused. An inbound call runs under `wolang.CallBudget`. A script makes the call with `CallRpc`; see [Wolang scripting](/docs/gameplay/wolang-scripting/#replication).
 
 ## The authority gate
 

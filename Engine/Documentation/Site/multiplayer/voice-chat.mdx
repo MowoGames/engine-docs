@@ -14,7 +14,7 @@ sources:
   - Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceAdpcmCodec.h
   - Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceSettings.h
   - Engine/Source/Runtime/Networking/Public/Networking/NetworkTypes.h
-verifiedAt: 5922e6e5e
+verifiedAt: 500cf5785
 ---
 
 The `VoiceChat` engine module adds in-game voice to a session: microphone capture, encoding, a per-speaker jitter buffer and positional playback. It uses the session's existing connection on its own `Voice` channel, so there is no second socket to open or NAT to punch.
@@ -70,6 +70,8 @@ Opus binaries are vendored for **Windows x64 and macOS** only, so Linux builds r
 `SetSelfMuted(true)` silences the outgoing stream in either mode. `SetPeerMuted`, `SetPeerVolume` and `SetMasterVoiceVolume` control what you hear.
 
 With `voice.FollowPlatformMute` on (the default), muting yourself in Discord closes the gate, and deafening there also silences incoming voice. This state is kept apart from in-game mute: unmuting in Discord never unmutes a player who also muted in the game.
+
+While the player is in a Discord lobby call ([Discord Social](/docs/multiplayer/discord-social/)), the in-game microphone is kept off as well, so one voice is not sent twice; `voice.MuteDuringPlatformCall` turns that off for a game that wants both.
 
 ### Capture processing
 
@@ -158,6 +160,7 @@ Every player-facing control is a console variable, read once per frame. That let
 | `voice.OpusFec` | `true` | Inband FEC, used only while redundancy is off |
 | `voice.OpusDtx` | `true` | Send nothing through silence |
 | `voice.FollowPlatformMute` | `true` | Follow Discord mute and deafen |
+| `voice.MuteDuringPlatformCall` | `true` | Keep the in-game microphone off during a Discord call |
 | `voice.BytesPerSecond` | `12000` | Hard outgoing cap per client. Frames over it are dropped, never queued. |
 
 Game code that links the module can use `FVoiceSettings::Read()` and `FVoiceSettings::Apply()` <Source symbol="FVoiceSettings" /> for a typed view of the same values, and `FVoiceSettings::IsOpusAvailable()` to grey out the Opus option where it is missing <Source symbol="FVoiceSettings" />.
@@ -169,5 +172,5 @@ Relayed voice is charged against each client's replication byte budget up to `ne
 ## Related
 
 - [Replication](/docs/multiplayer/replication/#relevancy-and-budgets) for the shared byte budget.
-- [Online platforms](/docs/multiplayer/online-platforms/) for Discord.
+- [Online platforms](/docs/multiplayer/online-platforms/) and [Discord Social](/docs/multiplayer/discord-social/) for Discord.
 - API: [`FVoiceChatSystem`](/docs/api/voicechat/fvoicechatsystem/), [`FVoiceSettings`](/docs/api/voicechat/fvoicesettings/), [`FVoiceOpusCodec`](/docs/api/voicechat/fvoiceopuscodec/), [`FVoiceAdpcmCodec`](/docs/api/voicechat/fvoiceadpcmcodec/), [`FVoiceSpeakerInfo`](/docs/api/voicechat/fvoicespeakerinfo/).

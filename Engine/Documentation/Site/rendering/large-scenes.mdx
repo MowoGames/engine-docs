@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/Renderer/Public/Renderer/GeometryPool.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/MeshletPool.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/ImageDecode.h
-verifiedAt: 457b4317b
+verifiedAt: 207b9da75
 ---
 
 A level the size of the Intel Sponza (2022, with the Curtains and Ivy add-ons: about 10.8 million triangles in 450 submeshes and 80 4K PBR textures) runs on the same renderer as a small one. On a mid-range GPU its frame time is decided by the [quality tier](/docs/rendering/quality-tiers/) and the resolution far more than by the size of the meshes. This page shows where the time goes and what the engine does so the geometry itself stays cheap.
@@ -62,15 +62,11 @@ The Sponza on Epic is the opposite case: on an 8 GB card it already uses about 9
 
 A pool that is full and still asked for more (a big level, a fast camera) evicts and admits meshes every frame. Before November 2026 that could shred meshes: each page-in's vertex gather read its page table from an upload buffer that the next eviction, or the next frame, had already rewritten, so the gather filled the wrong slices. Every frame now writes its own tables, and the `meshlet-pool-churn-test` row reads the whole pool back while groups of meshes churn through it on D3D12 and Vulkan: 1.2 million of 1.8 million checked vertices were wrong before the fix, none after.
 
-### Not yet: pages streamed from disk
+The pool ages a mesh by frames the GPU has finished with, not by views drawn. A renderer that draws several views in one frame (a viewport with a scene capture, a split view) used to count each view as a frame, so a mesh's slices came back for reuse after a single GPU frame while the previous frame was still reading them. Eviction and the retire queue now follow the device's frame counter; the `meshlet-pool-churn-test` row runs its churn again with three views per frame and no idle between frames.
 
-The cluster hierarchy of every mesh still lives in system memory once the mesh is loaded (179 MB for the Sponza), and the pool pages from that copy. Streaming the pages from the cooked package instead is planned after 1.0:
+### Cluster pages from disk: not yet
 
-- The cook writes each mesh's pages as they are already laid out at run time (a coarse-to-fine suffix closed over cluster groups, page-relative indices), each page one separately readable range of the package, plus a resident root of the coarsest pages that is always loaded.
-- The pool requests the pages the cut asks for through the asynchronous file reader, a budget of bytes per frame, and keeps drawing the coarser resident pages until a request lands, so a missing page is a coarser surface, never a hole.
-- Eviction keeps both a VRAM and a system-memory budget, oldest-used first.
-
-It was not built for 1.0 because no measured level needs it yet: the Sponza's 179 MB of cluster data is 2 % of the editor's working set on Epic, and the pool, not the system copy, is what limits large levels on an 8 GB card.
+The cluster hierarchy of every mesh still lives in system memory once the mesh is loaded (179 MB for the Sponza), and the pool pages from that copy. Paging it from the cooked package is designed (the engine's internal notes hold the design) and not shipped: it needs a cook chunk of page-ordered payloads, a page source behind the pool, and asynchronous reads with a byte budget per frame. A package cooked today keeps working unchanged when it lands, because the new chunk is optional and the pool builds a layout at run time for a package without it. It was not built because no measured level needs it yet: the Sponza's cluster data is 2 % of the editor's working set on Epic, and the pool, not the system copy, is what limits large levels on an 8 GB card.
 
 ## Check your own settings
 

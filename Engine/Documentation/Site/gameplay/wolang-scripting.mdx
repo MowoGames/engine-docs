@@ -13,12 +13,13 @@ sources:
   - Engine/Source/Runtime/Scripting/Public/Scripting/WolangScripting.h
   - Engine/Source/Runtime/Scripting/Public/Scripting/WolangObjectBridge.h
   - Engine/Source/Runtime/Scripting/Public/Scripting/WolangSaveGame.h
+  - Engine/Source/Runtime/Scripting/Public/Scripting/WolangReplication.h
   - Samples/SampleProject/Scripts/Mover/wolang.toml
   - Samples/SampleProject/Scripts/Mover/src/mover.wo
   - Samples/SampleProject/Content/Scenes/WolangDemo.mmap
   - Samples/SampleProject/Config/Plugins.ini
   - Templates/TP_Wolang/Scripts/Starter/src/starter.wo
-verifiedAt: 85a4008d1
+verifiedAt: 7bc02f92d
 ---
 
 Wolang is the engine's scripting language. A Wolang class that derives from `AActor` is an actor class like a C++ or Visual Scripting one: it is in Place Actors, the level saves it by name, its `@Editable` fields are rows in Details, and it spawns by class from C++ and Visual Scripting. A class that derives from `MActorComponent` is a component any actor can carry. Scripts call the engine through the `mowo` package, which the build generates from the engine's reflection. Saving a script while the level plays reloads it and keeps its state; a debugger attaches from VS Code. <Source symbol="AWolangActor" />
@@ -346,9 +347,70 @@ offer class Chest {
 - Shared references and cycles survive, and the save tolerates change: after you edit the script and add a `@Save` field, an older save still loads and the new field reads zero; a removed field is dropped. This also holds across a hot reload while playing.
 - The scripts still run in a packaged game, and so does saving: the slot lives in the game's save folder. A class with a virtual method, or a marked field of a kind Wolang cannot write, is refused and the Message Log says why. Avoid naming a class like one of Wolang's standard-library examples (`Mover`, `Counter`, `Event`, `Money`, ...): see Current limits.
 
-## Replication and mods
+## Replication
 
-- `@Replicated` on a field and `@Server`, `@Client`, `@Multicast` on a method are checked by the compiler and reported to the engine, but nothing replicates them yet: they have no effect in a networked session today.
+A script actor class says what the server shares with `@Replicated` on a field and which calls cross the network with `@Server`, `@Client` and `@Multicast` on a method. Wolang checks the attributes and reports them; the engine carries them over the session, so a listen host and its clients (the first game is 2 to 5 players) run the same script and the host decides.
+
+```wolang
+need mowo.{AActor, World, RpcInt, CallRpc}
+
+@Native("AActor")
+offer class Turret {
+  @Replicated
+  var health: int = 100
+
+  @Replicated(owner)
+  var ammo: int = 30
+
+  fun OnRep_health() {
+    // runs on a client when health changed there
+  }
+
+  @Server
+  fun Fire(rounds: int) {
+    ammo = ammo - rounds
+  }
+
+  @Client
+  fun Jammed(seconds: float) {}
+
+  @Multicast
+  fun Flash() {}
+
+  fun TryFire(owner: AActor) uses World {
+    RpcInt(1)
+    const _sent = CallRpc(owner, "Fire")
+  }
+}
+```
+
+| Attribute | Meaning |
+|---|---|
+| `@Replicated` | The server sends the field to every client when it changes. Clients start from the declared value. |
+| `@Replicated(owner)` | Only the owning client receives it (`MNET_CONDITION(OwnerOnly)`). Everyone else keeps the declared value. |
+| `@Server` | The owning client asks, the server runs it. The server refuses any other peer. |
+| `@Client` | The server calls, the owning client runs it. On a host-owned actor it runs on the host. |
+| `@Multicast` | The server calls; the server and every client run it. |
+| `(unreliable)` on a method | The call may be dropped; a method is reliable by default. A field is always reliable: Wolang takes only `owner` on `@Replicated`. |
+
+A field holds numbers, `bool` or `text` (`Vec2` and `Vec3` too); an RPC takes numbers, `bool` and `text`. Anything else is a problem in the Message Log naming the field or method and is not replicated: an optional, an enum, a struct other than `Vec2`/`Vec3`, a class. Wolang itself refuses an object reference in a replicated field or an RPC parameter. Replication is on the actor's class; a replicated field or RPC on a script component is reported the same way. Add `NetworkObject` to the actor (Details, Add Component) so the session assigns it a network id.
+
+What the engine guarantees:
+
+- **The server is the only writer.** A client script that assigns a replicated field changes it for a moment: the server's last value is put back on the next frame, and the write is counted in the Network Debug panel.
+- **A `@Server` call from a peer that does not own the actor is dropped**, and so are a `@Client` or `@Multicast` method named by a client, a method the class does not declare, a call with the wrong number or kind of arguments, and anything over `wolang.RpcMaxBytes` (1024). The owner may call each `@Server` method `wolang.RpcRate` (30) times a second.
+- **A call runs under `wolang.CallBudget`**, like every call into a script. A `@Server` method that loops forever stops with `step limit` and the server goes on.
+- **Late joiners get the current state**; a change of owner sends the new owner its owner-only fields.
+- **A hot reload keeps it all**: the object keeps its values, the plan is read again, a field or method added by the reload replicates and routes from then on.
+
+`OnRep_<field>` is the RepNotify: if the class declares it, a client calls it when the value it received differs from the value it held.
+
+<Callout type="warning">Wolang gives the engine no hook on a call, so `x.Fire(1)` written in a script runs `Fire` where it is written, even if it is `@Server`. To make the call travel, stage the arguments in order and call `CallRpc(owner, "Fire")` (`RpcInt`, `RpcFloat`, `RpcBool`, `RpcText`); on the server it runs the method there, outside a session it runs it here. Calls the engine makes itself (from C++ or Visual Scripting) are routed by kind. This convention and its reason are W7 in `Engine/Source/ThirdParty/Wolang/KNOWN_ISSUES.md`.</Callout>
+
+Replicated state travels as one batch per actor and channel, at most 20 times a second, reliably and without per-client acknowledgement; it suits gameplay state such as health, phase and ammo. Continuous per-frame state belongs in a component with the engine's delta replication. In the editor, Details shows a Replication section for the actor (each field's value, condition and channel, and every RPC with its direction) and the Network Debug panel counts what was sent, applied and refused. What is not there yet and why: `@Replicated(unreliable)` (Wolang refuses it on a field), `@Replicated(initial)` and `(skip_owner)` (W8), enum and struct fields, and actor references (W9). Only `@Native("AActor")` classes replicate: the entry-point actor under Script actors below and script components do not.
+
+## Mods
+
 - A package loaded as a mod is granted only the capabilities the engine lists for it, never `unsafe`, and cannot declare `extern`; nothing in the editor loads mods yet.
 
 ## Debugging from VS Code

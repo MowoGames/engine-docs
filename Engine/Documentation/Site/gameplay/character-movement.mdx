@@ -16,7 +16,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/ACharacter.h
   - Engine/Source/Runtime/Game/Public/Game/FeetAnchoredBody.h
   - Engine/Source/Runtime/Game/Public/Water/CharacterWaterSystem.h
-verifiedAt: dc043afc1
+verifiedAt: f8a3a28e3
 ---
 
 Characters do not use rigid bodies. A character controller moves a capsule with its own collision checks, and a movement component turns input into velocity through a set of movement modes. `ACharacter` wires both up for you; this page explains what they do and how to tune them.
@@ -29,6 +29,9 @@ Characters do not use rigid bodies. A character controller moves a capsule with 
 | --- | --- |
 | `radius`, `height`, `mass` | The capsule |
 | `maxSlopeAngle`, `stepHeight` | The steepest walkable slope and the tallest step the capsule climbs |
+| `stepForwardTest`, `stepMinForward`, `stepDownExtra` | How far ahead of a blocked move the stair probe looks for a tread, the least the capsule must advance over a step, and extra drop allowed after the step-up |
+| `stickToFloorDistance` | How far the capsule is pulled down onto the ground when it walks off a slope or step edge; 0 lets it launch off ramps |
+| `collideWithCharacters` | Characters with this on block each other even without a physical presence (off by default; one capsule test per other such character) |
 | `crouchHeightScale` | Crouched height as a fraction of `height` |
 | `pushBodies`, `maxStrength` | Whether walking into dynamic bodies shoves them, and how hard |
 | `physicalPresence` | Builds an inner kinematic body (on by default) |
@@ -44,6 +47,8 @@ A ray that starts inside a capsule hits it at distance 0. Every trace fired from
 ### Moving platforms
 
 A character standing on a moving or rotating body is carried with it. `linearVelocity` on the component is the character's own velocity relative to the ground, so standing still on a lift reads as zero. The ground's share is in `groundVelocity`. When the character jumps off, it keeps the platform's velocity. <Source symbol="CharacterController::GetLinearVelocity" />
+
+A body with a [`ContactModifier`](/docs/gameplay/physics/#contact-modifiers) carries the character at its `Surface Velocity` like a conveyor, and a `One Way` platform lets the character jump up through it and land on top. Mass scale is not read by characters.
 
 ## Movement modes
 

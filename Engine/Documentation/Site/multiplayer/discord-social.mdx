@@ -1,0 +1,94 @@
+---
+title: Discord Social
+description: Discord sign-in (browser, device code, provisional account), lobbies, voice calls, linked channels, friends and rich presence via the DiscordPlatform plugin.
+order: 13
+sources:
+  - Engine/Plugins/DiscordPlatform/DiscordPlatform.mplugin
+  - Engine/Source/Runtime/Networking/Public/Networking/SocialService.h
+  - Engine/Source/Runtime/Networking/Public/Networking/SocialSupport.h
+  - Engine/Source/Runtime/Networking/Public/Networking/OnlineService.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Subsystems/MPlatformSubsystem.h
+verifiedAt: 500cf5785
+---
+
+The `DiscordPlatform` plugin wraps the Discord Social SDK. Beyond rich presence it gives a game Discord sign-in, lobbies with a voice call, a mirrored text channel, a friends and relationship list and join invites. All of it is reached through `MPlatformSubsystem` (Visual Scripting nodes) or the small interfaces in `SocialService.h`, so a game and its tests never include the SDK.
+
+<Callout type="warning">
+Everything on this page is **unverified against live Discord**. It is written against the 1.10 SDK headers and covered by CPU rows that drive a fake Discord service; no row ever calls Discord. Run a two-account session before shipping a feature that depends on it.
+</Callout>
+
+## Turn it on
+
+1. Enable the plugin and, in **Project Settings › Project › Platform › DISCORD**, turn on **Enable Discord** and enter the **Discord Application ID**.
+2. Turn on **Friends, Lobbies and Voice** (`platform.discordSocial`). It makes the sign-in ask for the communication scopes; without it the consent screen stays the smaller presence-only one and friends, lobbies and calls are unavailable.
+3. Choose the **Call Input Mode** (voice activity or push to talk) and whether the lobby call starts on its own (**Join The Call Automatically**).
+
+Discord does not load on a dedicated server: it is a user-session SDK.
+
+## Sign in
+
+`SignInDiscord(method, externalToken)` starts a sign-in and `GetDiscordAuthState` reports it (0 signed out, 1 using the stored token, 2 refreshing, 3 waiting for the player, 4 connecting, 5 signed in, 6 failed; `GetDiscordAuthFailure` has the reason). `AuthorizeDiscord` is the same thing with the browser method.
+
+| Method | Use |
+|---|---|
+| 0 browser or overlay (PKCE) | A desktop game. The player approves in Discord. |
+| 1 device code | A console or couch setup with no browser on the machine. |
+| 2 provisional account | The player has no Discord account. Pass the game's own identity token; Discord creates an account tied to it. `discord.ProvisionalAuthType` selects how the token is presented (OIDC, Steam session ticket, ...). `SetDiscordProvisionalName` gives it a display name. |
+
+The flow is the same each launch: a stored token is tried first, a token close to expiry is refreshed with its refresh token, and only when both fail does the player see a prompt. A token granted narrower scopes than the project now needs is not reused. When Discord reports the token expired mid-session it is refreshed in place. Provisional tokens are never written to disk.
+
+Tokens are stored through the engine's credential store, per application id, never in a project file or the config: Windows Credential Manager on Windows, and on macOS and Linux a file in the user's state folder that only that user can read (`FPlatformCredentialStore::IsProtectedByOS` is false there, so it is not encrypted at rest). `SignOutDiscord` disconnects, leaves the lobby and forgets the token.
+
+## Lobbies
+
+A Discord lobby is joined by a secret, not listed: Discord has no lobby search. A game finds lobbies through invites and the Join button on a friend's profile.
+
+- `CreateDiscordLobby(maxMembers)` makes a lobby with a random secret and makes this client the owner. `GetDiscordLobbySecret`, `GetDiscordLobbyId` and `GetDiscordLobbyOwnerId` read it back.
+- `JoinDiscordLobbyBySecret(secret)` joins. A closed or full lobby is left again at once and the join reports failure.
+- `InviteToDiscordLobby(userId, message)` publishes the lobby as the player's activity (party, size and a `lobby:` join secret) and sends the invite. When the friend accepts, or presses Join, the engine joins the lobby with that secret. The same activity slot carries a Steam host's join secret, so the most recent advertisement wins.
+- `SetDiscordLobbyData`, `GetDiscordLobbyData` and `SetDiscordLobbyJoinable` are owner only. Discord has no separate lobby-edit call, so the owner re-publishes the whole metadata map. Keys starting `mowo.` are reserved.
+- Discord lobbies have no owner of their own. The creator is recorded in the lobby metadata. If the owner leaves, the member with the lowest id takes over so every client agrees without talking. `TransferDiscordLobbyOwnership` hands it over deliberately.
+- `GetDiscordLobbyMemberCount`, `…IdAt` and `…NameAt` list the roster.
+
+## Voice calls
+
+Every lobby can carry a voice call. With **Join The Call Automatically** the call starts as soon as the lobby is created or joined; otherwise call `StartDiscordCall`. Discord captures, encodes and plays the audio itself, so this is separate from the in-game [voice chat](/docs/multiplayer/voice-chat/).
+
+| Call | Does |
+|---|---|
+| `GetDiscordCallStatus`, `IsInDiscordCall` | 0 disconnected, 1 joining, 2 connecting, 3 connected, 4 reconnecting, 5 disconnecting, 6 failed. |
+| `SetDiscordSelfMute`, `SetDiscordSelfDeaf` | Mute or deafen this client across calls. |
+| `GetDiscordCallParticipant…At` | Id, name, speaking, muted and volume of each participant. |
+| `SetDiscordParticipantVolume`, `SetDiscordParticipantMuted` | A local, per-person volume (0 to 2, 1 is normal) or mute. Nobody else hears the change. |
+| `SetDiscordVoiceMode`, `SetDiscordPushToTalk` | Voice activity or push to talk. The game owns the key and calls `SetDiscordPushToTalk(true/false)`. |
+| `RefreshDiscordAudioDevices`, `SetDiscordInputDevice`, `SetDiscordOutputDevice` | List and choose the microphone and speakers. Only a listed id is accepted. |
+| `ApplyDiscordVoiceOptions` | Push the `discord.Voice.*` options below to the call. |
+
+The `discord.Voice.*` variables hold the options: `Mode`, `PttReleaseMs`, `VadAutomatic`, `VadThreshold`, `InputVolume`, `OutputVolume`, `EchoCancellation`, `NoiseSuppression`, `AutomaticGain`, `InputDevice`, `OutputDevice` and `AutoJoinCall`. Values are clamped to the SDK's ranges, and a saved device that is no longer plugged in falls back to the system default instead of failing.
+
+While the player is in a Discord call the in-game microphone is kept off, so one voice is not sent twice (`voice.MuteDuringPlatformCall`, on by default). Mute and deafen in the Discord client keep following `voice.FollowPlatformMute`.
+
+## Linked channels
+
+A lobby's chat can be mirrored to a channel of a server the player belongs to. `RefreshDiscordGuilds` and `RefreshDiscordGuildChannels(guildId)` fill the lists (poll the counts), `IsDiscordChannelLinkableAt` says whether the player may link that channel, and `LinkDiscordChannel(channelId)` / `UnlinkDiscordChannel` change it. `GetLinkedDiscordChannelId` and `GetLinkedDiscordChannelName` read the current link.
+
+## Friends and relationships
+
+`GetDiscordFriend…` and the invite calls are described on [Online platforms](/docs/multiplayer/online-platforms/). The relationship list adds the full state: `GetDiscordRelationshipStateAt` is Discord's own relationship and `GetDiscordGameRelationshipStateAt` the game-scoped one (0 none, 1 friend, 2 blocked, 3 incoming request, 4 outgoing request, 5 played together). `SendDiscordFriendRequest(username)`, `AcceptDiscordFriendRequest`, `RejectDiscordFriendRequest`, `CancelDiscordFriendRequest`, `RemoveDiscordFriend`, `BlockDiscordUser` and `UnblockDiscordUser` change it.
+
+## Rich presence
+
+`SetDiscordActivity` sets the card beyond details and state: a party id, current and maximum size, whether the party is private, the join secret that puts **Invite** and **Ask to Join** on the card, start and end times, and one link button. An empty party id is derived from the join secret.
+
+## Console variables
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `discord.Social` | off | Ask for the communication scopes at sign-in. Set by the project's **Friends, Lobbies and Voice**. |
+| `discord.ProvisionalAuthType` | 0 | How the game's token is presented for a provisional account. |
+| `discord.Voice.*` | see above | The call options. |
+| `voice.MuteDuringPlatformCall` | on | Keep the in-game microphone off during a Discord call. |
+
+## Writing your own platform
+
+The same interfaces (`ISocialVoiceCalls`, `ISocialLobbies`, `ISocialAccounts`, `ISocialRelationships`) are what a test fake or another platform plugin implements: return them from the matching `GetSocial…` accessor on `IOnlineService`. The `discord-social-test` row drives the whole engine side this way with no network.

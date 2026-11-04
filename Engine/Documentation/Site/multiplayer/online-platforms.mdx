@@ -13,7 +13,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/SteamTicketValidator.h
   - Engine/Source/Runtime/Networking/Public/Networking/ClientAuth.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-verifiedAt: 44a944219
+verifiedAt: 500cf5785
 ---
 
 Steam, Discord and Mowo Online are not built into the engine. Each lives in its own plugin, and all three are **off by default** for a project (`"enabledByDefault": false`). When a plugin loads, it registers an `IOnlineService` with the engine, and engine code talks only to that interface <Source symbol="IOnlineService" />. No engine module includes a platform SDK header. A build without the plugins still hosts and joins over ENet with a direct address.
@@ -21,7 +21,7 @@ Steam, Discord and Mowo Online are not built into the engine. Each lives in its 
 | Plugin | Provides |
 |---|---|
 | **SteamPlatform** | Identity, SDR P2P transport, lobbies and invites, rich presence with party groups, stats and achievements, encrypted session tickets, cloud saves, Workshop items, Remote Play Together, the on-screen keyboard and Steam Input action sets and glyphs |
-| **DiscordPlatform** | Rich presence, Ask to Join, friends and join invites, and the per-frame callback pump. Does not load on dedicated servers. |
+| **DiscordPlatform** | Rich presence, Ask to Join, sign-in with stored and refreshed tokens, lobbies with a voice call, linked channels, friends and join invites, and the per-frame callback pump. See [Discord Social](/docs/multiplayer/discord-social/). Does not load on dedicated servers. |
 | **MowoOnlinePlatform** | Mowo ID identity and token, friends and presence, invites and join requests, achievements, cloud saves of the SaveGames folder and the launcher overlay, through the Mowo Games Launcher. Does not load on dedicated servers. |
 
 ## Build options
@@ -69,6 +69,9 @@ The `platform` settings and their defaults:
 | `platform.steamAppId` | `0` | Steam App ID |
 | `platform.discordEnabled` | `false` | Bring up Discord |
 | `platform.discordApplicationId` | `0` | Discord application id |
+| `platform.discordSocial` | `false` | Ask for the communication scopes at sign-in (friends, lobbies, calls) |
+| `platform.discordVoiceMode` | `0` | Lobby call input: 0 voice activity, 1 push to talk |
+| `platform.discordAutoJoinCall` | `true` | Start the lobby call when a Discord lobby is created or joined |
 | `platform.mowoOnlineEnabled` | `false` | Bring up Mowo Online |
 | `platform.mowoProductId` | empty | The game's product id on Mowo ID |
 | `platform.mowoRestartThroughLauncher` | `false` | A start outside the launcher hands the start to the launcher and quits |
@@ -122,7 +125,7 @@ Rich presence goes to every available service, formatted through the project's p
 - Steam game recording: `AddTimelineEvent`, `SetTimelineMode`, `StartGamePhase`, `EndGamePhase` and related calls;
 - hardware: `GetPlatformHardware`, `GetRecommendedQualityPreset`, `IsRunningUnderProton`;
 - Discord: `IsDiscordReady`, `AuthorizeDiscord`, `IsDiscordAuthorized`;
-- Discord friends and invites: `GetDiscordFriendCount` with `GetDiscordFriend…At` (presence 0 offline, 1 online elsewhere, 2 in this game), `SendDiscordInvite`, `GetPendingDiscordInviteCount`, `GetPendingDiscordInviteSenderAt` and `AcceptDiscordInvite`, which joins through the same path as a Steam invite. They need the player to sign in with the social scopes, which `discord.Social` turns on (off by default: a presence-only game keeps the smaller consent screen). Written against the 1.10 headers and covered by mock rows, but not yet run against a live Discord client.
+- Discord friends and invites: `GetDiscordFriendCount` with `GetDiscordFriend…At` (presence 0 offline, 1 online elsewhere, 2 in this game), `SendDiscordInvite`, `GetPendingDiscordInviteCount`, `GetPendingDiscordInviteSenderAt` and `AcceptDiscordInvite`, which joins through the same path as a Steam invite. They need the player to sign in with the social scopes, which `discord.Social` turns on (off by default: a presence-only game keeps the smaller consent screen). Written against the 1.10 headers and covered by mock rows, but not yet run against a live Discord client. Lobbies, voice calls, linked channels, provisional accounts and relationships are on [Discord Social](/docs/multiplayer/discord-social/).
 
 ## Mowo Online
 
@@ -187,4 +190,5 @@ Without `--appid` and a key, the dedicated server accepts every connection witho
 - [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/) for `--join-steam`.
 - [Dedicated server](/docs/multiplayer/dedicated-server/) for the Steam game server.
 - [Voice chat](/docs/multiplayer/voice-chat/) for following Discord mute and deafen.
+- [Discord Social](/docs/multiplayer/discord-social/) for Discord sign-in, lobbies, voice calls and linked channels.
 - API: [`IOnlineService`](/docs/api/networking/ionlineservice/), [`FOnlineServices`](/docs/api/networking/fonlineservices/), [`FPlatformInit`](/docs/api/networking/fplatforminit/), [`MPlatformSubsystem`](/docs/api/networking/mplatformsubsystem/), [`SteamTicketValidator`](/docs/api/networking/steamticketvalidator/), [`FClientAuth`](/docs/api/networking/fclientauth/).

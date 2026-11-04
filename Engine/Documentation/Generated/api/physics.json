@@ -153,10 +153,17 @@
 						},
 						{
 							"kind": "method",
+							"name": "ApplyTuning",
+							"signature": "void ApplyTuning(const CharacterControllerComponent& component)",
+							"doc": "Live stair, slope, strength and character-collision settings, so the\ndetails panel edits take effect without rebuilding the controller.",
+							"line": 90
+						},
+						{
+							"kind": "method",
 							"name": "EntitySlotHint",
 							"signature": "uint32_t& EntitySlotHint()",
 							"doc": "The owning entity's ECS slot, cached for PhysicsSystem's per-frame\ncontroller loops (World::GetComponentsHinted refreshes it in place).",
-							"line": 90
+							"line": 94
 						}
 					]
 				}
@@ -1088,153 +1095,183 @@
 						},
 						{
 							"kind": "field",
+							"name": "stepForwardTest",
+							"signature": "float stepForwardTest = 0.15f",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "stepMinForward",
+							"signature": "float stepMinForward = 0.02f",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "stepDownExtra",
+							"signature": "float stepDownExtra = 0.0f",
+							"line": 58
+						},
+						{
+							"kind": "field",
+							"name": "stickToFloorDistance",
+							"signature": "float stickToFloorDistance = 0.5f",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "collideWithCharacters",
+							"signature": "bool collideWithCharacters = false",
+							"line": 70
+						},
+						{
+							"kind": "field",
 							"name": "crouchHeightScale",
 							"signature": "float crouchHeightScale = 0.55f",
-							"line": 46
+							"line": 74
 						},
 						{
 							"kind": "field",
 							"name": "useGravity",
 							"signature": "bool useGravity = true",
 							"doc": "Auto-gravity (applied automatically in PhysicsSystem when not grounded)",
-							"line": 53
+							"line": 81
 						},
 						{
 							"kind": "field",
 							"name": "gravity",
 							"signature": "Vec3 gravity = Vec3(0.0f, -9.81f, 0.0f)",
-							"line": 56
+							"line": 84
 						},
 						{
 							"kind": "field",
 							"name": "layer",
 							"signature": "uint8_t layer = 2",
 							"doc": "Physics layer (0-31) for collision filtering",
-							"line": 59
+							"line": 87
 						},
 						{
 							"kind": "field",
 							"name": "physicalPresence",
 							"signature": "bool physicalPresence = true",
 							"doc": "A kinematic rigid body shaped like the capsule, carried along by the\ncontroller. Without it the character exists ONLY inside its own sweep:\nit is never added to the broad phase, so bullets, melee traces,\nexplosion overlaps, AI line-of-sight and the scanner all pass straight\nthrough a player. Clear it only for a deliberately non-interactive\nproxy (a spectator, a replay ghost).",
-							"line": 68
+							"line": 96
 						},
 						{
 							"kind": "field",
 							"name": "pushBodies",
 							"signature": "bool pushBodies = true",
 							"doc": "Whether the character shoves dynamic bodies it walks into (bounded by\nmaxStrength), and whether moving bodies shove it back.",
-							"line": 74
+							"line": 102
 						},
 						{
 							"kind": "field",
 							"name": "pushable",
 							"signature": "bool pushable = true",
-							"line": 77
+							"line": 105
 						},
 						{
 							"kind": "field",
 							"name": "collisionPreset",
 							"signature": "ECollisionPreset collisionPreset = ECollisionPreset::Pawn",
 							"doc": "Channel responses the inner body registers with, so a character answers\ntraces the same way a collider does. Preset seeds the whole set; the\noverrides below apply when it is Custom.",
-							"line": 84
+							"line": 112
 						},
 						{
 							"kind": "field",
 							"name": "objectType",
 							"signature": "ECollisionChannel objectType = ECollisionChannel::Pawn",
-							"line": 88
+							"line": 116
 						},
 						{
 							"kind": "field",
 							"name": "responseToVisibility",
 							"signature": "ECollisionResponse responseToVisibility = ECollisionResponse::Block",
-							"line": 92
+							"line": 120
 						},
 						{
 							"kind": "field",
 							"name": "responseToCamera",
 							"signature": "ECollisionResponse responseToCamera = ECollisionResponse::Block",
-							"line": 96
+							"line": 124
 						},
 						{
 							"kind": "field",
 							"name": "responseToProjectile",
 							"signature": "ECollisionResponse responseToProjectile = ECollisionResponse::Block",
-							"line": 100
+							"line": 128
 						},
 						{
 							"kind": "field",
 							"name": "controllerLive",
 							"signature": "bool controllerLive = false",
 							"doc": "Runtime state (managed by PhysicsSystem). The controller itself lives\nin PhysicsSystem (GetCharacterController); this only says one is live.",
-							"line": 106
+							"line": 134
 						},
 						{
 							"kind": "field",
 							"name": "netDriven",
 							"signature": "bool netDriven = false",
 							"doc": "Stepped by its owner's network moves (FCharacterNetDriver on the\nserver), one step per move with that move's time, and never by the\nframe: CharacterMovementSystem and the physics character pass skip it.",
-							"line": 111
+							"line": 139
 						},
 						{
 							"kind": "field",
 							"name": "innerBodyID",
 							"signature": "FPhysicsBodyId innerBodyID",
 							"doc": "The inner body Jolt created for the capsule. Invalid when\nphysicalPresence is off or body creation failed.",
-							"line": 115
+							"line": 143
 						},
 						{
 							"kind": "field",
 							"name": "isGrounded",
 							"signature": "bool isGrounded = false",
-							"line": 116
+							"line": 144
 						},
 						{
 							"kind": "field",
 							"name": "groundNormal",
 							"signature": "Vec3 groundNormal",
-							"line": 117
+							"line": 145
 						},
 						{
 							"kind": "field",
 							"name": "linearVelocity",
 							"signature": "Vec3 linearVelocity",
 							"doc": "The character's own velocity, relative to whatever it stands on. The\nplatform's share is carried separately in groundVelocity and folded\nback in when the feet leave it, so a jump off a moving platform keeps\nthe platform's velocity.",
-							"line": 123
+							"line": 151
 						},
 						{
 							"kind": "field",
 							"name": "groundVelocity",
 							"signature": "Vec3 groundVelocity",
 							"doc": "Velocity of the ground body at the contact point (linear plus angular\nabout the contact). Zero on static ground or in the air.",
-							"line": 127
+							"line": 155
 						},
 						{
 							"kind": "field",
 							"name": "groundBodyID",
 							"signature": "FPhysicsBodyId groundBodyID",
-							"line": 128
+							"line": 156
 						},
 						{
 							"kind": "field",
 							"name": "groundSurface",
 							"signature": "ESurfaceType groundSurface = ESurfaceType::Default",
 							"doc": "What the character is currently standing on. Jolt tracks the ground\ncontact's sub-shape, so this is the painted terrain layer or the struck\nmesh triangle under the feet, not the whole body's material.",
-							"line": 133
+							"line": 161
 						},
 						{
 							"kind": "field",
 							"name": "wantsCrouchShape",
 							"signature": "bool wantsCrouchShape = false",
 							"doc": "Crouch capsule request/state: gameplay (CharacterMovementSystem) sets\nwantsCrouchShape; PhysicsSystem applies it each tick and reports back\nthe actual shape (standing up stays refused under a low ceiling).",
-							"line": 138
+							"line": 166
 						},
 						{
 							"kind": "field",
 							"name": "isCrouchedShape",
 							"signature": "bool isCrouchedShape = false",
-							"line": 139
+							"line": 167
 						}
 					]
 				}
@@ -1862,53 +1899,75 @@
 					]
 				},
 				{
+					"kind": "enum",
+					"name": "ECompoundMode",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"reflected": true,
+					"line": 27,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Static",
+							"signature": "Static",
+							"line": 28
+						},
+						{
+							"kind": "enumerator",
+							"name": "Mutable",
+							"signature": "Mutable",
+							"line": 29
+						}
+					]
+				},
+				{
 					"kind": "struct",
 					"name": "ColliderShape",
 					"namespace": "Mowo",
-					"doc": "A single sub-shape within a compound collider",
-					"line": 28,
+					"reflected": true,
+					"line": 32,
 					"members": [
 						{
 							"kind": "field",
 							"name": "shape",
 							"signature": "Shape shape = Shape::Box",
-							"line": 29
+							"line": 33
 						},
 						{
 							"kind": "field",
 							"name": "halfExtents",
 							"signature": "Vec3 halfExtents = Vec3(0.5f, 0.5f, 0.5f)",
-							"line": 30
+							"line": 35
 						},
 						{
 							"kind": "field",
 							"name": "radius",
 							"signature": "float radius = 0.5f",
-							"line": 31
+							"line": 39
 						},
 						{
 							"kind": "field",
 							"name": "height",
 							"signature": "float height = 1.0f",
-							"line": 32
+							"line": 44
 						},
 						{
 							"kind": "field",
 							"name": "bottomRadius",
 							"signature": "float bottomRadius = 0.5f",
-							"line": 33
+							"line": 49
 						},
 						{
 							"kind": "field",
 							"name": "offset",
 							"signature": "Vec3 offset = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 34
+							"line": 55
 						},
 						{
 							"kind": "field",
 							"name": "rotation",
 							"signature": "Vec3 rotation = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 35
+							"line": 58
 						}
 					]
 				},
@@ -1917,219 +1976,230 @@
 					"name": "ColliderComponent",
 					"namespace": "Mowo",
 					"reflected": true,
-					"line": 38,
+					"line": 63,
 					"members": [
 						{
 							"kind": "field",
 							"name": "enabled",
 							"signature": "bool enabled = true",
-							"line": 39
+							"line": 64
 						},
 						{
 							"kind": "field",
 							"name": "shape",
 							"signature": "Shape shape = Shape::Box",
-							"line": 42
+							"line": 67
 						},
 						{
 							"kind": "field",
 							"name": "halfExtents",
 							"signature": "Vec3 halfExtents = Vec3(0.5f, 0.5f, 0.5f)",
 							"doc": "Box",
-							"line": 44
+							"line": 69
 						},
 						{
 							"kind": "field",
 							"name": "radius",
 							"signature": "float radius = 0.5f",
 							"doc": "Sphere/Capsule",
-							"line": 48
+							"line": 73
 						},
 						{
 							"kind": "field",
 							"name": "height",
 							"signature": "float height = 1.0f",
 							"doc": "Capsule, Cylinder, tapered shapes: the full length including caps",
-							"line": 53
+							"line": 78
 						},
 						{
 							"kind": "field",
 							"name": "bottomRadius",
 							"signature": "float bottomRadius = 0.5f",
 							"doc": "Tapered shapes: Radius is the top end",
-							"line": 58
+							"line": 83
 						},
 						{
 							"kind": "field",
 							"name": "offset",
 							"signature": "Vec3 offset = Vec3(0.0f, 0.0f, 0.0f)",
 							"doc": "Local offset",
-							"line": 64
+							"line": 89
 						},
 						{
 							"kind": "field",
 							"name": "isTrigger",
 							"signature": "bool isTrigger = false",
-							"line": 67
+							"line": 92
 						},
 						{
 							"kind": "field",
 							"name": "staticBody",
 							"signature": "bool staticBody = true",
 							"doc": "UE's default for a placed static mesh: collision on, simulation off. A\ncollider with no RigidBody used to be shape-without-body — the prop had\nthe right hull and nothing in the world could touch it — because\nPhysicsSystem only ever built a body for entities carrying both. The\nphysics system now gives such a collider a static body of its own, and\ntakes it away the moment a RigidBody arrives to own the entity instead.\nTurn this off for a collider that exists purely as authoring data (a\nshape a tool will cook later, a proxy a gameplay system spawns from).",
-							"line": 79
+							"line": 104
 						},
 						{
 							"kind": "field",
 							"name": "collisionPreset",
 							"signature": "ECollisionPreset collisionPreset = ECollisionPreset::WorldDynamic",
 							"doc": "UE-style collision channels. The preset picks a whole response set;\nobjectType and the response overrides below apply when preset == Custom.\nEverything maps down to a Jolt object layer plus a response table the\ncontact filter consults, so the legacy layer/matrix path still works.",
-							"line": 87
+							"line": 112
 						},
 						{
 							"kind": "field",
 							"name": "objectType",
 							"signature": "ECollisionChannel objectType = ECollisionChannel::WorldDynamic",
-							"line": 91
+							"line": 116
 						},
 						{
 							"kind": "field",
 							"name": "responseToPawn",
 							"signature": "ECollisionResponse responseToPawn = ECollisionResponse::Block",
-							"line": 95
+							"line": 120
 						},
 						{
 							"kind": "field",
 							"name": "responseToProjectile",
 							"signature": "ECollisionResponse responseToProjectile = ECollisionResponse::Block",
-							"line": 99
+							"line": 124
 						},
 						{
 							"kind": "field",
 							"name": "responseToVisibility",
 							"signature": "ECollisionResponse responseToVisibility = ECollisionResponse::Block",
-							"line": 103
+							"line": 128
 						},
 						{
 							"kind": "field",
 							"name": "responseToCamera",
 							"signature": "ECollisionResponse responseToCamera = ECollisionResponse::Block",
-							"line": 107
+							"line": 132
 						},
 						{
 							"kind": "field",
 							"name": "material",
 							"signature": "PhysicsMaterial material",
 							"doc": "Physics material (per-collider friction/restitution).\nThe three fields surfaced via MOWO_NESTED match the legacy\nmat_friction / mat_restitution / mat_density MDF keys exactly.",
-							"line": 114
+							"line": 139
 						},
 						{
 							"kind": "field",
 							"name": "materialPath",
 							"signature": "std::string materialPath",
 							"doc": "A shared .physmat asset. When set it replaces the inline material\nabove wholesale at body creation, so \"ice\" is authored once and\nreferenced everywhere instead of retyped per collider.",
-							"line": 122
+							"line": 147
 						},
 						{
 							"kind": "field",
 							"name": "surfaceType",
 							"signature": "ESurfaceType surfaceType = ESurfaceType::Default",
 							"doc": "What this collider is made of, for footsteps / impacts / decals / scans.\nIgnored when materialPath resolves — the asset owns the surface then.",
-							"line": 127
+							"line": 152
 						},
 						{
 							"kind": "field",
 							"name": "collisionMeshPath",
 							"signature": "std::string collisionMeshPath",
 							"doc": "Where a Mesh / ConvexHull collider's geometry comes from. Empty means\nthe entity's own MeshRenderer model, which is what \"give this prop real\ncollision\" means 95% of the time; point it at another asset for a\nhand-authored low-poly proxy. Ignored when meshVertices is already\nfilled (terrain and the geometry tools cook their own).",
-							"line": 136
+							"line": 161
 						},
 						{
 							"kind": "field",
 							"name": "materialSurfaces",
 							"signature": "bool materialSurfaces = true",
 							"doc": "Whether an asset-cooked shape stamps each triangle with the surface of\nthe material bound to the submesh it came from, and adopts that\nmaterial's friction and restitution when this collider names no\n.physmat of its own. Turn it off for a proxy that is deliberately made\nof one thing regardless of what the render mesh is painted with.",
-							"line": 144
+							"line": 169
 						},
 						{
 							"kind": "field",
 							"name": "autoConvexCollision",
 							"signature": "bool autoConvexCollision = true",
 							"doc": "Automatic convex decomposition for a ConvexHull collider whose mesh has\nno authored simple collision and no UCX_ pieces. Off falls back to the\nsingle hull over the whole silhouette, which is a solid block wherever\nthe mesh has a hole in it.",
-							"line": 152
+							"line": 177
+						},
+						{
+							"kind": "field",
+							"name": "compoundShapes",
+							"signature": "std::vector<ColliderShape> compoundShapes",
+							"line": 181
+						},
+						{
+							"kind": "field",
+							"name": "compoundMode",
+							"signature": "ECompoundMode compoundMode = ECompoundMode::Static",
+							"line": 186
 						},
 						{
 							"kind": "field",
 							"name": "additionalShapes",
 							"signature": "std::vector<ColliderShape> additionalShapes",
-							"doc": "Additional shapes for compound collider (empty = single shape mode)",
-							"line": 157
+							"line": 191
 						},
 						{
 							"kind": "field",
 							"name": "meshVertices",
 							"signature": "std::vector<Vec3> meshVertices",
 							"doc": "Mesh collider data (only used when shape == Mesh). Filled by whoever\ncooks the geometry — terrain, the geometry tools, or the mesh-asset\nresolver — and RELEASED once the shape is cooked and cached, because a\nshared shape makes a per-collider copy of the triangle soup dead weight.",
-							"line": 163
+							"line": 197
 						},
 						{
 							"kind": "field",
 							"name": "meshIndices",
 							"signature": "std::vector<uint32_t> meshIndices",
-							"line": 164
+							"line": 198
 						},
 						{
 							"kind": "field",
 							"name": "cookedShapeKey",
 							"signature": "std::string cookedShapeKey",
 							"doc": "Identity of the cooked shape in FCollisionShapeCache. Set by the\nresolver; empty means this collider's geometry is one-off and must not\nbe shared with anything else.",
-							"line": 169
+							"line": 203
 						},
 						{
 							"kind": "field",
 							"name": "assetGeometryFailureReported",
 							"signature": "bool assetGeometryFailureReported = false",
 							"doc": "Body creation retries every tick while a mesh collider's source asset is\nnot resident — which is what lets a proxy that streams in later still\ncook. Without this latch the same two failure lines are written every\nframe for the whole time it is missing, which buries everything else in\nthe log and reads as a hang.",
-							"line": 176
+							"line": 210
 						},
 						{
 							"kind": "field",
 							"name": "meshTriangleSurfaces",
 							"signature": "std::vector<ESurfaceType> meshTriangleSurfaces",
 							"doc": "One entry per triangle (meshIndices.size() / 3). Empty means the whole\nmesh takes the material's surface. A wall whose lower band is stone and\nwhose upper band is wood is one mesh collider with two values here, and\na hit on it resolves to whichever triangle was actually struck.",
-							"line": 182
+							"line": 216
 						},
 						{
 							"kind": "field",
 							"name": "heightfieldSamples",
 							"signature": "std::vector<float> heightfieldSamples",
 							"doc": "Height field data (only used when shape == HeightField). An n×n grid\nof heights: world position of sample (i, j) is\nheightfieldOffset + (i * scale.x, samples[j*n+i] * scale.y, j * scale.z).\nFar more compact than an equivalent Mesh collider (terrain uses this).",
-							"line": 188
+							"line": 222
 						},
 						{
 							"kind": "field",
 							"name": "heightfieldSampleCount",
 							"signature": "int32_t heightfieldSampleCount = 0",
-							"line": 189
+							"line": 223
 						},
 						{
 							"kind": "field",
 							"name": "heightfieldOffset",
 							"signature": "Vec3 heightfieldOffset = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 190
+							"line": 224
 						},
 						{
 							"kind": "field",
 							"name": "heightfieldScale",
 							"signature": "Vec3 heightfieldScale = Vec3(1.0f, 1.0f, 1.0f)",
-							"line": 191
+							"line": 225
 						},
 						{
 							"kind": "field",
 							"name": "heightfieldSurfaces",
 							"signature": "std::vector<ESurfaceType> heightfieldSurfaces",
 							"doc": "One entry per heightfield square, row-major over (n-1)x(n-1). Empty\nmeans the whole field takes the material's surface. Terrain fills this\nfrom the dominant painted layer so grass, rock and sand on one terrain\nreport as themselves.",
-							"line": 197
+							"line": 231
 						}
 					]
 				}
@@ -2146,43 +2216,107 @@
 					"name": "ConstraintType",
 					"namespace": "Mowo",
 					"reflected": true,
-					"line": 13,
+					"line": 15,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Fixed",
 							"signature": "Fixed",
-							"line": 14
+							"line": 16
 						},
 						{
 							"kind": "enumerator",
 							"name": "Hinge",
 							"signature": "Hinge",
-							"line": 15
+							"line": 17
 						},
 						{
 							"kind": "enumerator",
 							"name": "BallSocket",
 							"signature": "BallSocket",
-							"line": 16
+							"line": 18
 						},
 						{
 							"kind": "enumerator",
 							"name": "Distance",
 							"signature": "Distance",
-							"line": 17
+							"line": 19
 						},
 						{
 							"kind": "enumerator",
 							"name": "Slider",
 							"signature": "Slider",
-							"line": 18
+							"line": 20
 						},
 						{
 							"kind": "enumerator",
 							"name": "SixDOF",
 							"signature": "SixDOF MMETA(DisplayName = \"Six DOF\")",
-							"line": 19
+							"line": 21
+						},
+						{
+							"kind": "enumerator",
+							"name": "Cone",
+							"signature": "Cone",
+							"line": 22
+						},
+						{
+							"kind": "enumerator",
+							"name": "Pulley",
+							"signature": "Pulley",
+							"line": 23
+						},
+						{
+							"kind": "enumerator",
+							"name": "Gear",
+							"signature": "Gear",
+							"line": 24
+						},
+						{
+							"kind": "enumerator",
+							"name": "RackAndPinion",
+							"signature": "RackAndPinion MMETA(DisplayName = \"Rack And Pinion\")",
+							"line": 25
+						},
+						{
+							"kind": "enumerator",
+							"name": "Path",
+							"signature": "Path",
+							"line": 26
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "EConstraintPathRotation",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"reflected": true,
+					"line": 29,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Free",
+							"signature": "Free",
+							"line": 30
+						},
+						{
+							"kind": "enumerator",
+							"name": "AroundTangent",
+							"signature": "AroundTangent MMETA(DisplayName = \"Around Tangent\")",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "FollowPath",
+							"signature": "FollowPath MMETA(DisplayName = \"Follow Path\")",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "Fixed",
+							"signature": "Fixed",
+							"line": 33
 						}
 					]
 				},
@@ -2193,25 +2327,25 @@
 					"bases": "uint8_t",
 					"reflected": true,
 					"doc": "Per-axis freedom of a 6DOF joint, UE's ELinearConstraintMotion /\nEAngularConstraintMotion vocabulary.",
-					"line": 24,
+					"line": 38,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Free",
 							"signature": "Free",
-							"line": 25
+							"line": 39
 						},
 						{
 							"kind": "enumerator",
 							"name": "Limited",
 							"signature": "Limited",
-							"line": 26
+							"line": 40
 						},
 						{
 							"kind": "enumerator",
 							"name": "Locked",
 							"signature": "Locked",
-							"line": 27
+							"line": 41
 						}
 					]
 				},
@@ -2222,25 +2356,25 @@
 					"bases": "uint8_t",
 					"reflected": true,
 					"doc": "What a motor drives toward on its axis. Position holds an offset / angle;\nVelocity keeps a rate (a turntable, a conveyor, a wheel).",
-					"line": 32,
+					"line": 46,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Off",
 							"signature": "Off",
-							"line": 33
+							"line": 47
 						},
 						{
 							"kind": "enumerator",
 							"name": "Position",
 							"signature": "Position",
-							"line": 34
+							"line": 48
 						},
 						{
 							"kind": "enumerator",
 							"name": "Velocity",
 							"signature": "Velocity",
-							"line": 35
+							"line": 49
 						}
 					]
 				},
@@ -2249,294 +2383,425 @@
 					"name": "ConstraintComponent",
 					"namespace": "Mowo",
 					"reflected": true,
-					"line": 38,
+					"line": 52,
 					"members": [
 						{
 							"kind": "field",
 							"name": "enabled",
 							"signature": "bool enabled = true",
-							"line": 44
+							"line": 57
 						},
 						{
 							"kind": "field",
 							"name": "type",
 							"signature": "ConstraintType type = ConstraintType::Fixed",
-							"line": 47
+							"line": 60
 						},
 						{
 							"kind": "field",
 							"name": "connectedEntityId",
 							"signature": "uint64_t connectedEntityId = 0",
-							"doc": "Connected entity (the other body this constraint connects to). Handled\nentirely by the custom (de)serialize hooks — needs MDF int64 round-trip\nsemantics that PropertyInfo's UUID type doesn't quite express.",
-							"line": 53
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "collideConnected",
+							"signature": "bool collideConnected = true",
+							"line": 69
 						},
 						{
 							"kind": "field",
 							"name": "anchorA",
 							"signature": "Vec3 anchorA = Vec3(0.0f, 0.0f, 0.0f)",
 							"doc": "Anchor points relative to each body's centre of mass: A on this body, B\non the connected one. Both left at zero pins the joint at the bodies'\nown centres; Fixed and Slider instead weld the bodies in their current\nrelative pose, which is the useful default for those two. Angles,\nlimits and motor targets all read as THIS body relative to the\nconnected one (or the world), whichever of the two it is attached to.",
-							"line": 61
+							"line": 79
 						},
 						{
 							"kind": "field",
 							"name": "anchorB",
 							"signature": "Vec3 anchorB = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 65
+							"line": 83
 						},
 						{
 							"kind": "field",
 							"name": "axisA",
 							"signature": "Vec3 axisA = Vec3(0.0f, 1.0f, 0.0f)",
 							"doc": "Axis (used by Hinge, Slider, and as the 6DOF joint's X axis), in the\nsame space as the anchors",
-							"line": 72
+							"line": 90
 						},
 						{
 							"kind": "field",
 							"name": "axisB",
 							"signature": "Vec3 axisB = Vec3(0.0f, 1.0f, 0.0f)",
-							"line": 75
+							"line": 93
 						},
 						{
 							"kind": "field",
 							"name": "hingeLimitMin",
 							"signature": "float hingeLimitMin = -180.0f",
-							"line": 79
+							"line": 97
 						},
 						{
 							"kind": "field",
 							"name": "hingeLimitMax",
 							"signature": "float hingeLimitMax = 180.0f",
-							"line": 85
+							"line": 103
 						},
 						{
 							"kind": "field",
 							"name": "hingeLimitsEnabled",
 							"signature": "bool hingeLimitsEnabled = false",
-							"line": 91
+							"line": 109
 						},
 						{
 							"kind": "field",
 							"name": "hingeMotor",
 							"signature": "EConstraintMotorMode hingeMotor = EConstraintMotorMode::Off",
 							"doc": "Hinge motor: Position holds hingeMotorTargetAngle, Velocity spins at\nhingeMotorTargetVelocity. Re-applied every tick, so gameplay writing\nthe target is live.",
-							"line": 98
+							"line": 116
 						},
 						{
 							"kind": "field",
 							"name": "hingeMotorTargetAngle",
 							"signature": "float hingeMotorTargetAngle = 0.0f",
-							"line": 101
+							"line": 119
 						},
 						{
 							"kind": "field",
 							"name": "hingeMotorTargetVelocity",
 							"signature": "float hingeMotorTargetVelocity = 0.0f",
-							"line": 107
+							"line": 125
 						},
 						{
 							"kind": "field",
 							"name": "hingeMotorMaxTorque",
 							"signature": "float hingeMotorMaxTorque = 100.0f",
-							"line": 113
+							"line": 131
 						},
 						{
 							"kind": "field",
 							"name": "distanceMin",
 							"signature": "float distanceMin = 0.0f",
-							"line": 120
+							"line": 138
 						},
 						{
 							"kind": "field",
 							"name": "distanceMax",
 							"signature": "float distanceMax = 1.0f",
-							"line": 126
+							"line": 144
 						},
 						{
 							"kind": "field",
 							"name": "springFrequency",
 							"signature": "float springFrequency = 0.0f",
 							"doc": "Spring settings (shared)",
-							"line": 134
+							"line": 152
 						},
 						{
 							"kind": "field",
 							"name": "springDamping",
 							"signature": "float springDamping = 0.0f",
-							"line": 140
+							"line": 158
 						},
 						{
 							"kind": "field",
 							"name": "linearMotionX",
 							"signature": "EConstraintAxisMotion linearMotionX = EConstraintAxisMotion::Locked",
 							"doc": "SixDOF: per-axis freedom. Linear limits are symmetric half-ranges about\nthe anchor; angular limits are a min/max pair per axis, where X is the\ntwist about axisA and Y/Z the two swings (a pyramid, so each swing is\nauthored on its own). Defaults reproduce a ball socket.",
-							"line": 150
+							"line": 168
 						},
 						{
 							"kind": "field",
 							"name": "linearMotionY",
 							"signature": "EConstraintAxisMotion linearMotionY = EConstraintAxisMotion::Locked",
-							"line": 154
+							"line": 172
 						},
 						{
 							"kind": "field",
 							"name": "linearMotionZ",
 							"signature": "EConstraintAxisMotion linearMotionZ = EConstraintAxisMotion::Locked",
-							"line": 158
+							"line": 176
 						},
 						{
 							"kind": "field",
 							"name": "linearLimit",
 							"signature": "Vec3 linearLimit = Vec3(0.5f, 0.5f, 0.5f)",
-							"line": 162
+							"line": 180
 						},
 						{
 							"kind": "field",
 							"name": "angularMotionX",
 							"signature": "EConstraintAxisMotion angularMotionX = EConstraintAxisMotion::Free",
-							"line": 168
+							"line": 186
 						},
 						{
 							"kind": "field",
 							"name": "angularMotionY",
 							"signature": "EConstraintAxisMotion angularMotionY = EConstraintAxisMotion::Free",
-							"line": 172
+							"line": 190
 						},
 						{
 							"kind": "field",
 							"name": "angularMotionZ",
 							"signature": "EConstraintAxisMotion angularMotionZ = EConstraintAxisMotion::Free",
-							"line": 176
+							"line": 194
 						},
 						{
 							"kind": "field",
 							"name": "angularLimitMin",
 							"signature": "Vec3 angularLimitMin = Vec3(-45.0f, -45.0f, -45.0f)",
-							"line": 180
+							"line": 198
 						},
 						{
 							"kind": "field",
 							"name": "angularLimitMax",
 							"signature": "Vec3 angularLimitMax = Vec3(45.0f, 45.0f, 45.0f)",
-							"line": 185
+							"line": 203
 						},
 						{
 							"kind": "field",
 							"name": "linearMotorX",
 							"signature": "EConstraintMotorMode linearMotorX = EConstraintMotorMode::Off",
 							"doc": "SixDOF motors, one per axis. Linear targets are in the connected body's\njoint frame (axisB = X; the world's when unattached), angular targets in\nthis body's (axisA = X) — with the two axes authored alike, as they\nusually are, the frames coincide at rest. Position targets are an\noffset from the anchor / an Euler orientation; Velocity targets are\nrates. Re-applied every tick like the hinge motor.",
-							"line": 197
+							"line": 215
 						},
 						{
 							"kind": "field",
 							"name": "linearMotorY",
 							"signature": "EConstraintMotorMode linearMotorY = EConstraintMotorMode::Off",
-							"line": 201
+							"line": 219
 						},
 						{
 							"kind": "field",
 							"name": "linearMotorZ",
 							"signature": "EConstraintMotorMode linearMotorZ = EConstraintMotorMode::Off",
-							"line": 205
+							"line": 223
 						},
 						{
 							"kind": "field",
 							"name": "linearMotorTargetPosition",
 							"signature": "Vec3 linearMotorTargetPosition = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 209
+							"line": 227
 						},
 						{
 							"kind": "field",
 							"name": "linearMotorTargetVelocity",
 							"signature": "Vec3 linearMotorTargetVelocity = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 214
+							"line": 232
 						},
 						{
 							"kind": "field",
 							"name": "linearMotorMaxForce",
 							"signature": "float linearMotorMaxForce = 1000.0f",
-							"line": 219
+							"line": 237
 						},
 						{
 							"kind": "field",
 							"name": "angularMotorX",
 							"signature": "EConstraintMotorMode angularMotorX = EConstraintMotorMode::Off",
-							"line": 227
+							"line": 245
 						},
 						{
 							"kind": "field",
 							"name": "angularMotorY",
 							"signature": "EConstraintMotorMode angularMotorY = EConstraintMotorMode::Off",
-							"line": 231
+							"line": 249
 						},
 						{
 							"kind": "field",
 							"name": "angularMotorZ",
 							"signature": "EConstraintMotorMode angularMotorZ = EConstraintMotorMode::Off",
-							"line": 235
+							"line": 253
 						},
 						{
 							"kind": "field",
 							"name": "angularMotorTargetRotation",
 							"signature": "Vec3 angularMotorTargetRotation = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 239
+							"line": 257
 						},
 						{
 							"kind": "field",
 							"name": "angularMotorTargetVelocity",
 							"signature": "Vec3 angularMotorTargetVelocity = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 244
+							"line": 262
 						},
 						{
 							"kind": "field",
 							"name": "angularMotorMaxTorque",
 							"signature": "float angularMotorMaxTorque = 100.0f",
-							"line": 249
+							"line": 267
 						},
 						{
 							"kind": "field",
 							"name": "motorFrequency",
 							"signature": "float motorFrequency = 2.0f",
 							"doc": "Stiffness shared by every position motor, the hinge's included. For the\nhinge and for each 6DOF angular axis the pair describes the swing about\nthe joint itself, however far the centre of mass sits from it. A\nvelocity motor ignores the spring and only honours the force / torque\ncap.",
-							"line": 262
+							"line": 280
 						},
 						{
 							"kind": "field",
 							"name": "motorDamping",
 							"signature": "float motorDamping = 1.0f",
-							"line": 269
+							"line": 287
 						},
 						{
 							"kind": "field",
 							"name": "breakForce",
 							"signature": "float breakForce = 0.0f",
 							"doc": "Break thresholds (0 = unbreakable), compared against the solver's\nreaction each fixed step. Crossing either removes the joint, sets\n`broken` and raises PhysicsSystem::OnConstraintBroken plus a\nConstraintBrokenEvent on the bus.",
-							"line": 280
+							"line": 298
 						},
 						{
 							"kind": "field",
 							"name": "breakTorque",
 							"signature": "float breakTorque = 0.0f",
-							"line": 286
+							"line": 304
+						},
+						{
+							"kind": "field",
+							"name": "coneHalfAngle",
+							"signature": "float coneHalfAngle = 30.0f",
+							"line": 311
+						},
+						{
+							"kind": "field",
+							"name": "pulleyFixedPointA",
+							"signature": "Vec3 pulleyFixedPointA = Vec3(0.0f, 5.0f, 0.0f)",
+							"line": 319
+						},
+						{
+							"kind": "field",
+							"name": "pulleyFixedPointB",
+							"signature": "Vec3 pulleyFixedPointB = Vec3(1.0f, 5.0f, 0.0f)",
+							"line": 324
+						},
+						{
+							"kind": "field",
+							"name": "pulleyRatio",
+							"signature": "float pulleyRatio = 1.0f",
+							"line": 329
+						},
+						{
+							"kind": "field",
+							"name": "pulleyMinLength",
+							"signature": "float pulleyMinLength = 0.0f",
+							"line": 335
+						},
+						{
+							"kind": "field",
+							"name": "pulleyMaxLength",
+							"signature": "float pulleyMaxLength = -1.0f",
+							"line": 342
+						},
+						{
+							"kind": "field",
+							"name": "gearTeethA",
+							"signature": "int32_t gearTeethA = 20",
+							"line": 350
+						},
+						{
+							"kind": "field",
+							"name": "gearTeethB",
+							"signature": "int32_t gearTeethB = 20",
+							"line": 356
+						},
+						{
+							"kind": "field",
+							"name": "rackTeeth",
+							"signature": "int32_t rackTeeth = 20",
+							"line": 363
+						},
+						{
+							"kind": "field",
+							"name": "rackLength",
+							"signature": "float rackLength = 2.0f",
+							"line": 369
+						},
+						{
+							"kind": "field",
+							"name": "pinionTeeth",
+							"signature": "int32_t pinionTeeth = 20",
+							"line": 376
+						},
+						{
+							"kind": "field",
+							"name": "pathPoints",
+							"signature": "std::vector<Vec3> pathPoints",
+							"line": 383
+						},
+						{
+							"kind": "field",
+							"name": "pathLooping",
+							"signature": "bool pathLooping = false",
+							"line": 387
+						},
+						{
+							"kind": "field",
+							"name": "pathRotation",
+							"signature": "EConstraintPathRotation pathRotation = EConstraintPathRotation::Free",
+							"line": 391
+						},
+						{
+							"kind": "field",
+							"name": "pathFriction",
+							"signature": "float pathFriction = 0.0f",
+							"line": 395
+						},
+						{
+							"kind": "field",
+							"name": "pathMotor",
+							"signature": "EConstraintMotorMode pathMotor = EConstraintMotorMode::Off",
+							"line": 402
+						},
+						{
+							"kind": "field",
+							"name": "pathMotorTargetVelocity",
+							"signature": "float pathMotorTargetVelocity = 1.0f",
+							"line": 406
+						},
+						{
+							"kind": "field",
+							"name": "pathMotorMaxForce",
+							"signature": "float pathMotorMaxForce = 1000.0f",
+							"line": 413
 						},
 						{
 							"kind": "field",
 							"name": "constraint",
 							"signature": "FPhysicsConstraintHandle constraint",
 							"doc": "Runtime state (managed by PhysicsSystem)",
-							"line": 294
+							"line": 422
+						},
+						{
+							"kind": "field",
+							"name": "auxConstraints",
+							"signature": "std::vector<FPhysicsConstraintHandle> auxConstraints",
+							"line": 423
 						},
 						{
 							"kind": "field",
 							"name": "initialized",
 							"signature": "bool initialized = false",
-							"line": 295
+							"line": 424
 						},
 						{
 							"kind": "field",
 							"name": "broken",
 							"signature": "bool broken = false",
 							"doc": "Set when the break threshold fired. A broken joint is NOT rebuilt on the\nnext tick — before this flag existed the constraint re-formed one frame\nafter snapping. Clear it to re-form the joint deliberately.",
-							"line": 300
+							"line": 429
+						},
+						{
+							"kind": "field",
+							"name": "loadForce",
+							"signature": "float loadForce = 0.0f",
+							"line": 431
+						},
+						{
+							"kind": "field",
+							"name": "loadTorque",
+							"signature": "float loadTorque = 0.0f",
+							"line": 432
 						}
 					]
 				}
@@ -3797,78 +4062,115 @@
 						},
 						{
 							"kind": "field",
+							"name": "antiRollStiffness",
+							"signature": "float antiRollStiffness = 0.0f",
+							"doc": "A spring between the left and right wheel of each axle that resists the\nbody rolling in a corner: the outside wheel is pressed down and the inside\none lifted. 0 turns it off. Read live, so it can be tuned while driving.",
+							"line": 234
+						},
+						{
+							"kind": "field",
 							"name": "wheelModelRight",
 							"signature": "Vec3 wheelModelRight = Vec3(1.0f, 0.0f, 0.0f)",
 							"doc": "The wheel mesh's own axle and up axes, so one model serves both sides\n(the system mirrors right for wheels at negative x).",
-							"line": 233
+							"line": 243
 						},
 						{
 							"kind": "field",
 							"name": "wheelModelUp",
 							"signature": "Vec3 wheelModelUp = Vec3(0.0f, 1.0f, 0.0f)",
-							"line": 237
+							"line": 247
 						},
 						{
 							"kind": "field",
 							"name": "tracked",
 							"signature": "bool tracked = false",
 							"doc": "Tank mode: wheelsPerTrack road wheels per side inside two\ndriven tracks; `steer` becomes the track-ratio differential (skid\nsteering) instead of a wheel angle.",
-							"line": 244
+							"line": 254
 						},
 						{
 							"kind": "field",
 							"name": "wheelsPerTrack",
 							"signature": "int32_t wheelsPerTrack = 5",
-							"line": 248
+							"line": 258
 						},
 						{
 							"kind": "field",
 							"name": "throttle",
 							"signature": "float throttle = 0.0f",
-							"line": 254
+							"line": 264
 						},
 						{
 							"kind": "field",
 							"name": "steer",
 							"signature": "float steer = 0.0f",
-							"line": 255
+							"line": 265
 						},
 						{
 							"kind": "field",
 							"name": "brake",
 							"signature": "float brake = 0.0f",
-							"line": 256
+							"line": 266
 						},
 						{
 							"kind": "field",
 							"name": "handbrake",
 							"signature": "float handbrake = 0.0f",
-							"line": 257
+							"line": 267
 						},
 						{
 							"kind": "field",
 							"name": "currentRPM",
 							"signature": "float currentRPM = 0.0f",
-							"line": 259
+							"line": 269
 						},
 						{
 							"kind": "field",
 							"name": "currentGear",
 							"signature": "int32_t currentGear = 0",
-							"line": 260
+							"line": 270
 						},
 						{
 							"kind": "field",
 							"name": "wheelStates",
 							"signature": "std::vector<FVehicleWheelState> wheelStates",
 							"doc": "One entry per simulated wheel, in the order the layout resolved them.",
-							"line": 263
+							"line": 273
 						},
 						{
 							"kind": "method",
 							"name": "VehicleComponent",
 							"signature": "VehicleComponent() = default",
-							"line": 265
+							"line": 275
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Physics/Public/Physics/ConstraintFrames.h",
+			"include": "Physics/ConstraintFrames.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FConstraintFrames",
+					"namespace": "Mowo",
+					"line": 10,
+					"members": [
+						{
+							"kind": "method",
+							"name": "PerpendicularTo",
+							"signature": "static Vec3 PerpendicularTo(const Vec3& axis)",
+							"static": true,
+							"line": 12
+						},
+						{
+							"kind": "method",
+							"name": "NormalizedAxisOr",
+							"signature": "static Vec3 NormalizedAxisOr(const Vec3& axis, const Vec3& fallback)",
+							"static": true,
+							"line": 24
 						}
 					]
 				}
@@ -5469,10 +5771,31 @@
 						},
 						{
 							"kind": "field",
+							"name": "drawIslands",
+							"signature": "bool drawIslands = false",
+							"doc": "box per simulation island, one colour each",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "drawVehicles",
+							"signature": "bool drawVehicles = false",
+							"doc": "suspension travel, wheel contacts and contact normals per wheel",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "drawBroadPhaseLayers",
+							"signature": "bool drawBroadPhaseLayers = false",
+							"doc": "body bounds tinted by object layer, dimmed for the non-moving broad phase",
+							"line": 29
+						},
+						{
+							"kind": "field",
 							"name": "velocityScale",
 							"signature": "float velocityScale = 0.2f",
 							"doc": "How far the velocity arrow extends — seconds of look-ahead. At 0.2s a\nbody moving 5 m/s draws a 1 m arrow.",
-							"line": 30
+							"line": 33
 						}
 					]
 				},
@@ -5481,77 +5804,91 @@
 					"name": "PhysicsStats",
 					"namespace": "Mowo",
 					"doc": "Snapshot of physics-side counts and timing, refreshed once per\nPhysicsSystem::Update tick. Cheap to read (POD, no atomics) — the UI\npulls it directly without locking.",
-					"line": 36,
+					"line": 39,
 					"members": [
 						{
 							"kind": "field",
 							"name": "totalBodies",
 							"signature": "uint32_t totalBodies = 0",
-							"line": 37
+							"line": 40
 						},
 						{
 							"kind": "field",
 							"name": "maxBodies",
 							"signature": "uint32_t maxBodies = 0",
 							"doc": "budget from PhysicsConfig",
-							"line": 38
+							"line": 41
 						},
 						{
 							"kind": "field",
 							"name": "activeBodiesDynamic",
 							"signature": "uint32_t activeBodiesDynamic = 0",
-							"line": 39
+							"line": 42
 						},
 						{
 							"kind": "field",
 							"name": "activeBodiesKinematic",
 							"signature": "uint32_t activeBodiesKinematic = 0",
-							"line": 40
+							"line": 43
 						},
 						{
 							"kind": "field",
 							"name": "dynamicBodies",
 							"signature": "uint32_t dynamicBodies = 0",
-							"line": 41
+							"line": 44
 						},
 						{
 							"kind": "field",
 							"name": "staticBodies",
 							"signature": "uint32_t staticBodies = 0",
-							"line": 42
+							"line": 45
 						},
 						{
 							"kind": "field",
 							"name": "kinematicBodies",
 							"signature": "uint32_t kinematicBodies = 0",
-							"line": 43
+							"line": 46
 						},
 						{
 							"kind": "field",
 							"name": "constraintCount",
 							"signature": "uint32_t constraintCount = 0",
-							"line": 44
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "sleepingBodies",
+							"signature": "uint32_t sleepingBodies = 0",
+							"doc": "dynamic bodies Jolt has put to sleep",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "activeIslands",
+							"signature": "uint32_t activeIslands = 0",
+							"doc": "groups of awake bodies joined by a contact or a constraint; only counted while something shows it",
+							"line": 49
 						},
 						{
 							"kind": "field",
 							"name": "contactsThisFrame",
 							"signature": "uint32_t contactsThisFrame = 0",
 							"doc": "from MowoContactListener",
-							"line": 45
+							"line": 50
 						},
 						{
 							"kind": "field",
 							"name": "lastStepTimeMs",
 							"signature": "float lastStepTimeMs = 0.0f",
 							"doc": "Wall-clock time spent inside the last Jolt Step (single substep). The\nengine's fixed timestep can trigger multiple substeps per Update; this\nis just the most recent one — for an average use avgStepTimeMs.",
-							"line": 50
+							"line": 55
 						},
 						{
 							"kind": "field",
 							"name": "avgStepTimeMs",
 							"signature": "float avgStepTimeMs = 0.0f",
 							"doc": "exponential moving average, alpha=0.1",
-							"line": 51
+							"line": 56
 						}
 					]
 				}
@@ -6323,32 +6660,88 @@
 				},
 				{
 					"kind": "enum",
+					"name": "EQueryComplexity",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Which collision shapes a query may see. A mesh or heightfield body is the\ncomplex collision of a level; everything built from primitives and hulls is\nthe simple collision gameplay bodies use. Bullets want complex, character\nprobes want simple.",
+					"line": 31,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Both",
+							"signature": "Both",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "SimpleOnly",
+							"signature": "SimpleOnly",
+							"line": 33
+						},
+						{
+							"kind": "enumerator",
+							"name": "ComplexOnly",
+							"signature": "ComplexOnly",
+							"line": 34
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"name": "EQueryBackFaces",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Whether a query reports the inside face of a triangle or the interior of a\nconvex shape it starts in. Default keeps each query kind's own behaviour:\nrays and sweeps skip back faces, overlaps do not.",
+					"line": 40,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Default",
+							"signature": "Default",
+							"line": 41
+						},
+						{
+							"kind": "enumerator",
+							"name": "Ignore",
+							"signature": "Ignore",
+							"line": 42
+						},
+						{
+							"kind": "enumerator",
+							"name": "Collide",
+							"signature": "Collide",
+							"line": 43
+						}
+					]
+				},
+				{
+					"kind": "enum",
 					"name": "EQueryShape",
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "The swept / overlapped volume. Primitives only: the shape is built per call,\nso a mesh here would cook a triangle soup on every trace.",
-					"line": 29,
+					"line": 48,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Sphere",
 							"signature": "Sphere",
 							"doc": "extents.x = radius",
-							"line": 30
+							"line": 49
 						},
 						{
 							"kind": "enumerator",
 							"name": "Box",
 							"signature": "Box",
 							"doc": "extents  = half extents",
-							"line": 31
+							"line": 50
 						},
 						{
 							"kind": "enumerator",
 							"name": "Capsule",
 							"signature": "Capsule",
 							"doc": "extents.x = radius, extents.y = half height of the cylinder",
-							"line": 32
+							"line": 51
 						}
 					]
 				},
@@ -6357,72 +6750,103 @@
 					"name": "FQueryFilter",
 					"namespace": "Mowo",
 					"doc": "Everything a query filters on, in one place. The legacy entry points took a\nlayer mask and a single ignored body, which is why a scanner could not skip\nits own carrier plus the prop in its hands, and why \"by channel\" only\nexisted for plain rays.",
-					"line": 39,
+					"line": 58,
 					"members": [
 						{
 							"kind": "field",
 							"name": "channel",
 							"signature": "ECollisionChannel channel = ECollisionChannel::Visibility",
 							"doc": "A body participates only when its registered response to this channel is\nBlock — or Overlap, when includeOverlaps is set on a multi query. Bodies\nwith no registered response Block, so externally created geometry still\nstops traces.",
-							"line": 44
+							"line": 63
 						},
 						{
 							"kind": "field",
 							"name": "useChannel",
 							"signature": "bool useChannel = true",
 							"doc": "Off = the object-layer mask path instead, for callers that reason in\nlayers. layerMask is ignored while useChannel is on.",
-							"line": 48
+							"line": 67
 						},
 						{
 							"kind": "field",
 							"name": "layerMask",
 							"signature": "uint32_t layerMask = 0xFFFFFFFFu",
-							"line": 49
+							"line": 68
 						},
 						{
 							"kind": "field",
 							"name": "includeOverlaps",
 							"signature": "bool includeOverlaps = false",
 							"doc": "Multi queries only: report the bodies the trace passed through as\nOverlap hits alongside the blocking one, the way UE's multi traces do.",
-							"line": 53
+							"line": 72
 						},
 						{
 							"kind": "field",
 							"name": "ignoreSensors",
 							"signature": "bool ignoreSensors = true",
 							"doc": "A sensor body is a gameplay volume; stopping a bullet on a trigger box\nis almost never what the caller meant.",
-							"line": 57
+							"line": 76
 						},
 						{
 							"kind": "field",
 							"name": "mobility",
 							"signature": "EQueryMobility mobility = EQueryMobility::All",
-							"line": 59
+							"line": 78
+						},
+						{
+							"kind": "field",
+							"name": "complexity",
+							"signature": "EQueryComplexity complexity = EQueryComplexity::Both",
+							"line": 80
+						},
+						{
+							"kind": "field",
+							"name": "backFaces",
+							"signature": "EQueryBackFaces backFaces = EQueryBackFaces::Default",
+							"line": 81
+						},
+						{
+							"kind": "field",
+							"name": "useProfile",
+							"signature": "bool useProfile = false",
+							"doc": "Query as if the probe were a body with this collision profile: a body is\nreported unless the pair would Ignore each other, and a single-hit query\nstops only on a pair that would Block. Replaces the channel test while on.",
+							"line": 86
+						},
+						{
+							"kind": "field",
+							"name": "profile",
+							"signature": "FCollisionResponseContainer profile",
+							"line": 87
 						},
 						{
 							"kind": "field",
 							"name": "ignoreBodies",
 							"signature": "std::vector<FPhysicsBodyId> ignoreBodies",
 							"doc": "Bodies dropped from the result set — the shooter's own capsule, the\ncarried prop, everything a penetrating shot has already passed.",
-							"line": 63
+							"line": 91
+						},
+						{
+							"kind": "method",
+							"name": "SetProfile",
+							"signature": "void SetProfile(ECollisionPreset preset)",
+							"line": 93
 						},
 						{
 							"kind": "method",
 							"name": "Ignore",
 							"signature": "void Ignore(FPhysicsBodyId bodyID)",
-							"line": 65
+							"line": 94
 						},
 						{
 							"kind": "method",
 							"name": "ClearIgnored",
 							"signature": "void ClearIgnored()",
-							"line": 66
+							"line": 95
 						},
 						{
 							"kind": "method",
 							"name": "IsIgnored",
 							"signature": "bool IsIgnored(FPhysicsBodyId bodyID) const",
-							"line": 67
+							"line": 96
 						}
 					]
 				},
@@ -6430,72 +6854,72 @@
 					"kind": "struct",
 					"name": "FQueryHit",
 					"namespace": "Mowo",
-					"line": 70,
+					"line": 99,
 					"members": [
 						{
 							"kind": "field",
 							"name": "bodyID",
 							"signature": "FPhysicsBodyId bodyID",
-							"line": 71
+							"line": 100
 						},
 						{
 							"kind": "field",
 							"name": "subShapeID",
 							"signature": "FPhysicsSubShapeId subShapeID",
 							"doc": "Identifies the exact triangle / heightfield square / compound leaf that\nwas struck, for a later surface or material re-resolve.",
-							"line": 75
+							"line": 104
 						},
 						{
 							"kind": "field",
 							"name": "entityId",
 							"signature": "EntityID entityId = INVALID_ENTITY",
 							"doc": "The gameplay entity behind the body, resolved on the query path so a\ncaller does not need a second map lookup per hit. INVALID_ENTITY for\nbodies nobody registered (raw physics bodies, ragdoll parts).",
-							"line": 80
+							"line": 109
 						},
 						{
 							"kind": "field",
 							"name": "location",
 							"signature": "Vec3 location",
 							"doc": "On the struck surface, pointing out of it.",
-							"line": 83
+							"line": 112
 						},
 						{
 							"kind": "field",
 							"name": "normal",
 							"signature": "Vec3 normal",
-							"line": 84
+							"line": 113
 						},
 						{
 							"kind": "field",
 							"name": "shapeCenter",
 							"signature": "Vec3 shapeCenter",
 							"doc": "Sweeps only: where the swept shape's centre sat at impact. Rays leave it\nequal to location.",
-							"line": 88
+							"line": 117
 						},
 						{
 							"kind": "field",
 							"name": "distance",
 							"signature": "float distance = 0.0f",
-							"line": 90
+							"line": 119
 						},
 						{
 							"kind": "field",
 							"name": "fraction",
 							"signature": "float fraction = 1.0f",
-							"line": 91
+							"line": 120
 						},
 						{
 							"kind": "field",
 							"name": "surface",
 							"signature": "ESurfaceType surface = ESurfaceType::Default",
-							"line": 92
+							"line": 121
 						},
 						{
 							"kind": "field",
 							"name": "response",
 							"signature": "ECollisionResponse response = ECollisionResponse::Block",
 							"doc": "Block for the hit that stopped the trace, Overlap for a body the trace\nonly reported on its way through.",
-							"line": 96
+							"line": 125
 						}
 					]
 				},
@@ -6503,26 +6927,26 @@
 					"kind": "struct",
 					"name": "FTraceBatchItem",
 					"namespace": "Mowo",
-					"line": 99,
+					"line": 128,
 					"members": [
 						{
 							"kind": "field",
 							"name": "origin",
 							"signature": "Vec3 origin",
-							"line": 100
+							"line": 129
 						},
 						{
 							"kind": "field",
 							"name": "direction",
 							"signature": "Vec3 direction",
 							"doc": "need not be normalized",
-							"line": 101
+							"line": 130
 						},
 						{
 							"kind": "field",
 							"name": "maxDistance",
 							"signature": "float maxDistance = 0.0f",
-							"line": 102
+							"line": 131
 						}
 					]
 				},
@@ -6531,63 +6955,63 @@
 					"name": "FTraceBatch",
 					"namespace": "Mowo",
 					"doc": "Many rays, one filter, one setup. A scanner fan pays for filter\nconstruction, the narrow-phase lookup and the job dispatch ONCE for the\nwhole sweep instead of once per ray, and the rays fan out across the worker\npool. Fill, Execute, read; the storage is reused across frames, so a\nper-frame scanner allocates nothing after its first sweep.",
-					"line": 110,
+					"line": 139,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Reserve",
 							"signature": "void Reserve(size_t count)",
-							"line": 112
+							"line": 141
 						},
 						{
 							"kind": "method",
 							"name": "Clear",
 							"signature": "void Clear()",
 							"doc": "Keeps the capacity — the point of holding the batch across frames.",
-							"line": 115
+							"line": 144
 						},
 						{
 							"kind": "method",
 							"name": "Add",
 							"signature": "void Add(const Vec3& origin, const Vec3& direction, float maxDistance)",
-							"line": 117
+							"line": 146
 						},
 						{
 							"kind": "method",
 							"name": "Num",
 							"signature": "size_t Num() const",
-							"line": 119
+							"line": 148
 						},
 						{
 							"kind": "method",
 							"name": "Execute",
 							"signature": "void Execute(const PhysicsWorld& world, const FQueryFilter& filter)",
 							"doc": "Runs every queued ray against the world. Game-thread only: it reads the\nnarrow phase, which must not be mid-step. Results line up index for\nindex with the Add calls.",
-							"line": 126
+							"line": 155
 						},
 						{
 							"kind": "method",
 							"name": "HasHit",
 							"signature": "bool HasHit(size_t index) const",
-							"line": 128
+							"line": 157
 						},
 						{
 							"kind": "method",
 							"name": "GetHit",
 							"signature": "const FQueryHit& GetHit(size_t index) const",
-							"line": 129
+							"line": 158
 						},
 						{
 							"kind": "method",
 							"name": "GetHits",
 							"signature": "const std::vector<FQueryHit>& GetHits() const",
-							"line": 130
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "GetHitCount",
 							"signature": "uint32_t GetHitCount() const",
-							"line": 133
+							"line": 162
 						},
 						{
 							"kind": "field",
@@ -6595,7 +7019,341 @@
 							"signature": "static constexpr size_t kParallelThreshold = 64",
 							"static": true,
 							"doc": "Below this many rays the batch runs inline — the dispatch costs more\nthan the work it hands out.",
-							"line": 139
+							"line": 168
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Physics/Public/Physics/PhysicsSnapshot.h",
+			"include": "Physics/PhysicsSnapshot.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FPhysicsBodyState",
+					"namespace": "Mowo",
+					"doc": "One body's replicable state. `key` is whatever the caller replicates the body\nunder (an entity id's low bits, a net id): Jolt body ids are not stable across\nmachines, so the wire never carries one.",
+					"line": 18,
+					"members": [
+						{
+							"kind": "field",
+							"name": "key",
+							"signature": "uint32_t key = 0",
+							"line": 19
+						},
+						{
+							"kind": "field",
+							"name": "position",
+							"signature": "Vec3 position = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "rotation",
+							"signature": "Quat rotation",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "linearVelocity",
+							"signature": "Vec3 linearVelocity = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "angularVelocity",
+							"signature": "Vec3 angularVelocity = Vec3(0.0f, 0.0f, 0.0f)",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "sleeping",
+							"signature": "bool sleeping = false",
+							"line": 24
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPhysicsBodyBinding",
+					"namespace": "Mowo",
+					"line": 27,
+					"members": [
+						{
+							"kind": "field",
+							"name": "body",
+							"signature": "FPhysicsBodyId body",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "key",
+							"signature": "uint32_t key = 0",
+							"line": 29
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPhysicsReconcileSettings",
+					"namespace": "Mowo",
+					"line": 32,
+					"members": [
+						{
+							"kind": "field",
+							"name": "snapDistance",
+							"signature": "float snapDistance = 1.0f",
+							"doc": "A position or orientation error past either threshold snaps outright: a\nsmooth correction of a body that was teleported or tunnelled looks worse\nthan the pop.",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "snapAngleDegrees",
+							"signature": "float snapAngleDegrees = 45.0f",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "deadZone",
+							"signature": "float deadZone = 0.002f",
+							"doc": "Below this the body already agrees with the server and nothing is touched,\nso a settled prop is not nudged awake by quantisation noise.",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "positionBlend",
+							"signature": "float positionBlend = 0.25f",
+							"doc": "Fraction of the remaining error removed per call.",
+							"line": 42
+						},
+						{
+							"kind": "field",
+							"name": "rotationBlend",
+							"signature": "float rotationBlend = 0.25f",
+							"line": 43
+						},
+						{
+							"kind": "field",
+							"name": "velocityBlend",
+							"signature": "float velocityBlend = 0.5f",
+							"line": 44
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPhysicsBodyReplication",
+					"namespace": "Mowo",
+					"doc": "Per-body replication state: a bandwidth-lean wire format with delta against a\nbaseline the receiver already holds, and the client-side correction that\npulls a predicted body onto the authoritative one. The server replicates the\nbodies it owns; the owner-predicted ones are reconciled, not overwritten.",
+					"line": 51,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Quantize",
+							"signature": "static FPhysicsBodyState Quantize(const FPhysicsBodyState& state)",
+							"static": true,
+							"doc": "What a state looks like after one trip through the wire's fixed point\n(1 mm, 0.01 m/s, 16-bit orientation components) — compare a received state\nagainst this, never against the unquantised original.",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Encode",
+							"signature": "static void Encode(const std::vector<FPhysicsBodyState>& states, const std::vector<FPhysicsBodyState>* baseline, std::vector<uint8_t>& out)",
+							"static": true,
+							"doc": "Writes every state, each field only when it differs from the same-key\nbaseline entry; a key with no baseline entry carries all fields.",
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "Decode",
+							"signature": "static bool Decode(const std::vector<uint8_t>& packet, const std::vector<FPhysicsBodyState>* baseline, std::vector<FPhysicsBodyState>& out)",
+							"static": true,
+							"doc": "Rebuilds the states a packet carried, applying each onto its baseline\nentry. False on a truncated or malformed packet; `out` is then unspecified.",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "Reconcile",
+							"signature": "static float Reconcile(const FPhysicsBodyState& local, const FPhysicsBodyState& authoritative, const FPhysicsReconcileSettings& settings, FPhysicsBodyState& corrected, bool& snapped)",
+							"static": true,
+							"doc": "Moves `local` toward `authoritative` and returns the position error it\nstarted from. `snapped` is set when the thresholds sent it straight there.",
+							"line": 68
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPhysicsSnapshotCodec",
+					"namespace": "Mowo",
+					"doc": "Delta of a whole-world snapshot against an earlier one: zero runs of the XOR\nof the two byte streams stay implicit, so a world where few bodies moved\ncosts little. Lossless; the receiver needs the same baseline.",
+					"line": 74,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Encode",
+							"signature": "static void Encode(const std::vector<uint8_t>& baseline, const std::vector<uint8_t>& current, std::vector<uint8_t>& out)",
+							"static": true,
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "Decode",
+							"signature": "static bool Decode(const std::vector<uint8_t>& baseline, const std::vector<uint8_t>& delta, std::vector<uint8_t>& out)",
+							"static": true,
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "Hash",
+							"signature": "static uint64_t Hash(const std::vector<uint8_t>& bytes)",
+							"static": true,
+							"doc": "FNV-1a over the snapshot bytes: the cheap desync check two peers compare.",
+							"line": 80
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPhysicsSnapshotRing",
+					"namespace": "Mowo",
+					"doc": "The last `capacity` whole-world states, by tick. A tick's snapshot is the\nworld BEFORE that tick is simulated, so restoring tick N and stepping runs\ntick N again. Capturing a tick drops every snapshot at or after it: a state\nthat rewrites the past invalidates what was recorded after it.",
+					"line": 87,
+					"members": [
+						{
+							"kind": "method",
+							"name": "SetCapacity",
+							"signature": "void SetCapacity(uint32_t frames)",
+							"line": 89
+						},
+						{
+							"kind": "method",
+							"name": "GetCapacity",
+							"signature": "uint32_t GetCapacity() const",
+							"line": 90
+						},
+						{
+							"kind": "method",
+							"name": "Capture",
+							"signature": "bool Capture(int32_t tick, const PhysicsWorld& world)",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "Restore",
+							"signature": "bool Restore(int32_t tick, PhysicsWorld& world) const",
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "const std::vector<uint8_t>* Find(int32_t tick) const",
+							"line": 97
+						},
+						{
+							"kind": "method",
+							"name": "GetChecksum",
+							"signature": "bool GetChecksum(int32_t tick, uint64_t& outChecksum) const",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "IsEmpty",
+							"signature": "bool IsEmpty() const",
+							"line": 100
+						},
+						{
+							"kind": "method",
+							"name": "GetOldestTick",
+							"signature": "int32_t GetOldestTick() const",
+							"line": 103
+						},
+						{
+							"kind": "method",
+							"name": "GetNewestTick",
+							"signature": "int32_t GetNewestTick() const",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "GetCount",
+							"signature": "uint32_t GetCount() const",
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "GetBytes",
+							"signature": "uint64_t GetBytes() const",
+							"line": 108
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 109
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FPhysicsResimResult",
+					"namespace": "Mowo",
+					"line": 122,
+					"members": [
+						{
+							"kind": "field",
+							"name": "ok",
+							"signature": "bool ok = false",
+							"line": 123
+						},
+						{
+							"kind": "field",
+							"name": "steps",
+							"signature": "int32_t steps = 0",
+							"line": 124
+						},
+						{
+							"kind": "field",
+							"name": "compared",
+							"signature": "int32_t compared = 0",
+							"doc": "Ticks whose recomputed state could be compared with what the ring held, and\nthe first of them that differed (-1 when none did). A mismatch on an\nunchanged input means the step is not deterministic, which is what rollback\nnetcode cannot survive.",
+							"line": 129
+						},
+						{
+							"kind": "field",
+							"name": "firstMismatchTick",
+							"signature": "int32_t firstMismatchTick = -1",
+							"line": 130
+						},
+						{
+							"kind": "field",
+							"name": "finalChecksum",
+							"signature": "uint64_t finalChecksum = 0",
+							"line": 131
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FPhysicsResimulator",
+					"namespace": "Mowo",
+					"doc": "Restore tick `fromTick`, replay up to `toTick`, recording every recomputed\ntick back into the ring. `applyInputs` runs before each step with the tick it\nbelongs to: the place a replay re-applies the forces, impulses and kinematic\nmoves of that tick's inputs.",
+					"line": 138,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "FInputFn",
+							"signature": "using FInputFn = std::function<void(int32_t tick, PhysicsWorld& world)>",
+							"line": 140
+						},
+						{
+							"kind": "method",
+							"name": "Run",
+							"signature": "static FPhysicsResimResult Run(PhysicsWorld& world, FPhysicsSnapshotRing& ring, int32_t fromTick, int32_t toTick, float fixedDt, const FInputFn& applyInputs)",
+							"static": true,
+							"line": 142
 						}
 					]
 				}
@@ -6611,38 +7369,38 @@
 					"kind": "struct",
 					"name": "CollisionInfo",
 					"namespace": "Mowo",
-					"line": 22,
+					"line": 23,
 					"members": [
 						{
 							"kind": "field",
 							"name": "otherEntityId",
 							"signature": "uint64_t otherEntityId = INVALID_ENTITY",
-							"line": 23
+							"line": 24
 						},
 						{
 							"kind": "field",
 							"name": "contactPoint",
 							"signature": "Vec3 contactPoint",
-							"line": 24
+							"line": 25
 						},
 						{
 							"kind": "field",
 							"name": "normal",
 							"signature": "Vec3 normal",
-							"line": 25
+							"line": 26
 						},
 						{
 							"kind": "field",
 							"name": "relativeVelocity",
 							"signature": "Vec3 relativeVelocity",
-							"line": 26
+							"line": 27
 						},
 						{
 							"kind": "field",
 							"name": "impulse",
 							"signature": "float impulse = 0.0f",
 							"doc": "Estimated normal impulse of the impact (kg m/s); zero on stay events,\nsensors and overlaps. Equal for both sides of the pair.",
-							"line": 29
+							"line": 30
 						}
 					]
 				},
@@ -6651,69 +7409,76 @@
 					"name": "PhysicsSystem",
 					"namespace": "Mowo",
 					"bases": "public System",
-					"line": 34,
+					"line": 35,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Initialize",
 							"signature": "void Initialize(World* world) override",
-							"line": 36
+							"line": 37
 						},
 						{
 							"kind": "method",
 							"name": "Shutdown",
 							"signature": "void Shutdown() override",
-							"line": 37
+							"line": 38
 						},
 						{
 							"kind": "method",
 							"name": "Update",
 							"signature": "void Update(float deltaTime) override",
-							"line": 38
+							"line": 39
 						},
 						{
 							"kind": "method",
 							"name": "GetPhysicsWorld",
 							"signature": "PhysicsWorld& GetPhysicsWorld()",
-							"line": 40
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "GetSnapshotRing",
+							"signature": "FPhysicsSnapshotRing& GetSnapshotRing()",
+							"doc": "The whole-world snapshots gameplay captures for rollback and resimulation.\nEmpty and unsized until first asked for: its capacity comes from\np.SnapshotFrames, and nothing is recorded unless something captures.",
+							"line": 48
 						},
 						{
 							"kind": "method",
 							"name": "GetDiscardedSimulationTime",
 							"signature": "float GetDiscardedSimulationTime() const",
 							"doc": "Simulation time the substep cap (p.MaxSubsteps) refused to run, and how\nmany frames hit the cap. Both stay zero on a healthy frame budget.",
-							"line": 46
+							"line": 52
 						},
 						{
 							"kind": "method",
 							"name": "GetSubstepCapHits",
 							"signature": "uint32_t GetSubstepCapHits() const",
-							"line": 49
+							"line": 55
 						},
 						{
 							"kind": "method",
 							"name": "GetFixedTimestep",
 							"signature": "float GetFixedTimestep() const",
-							"line": 53
+							"line": 59
 						},
 						{
 							"kind": "method",
 							"name": "SetFixedTimestep",
 							"signature": "void SetFixedTimestep(float timestep)",
-							"line": 56
+							"line": 62
 						},
 						{
 							"kind": "method",
 							"name": "GetAsyncStepsInFlight",
 							"signature": "uint32_t GetAsyncStepsInFlight() const",
 							"doc": "p.AsyncTick: fixed steps this Update handed to a worker and has not yet\njoined. Non-zero between one Update's return and the next one's start;\nevery PhysicsWorld entry point that reaches Jolt joins on its own.",
-							"line": 65
+							"line": 71
 						},
 						{
 							"kind": "method",
 							"name": "IsAsyncStepInFlight",
 							"signature": "bool IsAsyncStepInFlight() const",
-							"line": 68
+							"line": 74
 						},
 						{
 							"kind": "method",
@@ -6721,177 +7486,183 @@
 							"signature": "static bool IsDuringPhysicsOverlapEnabled()",
 							"static": true,
 							"doc": "p.OverlapDuringPhysics (on by default): UE's StartPhysics / EndPhysics. The\nscene kicks the frame's steps onto a worker after the PrePhysics tick\ngroup, ticks DuringPhysics while Jolt runs, then joins — instead of the\nstep running inside Update with the game thread waiting. EndFrameStep\nruns Update's post-step half, so the Update that follows in the same\nframe does nothing. BeginFrameStep returns false (Update does it all)\nwhen the overlap is off or p.AsyncTick owns the step. The scene runs\nthe world systems ordered ahead of this one (World::UpdateBefore)\nbefore the kick, so movement input still lands on this frame's step.",
-							"line": 81
+							"line": 87
 						},
 						{
 							"kind": "method",
 							"name": "BeginFrameStep",
 							"signature": "bool BeginFrameStep(float deltaTime)",
-							"line": 82
+							"line": 88
 						},
 						{
 							"kind": "method",
 							"name": "EndFrameStep",
 							"signature": "void EndFrameStep()",
-							"line": 83
+							"line": 89
 						},
 						{
 							"kind": "method",
 							"name": "OnConstraintBroken",
 							"signature": "MulticastDelegate<const FConstraintBreakInfo&>& OnConstraintBroken()",
 							"doc": "Raised the fixed step a ConstraintComponent crossed its break threshold,\nafter the joint is gone and `broken` is set. The same payload rides the\nEventBus as ConstraintBrokenEvent for listeners that never see this\nsystem (audio, VFX, replication).",
-							"line": 89
+							"line": 95
+						},
+						{
+							"kind": "method",
+							"name": "ReleaseConstraint",
+							"signature": "void ReleaseConstraint(ConstraintComponent& constraint, bool clearBroken)",
+							"line": 99
 						},
 						{
 							"kind": "method",
 							"name": "SetSimulationFocus",
 							"signature": "void SetSimulationFocus(const Vec3& position)",
 							"doc": "Simulation LOD: dynamic bodies beyond the sleep radius around\nthe focus are force-deactivated; they wake when the focus comes back\nwithin the (smaller) wake radius. No focus = no LOD. Radii override\nvia p.LODSleepRadius / p.LODWakeRadius, kill switch via p.LOD.",
-							"line": 97
+							"line": 105
 						},
 						{
 							"kind": "method",
 							"name": "ClearSimulationFocus",
 							"signature": "void ClearSimulationFocus()",
-							"line": 101
+							"line": 109
 						},
 						{
 							"kind": "method",
 							"name": "GetLodFrozenCount",
 							"signature": "size_t GetLodFrozenCount() const",
 							"doc": "Bodies currently frozen by the simulation LOD. Diagnostic (and the\nself-tests pin that destroyed entities don't linger here).",
-							"line": 107
+							"line": 115
 						},
 						{
 							"kind": "method",
 							"name": "GetLodBodiesExaminedLastUpdate",
 							"signature": "uint32_t GetLodBodiesExaminedLastUpdate() const",
 							"doc": "Bodies the last LOD pass looked at: the active ones, plus the frozen set\non a frame the focus moved. Diagnostic — a settled world reads zero.",
-							"line": 113
+							"line": 121
 						},
 						{
 							"kind": "method",
 							"name": "ShiftOrigin",
 							"signature": "void ShiftOrigin(const Vec3& shift)",
 							"doc": "Origin rebasing: translate every Jolt body and character\ncontroller by -shift, velocities untouched. Callers (Scene) shift\nthe transform components; this keeps the physics mirror aligned.",
-							"line": 120
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "StepCharacter",
 							"signature": "bool StepCharacter(uint64_t entityId, float dt)",
 							"doc": "Advance ONE character controller by dt outside the fixed-step loop:\nintegrates gravity into the component's linearVelocity, runs the Jolt\nExtendedUpdate against the live collision world, and writes the result\nback to the component + transform. Game-thread only, never while\nUpdate is running — the client-prediction replay path steps a rewound\ncharacter through the still-unacked inputs with this.",
-							"line": 128
+							"line": 136
 						},
 						{
 							"kind": "method",
 							"name": "SetCharacterPosition",
 							"signature": "bool SetCharacterPosition(uint64_t entityId, const Vec3& position)",
 							"doc": "Teleport a character controller (and its transform) — the rewind half\nof the prediction reconcile.",
-							"line": 132
+							"line": 140
 						},
 						{
 							"kind": "method",
 							"name": "GetCharacterController",
 							"signature": "const CharacterController* GetCharacterController(uint64_t entityId) const",
 							"doc": "The live controller behind an entity, nullptr when none — diagnostics\nand the self-tests (capsule shape state isn't mirrored on the component).",
-							"line": 136
+							"line": 144
 						},
 						{
 							"kind": "method",
 							"name": "GetQueryBodyForEntity",
 							"signature": "FPhysicsBodyId GetQueryBodyForEntity(uint64_t entityId) const",
 							"doc": "The body a query originating ON this entity must exclude: its rigid body\nif it has one, otherwise its character controller's inner body. Looking\nup RigidBodyComponent alone misses characters entirely, and a ray that\nstarts inside a convex shape reports a hit at fraction 0 — which is how\nan AI standing in its own capsule goes blind, or a foot-IK probe lands on\nits own knee. Anything tracing from a pawn wants this, not the component.",
-							"line": 148
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityForBody",
 							"signature": "uint64_t GetEntityForBody(FPhysicsBodyId bodyID) const",
 							"doc": "Look up EntityID for a physics body (returns INVALID_ENTITY if not found)",
-							"line": 151
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "GetRegisteredBodyCount",
 							"signature": "size_t GetRegisteredBodyCount() const",
 							"doc": "Bodies this system has registered — RigidBody bodies, character inner\nbodies and implicit statics alike. Diagnostic, and the self-tests read it\nto pin that a torn-down entity leaves nothing behind.",
-							"line": 159
+							"line": 167
 						},
 						{
 							"kind": "method",
 							"name": "GetBodyInterpolation",
 							"signature": "bool GetBodyInterpolation(uint64_t entityId, FBodyInterp& out) const",
-							"line": 180
+							"line": 188
 						},
 						{
 							"kind": "method",
 							"name": "GetInterpolationAlpha",
 							"signature": "float GetInterpolationAlpha() const",
-							"line": 189
+							"line": 197
 						},
 						{
 							"kind": "method",
 							"name": "OnCollisionEnterEvents",
 							"signature": "MulticastDelegate<uint64_t, const CollisionInfo&>& OnCollisionEnterEvents()",
 							"doc": "The single-slot callbacks above belong to whichever system claimed them\n(the interactable system owns collision enter). Anything else that wants\ncontact begins — an actor's OnHit event — subscribes here and is told\nabout the same pairs, once per side, after the slot callback ran.",
-							"line": 197
+							"line": 205
 						},
 						{
 							"kind": "method",
 							"name": "SetOnCollisionEnter",
 							"signature": "void SetOnCollisionEnter(CollisionCallback cb)",
-							"line": 201
+							"line": 209
 						},
 						{
 							"kind": "method",
 							"name": "SetOnCollisionStay",
 							"signature": "void SetOnCollisionStay(CollisionCallback cb)",
-							"line": 204
+							"line": 212
 						},
 						{
 							"kind": "method",
 							"name": "SetOnCollisionExit",
 							"signature": "void SetOnCollisionExit(CollisionCallback cb)",
-							"line": 207
+							"line": 215
 						},
 						{
 							"kind": "method",
 							"name": "SetOnTriggerEnter",
 							"signature": "void SetOnTriggerEnter(CollisionCallback cb)",
-							"line": 210
+							"line": 218
 						},
 						{
 							"kind": "method",
 							"name": "SetOnTriggerStay",
 							"signature": "void SetOnTriggerStay(CollisionCallback cb)",
-							"line": 213
+							"line": 221
 						},
 						{
 							"kind": "method",
 							"name": "SetOnTriggerExit",
 							"signature": "void SetOnTriggerExit(CollisionCallback cb)",
-							"line": 216
+							"line": 224
 						},
 						{
 							"kind": "method",
 							"name": "GetImplicitStaticBody",
 							"signature": "FPhysicsBodyId GetImplicitStaticBody(uint64_t entityId) const",
 							"doc": "The static body this system created for a collider that carries no\nRigidBody, if any. Diagnostics and the self-tests — nothing is stored on\nthe component, because the body is derived state and must not survive a\nsave/load round trip as authored data.",
-							"line": 239
+							"line": 247
 						},
 						{
 							"kind": "method",
 							"name": "GetImplicitStaticBodyCount",
 							"signature": "size_t GetImplicitStaticBodyCount() const",
-							"line": 245
+							"line": 253
 						},
 						{
 							"kind": "method",
 							"name": "GetImplicitStaticPoseReadCount",
 							"signature": "uint64_t GetImplicitStaticPoseReadCount() const",
 							"doc": "How many times an implicit static's world pose has been re-derived from\nits transform since the system started. Diagnostic — a frame in which no\nprop's transform was rebuilt adds nothing.",
-							"line": 252
+							"line": 260
 						}
 					]
 				},
@@ -6900,38 +7671,38 @@
 					"name": "PhysicsSystem::FBodyInterp",
 					"namespace": "Mowo",
 					"doc": "Physics→render interpolation: the fixed-step sim advances in\n1/60 chunks while the frame time is variable, so dynamic bodies would\njudder at any refresh ≠ 60. Every dynamic body keeps its previous and\ncurrent physics transform; SyncFromPhysics writes the render transform\nas a lerp/slerp between them by alpha = accumulator / fixedTimestep.\nThe simulation itself is untouched — only the rendered pose is\ninterpolated. Kinematic/static bodies and character controllers are\nauthoritative and never interpolated.",
-					"line": 171,
+					"line": 179,
 					"members": [
 						{
 							"kind": "field",
 							"name": "prevPos",
 							"signature": "Vec3 prevPos",
-							"line": 172
+							"line": 180
 						},
 						{
 							"kind": "field",
 							"name": "currPos",
 							"signature": "Vec3 currPos",
-							"line": 173
+							"line": 181
 						},
 						{
 							"kind": "field",
 							"name": "prevRot",
 							"signature": "Quat prevRot",
-							"line": 174
+							"line": 182
 						},
 						{
 							"kind": "field",
 							"name": "currRot",
 							"signature": "Quat currRot",
-							"line": 175
+							"line": 183
 						},
 						{
 							"kind": "field",
 							"name": "active",
 							"signature": "bool active = true",
 							"doc": "Captured with the poses so SyncFromPhysics never asks Jolt — under\nthe async tick Jolt may be mid-step when the render pose is written.",
-							"line": 178
+							"line": 186
 						}
 					]
 				},
@@ -6940,44 +7711,44 @@
 					"name": "PhysicsSystem::FImplicitStaticBody",
 					"namespace": "Mowo",
 					"doc": "A body this system owns on behalf of a collider whose entity carries no\nRigidBody — UE's implicit static: collision enabled, simulation off.\nThe pose and the shape identity are kept so a prop dragged in the editor\ntakes its collision with it (a static body never moves on its own, so\nnothing else would notice) and a reshaped collider is rebuilt.",
-					"line": 225,
+					"line": 233,
 					"members": [
 						{
 							"kind": "field",
 							"name": "bodyID",
 							"signature": "FPhysicsBodyId bodyID",
-							"line": 226
+							"line": 234
 						},
 						{
 							"kind": "field",
 							"name": "position",
 							"signature": "Vec3 position",
-							"line": 227
+							"line": 235
 						},
 						{
 							"kind": "field",
 							"name": "rotation",
 							"signature": "Quat rotation",
-							"line": 228
+							"line": 236
 						},
 						{
 							"kind": "field",
 							"name": "scale",
 							"signature": "Vec3 scale = Vec3(1.0f, 1.0f, 1.0f)",
-							"line": 229
+							"line": 237
 						},
 						{
 							"kind": "field",
 							"name": "shapeFingerprint",
 							"signature": "uint64_t shapeFingerprint = 0",
-							"line": 230
+							"line": 238
 						},
 						{
 							"kind": "field",
 							"name": "transformVersion",
 							"signature": "uint32_t transformVersion = 0",
 							"doc": "TransformComponent::worldVersion the pose above was read at.",
-							"line": 232
+							"line": 240
 						}
 					]
 				}
@@ -6987,7 +7758,7 @@
 					"kind": "alias",
 					"name": "CollisionCallback",
 					"signature": "using CollisionCallback = std::function<void(uint64_t entityId, const CollisionInfo& info)>",
-					"line": 32
+					"line": 33
 				}
 			]
 		},
@@ -7000,78 +7771,78 @@
 					"kind": "struct",
 					"name": "PhysicsConfig",
 					"namespace": "Mowo",
-					"line": 33,
+					"line": 34,
 					"members": [
 						{
 							"kind": "field",
 							"name": "maxBodies",
 							"signature": "uint32_t maxBodies = Physics::DefaultMaxBodies",
-							"line": 34
+							"line": 35
 						},
 						{
 							"kind": "field",
 							"name": "numBodyMutexes",
 							"signature": "uint32_t numBodyMutexes = 0",
 							"doc": "0 = auto",
-							"line": 35
+							"line": 36
 						},
 						{
 							"kind": "field",
 							"name": "maxBodyPairs",
 							"signature": "uint32_t maxBodyPairs = Physics::DefaultMaxBodyPairs",
-							"line": 36
+							"line": 37
 						},
 						{
 							"kind": "field",
 							"name": "maxContactConstraints",
 							"signature": "uint32_t maxContactConstraints = Physics::DefaultMaxContactConstraints",
-							"line": 37
+							"line": 38
 						},
 						{
 							"kind": "field",
 							"name": "tempAllocatorSize",
 							"signature": "uint32_t tempAllocatorSize = Physics::DefaultTempAllocatorSize",
-							"line": 38
+							"line": 39
 						},
 						{
 							"kind": "field",
 							"name": "numThreads",
 							"signature": "int numThreads = -1",
 							"doc": "Upper bound on the workers Jolt splits a phase across (-1 = the whole\nengine pool). Caps the split only; no engine worker is spawned or parked.",
-							"line": 41
+							"line": 42
 						},
 						{
 							"kind": "field",
 							"name": "singleThreadedJobs",
 							"signature": "bool singleThreadedJobs = false",
 							"doc": "Escape hatch: run Jolt's jobs on the stepping thread instead of the\nengine worker pool. Off everywhere by default; flip it if a platform\nbring-up ever hits pool trouble mid-port.",
-							"line": 45
+							"line": 46
 						},
 						{
 							"kind": "field",
 							"name": "deterministic",
 							"signature": "bool deterministic = false",
 							"doc": "Reproducible mode (p.Deterministic): Jolt's jobs run on the stepping\nthread in a fixed order whatever numThreads says, and contact events are\nhanded to gameplay sorted by body pair rather than in worker-completion\norder. Jolt's own guarantee — same binary, same CPU, same inputs, same\nresults — is what this mode makes the ENGINE honour on top; without it\nthe step is still Jolt-deterministic but the event order is not.",
-							"line": 52
+							"line": 53
 						},
 						{
 							"kind": "field",
 							"name": "velocitySteps",
 							"signature": "uint32_t velocitySteps = 10",
 							"doc": "Solver iterations per step (p.VelocitySteps / p.PositionSteps). More steps\nsettle stacks and tall piles harder at a linear cost; Jolt's own defaults.",
-							"line": 55
+							"line": 56
 						},
 						{
 							"kind": "field",
 							"name": "positionSteps",
 							"signature": "uint32_t positionSteps = 2",
-							"line": 56
+							"line": 57
 						},
 						{
 							"kind": "field",
 							"name": "gravity",
 							"signature": "Vec3 gravity = Vec3(0.0f, Physics::DefaultGravityY, 0.0f)",
-							"line": 57
+							"line": 58
 						}
 					]
 				},
@@ -7079,54 +7850,54 @@
 					"kind": "struct",
 					"name": "RaycastHit",
 					"namespace": "Mowo",
-					"line": 60,
+					"line": 61,
 					"members": [
 						{
 							"kind": "field",
 							"name": "bodyID",
 							"signature": "FPhysicsBodyId bodyID",
-							"line": 61
+							"line": 62
 						},
 						{
 							"kind": "field",
 							"name": "subShapeID",
 							"signature": "FPhysicsSubShapeId subShapeID",
 							"doc": "Identifies the exact triangle / heightfield square / compound leaf that\nwas struck. Keep it if you want to re-resolve the surface later.",
-							"line": 64
+							"line": 65
 						},
 						{
 							"kind": "field",
 							"name": "point",
 							"signature": "Vec3 point",
 							"doc": "The impact point ON the struck surface — for shape casts this is the\ncontact point, not the swept shape's center (decals, impact FX and the\ncamera boom all want the surface).",
-							"line": 68
+							"line": 69
 						},
 						{
 							"kind": "field",
 							"name": "normal",
 							"signature": "Vec3 normal",
 							"doc": "Points OUT of the struck surface, toward the query.",
-							"line": 70
+							"line": 71
 						},
 						{
 							"kind": "field",
 							"name": "shapeCenter",
 							"signature": "Vec3 shapeCenter",
 							"doc": "Shape casts only: where the swept shape's center was at the time of\nimpact (origin + dir * fraction). Raycasts leave it equal to `point`.",
-							"line": 73
+							"line": 74
 						},
 						{
 							"kind": "field",
 							"name": "fraction",
 							"signature": "float fraction = 1.0f",
-							"line": 74
+							"line": 75
 						},
 						{
 							"kind": "field",
 							"name": "surface",
 							"signature": "ESurfaceType surface = ESurfaceType::Default",
 							"doc": "Resolved from the sub-shape, so a mesh with per-triangle surfaces or a\nterrain with painted layers answers per hit rather than per body.",
-							"line": 77
+							"line": 78
 						}
 					]
 				},
@@ -7135,63 +7906,63 @@
 					"name": "FPhysicsBodyDesc",
 					"namespace": "Mowo",
 					"doc": "A primitive body created straight through the world, outside any component\n(preview floors, tool geometry, tests). `extents` follows EQueryShape: a\nsphere reads x as the radius, a box all three as half extents, a capsule x\nas the radius and y as the half height of the cylinder.",
-					"line": 84,
+					"line": 85,
 					"members": [
 						{
 							"kind": "field",
 							"name": "shape",
 							"signature": "EQueryShape shape = EQueryShape::Box",
-							"line": 85
+							"line": 86
 						},
 						{
 							"kind": "field",
 							"name": "extents",
 							"signature": "Vec3 extents = Vec3(0.5f, 0.5f, 0.5f)",
-							"line": 86
+							"line": 87
 						},
 						{
 							"kind": "field",
 							"name": "position",
 							"signature": "Vec3 position = Vec3(0.0f, 0.0f, 0.0f)",
-							"line": 87
+							"line": 88
 						},
 						{
 							"kind": "field",
 							"name": "rotation",
 							"signature": "Quat rotation",
-							"line": 88
+							"line": 89
 						},
 						{
 							"kind": "field",
 							"name": "motionType",
 							"signature": "EPhysicsMotionType motionType = EPhysicsMotionType::Static",
-							"line": 89
+							"line": 90
 						},
 						{
 							"kind": "field",
 							"name": "layer",
 							"signature": "uint16_t layer = ObjectLayers::Static",
-							"line": 90
+							"line": 91
 						},
 						{
 							"kind": "field",
 							"name": "mass",
 							"signature": "float mass = 0.0f",
 							"doc": "Above zero overrides the mass (inertia still follows the shape).",
-							"line": 92
+							"line": 93
 						},
 						{
 							"kind": "field",
 							"name": "linearDamping",
 							"signature": "float linearDamping = -1.0f",
 							"doc": "Negative keeps Jolt's default damping.",
-							"line": 94
+							"line": 95
 						},
 						{
 							"kind": "field",
 							"name": "activate",
 							"signature": "bool activate = false",
-							"line": 95
+							"line": 96
 						}
 					]
 				},
@@ -7199,607 +7970,666 @@
 					"kind": "class",
 					"name": "PhysicsWorld",
 					"namespace": "Mowo",
-					"line": 98,
+					"line": 99,
 					"members": [
 						{
 							"kind": "method",
 							"name": "PhysicsWorld",
 							"signature": "PhysicsWorld()",
-							"line": 100
+							"line": 101
 						},
 						{
 							"kind": "method",
 							"name": "~PhysicsWorld",
 							"signature": "~PhysicsWorld()",
-							"line": 101
+							"line": 102
 						},
 						{
 							"kind": "method",
 							"name": "PhysicsWorld",
 							"signature": "PhysicsWorld(const PhysicsWorld&) = delete",
-							"line": 103
+							"line": 104
 						},
 						{
 							"kind": "method",
 							"name": "operator=",
 							"signature": "PhysicsWorld& operator=(const PhysicsWorld&) = delete",
-							"line": 104
+							"line": 105
 						},
 						{
 							"kind": "method",
 							"name": "Initialize",
 							"signature": "void Initialize(const PhysicsConfig& config = PhysicsConfig())",
-							"line": 106
+							"line": 107
 						},
 						{
 							"kind": "method",
 							"name": "Shutdown",
 							"signature": "void Shutdown()",
-							"line": 107
+							"line": 108
 						},
 						{
 							"kind": "method",
 							"name": "Step",
 							"signature": "void Step(float deltaTime)",
-							"line": 108
+							"line": 109
 						},
 						{
 							"kind": "method",
 							"name": "StepAsync",
 							"signature": "void StepAsync(float deltaTime, uint32_t stepCount)",
 							"doc": "The async tick (p.AsyncTick). StepAsync hands `stepCount` fixed steps to\nthe worker pool and returns at once; WaitForStep joins them. Between the\ntwo, Jolt belongs to the job: every entry point below that reaches it\njoins first (counted in GetAsyncJoinStalls, so a project can see which\ncaller keeps forfeiting the overlap), and the only read surface that\ndoes not wait is what PhysicsSystem copied out at the previous join —\ntransforms, the interpolation snapshot, the character components, the\ncontact events. The persistent-load channel is safe to write throughout:\nthe job consumes the copy it was handed at submit.",
-							"line": 119
+							"line": 120
 						},
 						{
 							"kind": "method",
 							"name": "WaitForStep",
 							"signature": "void WaitForStep() const",
-							"line": 120
+							"line": 121
 						},
 						{
 							"kind": "method",
 							"name": "IsStepInFlight",
 							"signature": "bool IsStepInFlight() const",
-							"line": 121
+							"line": 122
 						},
 						{
 							"kind": "method",
 							"name": "GetLastAsyncStepMs",
 							"signature": "float GetLastAsyncStepMs() const",
-							"line": 124
+							"line": 125
 						},
 						{
 							"kind": "method",
 							"name": "GetAsyncJoinStalls",
 							"signature": "uint64_t GetAsyncJoinStalls() const",
-							"line": 127
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "GetImpl",
 							"signature": "FPhysicsWorldImpl& GetImpl() const",
 							"doc": "Physics-internal: the Jolt side of this world, joined first like every\nother entry point. The type is only complete inside the Physics module.",
-							"line": 133
+							"line": 134
 						},
 						{
 							"kind": "method",
 							"name": "AddForce",
 							"signature": "void AddForce(FPhysicsBodyId bodyID, Vec3 force)",
 							"doc": "Force / Impulse / Torque (operate on dynamic bodies)",
-							"line": 136
+							"line": 137
 						},
 						{
 							"kind": "method",
 							"name": "AddImpulse",
 							"signature": "void AddImpulse(FPhysicsBodyId bodyID, Vec3 impulse)",
-							"line": 137
+							"line": 138
 						},
 						{
 							"kind": "method",
 							"name": "AddTorque",
 							"signature": "void AddTorque(FPhysicsBodyId bodyID, Vec3 torque)",
-							"line": 138
+							"line": 139
 						},
 						{
 							"kind": "method",
 							"name": "AddForceAtPosition",
 							"signature": "void AddForceAtPosition(FPhysicsBodyId bodyID, Vec3 force, Vec3 position)",
-							"line": 139
+							"line": 140
 						},
 						{
 							"kind": "method",
 							"name": "AddImpulseAtPosition",
 							"signature": "void AddImpulseAtPosition(FPhysicsBodyId bodyID, Vec3 impulse, Vec3 position)",
-							"line": 140
+							"line": 141
 						},
 						{
 							"kind": "method",
 							"name": "SetPersistentForce",
 							"signature": "void SetPersistentForce(FPhysicsBodyId bodyID, Vec3 force)",
 							"doc": "Persistent per-body force/torque channel. Jolt clears accumulated\nforces after every Update, so a force applied once per frame reaches\nonly the FIRST substep of a multi-substep frame — everything after it\nintegrates force-free. Loads registered here are re-applied at the top\nof every Step, making the effect substep-count independent. The channel\nis re-armed each frame: PhysicsSystem clears it after its substep loop,\nso per-frame sources (buoyancy, wind) just Add every tick. Direct\nPhysicsWorld steppers own the clearing themselves. One-shot impulses\nstay on AddImpulse.",
-							"line": 151
+							"line": 152
 						},
 						{
 							"kind": "method",
 							"name": "SetPersistentTorque",
 							"signature": "void SetPersistentTorque(FPhysicsBodyId bodyID, Vec3 torque)",
-							"line": 152
+							"line": 153
 						},
 						{
 							"kind": "method",
 							"name": "AddPersistentForce",
 							"signature": "void AddPersistentForce(FPhysicsBodyId bodyID, Vec3 force)",
-							"line": 153
+							"line": 154
 						},
 						{
 							"kind": "method",
 							"name": "AddPersistentForceAtPosition",
 							"signature": "void AddPersistentForceAtPosition(FPhysicsBodyId bodyID, Vec3 force, Vec3 position)",
-							"line": 154
+							"line": 155
 						},
 						{
 							"kind": "method",
 							"name": "AddPersistentTorque",
 							"signature": "void AddPersistentTorque(FPhysicsBodyId bodyID, Vec3 torque)",
-							"line": 155
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "ClearPersistentForce",
 							"signature": "void ClearPersistentForce(FPhysicsBodyId bodyID)",
-							"line": 156
+							"line": 157
 						},
 						{
 							"kind": "method",
 							"name": "ClearPersistentForces",
 							"signature": "void ClearPersistentForces()",
-							"line": 157
+							"line": 158
 						},
 						{
 							"kind": "method",
 							"name": "SetLinearVelocity",
 							"signature": "void SetLinearVelocity(FPhysicsBodyId bodyID, Vec3 velocity)",
-							"line": 159
+							"line": 160
 						},
 						{
 							"kind": "method",
 							"name": "SetAngularVelocity",
 							"signature": "void SetAngularVelocity(FPhysicsBodyId bodyID, Vec3 velocity)",
-							"line": 160
+							"line": 161
 						},
 						{
 							"kind": "method",
 							"name": "GetLinearVelocity",
 							"signature": "Vec3 GetLinearVelocity(FPhysicsBodyId bodyID) const",
-							"line": 161
+							"line": 162
 						},
 						{
 							"kind": "method",
 							"name": "GetAngularVelocity",
 							"signature": "Vec3 GetAngularVelocity(FPhysicsBodyId bodyID) const",
-							"line": 162
+							"line": 163
 						},
 						{
 							"kind": "method",
 							"name": "SetBodyFriction",
 							"signature": "void SetBodyFriction(FPhysicsBodyId bodyID, float friction)",
 							"doc": "Live friction / restitution on an existing body — what swapping a\nphysics material at runtime changes. The contact listener combines\nthese per contact, so the next contact already uses the new values.\nThe surface type lives on the shape and is not changed here.",
-							"line": 168
+							"line": 169
 						},
 						{
 							"kind": "method",
 							"name": "SetBodyRestitution",
 							"signature": "void SetBodyRestitution(FPhysicsBodyId bodyID, float restitution)",
-							"line": 169
+							"line": 170
 						},
 						{
 							"kind": "method",
 							"name": "GetBodyFriction",
 							"signature": "float GetBodyFriction(FPhysicsBodyId bodyID) const",
-							"line": 170
+							"line": 171
 						},
 						{
 							"kind": "method",
 							"name": "GetBodyRestitution",
 							"signature": "float GetBodyRestitution(FPhysicsBodyId bodyID) const",
-							"line": 171
+							"line": 172
 						},
 						{
 							"kind": "method",
 							"name": "Raycast",
 							"signature": "bool Raycast(Vec3 origin, Vec3 dir, float maxDist, RaycastHit& hit, uint32_t layerMask = 0xFFFFFFFF, FPhysicsBodyId ignoreBody = FPhysicsBodyId()) const",
 							"doc": "Queries. `ignoreBody` drops one body from the result set — pass the\nquerying entity's own body so a character does not detect itself.",
-							"line": 175
+							"line": 176
 						},
 						{
 							"kind": "method",
 							"name": "RaycastAll",
 							"signature": "bool RaycastAll(Vec3 origin, Vec3 dir, float maxDist, std::vector<RaycastHit>& hits, uint32_t layerMask = 0xFFFFFFFF, FPhysicsBodyId ignoreBody = FPhysicsBodyId()) const",
-							"line": 176
+							"line": 177
 						},
 						{
 							"kind": "method",
 							"name": "SphereCast",
 							"signature": "bool SphereCast(Vec3 origin, float radius, Vec3 dir, float maxDist, RaycastHit& hit, uint32_t layerMask = 0xFFFFFFFF, FPhysicsBodyId ignoreBody = FPhysicsBodyId()) const",
-							"line": 177
+							"line": 178
 						},
 						{
 							"kind": "method",
 							"name": "BoxCast",
 							"signature": "bool BoxCast(Vec3 center, Vec3 halfExtents, Vec3 dir, float maxDist, RaycastHit& hit, uint32_t layerMask = 0xFFFFFFFF, FPhysicsBodyId ignoreBody = FPhysicsBodyId()) const",
-							"line": 179
+							"line": 180
 						},
 						{
 							"kind": "method",
 							"name": "CapsuleCast",
 							"signature": "bool CapsuleCast(Vec3 origin, float radius, float halfHeight, Vec3 dir, float maxDist, RaycastHit& hit, uint32_t layerMask = 0xFFFFFFFF, FPhysicsBodyId ignoreBody = FPhysicsBodyId()) const",
-							"line": 180
+							"line": 181
 						},
 						{
 							"kind": "method",
 							"name": "RaycastChannel",
 							"signature": "bool RaycastChannel(Vec3 origin, Vec3 dir, float maxDist, ECollisionChannel traceChannel, RaycastHit& hit, FPhysicsBodyId ignoreBody = FPhysicsBodyId()) const",
 							"doc": "Trace-channel raycast. Independent of object collision: a body registers\na hit only when its response to `traceChannel` is Block. Bodies that\nIgnore or Overlap the channel are passed through, so a Visibility trace\nskips a collider that physically blocks a Pawn. Bodies with no registered\nresponse default to Block (hit), matching the plain layer raycast.",
-							"line": 187
+							"line": 188
 						},
 						{
 							"kind": "method",
 							"name": "OverlapSphere",
 							"signature": "std::vector<FPhysicsBodyId> OverlapSphere(Vec3 center, float radius, uint32_t layerMask = 0xFFFFFFFF, FPhysicsBodyId ignoreBody = FPhysicsBodyId()) const",
 							"doc": "Overlap queries. These are narrow-phase shape tests: a body is reported\nonly when its actual collision shape intersects the query volume, not\nmerely when its broad-phase AABB does.",
-							"line": 192
+							"line": 193
 						},
 						{
 							"kind": "method",
 							"name": "OverlapBox",
 							"signature": "std::vector<FPhysicsBodyId> OverlapBox(Vec3 center, Vec3 halfExtents, uint32_t layerMask = 0xFFFFFFFF, FPhysicsBodyId ignoreBody = FPhysicsBodyId()) const",
-							"line": 193
+							"line": 194
 						},
 						{
 							"kind": "method",
 							"name": "QueryRay",
 							"signature": "bool QueryRay(Vec3 origin, Vec3 direction, float maxDistance, const FQueryFilter& filter, FQueryHit& hit) const",
 							"doc": "The first-class query surface: channel or layer filtering, an ignore\nLIST, mobility and sensor gating, multi-hit with per-hit Block/Overlap,\nand entity resolution on the way out. The narrower entry points above\nremain for existing callers; new work goes through these.\n\n`extents` follows EQueryShape: sphere reads x as the radius, box reads\nall three as half extents, capsule reads x as the radius and y as the\nhalf height of the cylinder.",
-							"line": 203
+							"line": 204
 						},
 						{
 							"kind": "method",
 							"name": "QueryRayMulti",
 							"signature": "bool QueryRayMulti(Vec3 origin, Vec3 direction, float maxDistance, const FQueryFilter& filter, std::vector<FQueryHit>& hits) const",
-							"line": 204
+							"line": 205
 						},
 						{
 							"kind": "method",
 							"name": "QuerySweep",
 							"signature": "bool QuerySweep(EQueryShape shape, Vec3 extents, Vec3 origin, Vec3 direction, float maxDistance, const FQueryFilter& filter, FQueryHit& hit) const",
-							"line": 205
+							"line": 206
 						},
 						{
 							"kind": "method",
 							"name": "QuerySweepMulti",
 							"signature": "bool QuerySweepMulti(EQueryShape shape, Vec3 extents, Vec3 origin, Vec3 direction, float maxDistance, const FQueryFilter& filter, std::vector<FQueryHit>& hits) const",
-							"line": 206
+							"line": 207
 						},
 						{
 							"kind": "method",
 							"name": "QueryOverlap",
 							"signature": "bool QueryOverlap(EQueryShape shape, Vec3 extents, Vec3 center, const FQueryFilter& filter, std::vector<FQueryHit>& hits) const",
-							"line": 207
+							"line": 208
+						},
+						{
+							"kind": "method",
+							"name": "QueryRayAny",
+							"signature": "bool QueryRayAny(Vec3 origin, Vec3 direction, float maxDistance, const FQueryFilter& filter) const",
+							"doc": "Existence tests: stop at the first body that qualifies instead of finding\nthe closest, which is all \"is anything in the way\" ever needs. The overlap\nform is the cheap cousin of QueryOverlap for a placement or spawn check.",
+							"line": 213
+						},
+						{
+							"kind": "method",
+							"name": "QuerySweepAny",
+							"signature": "bool QuerySweepAny(EQueryShape shape, Vec3 extents, Vec3 origin, Vec3 direction, float maxDistance, const FQueryFilter& filter) const",
+							"line": 214
+						},
+						{
+							"kind": "method",
+							"name": "QueryOverlapAny",
+							"signature": "bool QueryOverlapAny(EQueryShape shape, Vec3 extents, Vec3 center, const FQueryFilter& filter) const",
+							"line": 215
+						},
+						{
+							"kind": "method",
+							"name": "QueryPoint",
+							"signature": "bool QueryPoint(Vec3 point, const FQueryFilter& filter, std::vector<FQueryHit>& hits) const",
+							"doc": "Every body whose shape contains the point. Hits are unordered; the\nlocation is the point itself and the normal is zero.",
+							"line": 219
 						},
 						{
 							"kind": "method",
 							"name": "ExecuteRayBatch",
 							"signature": "uint32_t ExecuteRayBatch(const FTraceBatchItem* items, size_t count, const FQueryFilter& filter, FQueryHit* outHits, uint8_t* outHasHit) const",
 							"doc": "The engine behind FTraceBatch: one filter construction, one narrow-phase\nlookup and one job dispatch for the whole ray set. Callers that own their\nown storage (a scanner writing straight into its point buffer) can drive\nit directly; `outHits` and `outHasHit` must both hold `count` entries.",
-							"line": 213
+							"line": 225
 						},
 						{
 							"kind": "method",
 							"name": "SetBodyEntity",
 							"signature": "void SetBodyEntity(FPhysicsBodyId bodyID, uint64_t entityId)",
 							"doc": "Body → entity mirror. Query results carry the gameplay entity directly,\nwhich is what every caller wanted from a raw BodyID anyway; the batched\nscanner path would otherwise do one map lookup per ray. PhysicsSystem\nowns the registrations (rigid bodies and character inner bodies alike).",
-							"line": 219
+							"line": 231
 						},
 						{
 							"kind": "method",
 							"name": "ClearBodyEntity",
 							"signature": "void ClearBodyEntity(uint32_t bodyIndex)",
-							"line": 220
+							"line": 232
 						},
 						{
 							"kind": "method",
 							"name": "GetBodyEntity",
 							"signature": "uint64_t GetBodyEntity(uint32_t bodyIndex) const",
-							"line": 221
+							"line": 233
 						},
 						{
 							"kind": "method",
 							"name": "GetSurfaceAt",
 							"signature": "ESurfaceType GetSurfaceAt(FPhysicsBodyId bodyID, const FPhysicsSubShapeId& subShapeID) const",
 							"doc": "Surface type at a specific point on a body. `subShapeID` is what a\nraycast, shape cast or contact manifold hands back; pass an empty one to\nget the body's uniform surface. This is the single resolution path — the\nper-triangle and per-terrain-square answers come out of Jolt's own shape\nmaterial lookup rather than a table kept alongside it.",
-							"line": 228
+							"line": 240
 						},
 						{
 							"kind": "method",
 							"name": "GetSurface",
 							"signature": "ESurfaceType GetSurface(FPhysicsBodyId bodyID) const",
-							"line": 229
+							"line": 241
 						},
 						{
 							"kind": "method",
 							"name": "IsBodySleeping",
 							"signature": "bool IsBodySleeping(FPhysicsBodyId bodyID) const",
-							"line": 231
+							"line": 243
 						},
 						{
 							"kind": "method",
 							"name": "WakeUpBody",
 							"signature": "void WakeUpBody(FPhysicsBodyId bodyID)",
-							"line": 232
+							"line": 244
 						},
 						{
 							"kind": "method",
 							"name": "PutBodyToSleep",
 							"signature": "void PutBodyToSleep(FPhysicsBodyId bodyID)",
-							"line": 233
+							"line": 245
 						},
 						{
 							"kind": "method",
 							"name": "IsBodyAdded",
 							"signature": "bool IsBodyAdded(FPhysicsBodyId bodyID) const",
 							"doc": "Whether the body is in the simulation right now (a disabled RigidBody's\nbody exists but is removed).",
-							"line": 237
+							"line": 249
 						},
 						{
 							"kind": "method",
 							"name": "CreateBody",
 							"signature": "FPhysicsBodyId CreateBody(const FPhysicsBodyDesc& desc)",
 							"doc": "A body owned by the caller rather than by a component; the caller\ndestroys it with DestroyBody.",
-							"line": 241
+							"line": 253
 						},
 						{
 							"kind": "method",
 							"name": "CreateStaticMeshBody",
 							"signature": "FPhysicsBodyId CreateStaticMeshBody(const std::vector<Vec3>& vertices, const std::vector<uint32_t>& indices, uint16_t layer = ObjectLayers::Static)",
 							"doc": "A static triangle mesh in world space (indices are triangle triples).\nInvalid when the mesh does not cook.",
-							"line": 244
+							"line": 256
 						},
 						{
 							"kind": "method",
 							"name": "DestroyBody",
 							"signature": "void DestroyBody(FPhysicsBodyId bodyID)",
-							"line": 245
+							"line": 257
 						},
 						{
 							"kind": "method",
 							"name": "OptimizeBroadPhase",
 							"signature": "void OptimizeBroadPhase()",
 							"doc": "Rebuilds the broad phase after a batch of bodies was added in one go —\nwhat a level load does, so a test or a tool that just placed static\ngeometry queries against the same tree a running game would.",
-							"line": 250
+							"line": 262
 						},
 						{
 							"kind": "method",
 							"name": "SetGravity",
 							"signature": "void SetGravity(Vec3 gravity)",
-							"line": 252
+							"line": 264
 						},
 						{
 							"kind": "method",
 							"name": "GetGravity",
 							"signature": "Vec3 GetGravity() const",
-							"line": 253
+							"line": 265
 						},
 						{
 							"kind": "method",
 							"name": "GetVelocitySteps",
 							"signature": "uint32_t GetVelocitySteps() const",
 							"doc": "What the solver actually runs with, read back from Jolt.",
-							"line": 256
+							"line": 268
 						},
 						{
 							"kind": "method",
 							"name": "GetPositionSteps",
 							"signature": "uint32_t GetPositionSteps() const",
-							"line": 257
+							"line": 269
 						},
 						{
 							"kind": "method",
 							"name": "CreateKinematicAnchorBody",
 							"signature": "FPhysicsBodyId CreateKinematicAnchorBody(Vec3 position, uint8_t layer)",
-							"line": 259
+							"line": 271
 						},
 						{
 							"kind": "method",
 							"name": "DestroyAnchorBody",
 							"signature": "void DestroyAnchorBody(FPhysicsBodyId bodyID)",
-							"line": 260
+							"line": 272
 						},
 						{
 							"kind": "method",
 							"name": "MoveKinematicBody",
 							"signature": "void MoveKinematicBody(FPhysicsBodyId bodyID, Vec3 position, float deltaTime)",
-							"line": 261
+							"line": 273
 						},
 						{
 							"kind": "method",
 							"name": "CreatePositionMotorConstraint",
 							"signature": "FPhysicsConstraintHandle CreatePositionMotorConstraint(FPhysicsBodyId anchorBody, FPhysicsBodyId carriedBody, Vec3 holdPoint, float frequency, float damping, float maxForce)",
-							"line": 262
+							"line": 274
 						},
 						{
 							"kind": "method",
 							"name": "RemoveHoldConstraint",
 							"signature": "void RemoveHoldConstraint(FPhysicsConstraintHandle constraint)",
-							"line": 263
+							"line": 275
 						},
 						{
 							"kind": "method",
 							"name": "CreateHingeConstraint",
 							"signature": "FPhysicsConstraintHandle CreateHingeConstraint(FPhysicsBodyId bodyID, FPhysicsBodyId otherBody, Vec3 worldPivot, Vec3 worldAxis, float limitMin, float limitMax, float maxFrictionTorque = 0.0f)",
 							"doc": "Constraint creation for gameplay (doors, levers, sliding parts). All\nJolt object creation stays inside this module — Jolt's allocator\nglobals are DLL-local, so callers in other modules must never build\nconstraint settings themselves. Pass an invalid `otherBody` to attach\nagainst the immovable world. Angles are radians, points/axes world-space.",
-							"line": 270
+							"line": 282
 						},
 						{
 							"kind": "method",
 							"name": "CreateSliderConstraint",
 							"signature": "FPhysicsConstraintHandle CreateSliderConstraint(FPhysicsBodyId bodyID, FPhysicsBodyId otherBody, Vec3 worldPoint, Vec3 worldAxis, float limitMin, float limitMax)",
-							"line": 271
+							"line": 283
 						},
 						{
 							"kind": "method",
 							"name": "RemoveConstraint",
 							"signature": "void RemoveConstraint(FPhysicsConstraintHandle constraint)",
-							"line": 272
+							"line": 284
 						},
 						{
 							"kind": "method",
 							"name": "GetHingeAngle",
 							"signature": "float GetHingeAngle(FPhysicsConstraintHandle constraint) const",
-							"line": 274
+							"line": 286
 						},
 						{
 							"kind": "method",
 							"name": "SetHingeMotorTarget",
 							"signature": "void SetHingeMotorTarget(FPhysicsConstraintHandle constraint, float targetAngle, float maxTorque, float frequency = 2.0f, float damping = 1.0f)",
 							"doc": "Holds the hinge at an angle (rad). Frequency (Hz) and damping ratio\ndescribe the swing of the bodies about the hinge itself, whatever the\nlever between hinge and centre of mass — the rescaling to what Jolt's\nangle-only motor part expects happens here.",
-							"line": 279
+							"line": 291
 						},
 						{
 							"kind": "method",
 							"name": "SetHingeMotorVelocity",
 							"signature": "void SetHingeMotorVelocity(FPhysicsConstraintHandle constraint, float targetAngularVelocity, float maxTorque)",
 							"doc": "Drives the hinge at a constant rate (rad/s) instead of toward an angle —\na turntable, a conveyor drum, a wheel that must keep spinning.",
-							"line": 282
+							"line": 294
 						},
 						{
 							"kind": "method",
 							"name": "SetHingeMotorOff",
 							"signature": "void SetHingeMotorOff(FPhysicsConstraintHandle constraint)",
-							"line": 283
+							"line": 295
 						},
 						{
 							"kind": "method",
 							"name": "SetSixDofMotorSprings",
 							"signature": "void SetSixDofMotorSprings(FPhysicsConstraintHandle constraint, float frequency, float damping)",
 							"doc": "Springs for every position motor of a 6DOF joint. Translation motors\ntake the pair as authored; each rotation motor gets it rescaled so it\ndescribes the swing about the joint on that axis — the hinge's contract.",
-							"line": 287
+							"line": 299
 						},
 						{
 							"kind": "method",
 							"name": "WakeConstraintBodies",
 							"signature": "void WakeConstraintBodies(FPhysicsConstraintHandle constraint)",
 							"doc": "Activates the non-static bodies of a two-body constraint. A motor on a\nsleeping island does nothing — Jolt solves only active bodies — and\nactivating a static body is a Jolt assert, so the check lives here.",
-							"line": 291
+							"line": 303
 						},
 						{
 							"kind": "method",
 							"name": "GetSliderPosition",
 							"signature": "float GetSliderPosition(FPhysicsConstraintHandle constraint) const",
-							"line": 292
+							"line": 304
 						},
 						{
 							"kind": "method",
 							"name": "SetBodyObjectLayer",
 							"signature": "void SetBodyObjectLayer(FPhysicsBodyId bodyID, uint8_t layer)",
-							"line": 293
+							"line": 305
 						},
 						{
 							"kind": "method",
 							"name": "SetBodyRotation",
 							"signature": "void SetBodyRotation(FPhysicsBodyId bodyID, const Quat& rotation)",
-							"line": 294
+							"line": 306
 						},
 						{
 							"kind": "method",
 							"name": "GetBodyPose",
 							"signature": "bool GetBodyPose(FPhysicsBodyId bodyID, Vec3& outPosition, Quat& outRotation) const",
 							"doc": "Origin pose of a body; false for an invalid or removed one.",
-							"line": 297
+							"line": 309
 						},
 						{
 							"kind": "method",
 							"name": "SaveState",
 							"signature": "bool SaveState(std::vector<uint8_t>& outState) const",
 							"doc": "The whole simulation state — every body's pose, velocity and sleep\nstate, constraint lambdas and the contact cache that warm-starts the\nnext step — as bytes, and back. What rollback netcode and time rewind\nrestore: with the contact cache included, a restored world steps to\nthe same bits it stepped to the first time. Restore needs the same set\nof bodies the state was saved with and returns false otherwise.",
-							"line": 305
+							"line": 317
 						},
 						{
 							"kind": "method",
 							"name": "RestoreState",
 							"signature": "bool RestoreState(const std::vector<uint8_t>& state)",
-							"line": 306
+							"line": 318
+						},
+						{
+							"kind": "method",
+							"name": "ComputeStateChecksum",
+							"signature": "uint64_t ComputeStateChecksum() const",
+							"doc": "Hash of SaveState: two worlds fed the same inputs agree on it exactly when\nthey simulated identically (meaningful under p.Deterministic). Zero when\nthe state could not be saved.",
+							"line": 323
+						},
+						{
+							"kind": "method",
+							"name": "GetBodyState",
+							"signature": "bool GetBodyState(FPhysicsBodyId bodyID, uint32_t key, FPhysicsBodyState& outState) const",
+							"doc": "Partial snapshots for the bodies one peer owns. GetBodyState reads a\nbody's pose, velocities and sleep state under the caller's `key`;\nApplyBodyState writes them back without waking a sleeping body that stays\nasleep. Static bodies take the pose only. Both are false for a body that\nis invalid or out of the simulation.",
+							"line": 330
+						},
+						{
+							"kind": "method",
+							"name": "ApplyBodyState",
+							"signature": "bool ApplyBodyState(FPhysicsBodyId bodyID, const FPhysicsBodyState& state)",
+							"line": 331
+						},
+						{
+							"kind": "method",
+							"name": "CaptureBodyStates",
+							"signature": "void CaptureBodyStates(const std::vector<FPhysicsBodyBinding>& bindings, std::vector<FPhysicsBodyState>& outStates) const",
+							"line": 332
+						},
+						{
+							"kind": "method",
+							"name": "ApplyBodyStates",
+							"signature": "uint32_t ApplyBodyStates(const std::vector<FPhysicsBodyBinding>& bindings, const std::vector<FPhysicsBodyState>& states)",
+							"doc": "Applies each state to the binding with the same key; returns how many matched.",
+							"line": 334
 						},
 						{
 							"kind": "method",
 							"name": "TeleportBody",
 							"signature": "void TeleportBody(FPhysicsBodyId bodyID, const Vec3& position, const Quat& rotation)",
 							"doc": "Moves a body without waking it or touching its velocity. Lag compensation\nputs bodies where they were for one query and then back, and a woken or\nre-integrated body would carry the rewind into the next step.",
-							"line": 311
+							"line": 339
 						},
 						{
 							"kind": "method",
 							"name": "GetBodyCenterOfMass",
 							"signature": "Vec3 GetBodyCenterOfMass(FPhysicsBodyId bodyID) const",
-							"line": 312
+							"line": 340
 						},
 						{
 							"kind": "method",
 							"name": "SetMotionType",
 							"signature": "void SetMotionType(FPhysicsBodyId bodyID, EPhysicsMotionType motionType)",
-							"line": 314
+							"line": 342
 						},
 						{
 							"kind": "method",
 							"name": "GetMotionType",
 							"signature": "EPhysicsMotionType GetMotionType(FPhysicsBodyId bodyID) const",
 							"doc": "Static for an invalid body.",
-							"line": 316
+							"line": 344
 						},
 						{
 							"kind": "method",
 							"name": "HasContactSensorRecord",
 							"signature": "bool HasContactSensorRecord(uint32_t bodyIndex) const",
 							"doc": "Whether the contact listener still holds a sensor record for this body\nindex — diagnostic; index reuse would misroute the next body's exit\nevents if teardown forgot one.",
-							"line": 321
+							"line": 349
 						},
 						{
 							"kind": "method",
 							"name": "GetConfig",
 							"signature": "const PhysicsConfig& GetConfig() const",
-							"line": 323
+							"line": 351
 						},
 						{
 							"kind": "method",
 							"name": "GetDebugSettings",
 							"signature": "PhysicsDebugSettings& GetDebugSettings()",
 							"doc": "GetDebugSettings() returns a writable reference so the editor can flip\ncheckboxes without going through setters. PhysicsSystem reads the same\nstruct once per Update tick to decide whether to call DrawDebug().",
-							"line": 330
+							"line": 358
 						},
 						{
 							"kind": "method",
 							"name": "GetDebugSettings",
 							"signature": "const PhysicsDebugSettings& GetDebugSettings() const",
-							"line": 333
+							"line": 361
 						},
 						{
 							"kind": "method",
 							"name": "GetStats",
 							"signature": "const PhysicsStats& GetStats() const",
 							"doc": "Snapshot of body / constraint counts + step timing. Refreshed by\nRefreshStats() — call from PhysicsSystem::Update so the values are\nstable for the rest of the frame.",
-							"line": 340
+							"line": 368
 						},
 						{
 							"kind": "method",
 							"name": "RefreshStats",
 							"signature": "void RefreshStats(float lastStepTimeMs)",
-							"line": 343
+							"line": 371
 						},
 						{
 							"kind": "method",
 							"name": "DrawDebug",
 							"signature": "void DrawDebug()",
 							"doc": "Walks every body via the locking interface and submits lines to the\nengine's DebugDraw. No-op when m_debugSettings.enabled is false. Safe\nto call from the main thread between physics steps.",
-							"line": 348
+							"line": 376
 						}
 					]
 				}

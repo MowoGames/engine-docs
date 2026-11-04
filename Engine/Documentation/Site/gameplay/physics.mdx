@@ -10,9 +10,13 @@ sources:
   - Engine/Source/Runtime/Physics/Public/Physics/Components/RigidBodyComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicsBodyTuning.h
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicsForceFields.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsSnapshot.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/ForceFieldComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/ColliderComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/ConstraintComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterControllerComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsDebug.h
+  - Engine/Source/Runtime/Core/Public/Core/FStatDisplay.h
   - Engine/Source/Runtime/Core/Public/Core/Constants.h
   - Engine/Source/Runtime/Game/Public/Game/MTriggerComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MGameplayStatics.h
@@ -24,7 +28,8 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/Components/FPhysicsInteractableComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MPhysicsInteractableStatics.h
   - Engine/Source/Runtime/Game/Public/Game/MPhysicsStatics.h
-verifiedAt: 0b319fdc0
+  - Engine/Source/Runtime/Game/Public/Game/MConstraintStatics.h
+verifiedAt: 57ea8e727
 ---
 
 Mowo simulates physics with [Jolt Physics](https://github.com/jrouwe/JoltPhysics). You describe bodies with reflected ECS components, a `PhysicsSystem` steps the simulation at a fixed rate, and a `PhysicsWorld` answers ray casts, sweeps and overlaps. Each scene has its own physics world.
@@ -95,6 +100,12 @@ Useful `RigidBodyComponent` fields:
 | `applyGyroscopicForce` | Gyroscopic precession for fast spinners such as a thrown axe |
 | `freezePositionX/Y/Z`, `freezeRotationX/Y/Z` | Lock individual axes |
 
+### Compound colliders
+
+One collider can hold several parts. The shape at the top of the component is the first part; **Compound Shapes** lists more, and each part has its own `Shape`, size, `Offset` and `Rotation` (degrees, applied about the part's own centre). Add parts with the **+** on the array row: a table with a drawer, a dumbbell, a chair. A selected collider draws every part in the viewport, rotated as built. Parts are saved with the scene and reloaded exactly, and editing a part rebuilds the body.
+
+**Compound Mode** picks the Jolt structure behind them. `Static` builds the fastest tree and is right for anything whose parts never change. `Mutable` builds a compound Jolt can edit after the body exists, at a small cost per query; choose it only when a part will change at runtime. Parts of `Mesh`, `HeightField` and `ConvexHull` kind are not available as compound parts; use a primitive.
+
 <Callout type="warning">
 Bodies with a `Mesh` or `HeightField` collider are forced to `Static`, because Jolt cannot simulate them, and a warning is logged. Use `ConvexHull` for moving objects.
 </Callout>
@@ -113,6 +124,8 @@ When two bodies meet, the pair ignores if either side ignores, blocks only if bo
 ## Characters
 
 Characters do not use rigid bodies. They move with a kinematic character controller and a movement component with walking, falling, swimming, ladder and mantling modes. See [Character movement](/docs/gameplay/character-movement/).
+
+A character honours the [contact modifiers](#contact-modifiers) of what it touches: it can jump up through a one-way platform and is carried by a conveyor. It also stands on, and is carried by, a moving platform. Turn on `Collide With Characters` on the `CharacterController` component to make characters block each other even when they have no physical presence.
 
 ## Scene queries
 
@@ -147,9 +160,19 @@ static bool TraceAhead(Mowo::AActor* self, const Mowo::Vec3& direction, float ra
 A ray that starts inside a shape hits it at distance 0. Any trace fired from a character, such as a weapon or sight line, must ignore that character's own body. `PhysicsSystem::GetQueryBodyForEntity` returns the right body for both rigid bodies and characters. <Source symbol="PhysicsSystem" />
 </Callout>
 
+Beyond the closest hit, the filtered API offers:
+
+- **Existence tests.** `QueryRayAny`, `QuerySweepAny` and `QueryOverlapAny` stop at the first body that qualifies and answer yes or no, which is all a spawn-point or line-of-sight check needs.
+- **Point test.** `QueryPoint` reports every body whose shape contains a point.
+- **Ordered overlaps.** `QueryOverlap` returns the bodies nearest first, with `distance` measured from the centre of the query volume.
+- **By profile.** `FQueryFilter::SetProfile` queries as a probe with a collision preset (`Ragdoll`, `Projectile`, ...): a body is reported unless the pair would ignore each other, and a single-hit query stops only on a pair that would block.
+- **Complexity.** `complexity` restricts a query to simple collision (primitives and hulls, what characters and props hit) or complex collision (triangle meshes and terrain, what bullets and decals want).
+- **Back faces.** `backFaces` set to `Ignore` makes rays and sweeps skip back faces, and a ray skips the convex shape it starts inside; `Collide` reports them, so a ray fired from inside a box hits the inside face it leaves through. The default keeps each query's usual behaviour: a single ray hits a shape it starts inside at distance 0.
+- **Triggers.** Sensors are skipped unless `ignoreSensors` is cleared.
+
 Multi queries report every overlap the trace passed through, in order, followed by the blocking hit. For hundreds of rays per frame, `FTraceBatch` sets up the filter once and spreads the rays across worker threads.
 
-For quick checks from gameplay code and Visual Scripting, `MGameplayStatics` offers `LineTraceByChannel`, `SphereTraceByChannel`, their multi-hit forms, and `OverlapSphereActors` and `OverlapBoxActors`, which resolve hits to actors. <Source symbol="MGameplayStatics" />
+For quick checks from gameplay code and Visual Scripting, `MGameplayStatics` offers `LineTraceByChannel`, `SphereTraceByChannel`, their multi-hit forms, and `OverlapSphereActors` and `OverlapBoxActors`, which resolve hits to actors. `LineTraceAny`, `SphereTraceAny`, `AnyOverlapSphere` and `AnyOverlapBox` are the yes-or-no forms, `PointOverlapActors` lists the bodies at a point, and `OverlapSphereByProfile` takes a preset name such as `Pawn`. `SetTraceComplexity` (0 both, 1 simple only, 2 complex only), `SetTraceBackFaces` and `SetTraceIgnoreTriggers` set how the traces that follow behave, and `ResetTraceOptions` puts them back. <Source symbol="MGameplayStatics" />
 
 ## Contact events
 
@@ -223,15 +246,44 @@ A `ContactModifier` component changes how one body behaves in its contacts, with
 - `Surface Velocity` is a conveyor: anything in friction contact with the body is carried at that velocity (in the body's local space) while the body itself stays put. A body that was placed asleep on a belt stays asleep until something wakes it.
 - `Mass Scale` changes the mass the body presents in contacts only. A scale of 100 makes a prop that others cannot shove; 0.1 makes one that yields to a touch. Gravity and the body's own momentum are unchanged.
 
-Character controllers use their own contact path and ignore one-way, surface velocity and mass scale. The modifiers cost nothing in a world that has none.
+Character controllers read one-way and surface velocity too, through their own contact path. A character can jump up through a one-way platform and lands on it; standing on a conveyor carries it along. Mass scale does not apply to characters: a character pushes bodies with its `Mass` and `Max Strength`, set on the `CharacterController` component. The modifiers cost nothing in a world that has none.
 
 ## Constraints
 
-A `ConstraintComponent` joins an entity's rigid body to another entity, or to the world when none is connected. Types are `Fixed`, `Hinge`, `BallSocket`, `Distance`, `Slider` and `SixDOF`. <Source symbol="ConstraintComponent" />
+A `ConstraintComponent` joins an entity's rigid body to another entity, or to the world when none is connected. Types are `Fixed`, `Hinge`, `BallSocket`, `Distance`, `Slider`, `SixDOF`, `Cone`, `Pulley`, `Gear`, `RackAndPinion` and `Path`. <Source symbol="ConstraintComponent" />
 
 - Anchors are local to each body, measured from its center of mass.
 - `SixDOF` sets each linear and angular axis to `Free`, `Limited` or `Locked`, and each axis can have a position or velocity motor.
 - `breakForce` and `breakTorque` (0 means unbreakable) let a joint snap. A break sets the component's `broken` flag and broadcasts `PhysicsSystem::OnConstraintBroken()`. <Source symbol="PhysicsSystem" />
+
+### Joint types
+
+| Type | What it does | Fields |
+| --- | --- | --- |
+| `Fixed` | Welds the two bodies in their current pose | anchors |
+| `Hinge` | One free axis, optional limits and a motor | `axisA`, `axisB`, `hingeLimit*`, `hingeMotor*` |
+| `BallSocket` | A shared point, free rotation | anchors |
+| `Distance` | Keeps the anchors between a minimum and maximum distance, optionally springy | `distanceMin`, `distanceMax`, `springFrequency` |
+| `Slider` | One free translation axis with limits | `axisA`, `axisB`, `distanceMin`, `distanceMax` |
+| `SixDOF` | Per-axis `Free`, `Limited` or `Locked`, with motors | `linearMotion*`, `angularMotion*`, `*Motor*` |
+| `Cone` | A shared point whose two twist axes may drift apart by at most a half angle | `axisA`, `axisB`, `coneHalfAngle` |
+| `Pulley` | A rope over two fixed world points; one side rising pulls the other down | `pulleyFixedPointA`, `pulleyFixedPointB`, `pulleyRatio`, `pulleyMinLength`, `pulleyMaxLength` |
+| `Gear` | Couples the spin of the owner and the connected body by tooth count; the pair turn in opposite directions | `axisA`, `axisB`, `gearTeethA`, `gearTeethB` |
+| `RackAndPinion` | Couples the owner's spin to the connected body sliding along a rail | `axisA` (pinion), `axisB` (rack), `rackTeeth`, `rackLength`, `pinionTeeth` |
+| `Path` | Constrains the owner to a curve through `pathPoints`, with optional rotation locking, friction and a motor along the path | `pathPoints`, `pathLooping`, `pathRotation`, `pathFriction`, `pathMotor*` |
+
+`Gear` and `RackAndPinion` mount their own axle (and rail) for the two bodies, hinged to the world at the anchors and axes you give, so one Constraint on the owner is the whole assembly. They need a connected body. A gear train with a middle wheel puts one Constraint on each meshing pair. `Pulley` fixed points are world positions. `Path` points are in the connected body's space, or world space when the owner is pinned to the world, and the owner is placed on the closest point of the path when the joint is built. A path with fewer than two points builds nothing.
+
+### Authoring a joint
+
+Pick the other body in the **Connected Body** row of the Details panel: a drop-down of the scene's actors, with **None** pinning the owner to the world. The reference is stored as the actor's identity, so it survives saving and reloading the scene, entering Play, and duplicating or pasting a set of actors that includes both ends of the joint (the copy joins the copied partner, not the original).
+
+- **Collide Connected** (on by default) decides whether the two joined bodies still collide with each other. Turn it off for a hinged door that would otherwise fight the frame it hangs on. The check is skipped entirely when no joint turns it off.
+- Switching a joint off removes it and wakes its bodies; switching it on again rebuilds it from where the bodies are now.
+- While a joint is selected the viewport draws both anchors, the axis of each side, a line between them and the joint's limits: the hinge arc, the slider's travel, the distance spheres, the six-axis linear box and twist range. The cone, pulley, gear, rack and path types draw their cone, rope, wheels, rail and curve. A joint with a break threshold turns from orange to red as its load approaches the limit; a broken joint is red and a switched-off one grey.
+- A joint with a break threshold records the force and torque it carried last step in `loadForce` and `loadTorque`.
+
+From Visual Scripting and Wolang, `MConstraintStatics` switches a joint on and off, re-points it at another actor, toggles collision between the joined bodies, changes its break thresholds, reads its load, drives a hinge motor and re-forms a snapped joint with `ResetConstraint`. <Source symbol="MConstraintStatics" />
 
 ## Physics materials and surfaces
 
@@ -271,6 +323,34 @@ From Visual Scripting or C++, `MPhysicsInteractableStatics` opens and closes doo
 ## Simulation level of detail
 
 When the scene has a focus point (the main camera by default), dynamic bodies farther than `p.LODSleepRadius` (150 m) are put to sleep and stay asleep until the focus comes back within `p.LODWakeRadius` (120 m). Bodies that were already asleep are left alone. `p.LOD 0` turns this off. Set the focus yourself with `PhysicsSystem::SetSimulationFocus`. <Source symbol="PhysicsSystem::SetSimulationFocus" />
+
+## Snapshots, rollback and replication
+
+The physics world can be saved and restored whole, which is what rollback netcode, time rewind and "undo the last second" need. Turn on **Deterministic Physics** in Project Settings under Physics first: jobs then run in a fixed order, so the same inputs replay to the same bits on the same build and CPU. **Rollback Snapshot Frames** sets how many whole-world snapshots the ring keeps; each is a full copy of every body, constraint and the contact cache that warm-starts the next step.
+
+From Visual Scripting or Wolang, call `CapturePhysicsSnapshot(tick)` once per tick, `RestorePhysicsSnapshot(tick)` to go back, and `ResimulatePhysics(fromTick, toTick)` to restore a tick and step forward to another. `GetPhysicsChecksum` and `GetPhysicsSnapshotChecksum(tick)` return a hash of the state as 16 hex digits; two peers that simulated the same inputs get the same string, so comparing them catches a desync. A snapshot is the world before its tick is simulated, and capturing a tick drops every later one, because a corrected past invalidates what was recorded after it.
+
+In C++, `FPhysicsResimulator::Run` does the same with a callback that runs before each replayed step, the place to re-apply that tick's forces and impulses. It records every replayed tick back into the ring and reports the first tick whose state differs from the first run, so an input that changed shows up as a divergence at the tick after it and a non-deterministic step shows up as a mismatch with unchanged inputs.
+
+For bodies one peer owns, `PhysicsWorld::GetBodyState` and `ApplyBodyState` read and write a body's pose, velocities and sleep state under a key you choose (an entity or net id), and `ApplyBodyStates` restores just a chosen set. `FPhysicsBodyReplication` turns those states into a packet: position to the millimetre, velocities to 1 cm/s, orientation in 16 bits per component, and each field only when it differs from the baseline the receiver already holds. A sleeping body costs a few bytes. `FPhysicsSnapshotCodec` does the same for whole-world snapshots, lossless against an earlier one. The client side of a replicated, predicted body is `FPhysicsBodyReplication::Reconcile`, which removes a fraction of the position and orientation error per call and snaps outright past a distance or angle; from a graph, `CorrectActorBody(actor, serverPosition, serverVelocity, blend, snapDistance)` does it for one actor.
+
+## Debug views and stats
+
+With `p.Debug 1` the physics world draws itself over the viewport. Each aspect has its own switch under Project Settings, Physics, Debug Draw, or as a console variable:
+
+| Console variable | Draws |
+| --- | --- |
+| `p.DebugShapes` | collider wireframes; sleeping bodies are dimmed |
+| `p.DebugAABB` | world-space bounding boxes |
+| `p.DebugCOM` | a cross at each centre of mass |
+| `p.DebugVelocity` | linear velocity arrows |
+| `p.DebugContacts` | contact normals, red for new contacts and orange for persisting ones |
+| `p.DebugConstraints` | constraint anchors |
+| `p.DebugVehicles` | each wheel's suspension travel and contact normal |
+| `p.DebugIslands` | a box around each island, the awake bodies joined by a contact or a constraint, each in its own colour |
+| `p.DebugBroadPhase` | each body's bounds tinted by its object layer, dimmer for the non-moving broad phase |
+
+`stat physics` opens an overlay with the body count against the budget, the dynamic, kinematic and static split, how many are active and how many sleeping, the island count, contacts, constraints and the last and average step time. The island count is only worked out while the overlay or the island view is on, so the panel costs nothing when hidden. <Source symbol="PhysicsStats" />
 
 ## More physics
 
