@@ -1,0 +1,51 @@
+---
+title: Voxel chunk meshes
+description: Draw thousands of voxel chunks from an 8-byte packed vertex, with per-vertex light and ambient occlusion, sun shadows and one shared quad index buffer.
+order: 17
+status: in-development
+sources:
+  - Engine/Source/Runtime/Renderer/Public/Renderer/VoxelMesh.h
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/VoxelChunkMeshComponent.h
+verifiedAt: 693ce02a1
+---
+
+A voxel world is thousands of meshes made of axis-aligned quads. The regular mesh format spends 72 bytes on every vertex; a voxel chunk mesh spends 8, and shares one index buffer between all chunks. A chunk of 8 000 quads takes 251 KB instead of 2.3 MB, about nine times less.
+
+<Status />
+
+## Build a chunk mesh
+
+Pack each vertex with `FVoxelVertex::Make`, four vertices to a quad, in order around the quad and counter-clockwise seen from outside. Then create the mesh:
+
+```cpp wrap
+#include "Renderer/VoxelMesh.h"
+#include <vector>
+
+std::vector<Mowo::FVoxelVertex> vertices;
+vertices.push_back(Mowo::FVoxelVertex::Make(0, 0, 0, 2, 3, 0, 0, 5, 15, 0));
+vertices.push_back(Mowo::FVoxelVertex::Make(0, 0, 1, 2, 3, 1, 0, 5, 15, 0));
+vertices.push_back(Mowo::FVoxelVertex::Make(1, 0, 1, 2, 3, 1, 1, 5, 15, 0));
+vertices.push_back(Mowo::FVoxelVertex::Make(1, 0, 0, 2, 3, 0, 1, 5, 15, 0));
+
+Mowo::Ref<Mowo::FVoxelMesh> mesh = Mowo::FVoxelMesh::Create(vertices);
+```
+
+Positions are chunk-local voxel units from 0 to 32. The arguments of `Make` are x, y, z, face, ambient occlusion, u, v, texture layer, sky light and block light. The full bit layout is in the header. To flip a quad's diagonal, rotate its four vertices by one instead of changing indices.
+
+`FVoxelMesh::Create` can run on any thread and returns at once; the vertices reach the GPU in a batch within a frame or two, and a mesh draws once `IsGpuReady()` is true. To replace a chunk's mesh without a gap, assign the new one to the component's `pendingMesh`: the old mesh keeps drawing until the new one is ready. Create returns null when the vertex count is not a multiple of four, the mesh has more than 131 072 quads, or the voxel vertex pool is full (`r.Voxel.PoolBudgetMB`).
+
+## Put it in the scene
+
+Add a `VoxelChunkMesh` component to an entity, set `mesh` and `atlas` in code, and place the entity at the chunk's origin. `voxelSize` is the world size of one voxel; `lodScale` multiplies it so a coarser version of the same chunk covers the same volume.
+
+The atlas is a square grid of tiles, `atlasTilesPerRow` to a side, and a vertex's texture layer picks the tile. Tint, roughness, light channels and shadow casting and receiving are fields of the component.
+
+## What it supports
+
+- Lit by the sun and every light that lights opaque surfaces, with shadow receiving, fog, ambient occlusion and temporal anti-aliasing like any opaque mesh.
+- Per-vertex sky light darkens the ambient term and block light is emission (`r.Voxel.BlockLightEmission`).
+- Casts shadows into the sun's cascades.
+
+<Callout type="warning">
+Not supported yet: shadows from point and spot lights, translucent layers such as water and glass, reflection captures, Global Illumination and ray tracing. A cutout layer clips in the view but casts a solid shadow.
+</Callout>

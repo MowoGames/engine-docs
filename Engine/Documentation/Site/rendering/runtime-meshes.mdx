@@ -1,0 +1,65 @@
+---
+title: Meshes built at runtime
+description: Create and replace meshes while the game runs (voxel chunks, procedural terrain) without holding them twice in video memory or stalling the frame on uploads.
+order: 6
+sources:
+  - Engine/Source/Runtime/Renderer/Public/Renderer/GPUMesh.h
+  - Engine/Source/Runtime/Renderer/Public/Renderer/DynamicMeshPool.h
+verifiedAt: 48c6466ea
+---
+
+A game that builds geometry while it runs, such as a voxel world remeshing chunks as the player digs or a terrain tile streaming in, creates meshes far more often than a level that loads once. `GPUMesh::CreateLit` suits a mesh made once: it gives the mesh buffers of its own and keeps a CPU copy of the positions, and the renderer then copies the mesh a second time into the shared geometry buffers it draws from. `GPUMesh::CreateLitPooled` is the call for meshes that come and go.
+
+## Create a mesh
+
+`CreateLitPooled` takes the same vertices and indices as `CreateLit`. You can call it from any thread, so a mesh worker can build the mesh and create it in one step.
+
+```cpp title="ChunkMesher.cpp" nocompile
+Mowo::Ref<Mowo::GPUMesh> mesh = Mowo::GPUMesh::CreateLitPooled(vertices, indices);
+
+pending[chunk] = mesh;
+```
+
+The call returns at once. The geometry is written into a slice of a shared buffer by the next frame's single upload batch, and the mesh is drawn only after that copy has finished on the GPU. Until then `mesh->IsGpuReady()` is false and the renderer skips the mesh, so a half-written mesh is never drawn.
+
+To replace a mesh, keep drawing the old one until the new one is ready, then swap:
+
+```cpp title="ChunkMesher.cpp" nocompile
+if (pending[chunk] && pending[chunk]->IsGpuReady()) {
+	meshRenderer.gpuMesh = std::move(pending[chunk]);
+}
+```
+
+The old mesh's slice goes back to the pool a few frames after the last frame that drew it, so replacing the same chunk over and over does not grow video memory.
+
+## What it saves
+
+The numbers below come from a voxel-style test: 64 chunks of 32 by 32 cells (4096 vertices and 6144 indices, 300 KB each) remeshed 200 times a second from three worker threads while the scene renders, measured on an RTX 3050 in a development build.
+
+| Per chunk mesh | `CreateLit` | `CreateLitPooled` |
+| --- | --- | --- |
+| Video memory | 600 KB (the mesh's own buffers, plus the copy the renderer makes into its geometry pool) | 300 KB |
+| CPU memory | 104 KB (positions, indices, UVs) | none |
+| Creation call on the worker, Direct3D 12 (mean, 99th percentile) | 1.3 ms, 11.8 ms | 0.035 ms, 0.08 ms |
+| Creation call on the worker, Vulkan (mean) | 0.19 ms | 0.034 ms |
+| Worst CPU frame during the burst, Direct3D 12 | 32 ms | 4 ms |
+| Uploads | two queue submits per mesh | one submit per frame, about 3.5 meshes each at 60 Hz |
+| Time until the mesh is on screen | 1 frame | 2 to 3 frames |
+
+Four thousand loaded chunks hold 2.4 GB of video memory with `CreateLit` and 1.2 GB with `CreateLitPooled`.
+
+## Limits
+
+- A pooled mesh has the standard lit vertex layout and one level of detail.
+- It keeps no CPU copy of its positions unless you pass `GPUMesh::FPooledFlags::KeepCpuGeometry`. Picking and navigation mesh baking then need your own voxel data or that flag. The bounds are always kept.
+- Opaque meshes are drawn from the pool directly. A translucent mesh, a reflection or probe capture, or ray tracing needs a separate vertex and index buffer; the mesh builds them from its slice the first time one of those asks, and from then on holds both copies.
+- On the Direct3D 11 backend the renderer has no GPU-driven draws, so a pooled mesh draws through separate buffers and saves only the CPU copy and the upload cost.
+- If the pool is full the call falls back to `CreateLit` and the mesh is ready at once; the log says so once.
+
+## Settings
+
+| Console variable | Default | What it does |
+| --- | --- | --- |
+| `r.Mesh.UploadBudgetKB` | 4096 | Most geometry, in KB, one frame's upload batch carries. What does not fit goes out first next frame; 0 means unlimited |
+| `r.Mesh.UploadMaxInFlight` | 3 | Upload batches kept in flight before the queue waits |
+| `r.Mesh.DynamicPoolBudgetMB` | 0 | Most video memory the pooled meshes may take in total; 0 = a quarter of the GPU's memory, 256 to 3072 MB |

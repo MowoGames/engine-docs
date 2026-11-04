@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialGraph.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialFunction.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/MaterialShaderCompileService.h
-verifiedAt: f30b268fb
+verifiedAt: e41a4451a
 ---
 
 A Mowo material is a physically based parameter set: base color, metallic, roughness, normal, emissive, ambient occlusion and opacity, plus a shading model and flags for clear coat, anisotropy, subsurface, hair, detail maps and parallax. You author it as a node graph in the Material Editor and save it as a `.mat` file. Material instances (`.matinst`) override a parent's parameters, and material functions (`.matfunc`) are reusable sub-graphs. The renderer draws opaque materials in the G-Buffer pass and translucent ones in the forward pass.
@@ -62,7 +62,7 @@ Its **Domain** decides where the graph runs (<Source symbol="MaterialGraph" />):
 | Vectors | World Normal, View Direction, World Position, Vertex Color |
 | Scene | Scene Depth, Custom Depth, Custom Stencil (Post Process domain only; they read zero elsewhere) |
 | Procedural | Value Noise |
-| Texture | Texture Sample |
+| Texture | Texture Sample, Texture Sample Array |
 | Parameters | Scalar Parameter, Vector Parameter, Static Bool, Static Switch |
 | Utility | Fresnel, Normal Map, Mask, Custom HLSL, Material Function Call |
 | Layers | Make Material Attributes, Material Layer Blend |
@@ -135,6 +135,19 @@ An instance does not own its parent. Whoever holds the parent's reference, usual
 - Normal maps are block-compressed to BC5, which stores two channels. Every shader rebuilds Z with `MowoUnpackTangentNormal`; do the same in your own HLSL.
 - While a temporal upscaler is active, texture samples take a negative mip bias so they keep output-resolution detail (`r.MaterialMipBias.Auto`).
 - Terrain and large surfaces can use [virtual texturing](/docs/rendering/virtual-texturing/).
+- Each texture picks its own filter: Nearest for pixel art, Bilinear, Trilinear or Anisotropic with a level. See [Filtering and pixel art](/docs/content-pipeline/importing/#filtering-and-pixel-art).
+
+### Texture arrays
+
+A **Texture Sample Array** node samples one layer of a texture array asset (see [Texture arrays](/docs/content-pipeline/importing/#texture-arrays)). Its pins are **UV** and **Layer**; the layer is the `x` of whatever is wired, rounded to the nearest layer, and an unwired pin uses the **Layer** number in the node's Details. Wire a Scalar Parameter to change the layer at run time without recompiling, or a Vertex Color channel times the layer count to choose it per vertex (voxel and tile meshes carry the tile index in the vertex color).
+
+An array fixes what an atlas cannot: every layer has its own mip chain, so a tile never bleeds into its neighbour in the distance, and tiles need no gutter. Pair it with a Nearest filter and a [nearest upscale](/docs/content-pipeline/importing/#filtering-and-pixel-art) for crisp pixel art at any angle.
+
+- An array takes one of the graph's eight texture slots like any texture, but never the Height slot (slot 6); the compiler leaves it free for a plain texture.
+- It works in the opaque (G-Buffer), translucent (forward) and masked-shadow paths on Direct3D 12, Vulkan and Direct3D 11. In the Decal, Post Process and Light Function domains the node reads white.
+- It cannot feed World Position Offset, as no texture can.
+- An array texture wired to a plain Texture Sample node, or a plain texture wired to an array node, renders white rather than reading the wrong view type.
+- Draws that do not run the graph's own shader (reflection and probe captures, terrain, foliage, the Global Illumination surface cache) see the array's slot as white.
 
 ## Substrate <Status />
 

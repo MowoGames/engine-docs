@@ -7,14 +7,14 @@ sources:
   - Engine/Source/Runtime/Renderer/Public/Renderer/GeometryPool.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/MeshletPool.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/ImageDecode.h
-verifiedAt: 207b9da75
+verifiedAt: 50894e884
 ---
 
 A level the size of the Intel Sponza (2022, with the Curtains and Ivy add-ons: about 10.8 million triangles in 450 submeshes and 80 4K PBR textures) runs on the same renderer as a small one. On a mid-range GPU its frame time is decided by the [quality tier](/docs/rendering/quality-tiers/) and the resolution far more than by the size of the meshes. This page shows where the time goes and what the engine does so the geometry itself stays cheap.
 
 ## What the engine does with a big model
 
-- **Static meshes are drawn by the GPU.** Every static, opaque mesh joins the GPU scene: its vertices and indices are copied once into a shared geometry pool, the GPU culls the instances against the frustum and the previous frame's depth, and all meshes that share a material draw with one indirect call. The pools grow with the level, a pool at a time, so a large level stays on this path. Their total size is capped by `r.GpuScene.GeometryPoolBudgetMB` (by default an eighth of the GPU's memory, between 256 and 2048 MB); a mesh that no longer fits is drawn on its own and the log says so once.
+- **Static meshes are drawn by the GPU.** Every static, opaque mesh joins the GPU scene: its vertices and indices are copied once into a shared geometry pool, the GPU culls the instances against the frustum and the previous frame's depth, and all meshes that share a material draw with one indirect call. The pools grow with the level, a pool at a time, so a large level stays on this path. Their total size is capped by `r.GpuScene.GeometryPoolBudgetMB` (by default an eighth of the GPU's memory, between 256 and 2048 MB); a mesh that no longer fits is drawn on its own and the log says so once. A mesh your game builds while it runs skips the second copy: see [Meshes built at runtime](/docs/rendering/runtime-meshes/).
 - **Textures are block-compressed.** An imported texture reaches the GPU as a BC chain with all its mips — BC7 for colour, BC5 for normal maps, BC6H for HDR — as the packaged game ships it. A 4K map takes 21 MB instead of the 85 MB it took uncompressed; on the Sponza that is the difference between 8.5 GB of loaded assets, past what an 8 GB card holds, and a level that fits. An author who sets a texture's compression to none keeps it uncompressed.
 - **The first open cooks, later opens read the cache.** The first time the editor opens a level it compresses every texture into the project's [Derived Data Cache](/docs/content-pipeline/derived-data-cache/) on all CPU cores, in the background: the level is usable at once, untextured surfaces fill in as their maps land, and the status bar counts the assets still importing. On the reference machine the Sponza's 80 textures cook in about a minute; every later open reads them from the cache.
 - **Entering Play does not stall on the level's size.** The sound occlusion and the scanner build their own copy of the level's triangles on a worker thread.
@@ -68,6 +68,28 @@ The pool ages a mesh by frames the GPU has finished with, not by views drawn. A 
 
 The cluster hierarchy of every mesh still lives in system memory once the mesh is loaded (179 MB for the Sponza), and the pool pages from that copy. Paging it from the cooked package is designed (the engine's internal notes hold the design) and not shipped: it needs a cook chunk of page-ordered payloads, a page source behind the pool, and asynchronous reads with a byte budget per frame. A package cooked today keeps working unchanged when it lands, because the new chunk is optional and the pool builds a layout at run time for a package without it. It was not built because no measured level needs it yet: the Sponza's cluster data is 2 % of the editor's working set on Epic, and the pool, not the system copy, is what limits large levels on an 8 GB card.
 
+## Many small meshes
+
+A voxel world is thousands of small meshes, one per chunk, each its own entity with a Mesh Renderer, edited and re-meshed all the time. The `voxel-chunk-scale-test` row (RendererTests) measures exactly that: 1 024 to 8 192 chunk entities of about 1 000 triangles in a 32×32 grid, one shared material, drawn through the same path a level takes (scene gather, instancing plan, GPU culling, cascaded shadows), on the reference RTX 3050 at 1280×720 with a development build and nothing else compiling. Milliseconds of CPU per frame for the game and render side together:
+
+| Chunk entities | 1 024 | 2 048 | 4 096 | 8 192 |
+| --- | --- | --- | --- | --- |
+| Nothing changes | 1.7 | 2.6 | 4.1 | 7.5 |
+| 5 % change transform every frame | 2.0 | 3.0 | 4.8 | 10.4 |
+| 5 % swap mesh every frame | 1.8 | 2.8 | 4.6 | 9.3 |
+| 20 % change transform every frame | 2.7 | 4.3 | 8.0 | 14.4 |
+| Camera orbiting | 2.7 | 4.5 | 8.0 | 16.2 |
+| 200 chunks created and destroyed per second | 3.2 | 4.7 | 7.0 | 14.0 |
+| GPU frame, nothing changes | 2.4 | 2.9 | 3.9 | 5.2 |
+
+- **Vulkan and D3D11 are in the same range:** 8 192 still chunks cost 8.9 ms on Vulkan and 6.4 ms on D3D11, and with a moving camera 11 ms and 20 ms. Run under the validation layers (`--gpu-validation`) the same frame takes about twice as long.
+- **The cost is linear in the number of chunks:** about 0.8 ms plus 0.85 µs per chunk when nothing changes. The scene already keeps what a static chunk needs between frames (the render proxies, the draw commands, the instancing plan and the GPU scene slots), so a chunk that does not change costs its gather, its draw record and its hash, not a rebuild. Changing 1 % to 5 % of the chunks adds under 3 ms at 8 192; a stream of fresh meshes costs the mesh creation (0.23 ms each) on top.
+- **Memory runs out before the CPU does.** A 1 000-triangle chunk takes about 0.5 MB of VRAM (its own buffers and its copy in the geometry pool) and 60 KB of system memory; a 2 000-triangle chunk about 0.9 MB. 8 192 chunks of 1 000 triangles fill 6.2 GB of the card's 8.
+- **A moving camera is the most expensive change**, because every cascade of the sun's shadow redraws the chunks it reaches when the camera slides it; see [Shadows](/docs/rendering/shadows/).
+- **Background jobs no longer stall the frame.** A frame that renders 4 096 chunks while 5 ms background jobs run on every worker took 26 ms (59 ms at worst) before the engine capped the workers background jobs may hold; it takes 6 ms now.
+
+The row judges the still scene, 5 % transform changes, 5 % mesh swaps and the 200 per second churn against bars of the form *base + per-chunk cost × chunks* with 30 to 50 % of headroom over these numbers, so a change that makes the per-chunk path slower fails it. The goal for a voxel world is 4 ms of CPU for 8 192 still chunks; today's 7.5 ms is above it, and the remaining time is spread over the passes (scene gather 15 %, G-buffer 30 %, shadows 15 %, instancing plan 13 %) rather than in one place. `--chunk-sizes=<list>`, `--chunk-tris=<n>` and `--chunk-frames=<n>` change the experiment.
+
 ## Check your own settings
 
 The editor keeps the tier and upscaling mode you pick in your user settings, and they apply to every project you open. If a level runs far slower for you than the table above, check the **Quality** preset and the upscaling mode you saved: Epic with native rendering costs a 3050 about five times what High with Auto costs. On a GPU with less than 10 GB of memory the Quality card and **Project Settings > Scalability** say so under Epic and Cinematic, with the rate the reference card measured.
@@ -84,3 +106,4 @@ To see the numbers for your own level, enable `stat.FrameStats 300` in the conso
 | `r.Meshlet.PoolBudgetMB` | 0 | Most VRAM the meshlet cluster pool may grow to, in MB; 0 = a sixteenth of the GPU's dedicated memory, 64 to 1024 MB; 64 or less keeps the starting pool. Growth also stops short of the last tenth of the GPU's memory budget |
 | `r.Meshlet.AsyncLayouts` | 1 | Build a mesh's meshlet page layout on a worker thread the first time it is drawn; 0 builds it on the render thread (for comparison) |
 | `r.MeshletResidencyStats` | 0 | Every N frames log the meshlet pool's residency, capacity, rejections and the system memory the meshes' cluster hierarchies hold |
+| `job.BackgroundWorkerReserve` | 3 | Workers kept free of background (Low priority) jobs; they hold at most all but this many at once. 0 lifts the cap |

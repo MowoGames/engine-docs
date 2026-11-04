@@ -12,7 +12,7 @@ sources:
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Statics/MRebindStatics.h
   - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUILobbyScreen.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-verifiedAt: aee5cfcae
+verifiedAt: 47c78cd0a
 ---
 
 ArcUI ships a complete player settings screen and a key-rebinding screen. You do not build these from scratch: drop them into a `.ui` or create them in C++, and they read and write the same console variables the editor's Project Settings pages use. This page explains how the screens work and lists every Accessibility option.
@@ -78,7 +78,7 @@ settings.Apply();
 
 ### Device gating
 
-`FArcDeviceProfile::Probe()` reads what the graphics API and GPU support. A control the API can never do is greyed with the backend's name; one the GPU lacks is greyed with "unavailable on this RHI/GPU". A third axis is the game itself: the Global Illumination, ray-tracing, MegaLights, volumetric fog and frame-generation rows are greyed with "this game does not use it" when the project left that feature off in Project Settings > Rendering > Features. A saved value for a greyed row is dropped on load, because the save file can outlive the GPU it was written on.
+`FArcDeviceProfile::Probe()` reads what the graphics API and GPU support. A control the API can never do is greyed with the backend's name; one the GPU lacks is greyed with "unavailable on this RHI/GPU". A third axis is the game itself: the Global Illumination, ray-tracing, MegaLights, volumetric fog and frame-generation rows are greyed with "this game does not use it" when the project left that feature off in Project Settings > Rendering > Features. The four ray-traced rows (reflections, ambient occlusion, sun shadows and the Global Illumination gather) are decided one by one by the [ray-tracing capability query](/docs/rendering/ray-tracing/#can-this-machine-run-it). A saved value for a greyed row is dropped on load, because the save file can outlive the GPU it was written on.
 
 ### Where settings are saved
 
@@ -86,7 +86,7 @@ settings.Apply();
 
 ## Categories
 
-There are six categories: Display, Graphics, Audio, Controls, Gameplay and Accessibility <Source symbol="FGameUserSettings" />.
+There are six built-in categories: Display, Graphics, Audio, Controls, Gameplay and Accessibility <Source symbol="FGameUserSettings" />. A game adds pages of its own after them (see [Add your own settings](#add-your-own-settings)).
 
 | Category | Examples |
 | --- | --- |
@@ -96,6 +96,41 @@ There are six categories: Display, Graphics, Audio, Controls, Gameplay and Acces
 | Controls | Mouse sensitivity and invert, stick and trigger deadzones (global and per player 1–4), input debug overlay |
 | Gameplay | Language (`i18n.Locale`), autosave interval, autosave on travel |
 | Accessibility | See below |
+
+## Add your own settings
+
+A game adds rows (and pages) to the same screen with `FGameUserSettings::RegisterRow`. Registration keeps the definition, so a model rebuild (the GPU probe finishing, for example) never drops it, and it may run before or after the model is built <Source symbol="FArcGameSettingDef" />.
+
+```cpp
+#include <ArcUI/Settings/FGameUserSettings.h>
+
+FArcGameSettingDef leaves;
+leaves.Id = "mygame.fancyLeaves";               // the key saved in GameUserSettings.ini
+leaves.Label = "Fancy Leaves";
+leaves.Description = "Draw leaves with transparency.";
+leaves.Category = EArcSettingCategory::Graphics; // or leaves.Page = "My Game" for a page of its own
+leaves.Control = EArcSettingControl::Toggle;     // Toggle, Slider or Choice
+leaves.DefaultValue = "1";
+leaves.TierValues = { "0", "0", "1" };           // follows the Quality Preset until the player moves it
+leaves.OnApply = [](const std::string& value, bool persist) {
+    MyGame::SetFancyLeaves(value == "1");
+};
+FGameUserSettings::Get().RegisterRow(leaves);
+```
+
+| Field | Meaning |
+|---|---|
+| `Id`, `Label`, `Description`, `Suffix` | The saved key and what the player reads. The id must not collide with an engine row. |
+| `Control`, `ValueType`, `Choices`, `MinValue`, `MaxValue`, `Step` | A toggle, a slider with a range and step, or a choice list (values must be unique). |
+| `DefaultValue` | The value a fresh install and Reset use. A value at its default is not written to the file. |
+| `CvarName` | Bind the row to a console variable: read at start-up, written on Apply. Without it the row is a pure callback row. |
+| `OnApply` | Called with the value after Apply (`persist = true`) and on the start-up replay of the saved value (`persist = false`). |
+| `Requirement`, `RequirementReason`, `HideWhenUnavailable` | A check that decides whether the row is usable. A failing one greys the row and prints the reason in place of the description, or removes it. Call `RefreshRequirements()` when the answer changes at run time. |
+| `TierValues` | The value at each Quality Preset tier (the last entry covers higher tiers). A row follows the preset only while it still holds its tier's value. |
+| `Page` | A page of your own, listed in the rail after the six built-in categories. |
+| `NeedsRestart`, `NeedsConfirmation` | The same behaviours as the engine rows, including the 15 second revert countdown. |
+
+`RegisterRow` returns false, and logs why, for an empty or taken id, a binding to a console variable nobody registered, a choice row with no choices or two choices with one value, and a slider whose maximum is not above its minimum. `UnregisterRow` removes a row. The screen shows your page with `AArcUISettingsScreen::SetPage`.
 
 ## Accessibility options
 

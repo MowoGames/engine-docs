@@ -9,7 +9,8 @@ sources:
   - Engine/Source/Runtime/RHI/Public/RHI/RayTracingPipeline.h
   - Engine/Source/Runtime/RHI/Public/RHI/BlasCompaction.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
-verifiedAt: aee5cfcae
+  - Engine/Source/Runtime/RHI/Public/RHI/RayTracingCapability.h
+verifiedAt: 47c78cd0a
 ---
 
 Mowo uses hardware ray tracing to improve four real-time effects: reflections, ambient occlusion, sun shadows and the Global Illumination gather. MegaLights also traces its shadow rays against the same scene. Every one is optional: when the device has no ray query, or the ray-tracing scene is not ready, each falls back to its raster or screen-space version for that frame. A progressive path tracer uses the same scene as a reference.
@@ -42,6 +43,21 @@ With **Ray Tracing** on in Project Settings:
 | MegaLights shadow rays | `r.MegaLights` | A screen-space depth march | Epic, Cinematic, when a ray scene exists |
 
 Each cvar takes `-1` for the tier value and `0` or `1` to force the feature.
+
+### Can this machine run it?
+
+`FRayTracingCapability::Query(feature)` answers per feature, with the reason when the answer is no:
+
+```cpp
+#include <RHI/RayTracingCapability.h>
+
+const FRayTracingAvailability rt = FRayTracingCapability::Query(ERayTracingFeature::SunShadows);
+if (!rt.Available) {
+    ShowGreyed(rt.Reason);   // "Ray-Traced Sun Shadows is unavailable: this GPU or its driver does not report ray queries"
+}
+```
+
+The features are `Reflections`, `AmbientOcclusion`, `SunShadows` and `GiGather`, and `FRayTracingCapability::CVarName` gives the switch each one reads (`r.RTReflections`, `r.RTAO`, `r.RTShadows`, `r.GI.HWRTGather`). `Block` names the first thing that rules the feature out, in the order a player can act on it: `Backend` (switch graphics API), `DriverOrGpu` (no ray query on this device), then `ProjectSwitch` (the game did not enable ray tracing in Project Settings). The player settings screen uses the same answers, so a missing option and a greyed one say the same thing.
 
 <Callout type="tip">
 You do not need Epic to try ray tracing. With the project switch on, on a High-tier machine with a capable GPU, set `r.RTReflections 1` or `r.RTAO 1`. Each one builds the ray-tracing scene it needs.

@@ -21,7 +21,7 @@ sources:
   - Engine/Source/Runtime/Memory/Public/Memory/MemoryManager.h
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/VFS.h
   - Engine/Source/Runtime/Serialization/Public/Serialization/JsonDocument.h
-verifiedAt: 77b5ea1b2
+verifiedAt: 50894e884
 ---
 
 The foundation modules sit just above Platform and below everything else. This page shows what each one is for and how to use it; every type is listed in full on its [API page](/docs/api/).
@@ -103,6 +103,7 @@ jobs.WaitForCounter(batches);
 - `ParallelFor(count, func)` splits a range into batches and returns a counter. Pass a batch size as the second argument to choose it yourself.
 - `WaitForCounter` helps: the waiting thread runs that counter's queued jobs instead of sleeping.
 - `SubmitToMainThread(job)` queues work the engine runs on the game thread once per frame.
+- A `Low` priority job is background work and cannot be interrupted once it runs. Background jobs hold at most all but three workers at once (`job.BackgroundWorkerReserve`, 0 lifts the cap), so a frame's parallel sections always find a free worker. With the cap off, 5 ms background jobs on every worker of a 22-worker pool stretched a frame of 4 096 chunk meshes from 6 ms to 26 ms (59 ms at worst); with the cap on, the same frame took 6 ms (9 ms at worst).
 
 <Callout type="warning">
 The pool's queues are unbounded and `Submit` never blocks. A producer that can outrun the workers must throttle itself, and only a thread that is not a worker (`JobSystem::IsWorkerThread()` is false) may block waiting for the pool to drain; a worker waiting on its own pool can deadlock it.

@@ -10,10 +10,11 @@ sources:
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/ModelFormats.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetDisplayInfo.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/TextureImportSidecar.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/TextureArrayBuilder.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
   - Engine/Source/Runtime/ML/Public/ML/OnnxSession.h
-verifiedAt: fe1a64ec2
+verifiedAt: e41a4451a
 ---
 
 Importing turns a file from a content tool into a project asset. The editor builds the file, from where it lies, into [asset packages](/docs/content-pipeline/asset-formats/) in the `Content/` folder you import into: a model into mesh, skeleton, animation, texture and material packages, a texture into a `.tex`, a sound into a `.sound`. Each package records its source and the options you chose, so a reimport replays them.
@@ -100,10 +101,38 @@ A `.gltf` or `.obj` names other files: buffers, images and `.mtl` libraries. Kee
 | **Texture group** | Color (sRGB), Normal map, Mask (linear), HDR |
 | **Max size** | Default, No limit, or a clamp on the longest edge |
 | **Alpha coverage** | Off, 0.25, 0.33, 0.5, 0.75 |
+| **Filter** | Default, Nearest, Bilinear, Trilinear, Anisotropic |
+| **Blend mip levels** | Off or on (Nearest and Bilinear) |
+| **Anisotropy** | 2x, 4x, 8x, 16x (Anisotropic) |
+| **Nearest upscale** | Off, 2x, 4x, 8x, 16x |
 
 The settings are stored in the `.tex` package, and the cook honors them when it builds the mip chain. **Auto** compression picks by group: BC6H for HDR, BC5 for normal maps, BC7 for everything else. Normal maps, masks and HDR textures always sample linear.
 
 **Alpha coverage** keeps alpha-tested foliage, fences and hair cards from thinning out with distance: each mip's alpha is rescaled so the same share of texels passes the alpha test as in mip 0. Match it to your material's cutoff.
+
+### Filtering and pixel art
+
+**Filter** is how materials sample the texture. **Default** is trilinear with the project's anisotropy (`r.MaxAnisotropy`), what every texture used before the option existed. **Nearest** keeps point sampling at every distance, which is what pixel art needs; with **Blend mip levels** off it also picks one mip level per pixel instead of fading between two, so texels stay hard-edged (and shimmer a little in motion, as point sampling does). **Bilinear** smooths within a level and picks one level; with blending on it is **Trilinear**. **Anisotropic** is trilinear plus 2x to 16x anisotropic filtering for textures seen at grazing angles; `r.MaxAnisotropy` still caps it.
+
+Only an all-linear sampler is ever anisotropic, on every backend: a Nearest request is never turned into a smooth one by the anisotropy setting.
+
+**Nearest upscale** repeats every source texel by a whole factor before the mip chain is built, so a 16x16 tile cooked at 4x is a 64x64 image whose texels are exact 4x4 blocks. The first two mips are then exact copies, the edges stay hard under anisotropic filtering, and the longest edge is capped at 8192. Pair it with the Nearest filter or with Anisotropic for blocky art that has to look good at an angle.
+
+### Texture arrays
+
+A texture array is one asset holding several same-sized images (a block tileset, a decal set). Unlike an atlas, each layer has its own mip chain, so a layer never bleeds into its neighbour at distance, and nothing needs padding between tiles. Build one from a folder or a list of PNG, JPEG, TGA or BMP files with `FTextureArrayBuilder` <Source path="Engine/Source/Runtime/AssetSystem/Public/AssetSystem/TextureArrayBuilder.h" />:
+
+```cpp
+#include <AssetSystem/TextureArrayBuilder.h>
+
+TextureImportSettings settings;
+settings.nearestUpscale = 4;                                  // 16x16 tiles become 64x64
+settings.compression = static_cast<int32_t>(MtexCompression::BC7);
+
+FTextureArrayBuilder::BuildFromFolder("Art/Blocks", "Content/Blocks.mtex", settings);
+```
+
+Files sort in natural order (`tile2` before `tile10`), and layer `i` is the `i`th file. Every layer must have the same size. A folder or list holds at most 2048 layers, the most any backend this engine targets can address, and one image becomes a two-layer array because a one-layer image is a plain 2D texture to every backend. The result is an array `.mtex`, which the Content Browser imports as a texture: its thumbnail and the Texture Editor show layer 0, and the Details panel shows the same Filter options. Sample it in a material with the **Texture Sample Array** node (see [Materials](/docs/rendering/materials/#texture-arrays)).
 
 You can change every setting after import in the Texture Editor (double-click the texture). See the [editor section](/docs/editor/).
 
