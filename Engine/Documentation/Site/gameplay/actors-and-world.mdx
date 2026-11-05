@@ -4,6 +4,7 @@ sidebarTitle: Actors and world
 description: Write AActor subclasses, spawn and destroy them in an MWorld, and control when and how often they tick.
 order: 1
 sources:
+  - Engine/Source/Runtime/Game/Public/Game/FViewerRegistry.h
   - Engine/Source/Runtime/Game/Public/Game/AActor.h
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
   - Engine/Source/Runtime/Game/Public/Game/MSceneComponent.h
@@ -18,7 +19,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/MGameplayStatics.h
   - Engine/Source/Runtime/Game/Public/Game/PlaceableActorRegistry.h
   - Engine/Source/Runtime/Game/Public/Game/FActorTemplateRegistry.h
-verifiedAt: 5922e6e5e
+verifiedAt: 90e6739a9
 ---
 
 An actor (`AActor`) is a gameplay object you can place in a scene or spawn at runtime. It owns a tree of components, has a transform, and goes through a fixed lifecycle. A world (`MWorld`) holds the actors of one scene, drives that lifecycle and ticks them every frame. <Source symbol="MWorld" />
@@ -191,6 +192,14 @@ Set these in the constructor:
 | `tickInterval` | Seconds between ticks. `Tick` receives the accumulated delta, so integrating code stays correct. <Source symbol="AActor" /> |
 | `CustomTimeDilation` | Per-actor multiplier on top of the world's time dilation. 0 freezes the actor. |
 | `AddTickPrerequisite(other)` | Tick after `other` within the same group. Cycles fall back to registration order. <Source symbol="AActor" /> |
+
+### Tick in the editor
+
+`ShouldTickInEditor()` returns false by default. Override it to return true and implement `TickInEditor(dt)` to have the edit world tick the actor, within the `ed.TickBudgetMs` budget, for edit-mode previews. `IsEditorWorld()` (on the actor and on `MWorld`, with `MWorld::IsPlayWorld()` as its opposite) tells constructor and `OnConstruct` code which world it is in. <Source symbol="AActor" /> <Source symbol="MWorld" />
+
+### Viewers
+
+`FViewerRegistry::GetViewers(world)` returns every point of view a world is looked at from, with position, forward vector, field of view, clip planes, a viewport id and a kind: editor viewport, Play In Editor player or game camera. Use it for distance-based streaming, level of detail or generation in actors and scene systems alike, without knowing which host runs. <Source symbol="FViewerRegistry" />
 
 <Callout type="tip">
 `tickInterval` is the cheapest way to cut cost for things that do not need per-frame updates, such as distant AI or ambient effects.

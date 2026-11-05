@@ -360,75 +360,87 @@
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
-					"line": 51,
+					"line": 52,
 					"members": [
 						{
 							"kind": "method",
 							"name": "AActor",
 							"signature": "AActor() = default",
-							"line": 54
+							"line": 55
 						},
 						{
 							"kind": "method",
 							"name": "~AActor",
 							"signature": "~AActor() override = default",
-							"line": 57
+							"line": 58
 						},
 						{
 							"kind": "field",
 							"name": "primaryTickGroup",
 							"signature": "ETickGroup primaryTickGroup = ETickGroup::PrePhysics",
 							"doc": "Default is PrePhysics — flip in subclass ctor when ordering\nmatters.",
-							"line": 84
+							"line": 85
 						},
 						{
 							"kind": "field",
 							"name": "canEverTick",
 							"signature": "bool canEverTick = true",
 							"doc": "UE's bCanEverTick: actors that opt out never enter the tick\nschedule at all — the dominant case for placed scenery. Defaults ON\nfor compatibility; subclasses (and the Visual Script bind, which knows whether\nany Tick graph or latent node exists in the chain) flip it off.",
-							"line": 90
+							"line": 91
 						},
 						{
 							"kind": "field",
 							"name": "tickOnAnyThread",
 							"signature": "bool tickOnAnyThread = false",
 							"doc": "UE's bRunOnAnyThread: the world may run this actor's tick (its\ntickInterval pacing, the virtual Tick and the components it ticks) on a\ntask-graph worker, in parallel with the group's other such actors once\ntheir prerequisites have ticked. Off by default, and only for an actor\nwhose tick touches nothing but its own state — no spawning or\ndestroying, no structural ECS work, no Visual Scripting, no other actor's fields.\nComponents with a tickGroupOverride still tick on the game thread.",
-							"line": 99
+							"line": 100
 						},
 						{
 							"kind": "field",
 							"name": "CustomTimeDilation",
 							"signature": "float CustomTimeDilation = 1.0f",
 							"doc": "Per-actor multiplier on top of the world's time dilation, so a\nsingle actor can run in slow motion (or keep full speed while the\nrest of the world is slowed) without a second clock. The world\nreads it when it computes this actor's tick delta; 1 = follow the\nworld exactly, 0 = frozen.",
-							"line": 106
+							"line": 107
 						},
 						{
 							"kind": "method",
 							"name": "OnConstruct",
 							"signature": "virtual void OnConstruct()",
 							"doc": "Construction event (UE Construction Script analog). Runs\nafter the backing entity exists and before BeginPlay; the editor\nre-runs it when instance properties change, so keep it\nidempotent — derive state, don't accumulate it. Default: no-op.",
-							"line": 112
+							"line": 113
+						},
+						{
+							"kind": "method",
+							"name": "GetClass",
+							"signature": "MClass* GetClass() const override",
+							"line": 116
+						},
+						{
+							"kind": "method",
+							"name": "SetClassOverride",
+							"signature": "void SetClassOverride(MClass* cls)",
+							"line": 119
 						},
 						{
 							"kind": "method",
 							"name": "RegisterComponents",
 							"signature": "virtual void RegisterComponents()",
 							"doc": "Publish this actor onto its backing ECS entity. Runs at\nregistration — scene load included — so a placed actor draws and\ninspects in the editor without beginning play. Default impl\ndispatches OnRegister to every component; overrides must call\nSuper::RegisterComponents().",
-							"line": 120
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "BeginPlay",
 							"signature": "virtual void BeginPlay()",
 							"doc": "Called once when the world begins play, or at registration for an\nactor spawned into a world that already has. Default impl\ndispatches BeginPlay to every component — overrides must call\nSuper::BeginPlay(). Gameplay startup only: the ECS mirror is\nalready published by RegisterComponents.",
-							"line": 127
+							"line": 135
 						},
 						{
 							"kind": "method",
 							"name": "HasActorBegunPlay",
 							"signature": "bool HasActorBegunPlay() const noexcept",
 							"doc": "True between the world's BeginPlay and EndPlay. MWorld owns the\nflag, which is what makes double-BeginPlay across a PIE\nPlay/Stop/Play cycle impossible.",
-							"line": 132
+							"line": 140
 						},
 						{
 							"kind": "field",
@@ -436,161 +448,220 @@
 							"signature": "float tickInterval = 0.0f",
 							"reflected": true,
 							"doc": "Tick pacing (UE TickInterval): 0 = every frame. When set, the world\naccumulates this actor's dilated time and Tick fires once the\ninterval elapses, receiving the ACCUMULATED delta — dt-integrating\ngameplay stays exact, it just steps coarser. The cost lever for\nthings that don't need per-frame updates (distant AI, ambience).",
-							"line": 141
+							"line": 149
 						},
 						{
 							"kind": "method",
 							"name": "DispatchTick",
 							"signature": "void DispatchTick(float deltaSeconds)",
 							"doc": "Non-virtual dispatch the world calls: applies tickInterval pacing\nBEFORE the virtual Tick, so subclass overrides pace with it.",
-							"line": 147
+							"line": 155
 						},
 						{
 							"kind": "method",
 							"name": "TickOverrideComponents",
 							"signature": "void TickOverrideComponents(ETickGroup group, float deltaSeconds)",
 							"doc": "World-driven pass for components whose tickGroupOverride names this\ngroup: they tick AFTER every actor of the group, regardless of the\nowner's own group. Inherit components (-1) tick inside Tick as ever.",
-							"line": 152
+							"line": 160
 						},
 						{
 							"kind": "method",
 							"name": "Tick",
 							"signature": "virtual void Tick(float deltaSeconds)",
 							"doc": "Per-frame tick. Default: dispatch to every component's\nTickComponent. Override on actors that need pre/post-component\nlogic; call Super::Tick(dt) to keep components ticking.",
-							"line": 157
+							"line": 165
+						},
+						{
+							"kind": "method",
+							"name": "ShouldTickInEditor",
+							"signature": "virtual bool ShouldTickInEditor() const",
+							"doc": "Editor-time actors (UE's ShouldTickIfViewportsOnly). Off by default: a\nplaced actor is inert in the editor until Play. An actor that previews\ngenerated content in edit mode (a procedural world, a spline mesh) returns\ntrue and does its work in TickInEditor, which the edit world calls once a\nframe within the `ed.TickBudgetMs` budget. Never called in a PIE copy or a\ngame, and not while a Play session replaces the edit world, so the work\nstops at Play and resumes at Stop. Tick and BeginPlay stay play-only: the\ndefault TickInEditor does nothing, it does not forward to Tick.",
+							"line": 175
+						},
+						{
+							"kind": "method",
+							"name": "TickInEditor",
+							"signature": "virtual void TickInEditor(float deltaSeconds)",
+							"line": 178
+						},
+						{
+							"kind": "method",
+							"name": "IsEditorWorld",
+							"signature": "bool IsEditorWorld() const",
+							"doc": "True while this actor's world is the level being authored. Constructors,\nOnConstruct and RegisterComponents run in the editor as well as in games,\nso gameplay-only startup asks this.",
+							"line": 184
+						},
+						{
+							"kind": "method",
+							"name": "IsTransient",
+							"signature": "bool IsTransient() const noexcept",
+							"doc": "Generated content: an actor (or component) an editor-time actor created\nfor preview is transient. A transient actor is not written to the level,\nnot copied into the Play world (which regenerates its own from BeginPlay),\nis hidden from the Outliner unless \"Show Generated\" is on, and selecting it\nselects its generating owner. Setting transient does not touch the scene's\ndirty state or the undo stack.",
+							"line": 192
+						},
+						{
+							"kind": "method",
+							"name": "SetTransient",
+							"signature": "void SetTransient(bool transient) noexcept",
+							"line": 195
+						},
+						{
+							"kind": "method",
+							"name": "GetGeneratedOwner",
+							"signature": "AActor* GetGeneratedOwner() const",
+							"line": 198
+						},
+						{
+							"kind": "method",
+							"name": "SetGeneratedOwner",
+							"signature": "void SetGeneratedOwner(AActor* owner)",
+							"line": 201
+						},
+						{
+							"kind": "method",
+							"name": "MarkGenerated",
+							"signature": "void MarkGenerated(AActor* generated)",
+							"doc": "Makes `generated` this actor's transient output: transient, owned by this\nactor, so it is cleaned up with it.",
+							"line": 207
+						},
+						{
+							"kind": "method",
+							"name": "ClearGeneratedContent",
+							"signature": "void ClearGeneratedContent()",
+							"doc": "Destroys every actor this one generated and drops its transient\ncomponents; call it before regenerating and from EndPlay. Does nothing\nfor content that is not transient.",
+							"line": 212
 						},
 						{
 							"kind": "method",
 							"name": "GetEndPlayReason",
 							"signature": "EEndPlayReason GetEndPlayReason() const",
-							"line": 167
+							"line": 222
 						},
 						{
 							"kind": "method",
 							"name": "Destroyed",
 							"signature": "virtual void Destroyed()",
 							"doc": "Fired by MWorld::Destroy right before EndPlay — the explicit-\ndestruction hook (UE Destroyed()). NOT called on world teardown,\nplay end or ejection; use EndPlay + GetEndPlayReason for those.",
-							"line": 174
+							"line": 229
 						},
 						{
 							"kind": "method",
 							"name": "EndPlay",
 							"signature": "virtual void EndPlay()",
 							"doc": "Called when the actor is removed from the world. Counterpart\nto BeginPlay — default impl dispatches EndPlay to components\nin reverse order. Overrides must call Super::EndPlay().",
-							"line": 180
+							"line": 235
 						},
 						{
 							"kind": "method",
 							"name": "GetLocation",
 							"signature": "Vec3 GetLocation() const",
 							"doc": "Transform\nRoot transform — typically the root MSceneComponent's transform.\nConvenience accessors mirror to the root component.",
-							"line": 185
+							"line": 240
 						},
 						{
 							"kind": "method",
 							"name": "GetRotation",
 							"signature": "Quat GetRotation() const",
-							"line": 186
+							"line": 241
 						},
 						{
 							"kind": "method",
 							"name": "GetScale",
 							"signature": "Vec3 GetScale() const",
-							"line": 187
+							"line": 242
 						},
 						{
 							"kind": "method",
 							"name": "SetLocation",
 							"signature": "void SetLocation(const Vec3& v)",
-							"line": 188
+							"line": 243
 						},
 						{
 							"kind": "method",
 							"name": "SetRotation",
 							"signature": "void SetRotation(const Quat& q)",
-							"line": 189
+							"line": 244
 						},
 						{
 							"kind": "method",
 							"name": "SetScale",
 							"signature": "void SetScale(const Vec3& v)",
-							"line": 190
+							"line": 245
 						},
 						{
 							"kind": "method",
 							"name": "GetSocketTransform",
 							"signature": "bool GetSocketTransform(const std::string& socketName, Vec3& outLocation, Quat& outRotation) const",
 							"doc": "Sockets — the named attachment points a mesh carries (a muzzle, a\nhand bone, a roof mount). Asks every scene component on the actor,\nin attachment order, and returns the first that owns the name;\nthe transform comes back in WORLD space, composed onto the owning\ncomponent, which is what a caller placing an effect or spawning a\nprojectile actually needs. False leaves the outputs untouched.",
-							"line": 203
+							"line": 258
 						},
 						{
 							"kind": "method",
 							"name": "HasSocket",
 							"signature": "bool HasSocket(const std::string& socketName) const",
-							"line": 204
+							"line": 259
 						},
 						{
 							"kind": "method",
 							"name": "GetSocketLocation",
 							"signature": "Vec3 GetSocketLocation(const std::string& socketName) const",
 							"reflected": true,
-							"line": 205
+							"line": 260
 						},
 						{
 							"kind": "method",
 							"name": "GetActorLocation",
 							"signature": "Vec3 GetActorLocation() const",
 							"reflected": true,
-							"line": 208
+							"line": 263
 						},
 						{
 							"kind": "method",
 							"name": "SetActorLocation",
 							"signature": "void SetActorLocation(const Vec3& location)",
 							"reflected": true,
-							"line": 211
+							"line": 266
 						},
 						{
 							"kind": "method",
 							"name": "CanMoveAtRuntime",
 							"signature": "bool CanMoveAtRuntime() const",
 							"doc": "False for a Static or Stationary actor once its world has begun play\n(UE's mobility rule); the refused move logs a warning naming the actor.",
-							"line": 216
+							"line": 271
 						},
 						{
 							"kind": "method",
 							"name": "GetActorName",
 							"signature": "std::string GetActorName() const",
 							"reflected": true,
-							"line": 217
+							"line": 272
 						},
 						{
 							"kind": "method",
 							"name": "SetActorHiddenInGame",
 							"signature": "void SetActorHiddenInGame(bool hidden)",
 							"reflected": true,
-							"line": 220
+							"line": 275
 						},
 						{
 							"kind": "method",
 							"name": "AddComponent",
 							"signature": "void AddComponent(MActorComponent* component)",
 							"doc": "Component management\nAttach a component. Takes ownership of the raw pointer; the\nactor will destroy it on EndPlay. Use the templated\nCreateDefaultSubobject<T>() helper in subclass constructors.",
-							"line": 228
+							"line": 283
 						},
 						{
 							"kind": "method",
 							"name": "RemoveComponent",
 							"signature": "bool RemoveComponent(MActorComponent* component)",
 							"doc": "Detach a component added at run time (a script component a designer\nremoved): it leaves the list and loses its owner; the caller ends its\nplay and lets it be collected. False when it was not this actor's.",
-							"line": 233
+							"line": 288
 						},
 						{
 							"kind": "method",
 							"name": "CreateDefaultSubobject",
 							"signature": "template<typename T> T* CreateDefaultSubobject(const char* name)",
 							"doc": "Convenience for subclass constructors. Constructs a T, sets\nits name, attaches to this actor, returns the raw pointer.\n\nclass APhysicsBox : public AActor {\nAPhysicsBox() {\nauto* root = CreateDefaultSubobject<MSceneComponent>(\"Root\");\nSetRootComponent(root);\nauto* mesh = CreateDefaultSubobject<MStaticMeshComponent>(\"Mesh\");\nmesh->AttachTo(root);",
-							"line": 246
+							"line": 301
 						},
 						{
 							"kind": "method",
@@ -598,21 +669,21 @@
 							"signature": "static void InitDefaultSubobjectConfig(MActorComponent* component)",
 							"static": true,
 							"doc": "The INI's MPROPERTY(Config) values from the component class's default\nobject: a constructor-made component is never cloned from a default,\nso this is the only way a project's Game.ini reaches it.",
-							"line": 260
+							"line": 315
 						},
 						{
 							"kind": "method",
 							"name": "FindComponent",
 							"signature": "template<typename T> T* FindComponent() const",
 							"doc": "Find first component of the given type. Returns nullptr if not\nattached. O(N) in component count — fine for typical actors\nwith <10 components.",
-							"line": 265
+							"line": 320
 						},
 						{
 							"kind": "method",
 							"name": "GetComponents",
 							"signature": "const std::vector<MActorComponent*>& GetComponents() const",
 							"doc": "Read-only access to the full component list (for iteration).",
-							"line": 276
+							"line": 331
 						},
 						{
 							"kind": "method",
@@ -620,137 +691,137 @@
 							"signature": "MActorComponent* GetComponentByClass(const std::string& className) const",
 							"reflected": true,
 							"doc": "The reflected component lookups: by class name (the component's own\nclass or any ancestor, so \"MSceneComponent\" finds a mesh component)\nand by the name it was created under. Nothing when absent.",
-							"line": 283
+							"line": 338
 						},
 						{
 							"kind": "method",
 							"name": "GetComponentByName",
 							"signature": "MActorComponent* GetComponentByName(const std::string& name) const",
 							"reflected": true,
-							"line": 286
+							"line": 341
 						},
 						{
 							"kind": "method",
 							"name": "GetComponentCount",
 							"signature": "int32_t GetComponentCount() const",
 							"reflected": true,
-							"line": 289
+							"line": 344
 						},
 						{
 							"kind": "method",
 							"name": "GetRootComponent",
 							"signature": "MSceneComponent* GetRootComponent() const",
 							"doc": "The scene root — the component whose transform is the actor's\ntransform. Always an MSceneComponent. nullptr for actors that\nare pure logic (controllers / managers).",
-							"line": 298
+							"line": 353
 						},
 						{
 							"kind": "method",
 							"name": "SetRootComponent",
 							"signature": "void SetRootComponent(MSceneComponent* root)",
-							"line": 301
+							"line": 356
 						},
 						{
 							"kind": "method",
 							"name": "GetWorld",
 							"signature": "MWorld* GetWorld() const",
 							"doc": "World",
-							"line": 304
+							"line": 359
 						},
 						{
 							"kind": "method",
 							"name": "SetWorld",
 							"signature": "void SetWorld(MWorld* world)",
 							"doc": "Out-of-line: the TObjectPtr store barrier needs the complete type,\nand MWorld is only forward-declared here.",
-							"line": 309
+							"line": 364
 						},
 						{
 							"kind": "method",
 							"name": "GetBackingEntity",
 							"signature": "EntityID GetBackingEntity() const",
 							"doc": "ECS bridge\nBacking entity in the scene's ECS World. Created by\nMWorld::RegisterActor when the world has an ECS world attached;\nINVALID_ENTITY otherwise (pure-logic worlds, tests). Components\nmirror render/physics state onto it so the flat systems\n(SceneRenderer's MeshRenderer iteration, TransformSystem) see\nactors without knowing about the OO layer. MWorld::Tick syncs\nthe root component transform into the entity each frame.",
-							"line": 319
+							"line": 374
 						},
 						{
 							"kind": "method",
 							"name": "SetBackingEntity",
 							"signature": "void SetBackingEntity(EntityID id)",
-							"line": 322
+							"line": 377
 						},
 						{
 							"kind": "method",
 							"name": "PullFromBackingEntity",
 							"signature": "void PullFromBackingEntity(World* ecs)",
 							"doc": "Adoption counterpart to the OnRegister push: seed the root transform\nfrom the entity's TransformComponent and fan PullFromMirror out to\nevery component, so re-publishing the mirror reproduces the scene's\nauthored values instead of class defaults.",
-							"line": 330
+							"line": 385
 						},
 						{
 							"kind": "method",
 							"name": "AddTag",
 							"signature": "void AddTag(FGameplayTag tag)",
 							"doc": "Gameplay tags\nHierarchical identifiers (Damage.Physical, Faction.Enemy.Goblin)\nused for AI behaviour predicates, ability requirements,\ngameplay filters. HasTag uses hierarchical matching — a query\nfor \"Damage\" matches an actor tagged \"Damage.Physical.Slash\".\n\nStorage is a vector of canonical dot-paths rather than a\nTSet<FGameplayTag>, which is what makes the field reflectable and\ntherefore serialized: MHT maps std::vector<T> to PropertyType::Array\nand has no set support at all, and FGameplayTag itself is not a\nreflected struct (its only member is an FName, which is not a\nPropertyType either). A vector of strings needs nothing new from\nthe header tool, round-trips through the existing scene writer and\nshows up in the inspector. Uniqueness is enforced in AddTag; actors\ncarry a handful of tags, so the linear scan is not worth a set.",
-							"line": 347
+							"line": 402
 						},
 						{
 							"kind": "method",
 							"name": "RemoveTag",
 							"signature": "void RemoveTag(FGameplayTag tag)",
-							"line": 348
+							"line": 403
 						},
 						{
 							"kind": "method",
 							"name": "HasTag",
 							"signature": "bool HasTag(FGameplayTag tag) const",
-							"line": 349
+							"line": 404
 						},
 						{
 							"kind": "method",
 							"name": "HasTagExact",
 							"signature": "bool HasTagExact(FGameplayTag tag) const",
-							"line": 350
+							"line": 405
 						},
 						{
 							"kind": "method",
 							"name": "HasAnyTag",
 							"signature": "bool HasAnyTag(const TSet<FGameplayTag>& s) const",
-							"line": 351
+							"line": 406
 						},
 						{
 							"kind": "method",
 							"name": "GetTags",
 							"signature": "const std::vector<std::string>& GetTags() const noexcept",
-							"line": 352
+							"line": 407
 						},
 						{
 							"kind": "method",
 							"name": "GetArchetypeName",
 							"signature": "const std::string& GetArchetypeName() const noexcept",
 							"doc": "The template (archetype) this instance derives its defaults from, or\nempty when it derives straight from the class CDO. When set, the scene\nwriter diffs the instance against the named template instead of the CDO\n(instance -> template -> CDO -> class), so raising a template default\nreaches every instance of it that never overrode the field.",
-							"line": 361
+							"line": 416
 						},
 						{
 							"kind": "method",
 							"name": "SetArchetypeName",
 							"signature": "void SetArchetypeName(const std::string& name)",
-							"line": 364
+							"line": 419
 						},
 						{
 							"kind": "method",
 							"name": "AddTickPrerequisite",
 							"signature": "void AddTickPrerequisite(AActor* prerequisite)",
 							"doc": "Tick prerequisites\nThis actor's Tick runs only after every prerequisite in the SAME\ntick group has ticked this frame; prerequisites in other groups\nare already ordered by the group sequence. Cycles degrade to\nregistration order. Dead prerequisites are ignored and pruned.",
-							"line": 373
+							"line": 428
 						},
 						{
 							"kind": "method",
 							"name": "RemoveTickPrerequisite",
 							"signature": "void RemoveTickPrerequisite(AActor* prerequisite)",
-							"line": 378
+							"line": 433
 						},
 						{
 							"kind": "method",
 							"name": "GetTickPrerequisites",
 							"signature": "const std::vector<TWeakObjectPtr<AActor>>& GetTickPrerequisites() const noexcept",
-							"line": 386
+							"line": 441
 						}
 					]
 				},
@@ -760,37 +831,37 @@
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "Tick ordering inside a frame — UE5's ETickingGroup analog.\nScene::OnUpdateRuntime dispatches in this order: PrePhysics →\nDuringPhysics → [ECS system update, which is where the physics step\nand TransformSystem live] → PostPhysics → PostUpdateWork. Most\ngameplay defaults to PrePhysics; place logic that must observe\npost-physics poses in PostPhysics or PostUpdateWork.\n\nMowo does not split the physics step into \"step\" and \"resolve\", so\nDuringPhysics runs BEFORE the step alongside PrePhysics rather than\ninside it — the useful distinction here is pre-step vs post-step.\nMWorld::Tick(dt) (the convenience whole-frame path used by headless\ndrivers) runs all four groups back to back with no physics between\nthem; only the Scene path honours the ordering above.",
-					"line": 74,
+					"line": 75,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "PrePhysics",
 							"signature": "PrePhysics = 0",
-							"line": 75
+							"line": 76
 						},
 						{
 							"kind": "enumerator",
 							"name": "DuringPhysics",
 							"signature": "DuringPhysics = 1",
-							"line": 76
+							"line": 77
 						},
 						{
 							"kind": "enumerator",
 							"name": "PostPhysics",
 							"signature": "PostPhysics = 2",
-							"line": 77
+							"line": 78
 						},
 						{
 							"kind": "enumerator",
 							"name": "PostUpdateWork",
 							"signature": "PostUpdateWork = 3",
-							"line": 78
+							"line": 79
 						},
 						{
 							"kind": "enumerator",
 							"name": "Count",
 							"signature": "Count",
-							"line": 79
+							"line": 80
 						}
 					]
 				},
@@ -800,35 +871,35 @@
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "Why EndPlay is firing (UE EEndPlayReason). Overrides read it via\nGetEndPlayReason() — a parameter would break every existing override.",
-					"line": 161,
+					"line": 216,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Destroyed",
 							"signature": "Destroyed",
 							"doc": "explicit MWorld::Destroy",
-							"line": 162
+							"line": 217
 						},
 						{
 							"kind": "enumerator",
 							"name": "RemovedFromWorld",
 							"signature": "RemovedFromWorld",
 							"doc": "ejected for a world transfer (EjectActor)",
-							"line": 163
+							"line": 218
 						},
 						{
 							"kind": "enumerator",
 							"name": "PlayEnded",
 							"signature": "PlayEnded",
 							"doc": "the world's EndPlay (PIE Stop, match end)",
-							"line": 164
+							"line": 219
 						},
 						{
 							"kind": "enumerator",
 							"name": "WorldTornDown",
 							"signature": "WorldTornDown",
 							"doc": "world destructor",
-							"line": 165
+							"line": 220
 						}
 					]
 				}
@@ -9839,6 +9910,198 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/FViewerRegistry.h",
+			"include": "Game/FViewerRegistry.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EViewerKind",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"line": 30,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "EditorViewport",
+							"signature": "EditorViewport",
+							"line": 31
+						},
+						{
+							"kind": "enumerator",
+							"name": "PIEPlayer",
+							"signature": "PIEPlayer",
+							"line": 32
+						},
+						{
+							"kind": "enumerator",
+							"name": "GameCamera",
+							"signature": "GameCamera",
+							"line": 33
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FViewerInfo",
+					"namespace": "Mowo",
+					"line": 36,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Position",
+							"signature": "Vec3 Position",
+							"line": 37
+						},
+						{
+							"kind": "field",
+							"name": "Forward",
+							"signature": "Vec3 Forward = Vec3(0.0f, 0.0f, -1.0f)",
+							"line": 38
+						},
+						{
+							"kind": "field",
+							"name": "FovDegrees",
+							"signature": "float FovDegrees = 60.0f",
+							"line": 39
+						},
+						{
+							"kind": "field",
+							"name": "NearPlane",
+							"signature": "float NearPlane = 0.1f",
+							"line": 40
+						},
+						{
+							"kind": "field",
+							"name": "FarPlane",
+							"signature": "float FarPlane = 1000.0f",
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "ViewportId",
+							"signature": "uint64_t ViewportId = 0",
+							"doc": "Stable per viewer within a host: the editor's viewport instance index, the\ncamera's entity id in a game. Lets a consumer keep per-viewer state.",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "Kind",
+							"signature": "EViewerKind Kind = EViewerKind::GameCamera",
+							"line": 45
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FViewerQuery",
+					"namespace": "Mowo",
+					"doc": "What a provider is asked about. `Actors` is null for an ECS world that has no\nMWorld (a bare simulation); `Ecs` is null only for an MWorld with no ECS world.",
+					"line": 50,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Actors",
+							"signature": "const MWorld* Actors = nullptr",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "Ecs",
+							"signature": "const World* Ecs = nullptr",
+							"line": 52
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FViewerRegistry",
+					"namespace": "Mowo",
+					"line": 55,
+					"members": [
+						{
+							"kind": "alias",
+							"name": "FHandle",
+							"signature": "using FHandle = uint32_t",
+							"line": 57
+						},
+						{
+							"kind": "alias",
+							"name": "FProvider",
+							"signature": "using FProvider = std::function<void(const FViewerQuery& query, std::vector<FViewerInfo>& out)>",
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FViewerRegistry& Get()",
+							"static": true,
+							"line": 60
+						},
+						{
+							"kind": "method",
+							"name": "FViewerRegistry",
+							"signature": "FViewerRegistry(const FViewerRegistry&) = delete",
+							"line": 62
+						},
+						{
+							"kind": "method",
+							"name": "operator=",
+							"signature": "FViewerRegistry& operator=(const FViewerRegistry&) = delete",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "AddProvider",
+							"signature": "FHandle AddProvider(FProvider provider)",
+							"doc": "The host's contribution. The handle removes it again; a provider living in\na module that unloads must be removed first or the call lands in unmapped code.",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "RemoveProvider",
+							"signature": "void RemoveProvider(FHandle handle)",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "GetViewers",
+							"signature": "std::vector<FViewerInfo> GetViewers(const MWorld* world) const",
+							"doc": "Every viewer of the world: the built-in camera answer for a play or game\nworld, plus whatever the providers add.",
+							"line": 72
+						},
+						{
+							"kind": "method",
+							"name": "GetViewers",
+							"signature": "std::vector<FViewerInfo> GetViewers(const World* ecs) const",
+							"doc": "The same question from a scene system, which is handed the ECS world only.",
+							"line": 75
+						},
+						{
+							"kind": "method",
+							"name": "BindWorld",
+							"signature": "void BindWorld(const World* ecs, MWorld* world)",
+							"doc": "Kept by MWorld::SetECSWorld so the ECS overload can find the actor world.",
+							"line": 78
+						},
+						{
+							"kind": "method",
+							"name": "UnbindWorld",
+							"signature": "void UnbindWorld(const MWorld* world)",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "FindWorld",
+							"signature": "MWorld* FindWorld(const World* ecs) const",
+							"line": 80
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Game/Public/Game/FVisualScriptRuntimeLoader.h",
 			"include": "Game/FVisualScriptRuntimeLoader.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -10732,12 +10995,25 @@
 							"line": 85
 						},
 						{
+							"kind": "method",
+							"name": "IsTransient",
+							"signature": "bool IsTransient() const noexcept",
+							"doc": "Created by an editor-time actor for preview: AActor::ClearGeneratedContent\nremoves it. Components are never saved by composition (the class\nconstructor owns that), so this only marks what regeneration may drop;\nvisible generated geometry belongs on a transient actor, whose ECS\nmirror is kept out of the level file as well.",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "SetTransient",
+							"signature": "void SetTransient(bool transient) noexcept",
+							"line": 95
+						},
+						{
 							"kind": "field",
 							"name": "tickEnabled",
 							"signature": "bool tickEnabled = true",
 							"reflected": true,
 							"doc": "Tick gate — set to false to skip TickComponent without\ndisabling the component. Cheaper than detaching/reattaching\nfor things that only sometimes need ticking (e.g. an AI\ncomponent that's only active while the player is nearby).",
-							"line": 91
+							"line": 103
 						},
 						{
 							"kind": "field",
@@ -10745,7 +11021,7 @@
 							"signature": "float tickInterval = 0.0f",
 							"reflected": true,
 							"doc": "Tick pacing (UE TickInterval): 0 = every frame. When set, the owning\nactor accumulates time and TickComponent fires with the ACCUMULATED\ndelta once the interval elapses.",
-							"line": 98
+							"line": 110
 						},
 						{
 							"kind": "field",
@@ -10753,14 +11029,14 @@
 							"signature": "int32_t tickGroupOverride = -1",
 							"reflected": true,
 							"doc": "Per-component tick group override. -1 (default) = tick inside the\nowner's Tick, in the owner's group. 0..3 = AActor::ETickGroup values\n(PrePhysics/DuringPhysics/PostPhysics/PostUpdateWork): the world then\nticks this component in THAT group's pass instead — after every\nactor of the group has ticked. An int rather than the enum so this\nheader keeps its forward-declared AActor.",
-							"line": 108
+							"line": 120
 						},
 						{
 							"kind": "method",
 							"name": "AdvanceTickAccumulator",
 							"signature": "bool AdvanceTickAccumulator(float deltaSeconds, float& outDelta)",
 							"doc": "Called by the owning actor's Tick: applies tickInterval pacing.\nReturns false to skip this frame; on true, outDelta carries the\naccumulated dt to tick with.",
-							"line": 115
+							"line": 127
 						}
 					]
 				}
@@ -17656,6 +17932,126 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/MVisualScriptHostComponent.h",
+			"include": "Game/MVisualScriptHostComponent.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "MVisualScriptHostComponent",
+					"namespace": "Mowo",
+					"bases": "public MActorComponent, public IVisualScriptHost",
+					"reflected": true,
+					"line": 30,
+					"members": [
+						{
+							"kind": "method",
+							"name": "MVisualScriptHostComponent",
+							"signature": "MVisualScriptHostComponent()",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "GetVisualScriptRuntime",
+							"signature": "FVisualScriptRuntime& GetVisualScriptRuntime() override",
+							"line": 37
+						},
+						{
+							"kind": "method",
+							"name": "GetClass",
+							"signature": "MClass* GetClass() const override",
+							"line": 41
+						},
+						{
+							"kind": "method",
+							"name": "OnRegister",
+							"signature": "void OnRegister() override",
+							"line": 43
+						},
+						{
+							"kind": "method",
+							"name": "BeginPlay",
+							"signature": "void BeginPlay() override",
+							"line": 44
+						},
+						{
+							"kind": "method",
+							"name": "TickComponent",
+							"signature": "void TickComponent(float deltaSeconds) override",
+							"line": 45
+						},
+						{
+							"kind": "method",
+							"name": "EndPlay",
+							"signature": "void EndPlay() override",
+							"line": 46
+						},
+						{
+							"kind": "method",
+							"name": "BindToActor",
+							"signature": "void BindToActor(MClass* synthetic, VisualScriptClass* def, const std::string& nativeClassName)",
+							"line": 48
+						},
+						{
+							"kind": "method",
+							"name": "SetComponentClass",
+							"signature": "void SetComponentClass(MClass* synthetic)",
+							"line": 49
+						},
+						{
+							"kind": "method",
+							"name": "IsActorHost",
+							"signature": "bool IsActorHost() const",
+							"line": 51
+						},
+						{
+							"kind": "method",
+							"name": "FindActorHost",
+							"signature": "static MVisualScriptHostComponent* FindActorHost(const AActor* actor)",
+							"static": true,
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "RuntimeOf",
+							"signature": "static FVisualScriptRuntime* RuntimeOf(const AActor* actor)",
+							"static": true,
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "CanHostNative",
+							"signature": "static bool CanHostNative(MClass* nativeParent)",
+							"static": true,
+							"line": 58
+						},
+						{
+							"kind": "method",
+							"name": "ConstructHosted",
+							"signature": "static MObject* ConstructHosted(MClass* synthetic)",
+							"static": true,
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "ApplyNativeDefaults",
+							"signature": "static std::vector<std::string> ApplyNativeDefaults(MObject* object, const VisualScriptClass& def)",
+							"static": true,
+							"line": 61
+						},
+						{
+							"kind": "method",
+							"name": "ValidateNativeDefaults",
+							"signature": "static std::vector<std::string> ValidateNativeDefaults(MClass* nativeParent, const VisualScriptClass& def)",
+							"static": true,
+							"line": 62
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Game/Public/Game/MVolumeComponent.h",
 			"include": "Game/MVolumeComponent.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -18083,316 +18479,411 @@
 					]
 				},
 				{
+					"kind": "enum",
+					"name": "EWorldType",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "What the world is for. Game: a standalone game or server (and any world nobody\ntold otherwise). Editor: the level being authored, ticked in edit mode.\nPIE: the disposable copy a Play In Editor session runs.",
+					"line": 60,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Game",
+							"signature": "Game",
+							"line": 61
+						},
+						{
+							"kind": "enumerator",
+							"name": "Editor",
+							"signature": "Editor",
+							"line": 62
+						},
+						{
+							"kind": "enumerator",
+							"name": "PIE",
+							"signature": "PIE",
+							"line": 63
+						}
+					]
+				},
+				{
 					"kind": "class",
 					"name": "MWorld",
 					"namespace": "Mowo",
 					"bases": "public MObject",
 					"reflected": true,
 					"doc": "MWorld is a GC root: the mark phase reaches every spawned actor\nthrough the MPROPERTY m_actors list (and from there components via\nthe actors' own MPROPERTY fields). An actor's Outer pointing at the\nworld does NOT keep the actor alive — only the m_actors edge does.",
-					"line": 61,
+					"line": 70,
 					"members": [
 						{
 							"kind": "method",
 							"name": "MWorld",
 							"signature": "MWorld()",
-							"line": 64
+							"line": 73
 						},
 						{
 							"kind": "method",
 							"name": "~MWorld",
 							"signature": "~MWorld() override",
-							"line": 67
+							"line": 76
 						},
 						{
 							"kind": "method",
 							"name": "MWorld",
 							"signature": "MWorld(const MWorld&) = delete",
-							"line": 69
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "operator=",
 							"signature": "MWorld& operator=(const MWorld&) = delete",
-							"line": 70
+							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "SpawnActor",
 							"signature": "template<typename T, typename... Args> TWeakObjectPtr<T> SpawnActor(Args&&... args)",
 							"doc": "Spawning\nConstruct + register an actor in this world. The world becomes\nthe actor's outer; BeginPlay fires (or is queued if tick is\nmid-frame). Returns a TWeakObjectPtr so callers can detect\npost-GC sweep — DON'T store as raw AActor*.",
-							"line": 77
+							"line": 86
 						},
 						{
 							"kind": "method",
 							"name": "SpawnActorByClass",
 							"signature": "AActor* SpawnActorByClass(MClass* cls, const std::function<void(AActor*)>& preRegister = {}, const FActorSpawnTransform* initialTransform = nullptr)",
 							"doc": "Spawn by runtime class (hot-reload restore, scene-deserialized\nactors). Returns nullptr when cls is null, lacks a codegen\nfactory, or isn't an AActor subclass. `preRegister` runs after\nconstruction (default subobjects exist) but BEFORE RegisterActor —\nrestore property values there so the ECS mirror publishes them.\n`initialTransform` is applied during registration, ahead of OnConstruct\nand BeginPlay: onto the root component when the actor has one, else\nonto the backing TransformComponent the moment it exists.",
-							"line": 98
+							"line": 107
 						},
 						{
 							"kind": "method",
 							"name": "SpawnActorFromTemplate",
 							"signature": "AActor* SpawnActorFromTemplate(FName templateName, const std::function<void(AActor*)>& preRegister = {}, const FActorSpawnTransform* initialTransform = nullptr)",
 							"doc": "Spawn an instance of a registered template (archetype instancing). The\ninstance derives its defaults from the template rather than the class\nCDO and remembers the template's name, so the scene writer diffs it\nagainst the template. Returns nullptr when the template is not\nregistered in FActorTemplateRegistry.",
-							"line": 107
+							"line": 116
 						},
 						{
 							"kind": "method",
 							"name": "InitializeGameMode",
 							"signature": "AGameMode* InitializeGameMode(MClass* gameModeClass = nullptr, bool spawnLocalPlayer = true)",
 							"doc": "Game framework\nSpawn the game mode (cls, or base AGameMode when null), call\nInitGame + StartMatch. One per world; repeated calls return the\nexisting mode. Typically invoked by the runtime after the start\nscene loads, with the class named in project settings.\nspawnLocalPlayer false = dedicated server: no local PlayerController\nor default pawn; connections get pawns through AGameMode::RestartPlayer.",
-							"line": 118
+							"line": 127
 						},
 						{
 							"kind": "method",
 							"name": "GetGameMode",
 							"signature": "AGameMode* GetGameMode() const",
-							"line": 119
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "BeginPlay",
 							"signature": "void BeginPlay()",
 							"doc": "Registration and play are separate transitions. Registering an\nactor publishes its ECS mirror — that is what makes a placed actor\nvisible and inspectable in the editor, and it happens at scene\nload. BeginPlay fans out only here, when the host enters play\n(Scene::OnRuntimeStart / OnSimulationStart).\n\nBoth are idempotent and each actor begins play at most once per\nplay session: an actor spawned mid-play begins play during its\nregistration and is skipped by a later world BeginPlay, and a\nPlay → Stop → Play cycle re-runs BeginPlay exactly once per cycle.",
-							"line": 133
+							"line": 142
 						},
 						{
 							"kind": "method",
 							"name": "EndPlay",
 							"signature": "void EndPlay()",
-							"line": 134
+							"line": 143
 						},
 						{
 							"kind": "method",
 							"name": "HasBegunPlay",
 							"signature": "bool HasBegunPlay() const noexcept",
-							"line": 135
+							"line": 144
 						},
 						{
 							"kind": "method",
 							"name": "Tick",
 							"signature": "void Tick(float deltaSeconds)",
 							"doc": "Lifecycle\nWhole-frame tick: BeginTickFrame, all four groups in order, then\nSyncActorTransforms. Correct only when nothing needs to run BETWEEN\ngroups — a host that steps physics mid-frame drives the pieces below\ninstead (Scene::OnUpdateRuntime does exactly that, so PostPhysics\nactors observe post-physics poses).\n\nBegins play first when it has not begun. This path is a game path\nby construction — an editor host drives the pieces below and calls\nBeginPlay itself — so a headless driver that only ticks still gets\nthe lifecycle it expects rather than silently unplayed actors.",
-							"line": 150
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "BeginTickFrame",
 							"signature": "void BeginTickFrame()",
 							"doc": "The frame-ordered pieces of Tick, so the caller can interleave a\nphysics step. Call order per frame: BeginTickFrame → TickGroup\n(PrePhysics) → TickGroup(DuringPhysics) → SyncActorTransforms(false) →\nphysics → TickGroup(PostPhysics) → TickGroup(PostUpdateWork) →\nSyncActorTransforms(true).\n\nBeginTickFrame advances the frame stamp the prerequisite resolver\ndedups against — exactly once per frame, never per group.",
-							"line": 160
+							"line": 169
 						},
 						{
 							"kind": "method",
 							"name": "TickGroup",
 							"signature": "void TickGroup(AActor::ETickGroup group, float deltaSeconds)",
-							"line": 161
+							"line": 170
 						},
 						{
 							"kind": "method",
 							"name": "GetTimerManager",
 							"signature": "FTimerManager& GetTimerManager()",
 							"doc": "World-scoped timers (UE parity): set here, a timer dies WITH the\nworld — it can never fire into a torn-down actor the way an\nengine-scope FTimerManager::Get() timer can. Ticked at the start of\nthe PrePhysics group, so it pauses when the world stops ticking.",
-							"line": 167
+							"line": 176
 						},
 						{
 							"kind": "method",
 							"name": "GetTimeSeconds",
 							"signature": "float GetTimeSeconds() const",
 							"doc": "Time (UWorld parity). All of it reads the process frame clock in\nCore — a world does not own a clock, it presents one — so the\nnumbers agree with FTime, FApp and every other module that asks.\nDefined out of line so a caller in another DLL resolves them here\nrather than inlining its own read.",
-							"line": 176
+							"line": 185
 						},
 						{
 							"kind": "method",
 							"name": "GetRealTimeSeconds",
 							"signature": "float GetRealTimeSeconds() const",
-							"line": 177
+							"line": 186
 						},
 						{
 							"kind": "method",
 							"name": "GetDeltaSeconds",
 							"signature": "float GetDeltaSeconds() const",
-							"line": 178
+							"line": 187
 						},
 						{
 							"kind": "method",
 							"name": "GetFrameNumber",
 							"signature": "uint64_t GetFrameNumber() const",
-							"line": 179
+							"line": 188
 						},
 						{
 							"kind": "method",
 							"name": "TimeSince",
 							"signature": "float TimeSince(float gameTimeSeconds) const",
 							"doc": "Game seconds since a stamp taken from GetTimeSeconds(). Does not\nadvance while paused.",
-							"line": 183
+							"line": 192
 						},
 						{
 							"kind": "method",
 							"name": "GetTimeDilation",
 							"signature": "float GetTimeDilation() const",
-							"line": 185
+							"line": 194
 						},
 						{
 							"kind": "method",
 							"name": "SetTimeDilation",
 							"signature": "void SetTimeDilation(float dilation)",
-							"line": 186
+							"line": 195
 						},
 						{
 							"kind": "method",
 							"name": "GetEffectiveTimeDilation",
 							"signature": "float GetEffectiveTimeDilation() const",
 							"doc": "The dilation actually applied to this frame's tick delta: zero\nwhile paused.",
-							"line": 190
+							"line": 199
 						},
 						{
 							"kind": "method",
 							"name": "IsPaused",
 							"signature": "bool IsPaused() const",
-							"line": 192
+							"line": 201
 						},
 						{
 							"kind": "method",
 							"name": "SetPaused",
 							"signature": "void SetPaused(bool paused)",
-							"line": 193
+							"line": 202
 						},
 						{
 							"kind": "method",
 							"name": "SetWorldPaused",
 							"signature": "void SetWorldPaused(bool paused)",
 							"doc": "Per-WORLD pause/dilation — a second axis on top of the process-global\nFTime clock the methods above mirror (TimeTests pins that mirroring).\nThis axis lets two worlds differ: a paused PIE world under a live\neditor world, a slow-motion cutscene world beside a real-time UI\nworld. Applied inside TickGroup, so both MWorld::Tick and hosts that\ndrive TickGroup directly (Scene::OnUpdateRuntime) honour it; a paused\nworld fires no timers and ticks no actors.",
-							"line": 202
+							"line": 211
 						},
 						{
 							"kind": "method",
 							"name": "IsWorldPaused",
 							"signature": "bool IsWorldPaused() const",
-							"line": 205
+							"line": 214
 						},
 						{
 							"kind": "method",
 							"name": "SetWorldTimeDilation",
 							"signature": "void SetWorldTimeDilation(float dilation)",
-							"line": 208
+							"line": 217
 						},
 						{
 							"kind": "method",
 							"name": "GetWorldTimeDilation",
 							"signature": "float GetWorldTimeDilation() const",
-							"line": 211
+							"line": 220
 						},
 						{
 							"kind": "method",
 							"name": "SyncActorTransforms",
 							"signature": "void SyncActorTransforms(bool onlyChanged = false)",
 							"doc": "Push each actor's root world transform into its backing entity.\n`onlyChanged` writes only actors whose root moved since the previous\nsync this frame — which is what lets the post-physics sync land\nPostPhysics actor movement WITHOUT clobbering the poses physics just\nwrote for actors that did not move themselves.",
-							"line": 220
+							"line": 229
 						},
 						{
 							"kind": "method",
 							"name": "Destroy",
 							"signature": "void Destroy(AActor* actor)",
 							"doc": "Despawn an actor: calls EndPlay, removes it from the list, deletes it.",
-							"line": 223
+							"line": 232
 						},
 						{
 							"kind": "method",
 							"name": "EjectActor",
 							"signature": "bool EjectActor(AActor* actor)",
-							"line": 225
+							"line": 234
 						},
 						{
 							"kind": "method",
 							"name": "AdoptActor",
 							"signature": "bool AdoptActor(AActor* actor)",
-							"line": 226
+							"line": 235
 						},
 						{
 							"kind": "method",
 							"name": "NotifyBackingEntityDestroyed",
 							"signature": "void NotifyBackingEntityDestroyed(EntityID entity)",
 							"doc": "The scene deleted an entity out from under its actor (outliner\ndelete): tear the actor down too, without re-entering the entity\ndestruction hooks. No-op for plain entities.",
-							"line": 231
+							"line": 240
 						},
 						{
 							"kind": "method",
 							"name": "GetActors",
 							"signature": "const std::vector<AActor*>& GetActors() const",
 							"doc": "Removal leaves a null hole so it costs no search and no shift; the\nholes are squeezed out here and once a frame by the tick schedule, so\na caller never sees one.",
-							"line": 236
+							"line": 245
 						},
 						{
 							"kind": "method",
 							"name": "InvalidateTickLists",
 							"signature": "void InvalidateTickLists()",
 							"doc": "The tick schedule is rebuilt once a frame from canEverTick,\nprimaryTickGroup and the components' tickGroupOverride, which are plain\nfields. A mid-frame change that takes an actor OUT of a group applies at\nonce (dispatch re-checks the fields); one that puts it INTO a group\nstill to run this frame needs this call, or it lands next frame.\nSpawning, destroying and AddComponent invalidate on their own.",
-							"line": 250
+							"line": 259
 						},
 						{
 							"kind": "method",
 							"name": "NotifyActorComponentAdded",
 							"signature": "void NotifyActorComponentAdded(AActor* actor, MActorComponent* component)",
 							"doc": "AActor::AddComponent reports here so a component added mid-frame with a\ntickGroupOverride still ticks in this frame's pass, as it did when every\npass walked the whole actor list.",
-							"line": 257
+							"line": 266
 						},
 						{
 							"kind": "method",
 							"name": "FindActorByEntity",
 							"signature": "AActor* FindActorByEntity(EntityID entity) const",
 							"doc": "Resolve the actor backing an ECS entity, or nullptr when the\nentity is plain ECS data (or its actor is pending kill). This is\nthe address translation the networking layer needs: replication,\nrelevancy and RPC routing all key off the entity carrying\nNetworkObjectComponent, and this is what turns one of those ids\nback into the gameplay object that owns it.",
-							"line": 265
+							"line": 274
 						},
 						{
 							"kind": "method",
 							"name": "GetECSWorld",
 							"signature": "World* GetECSWorld() const",
 							"doc": "ECS bridge\nBacking ECS world — systems that prefer flat iteration of\ntyped components read from here. Set by Scene during world\ninitialisation.",
-							"line": 271
+							"line": 280
 						},
 						{
 							"kind": "method",
 							"name": "SetECSWorld",
 							"signature": "void SetECSWorld(World* w)",
-							"line": 274
+							"doc": "Also tells FViewerRegistry, so a scene system holding only the ECS world\ncan still ask where the viewers are.",
+							"line": 285
+						},
+						{
+							"kind": "method",
+							"name": "GetWorldType",
+							"signature": "EWorldType GetWorldType() const noexcept",
+							"doc": "World type. The Scene that owns the world keeps it current: Editor while\nthe level is ticked in edit mode, PIE for a play copy, Game otherwise.",
+							"line": 289
+						},
+						{
+							"kind": "method",
+							"name": "SetWorldType",
+							"signature": "void SetWorldType(EWorldType type) noexcept",
+							"line": 292
+						},
+						{
+							"kind": "method",
+							"name": "IsEditorWorld",
+							"signature": "bool IsEditorWorld() const noexcept",
+							"doc": "The level as authored: actors here tick only through TickInEditor.",
+							"line": 296
+						},
+						{
+							"kind": "method",
+							"name": "IsPlayWorld",
+							"signature": "bool IsPlayWorld() const noexcept",
+							"doc": "A world that plays: a PIE copy or a game. Opposite of IsEditorWorld.",
+							"line": 300
+						},
+						{
+							"kind": "method",
+							"name": "TickInEditor",
+							"signature": "void TickInEditor(float deltaSeconds)",
+							"doc": "Edit-mode tick: gives each actor that opted in (AActor::ShouldTickInEditor)\none TickInEditor(dt), round-robin from where the previous frame stopped, and\nstops early once `ed.TickBudgetMs` is spent, so a slow generator cannot stall\nthe editor frame; the actors it skipped run first next frame. No-op unless\nthis is an editor world: a PIE copy and a game never call it.",
+							"line": 309
+						},
+						{
+							"kind": "method",
+							"name": "GetEditorTickStats",
+							"signature": "const FEditorTickStats& GetEditorTickStats() const noexcept",
+							"line": 316
 						},
 						{
 							"kind": "method",
 							"name": "AddPinWire",
 							"signature": "void AddPinWire(EntityID srcEntity, const std::string& srcPin, EntityID dstEntity, const std::string& dstPin)",
-							"line": 289
+							"line": 331
 						},
 						{
 							"kind": "method",
 							"name": "ClearPinWires",
 							"signature": "void ClearPinWires()",
-							"line": 290
+							"line": 332
 						},
 						{
 							"kind": "method",
 							"name": "GetPinWires",
 							"signature": "const std::vector<FPinWire>& GetPinWires() const",
-							"line": 293
+							"line": 335
 						},
 						{
 							"kind": "method",
 							"name": "FirePin",
 							"signature": "void FirePin(EntityID srcEntity, const std::string& pin, const struct VisualScriptValue& payload)",
-							"line": 296
+							"line": 338
 						},
 						{
 							"kind": "method",
 							"name": "SetBackingEntityHooks",
 							"signature": "void SetBackingEntityHooks(FBackingEntityHooks hooks)",
-							"line": 308
+							"line": 350
 						},
 						{
 							"kind": "method",
 							"name": "GetSubsystem",
 							"signature": "template<typename T> T* GetSubsystem()",
 							"doc": "World subsystems (UE-style)\nAuto-instanced MWorldSubsystem singletons. One per world;\nInitialize(this) fires on first GetSubsystem<T>(). Lifetime =\nworld lifetime; ~MWorld destroys all.",
-							"line": 316
+							"line": 358
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "MWorld::FEditorTickStats",
+					"namespace": "Mowo",
+					"line": 311,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Ticked",
+							"signature": "uint32_t Ticked = 0",
+							"line": 312
+						},
+						{
+							"kind": "field",
+							"name": "Deferred",
+							"signature": "uint32_t Deferred = 0",
+							"line": 313
+						},
+						{
+							"kind": "field",
+							"name": "Milliseconds",
+							"signature": "double Milliseconds = 0.0",
+							"line": 314
 						}
 					]
 				},
@@ -18401,31 +18892,31 @@
 					"name": "MWorld::FPinWire",
 					"namespace": "Mowo",
 					"doc": "Pin wiring (Glacier model)\nLevel-authored connections between instances: firing `srcPin` on the\nactor backing `srcEntity` runs `dstPin` as an event on every wired\ntarget (payload lands in the target's \"PinPayload\" variable). Wires\nare level data — the editor writes them, this table routes them.",
-					"line": 283,
+					"line": 325,
 					"members": [
 						{
 							"kind": "field",
 							"name": "srcEntity",
 							"signature": "EntityID srcEntity = INVALID_ENTITY",
-							"line": 284
+							"line": 326
 						},
 						{
 							"kind": "field",
 							"name": "srcPin",
 							"signature": "std::string srcPin",
-							"line": 285
+							"line": 327
 						},
 						{
 							"kind": "field",
 							"name": "dstEntity",
 							"signature": "EntityID dstEntity = INVALID_ENTITY",
-							"line": 286
+							"line": 328
 						},
 						{
 							"kind": "field",
 							"name": "dstPin",
 							"signature": "std::string dstPin",
-							"line": 287
+							"line": 329
 						}
 					]
 				},
@@ -18434,19 +18925,19 @@
 					"name": "MWorld::FBackingEntityHooks",
 					"namespace": "Mowo",
 					"doc": "Backing-entity creation hooks. Without them, backing entities\nare raw ECS entities — fine for tests, but INVISIBLE to the\nrenderer/editor, which iterate Scene's entity metadata\n(name/layer/active), not the raw World. A Scene installs hooks\nthat route through Scene::CreateEntity/DestroyEntity so spawned\nactors show up in the viewport and Outliner.",
-					"line": 304,
+					"line": 346,
 					"members": [
 						{
 							"kind": "field",
 							"name": "create",
 							"signature": "std::function<EntityID(AActor* actor)> create",
-							"line": 305
+							"line": 347
 						},
 						{
 							"kind": "field",
 							"name": "destroy",
 							"signature": "std::function<void(EntityID entity)> destroy",
-							"line": 306
+							"line": 348
 						}
 					]
 				}
@@ -20130,6 +20621,94 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/Game/Public/Game/VisualScriptNativeDefaults.h",
+			"include": "Game/VisualScriptNativeDefaults.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FNativeDefaultRow",
+					"namespace": "Mowo",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Path",
+							"signature": "std::string Path",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "Owner",
+							"signature": "std::string Owner",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "CxxType",
+							"signature": "std::string CxxType",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "Kind",
+							"signature": "EMPropertyKind Kind = EMPropertyKind::Unknown",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "Overridden",
+							"signature": "bool Overridden = false",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "Text",
+							"signature": "std::string Text",
+							"line": 26
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FVisualScriptNativeDefaults",
+					"namespace": "Mowo",
+					"line": 29,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Collect",
+							"signature": "static std::vector<FNativeDefaultRow> Collect(const VisualScriptClass& def)",
+							"static": true,
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "Set",
+							"signature": "static void Set(VisualScriptClass& def, const std::string& path, const std::string& text)",
+							"static": true,
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "static bool Clear(VisualScriptClass& def, const std::string& path)",
+							"static": true,
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "static const std::string* Find(const VisualScriptClass& def, const std::string& path)",
+							"static": true,
+							"line": 35
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h",
 			"include": "Game/VisualScriptRuntime.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -20150,15 +20729,21 @@
 						},
 						{
 							"kind": "method",
+							"name": "Rebind",
+							"signature": "void Rebind(AActor* owner, const char* nativeClassName, bool gateTick)",
+							"line": 46
+						},
+						{
+							"kind": "method",
 							"name": "FVisualScriptRuntime",
 							"signature": "FVisualScriptRuntime(const FVisualScriptRuntime&) = delete",
-							"line": 46
+							"line": 48
 						},
 						{
 							"kind": "method",
 							"name": "operator=",
 							"signature": "FVisualScriptRuntime& operator=(const FVisualScriptRuntime&) = delete",
-							"line": 47
+							"line": 49
 						},
 						{
 							"kind": "method",
@@ -20166,14 +20751,14 @@
 							"signature": "static FVisualScriptRuntime* Of(MObject* object)",
 							"static": true,
 							"doc": "The runtime of a visual-script-backed object, or null for anything else.",
-							"line": 50
+							"line": 52
 						},
 						{
 							"kind": "method",
 							"name": "Of",
 							"signature": "static const FVisualScriptRuntime* Of(const MObject* object)",
 							"static": true,
-							"line": 51
+							"line": 53
 						},
 						{
 							"kind": "method",
@@ -20181,222 +20766,222 @@
 							"signature": "static void InstallHooks()",
 							"static": true,
 							"doc": "Hooks the backing classes cannot do without: the RPC receive dispatch, the\nspawn-pin applier and the visual-script-function RPC invoker. Idempotent.",
-							"line": 55
+							"line": 57
 						},
 						{
 							"kind": "method",
 							"name": "BindVisualScriptClass",
 							"signature": "void BindVisualScriptClass(MClass* synthetic, VisualScriptClass* def)",
-							"line": 57
+							"line": 59
 						},
 						{
 							"kind": "method",
 							"name": "IsVisualScriptBound",
 							"signature": "bool IsVisualScriptBound() const",
-							"line": 58
+							"line": 60
 						},
 						{
 							"kind": "method",
 							"name": "SyntheticClass",
 							"signature": "MClass* SyntheticClass() const",
-							"line": 61
+							"line": 63
 						},
 						{
 							"kind": "method",
 							"name": "NativeClass",
 							"signature": "MClass* NativeClass() const",
-							"line": 64
+							"line": 66
 						},
 						{
 							"kind": "method",
 							"name": "Owner",
 							"signature": "AActor* Owner() const",
-							"line": 65
+							"line": 67
 						},
 						{
 							"kind": "method",
 							"name": "OnConstruct",
 							"signature": "void OnConstruct()",
 							"doc": "Lifecycle, called by the host after its native base's own.",
-							"line": 70
+							"line": 72
 						},
 						{
 							"kind": "method",
 							"name": "BeginPlay",
 							"signature": "void BeginPlay()",
-							"line": 71
+							"line": 73
 						},
 						{
 							"kind": "method",
 							"name": "Tick",
 							"signature": "void Tick(float deltaSeconds)",
-							"line": 72
+							"line": 74
 						},
 						{
 							"kind": "method",
 							"name": "EndPlay",
 							"signature": "void EndPlay()",
-							"line": 73
+							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "Destroyed",
 							"signature": "void Destroyed()",
-							"line": 74
+							"line": 76
 						},
 						{
 							"kind": "method",
 							"name": "OnDamage",
 							"signature": "void OnDamage(float amount, AActor* instigator)",
-							"line": 75
+							"line": 77
 						},
 						{
 							"kind": "method",
 							"name": "IsDead",
 							"signature": "bool IsDead() const",
-							"line": 76
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "NotifyHit",
 							"signature": "void NotifyHit(AActor* other, const Vec3& location, const Vec3& normal, float impulse)",
-							"line": 77
+							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "CallVisualScriptFunction",
 							"signature": "bool CallVisualScriptFunction(const std::string& functionName, const std::vector<VisualScriptValue>& args, VisualScriptValue* ret)",
-							"line": 79
+							"line": 81
 						},
 						{
 							"kind": "method",
 							"name": "AdvanceLatents",
 							"signature": "void AdvanceLatents(float dt)",
-							"line": 80
+							"line": 82
 						},
 						{
 							"kind": "method",
 							"name": "HasPendingLatents",
 							"signature": "bool HasPendingLatents() const",
-							"line": 81
+							"line": 83
 						},
 						{
 							"kind": "method",
 							"name": "ReceivePin",
 							"signature": "void ReceivePin(const std::string& pin, const VisualScriptValue& payload)",
-							"line": 84
+							"line": 86
 						},
 						{
 							"kind": "method",
 							"name": "FindVar",
 							"signature": "const VisualScriptValue* FindVar(const std::string& name) const",
-							"line": 86
+							"line": 88
 						},
 						{
 							"kind": "method",
 							"name": "SetVar",
 							"signature": "void SetVar(const std::string& name, const VisualScriptValue& value)",
-							"line": 91
+							"line": 93
 						},
 						{
 							"kind": "method",
 							"name": "FindVarType",
 							"signature": "bool FindVarType(const std::string& name, FMValueType& outType) const",
-							"line": 94
+							"line": 96
 						},
 						{
 							"kind": "method",
 							"name": "GetHostKey",
 							"signature": "std::string GetHostKey() const override",
 							"doc": "The instance-editable variables, as the Details panel and the serializer\nsee every script's; the overrides keep their own VisualScriptVars node.",
-							"line": 98
+							"line": 100
 						},
 						{
 							"kind": "method",
 							"name": "GetSectionName",
 							"signature": "std::string GetSectionName() const override",
-							"line": 101
+							"line": 103
 						},
 						{
 							"kind": "method",
 							"name": "GetSerializedNodeName",
 							"signature": "std::string GetSerializedNodeName() const override",
-							"line": 104
+							"line": 106
 						},
 						{
 							"kind": "method",
 							"name": "CollectVariables",
 							"signature": "void CollectVariables(std::vector<FScriptVariableDesc>& out) const override",
-							"line": 107
+							"line": 109
 						},
 						{
 							"kind": "method",
 							"name": "FindVariable",
 							"signature": "const VisualScriptValue* FindVariable(const std::string& name) const override",
-							"line": 108
+							"line": 110
 						},
 						{
 							"kind": "method",
 							"name": "SetVariable",
 							"signature": "bool SetVariable(const std::string& name, const VisualScriptValue& value) override",
-							"line": 111
+							"line": 113
 						},
 						{
 							"kind": "method",
 							"name": "CollectVarOverrides",
 							"signature": "void CollectVarOverrides(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
-							"line": 115
+							"line": 117
 						},
 						{
 							"kind": "method",
 							"name": "CollectDeclaredVars",
 							"signature": "void CollectDeclaredVars(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
 							"doc": "Every declared variable at its current value, overridden or not; the\nengine-fed scratch values (DamageAmount, HitLocation, ...) are left out.",
-							"line": 118
+							"line": 120
 						},
 						{
 							"kind": "method",
 							"name": "IsAuthoredOverride",
 							"signature": "static bool IsAuthoredOverride(const VisualScriptValue& current, const VisualScriptValue* seeded)",
 							"static": true,
-							"line": 119
+							"line": 121
 						},
 						{
 							"kind": "method",
 							"name": "PushReplicatedVars",
 							"signature": "bool PushReplicatedVars(bool forceFull = false)",
-							"line": 121
+							"line": 123
 						},
 						{
 							"kind": "method",
 							"name": "ApplyReplicatedVars",
 							"signature": "void ApplyReplicatedVars(const std::string& blob)",
 							"doc": "The body of every backing class's MulticastVisualScriptVars.",
-							"line": 123
+							"line": 125
 						},
 						{
 							"kind": "method",
 							"name": "SetComponentSlotOverride",
 							"signature": "void SetComponentSlotOverride(const std::string& slotName, const std::string& propertyName, const VisualScriptValue& value)",
-							"line": 125
+							"line": 127
 						},
 						{
 							"kind": "method",
 							"name": "CollectComponentSlotOverrides",
 							"signature": "void CollectComponentSlotOverrides(std::vector<std::pair<std::string, VisualScriptValue>>& out) const",
-							"line": 126
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "FindComponentSlotOverride",
 							"signature": "const VisualScriptValue* FindComponentSlotOverride(const std::string& slotName, const std::string& propertyName) const",
-							"line": 127
+							"line": 129
 						},
 						{
 							"kind": "method",
 							"name": "FindSlotEntity",
 							"signature": "EntityID FindSlotEntity(const std::string& slotName) const",
-							"line": 128
+							"line": 130
 						}
 					]
 				},
@@ -20405,19 +20990,19 @@
 					"name": "IVisualScriptHost",
 					"namespace": "Mowo",
 					"doc": "Implemented by every class that can back a Visual Script class.",
-					"line": 180,
+					"line": 182,
 					"members": [
 						{
 							"kind": "method",
 							"name": "~IVisualScriptHost",
 							"signature": "virtual ~IVisualScriptHost() = default",
-							"line": 182
+							"line": 184
 						},
 						{
 							"kind": "method",
 							"name": "GetVisualScriptRuntime",
 							"signature": "virtual FVisualScriptRuntime& GetVisualScriptRuntime() = 0",
-							"line": 184
+							"line": 186
 						}
 					]
 				}
@@ -30752,19 +31337,19 @@
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "What a scene serialization is for. A save game, the PIE snapshot and a deep\ncopy capture the play session, runtime spawns included; saving the level\nwrites only what was authored into it.",
-					"line": 44,
+					"line": 45,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Session",
 							"signature": "Session",
-							"line": 45
+							"line": 46
 						},
 						{
 							"kind": "enumerator",
 							"name": "Authored",
 							"signature": "Authored",
-							"line": 46
+							"line": 47
 						}
 					]
 				},
@@ -30773,209 +31358,229 @@
 					"name": "Scene",
 					"namespace": "Mowo",
 					"doc": "Scene class - contains entities and manages their lifecycle",
-					"line": 50,
+					"line": 51,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Scene",
 							"signature": "Scene()",
-							"line": 52
+							"line": 53
 						},
 						{
 							"kind": "method",
 							"name": "Scene",
 							"signature": "explicit Scene(const std::string& name)",
-							"line": 53
+							"line": 54
 						},
 						{
 							"kind": "method",
 							"name": "~Scene",
 							"signature": "~Scene()",
-							"line": 54
+							"line": 55
 						},
 						{
 							"kind": "method",
 							"name": "Initialize",
 							"signature": "void Initialize()",
 							"doc": "Lifecycle",
-							"line": 57
+							"line": 58
 						},
 						{
 							"kind": "method",
 							"name": "Shutdown",
 							"signature": "void Shutdown()",
-							"line": 58
+							"line": 59
 						},
 						{
 							"kind": "method",
 							"name": "OnUpdateEditor",
 							"signature": "void OnUpdateEditor(float dt)",
 							"doc": "New lifecycle API",
-							"line": 61
+							"line": 62
 						},
 						{
 							"kind": "method",
 							"name": "OnUpdateRuntime",
 							"signature": "void OnUpdateRuntime(float dt)",
 							"doc": "Ticks all systems (= current Update)",
-							"line": 62
+							"line": 63
 						},
 						{
 							"kind": "method",
 							"name": "OnUpdateSimulation",
 							"signature": "void OnUpdateSimulation(float dt)",
 							"doc": "Ticks Transform + Physics + Animation + RectTransform",
-							"line": 63
+							"line": 64
 						},
 						{
 							"kind": "method",
 							"name": "OnRender",
 							"signature": "void OnRender(SceneRenderer* renderer, uint32_t cullingMask = 0xFFFFFFFF)",
 							"doc": "Draws through the hook the renderer library installs when it loads; a\nhost that never loads it (the dedicated server) has none, and the call\ndoes nothing.",
-							"line": 67
+							"line": 68
 						},
 						{
 							"kind": "alias",
 							"name": "FRenderHook",
 							"signature": "using FRenderHook = void (*)(Scene& scene, SceneRenderer* renderer, uint32_t cullingMask)",
-							"line": 68
+							"line": 69
 						},
 						{
 							"kind": "method",
 							"name": "SetRenderHook",
 							"signature": "static void SetRenderHook(FRenderHook hook)",
 							"static": true,
-							"line": 69
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "GetRenderHook",
 							"signature": "static FRenderHook GetRenderHook()",
 							"static": true,
-							"line": 70
+							"line": 71
 						},
 						{
 							"kind": "method",
 							"name": "OnRuntimeStart",
 							"signature": "void OnRuntimeStart()",
 							"doc": "Ensures runtime systems present, calls init",
-							"line": 71
+							"line": 72
 						},
 						{
 							"kind": "method",
 							"name": "OnRuntimeStop",
 							"signature": "void OnRuntimeStop()",
 							"doc": "Shuts down runtime-only systems",
-							"line": 72
+							"line": 73
 						},
 						{
 							"kind": "method",
 							"name": "OnSimulationStart",
 							"signature": "void OnSimulationStart()",
 							"doc": "Adds Physics + Animation only",
-							"line": 73
+							"line": 74
 						},
 						{
 							"kind": "method",
 							"name": "OnSimulationStop",
 							"signature": "void OnSimulationStop()",
 							"doc": "Removes Physics + Animation",
-							"line": 74
+							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "DeepCopy",
 							"signature": "Scope<Scene> DeepCopy() const",
 							"doc": "Document round-trip (no text) → new Scene; name, path and env carried over",
-							"line": 75
+							"line": 76
 						},
 						{
 							"kind": "method",
 							"name": "GetName",
 							"signature": "const std::string& GetName() const",
 							"doc": "Scene metadata",
-							"line": 78
+							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "SetName",
 							"signature": "void SetName(const std::string& name)",
-							"line": 81
+							"line": 82
 						},
 						{
 							"kind": "method",
 							"name": "GetPath",
 							"signature": "const std::string& GetPath() const",
-							"line": 84
+							"line": 85
 						},
 						{
 							"kind": "method",
 							"name": "SetPath",
 							"signature": "void SetPath(const std::string& path)",
-							"line": 87
+							"line": 88
 						},
 						{
 							"kind": "method",
 							"name": "IsPlayWorld",
 							"signature": "bool IsPlayWorld() const",
 							"doc": "A play-in-editor world: a disposable copy of an edited document (or a\nlevel travelled to from one). Travel out of it loads a fresh copy rather\nthan handing the game a scene the editor has open.",
-							"line": 94
+							"line": 95
 						},
 						{
 							"kind": "method",
 							"name": "SetPlayWorld",
 							"signature": "void SetPlayWorld(bool playWorld)",
-							"line": 97
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "SetWorldType",
+							"signature": "void SetWorldType(EWorldType type)",
+							"doc": "What this scene's actor world is for (Editor, PIE, Game). A new scene takes\nthe process default, which the editor sets to Editor at startup, so actors\nconstructed while the level loads already see the right answer; SetPlayWorld\nmakes it PIE, and OnUpdateEditor keeps a non-play scene Editor.",
+							"line": 104
+						},
+						{
+							"kind": "method",
+							"name": "GetWorldType",
+							"signature": "EWorldType GetWorldType() const",
+							"line": 105
+						},
+						{
+							"kind": "method",
+							"name": "SetDefaultWorldType",
+							"signature": "static void SetDefaultWorldType(EWorldType type)",
+							"static": true,
+							"line": 106
 						},
 						{
 							"kind": "method",
 							"name": "CreateGameObject",
 							"signature": "GameObject* CreateGameObject(const std::string& name = \"\")",
 							"doc": "GameObject management (preferred API)",
-							"line": 102
+							"line": 109
 						},
 						{
 							"kind": "method",
 							"name": "GetGameObject",
 							"signature": "GameObject* GetGameObject(EntityID id)",
-							"line": 103
+							"line": 110
 						},
 						{
 							"kind": "method",
 							"name": "FindGameObject",
 							"signature": "GameObject* FindGameObject(const std::string& name) const",
-							"line": 104
+							"line": 111
 						},
 						{
 							"kind": "method",
 							"name": "FindGameObjectsWithTag",
 							"signature": "std::vector<GameObject*> FindGameObjectsWithTag(const std::string& tag) const",
-							"line": 105
+							"line": 112
 						},
 						{
 							"kind": "method",
 							"name": "FindGameObjectWithTag",
 							"signature": "GameObject* FindGameObjectWithTag(const std::string& tag) const",
-							"line": 106
+							"line": 113
 						},
 						{
 							"kind": "method",
 							"name": "CreateEntity",
 							"signature": "Entity CreateEntity(const std::string& name = \"\")",
 							"doc": "Entity management",
-							"line": 109
+							"line": 116
 						},
 						{
 							"kind": "method",
 							"name": "DuplicateEntity",
 							"signature": "EntityID DuplicateEntity(EntityID sourceId)",
-							"line": 110
+							"line": 117
 						},
 						{
 							"kind": "method",
 							"name": "DestroyEntity",
 							"signature": "void DestroyEntity(Entity entity)",
-							"line": 111
+							"line": 118
 						},
 						{
 							"kind": "method",
@@ -30983,135 +31588,135 @@
 							"signature": "static std::string ResolveGameModeClass(const Scene* scene, const std::string& projectGameMode)",
 							"static": true,
 							"doc": "World Settings at play: the level's game-mode override wins over the\nproject's; KillZ destroys every simulated body or character below the\nlevel's kill height and returns how many went.",
-							"line": 116
+							"line": 123
 						},
 						{
 							"kind": "method",
 							"name": "ApplyKillZ",
 							"signature": "size_t ApplyKillZ()",
-							"line": 117
+							"line": 124
 						},
 						{
 							"kind": "method",
 							"name": "FindEntity",
 							"signature": "Entity FindEntity(const std::string& name) const",
-							"line": 118
+							"line": 125
 						},
 						{
 							"kind": "method",
 							"name": "FindEntitiesWithTag",
 							"signature": "std::vector<Entity> FindEntitiesWithTag(const std::string& tag) const",
-							"line": 119
+							"line": 126
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityName",
 							"signature": "std::string GetEntityName(EntityID id) const",
 							"doc": "Entity name access",
-							"line": 122
+							"line": 129
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityNameRef",
 							"signature": "const std::string& GetEntityNameRef(EntityID id) const",
-							"line": 123
+							"line": 130
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityName",
 							"signature": "void SetEntityName(EntityID id, const std::string& name)",
-							"line": 124
+							"line": 131
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityTag",
 							"signature": "std::string GetEntityTag(EntityID id) const",
 							"doc": "Entity tag access",
-							"line": 127
+							"line": 134
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityTagRef",
 							"signature": "const std::string& GetEntityTagRef(EntityID id) const",
-							"line": 128
+							"line": 135
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityTag",
 							"signature": "void SetEntityTag(EntityID id, const std::string& tag)",
-							"line": 129
+							"line": 136
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityFolder",
 							"signature": "const std::string& GetEntityFolder(EntityID id) const",
 							"doc": "Outliner organizational folder — pure editor metadata: it never\naffects the transform hierarchy or any runtime system, it only\ngroups rows. Serialized with the scene so the layout survives.",
-							"line": 134
+							"line": 141
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityFolder",
 							"signature": "void SetEntityFolder(EntityID id, const std::string& folder)",
-							"line": 135
+							"line": 142
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityLayer",
 							"signature": "uint32_t GetEntityLayer(EntityID id) const",
 							"doc": "Entity layer access (0-31)",
-							"line": 138
+							"line": 145
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityLayer",
 							"signature": "void SetEntityLayer(EntityID id, uint32_t layer)",
-							"line": 139
+							"line": 146
 						},
 						{
 							"kind": "method",
 							"name": "FindEntityWithTag",
 							"signature": "Entity FindEntityWithTag(const std::string& tag) const",
 							"doc": "Find first entity with tag (returns invalid entity if not found)",
-							"line": 142
+							"line": 149
 						},
 						{
 							"kind": "method",
 							"name": "IsEntityActive",
 							"signature": "bool IsEntityActive(EntityID id) const",
 							"doc": "Active state (serialized — inactive entities skipped by systems)",
-							"line": 145
+							"line": 152
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityActive",
 							"signature": "void SetEntityActive(EntityID id, bool active)",
-							"line": 146
+							"line": 153
 						},
 						{
 							"kind": "method",
 							"name": "IsEntityEditorHidden",
 							"signature": "bool IsEntityEditorHidden(EntityID id) const",
 							"doc": "Editor visibility — UE's bHiddenEd, serialized with the scene as the\noptional `editor_hidden` entity property (absent = visible, so every\nscene authored before this stays readable). Distinct from bHidden:\nthis is an authoring aid, and Play must never inherit it.",
-							"line": 152
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityEditorHidden",
 							"signature": "void SetEntityEditorHidden(EntityID id, bool hidden)",
-							"line": 153
+							"line": 160
 						},
 						{
 							"kind": "method",
 							"name": "IsEntityEditorLocked",
 							"signature": "bool IsEntityEditorLocked(EntityID id) const",
 							"doc": "Editor selection lock — the Outliner's padlock, kept with the level as\nthe optional `editor_locked` property the way UE keeps bLockLocation,\nso a lock an author set survives closing the level.",
-							"line": 158
+							"line": 165
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityEditorLocked",
 							"signature": "void SetEntityEditorLocked(EntityID id, bool locked)",
-							"line": 159
+							"line": 166
 						},
 						{
 							"kind": "method",
@@ -31119,194 +31724,194 @@
 							"signature": "static bool ShouldGatherEntity(ESceneGatherContext context, bool editorHidden)",
 							"static": true,
 							"doc": "Whether a per-entity gather may submit this entity. A designer who hid a\nwall to reach behind it must not ship a level with a hole, so the flag\nstops at the editor boundary rather than travelling into PIE, Simulate\nor the standalone runtime.",
-							"line": 173
+							"line": 180
 						},
 						{
 							"kind": "method",
 							"name": "GetGatherContext",
 							"signature": "ESceneGatherContext GetGatherContext() const",
-							"line": 177
+							"line": 184
 						},
 						{
 							"kind": "method",
 							"name": "SetGatherContext",
 							"signature": "void SetGatherContext(ESceneGatherContext context)",
-							"line": 180
+							"line": 187
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityPrefabSource",
 							"signature": "std::string GetEntityPrefabSource(EntityID id) const",
 							"doc": "Prefab instance tracking (editor-only)",
-							"line": 185
+							"line": 192
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityPrefabSource",
 							"signature": "void SetEntityPrefabSource(EntityID id, const std::string& path)",
-							"line": 186
+							"line": 193
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityPrefabSourceIndex",
 							"signature": "int32_t GetEntityPrefabSourceIndex(EntityID id) const",
 							"doc": "Which entry (PrefabEntityData::index) of the source prefab this\ninstance entity was spawned from. -1 = not a prefab instance.\nPrefabInstantiator stamps it on spawn; the live-link reapply path\nuses it to line each instance entity back up with its source entry.",
-							"line": 192
+							"line": 199
 						},
 						{
 							"kind": "method",
 							"name": "SetEntityPrefabSourceIndex",
 							"signature": "void SetEntityPrefabSourceIndex(EntityID id, int32_t index)",
-							"line": 193
+							"line": 200
 						},
 						{
 							"kind": "method",
 							"name": "CapturePrefabOverride",
 							"signature": "void CapturePrefabOverride(EntityID id, const std::string& componentDisplayName)",
 							"doc": "Capture the current value of a whole reflected component on a prefab\ninstance as an override — a CDO-delta MDF blob (only properties that\ndiffer from the class default) keyed by the component display name.\nThe reapply path re-applies these on top of the source-rebuilt\ncomponents so local edits survive a prefab edit. Because the blob is\na delta, an untouched (default) property is NOT pinned and still\ntracks the prefab source — this is UE's override-is-a-diff model.",
-							"line": 202
+							"line": 209
 						},
 						{
 							"kind": "method",
 							"name": "CapturePrefabOverride",
 							"signature": "void CapturePrefabOverride(EntityID id, const std::string& componentDisplayName, const class PrefabAsset* sourcePrefab)",
 							"doc": "Test/tooling seam: capture against an explicit prefab asset instead of\nresolving the entity's source path through the AssetManager.",
-							"line": 205
+							"line": 212
 						},
 						{
 							"kind": "method",
 							"name": "PropagatePrefabInstance",
 							"signature": "bool PropagatePrefabInstance(EntityID rootId)",
 							"doc": "Re-instantiate a placed prefab instance from its source, then replay\nits stored overrides — the \"propagate a prefab edit to instances\"\npath. rootId must be an instance root (prefabSourcePath set); the\nsource prefab is resolved through the AssetManager. Returns false if\nthe entity isn't an instance or the prefab can't be found.",
-							"line": 212
+							"line": 219
 						},
 						{
 							"kind": "method",
 							"name": "SetParent",
 							"signature": "void SetParent(Entity child, Entity parent)",
 							"doc": "Entity hierarchy",
-							"line": 215
+							"line": 222
 						},
 						{
 							"kind": "method",
 							"name": "RemoveParent",
 							"signature": "void RemoveParent(Entity child)",
-							"line": 216
+							"line": 223
 						},
 						{
 							"kind": "method",
 							"name": "GetParent",
 							"signature": "Entity GetParent(Entity entity) const",
-							"line": 217
+							"line": 224
 						},
 						{
 							"kind": "method",
 							"name": "GetChildren",
 							"signature": "std::vector<Entity> GetChildren(Entity entity) const",
-							"line": 218
+							"line": 225
 						},
 						{
 							"kind": "method",
 							"name": "MoveEntityBefore",
 							"signature": "void MoveEntityBefore(EntityID toMove, EntityID before)",
 							"doc": "Reorder entity in the list (for drag&drop reorder in hierarchy)\nMoves 'toMove' so it appears before 'before' in iteration order.\nIf 'before' is INVALID_ENTITY, moves to the end.",
-							"line": 223
+							"line": 230
 						},
 						{
 							"kind": "method",
 							"name": "GetWorld",
 							"signature": "World* GetWorld()",
-							"line": 225
+							"line": 232
 						},
 						{
 							"kind": "method",
 							"name": "GetWorld",
 							"signature": "const World* GetWorld() const",
-							"line": 228
+							"line": 235
 						},
 						{
 							"kind": "method",
 							"name": "IsLoaded",
 							"signature": "bool IsLoaded() const",
 							"doc": "Scene state",
-							"line": 242
+							"line": 249
 						},
 						{
 							"kind": "method",
 							"name": "IsDirty",
 							"signature": "bool IsDirty() const",
-							"line": 245
+							"line": 252
 						},
 						{
 							"kind": "method",
 							"name": "MarkDirty",
 							"signature": "void MarkDirty()",
-							"line": 248
+							"line": 255
 						},
 						{
 							"kind": "method",
 							"name": "ClearDirty",
 							"signature": "void ClearDirty()",
-							"line": 251
+							"line": 258
 						},
 						{
 							"kind": "method",
 							"name": "GetEnvironment",
 							"signature": "SceneEnvironment& GetEnvironment()",
 							"doc": "Environment settings",
-							"line": 256
+							"line": 263
 						},
 						{
 							"kind": "method",
 							"name": "GetEnvironment",
 							"signature": "const SceneEnvironment& GetEnvironment() const",
-							"line": 259
+							"line": 266
 						},
 						{
 							"kind": "method",
 							"name": "EvaluateVolumes",
 							"signature": "void EvaluateVolumes(const Vec3& cameraPos)",
 							"doc": "Volume framework\n\nEvaluateVolumes is the per-frame hook that walks the scene's\nVolumeComponents, blends their profiles using `cameraPos`, and writes\nthe result back into `m_environment.postProcess` so the existing\nSceneRenderer read path picks it up unchanged.\n\nBaseline handling: on the first call after scene load (or after a\nPostProcessBaseline reset) the current `m_environment.postProcess` is\ncaptured as the authored baseline. Subsequent frames blend volumes\non top of that baseline. To edit the baseline live, disable all\nvolumes (or call `InvalidateVolumeBaseline`) so the next evaluation\ncaptures the inspector's fresh values.",
-							"line": 276
+							"line": 283
 						},
 						{
 							"kind": "method",
 							"name": "ResolveEnvironmentComponents",
 							"signature": "void ResolveEnvironmentComponents()",
-							"line": 278
+							"line": 285
 						},
 						{
 							"kind": "method",
 							"name": "InvalidateVolumeBaseline",
 							"signature": "void InvalidateVolumeBaseline()",
 							"doc": "Forces re-capture of `m_environment.postProcess` as the baseline on\nthe next EvaluateVolumes call. Editor's Volume inspector triggers\nthis when the user nudges the scene's PP fields directly.",
-							"line": 283
+							"line": 290
 						},
 						{
 							"kind": "method",
 							"name": "RebaseWorldOrigin",
 							"signature": "void RebaseWorldOrigin(const Vec3& shift)",
 							"doc": "Origin rebasing. Shifts every ROOT entity transform and the\nphysics mirror (bodies + character controllers, velocities kept) by\n-shift; children stay relative. Auto-triggered in OnUpdateRuntime\nwhen the main camera drifts past wp.RebaseDistance (snapped to\nwp.RebaseGrid). The accumulated offset maps rebased coordinates\nback to absolute world space: absolute = local + offset.",
-							"line": 293
+							"line": 300
 						},
 						{
 							"kind": "method",
 							"name": "GetWorldOriginOffset",
 							"signature": "const Vec3& GetWorldOriginOffset() const",
-							"line": 294
+							"line": 301
 						},
 						{
 							"kind": "method",
 							"name": "GetNavData",
 							"signature": "Ref<RefCounted> GetNavData() const",
 							"doc": "Navigation mesh (baked per scene). Null until a bake is done or a\npre-baked .navmesh is loaded. NavAgentSystem reads this each tick\nto plan paths; with no nav mesh it falls back to straight-line\nsteering (Scope A behavior).\nOpaque: the baked nav asset type lives in the AINavigation plugin,\nwhich loads the companion .navmesh on scene attach and pushes it\ninto its nav systems (FNavMeshProvider in the plugin wraps the cast\nfor typed callers). Core stores only the owning reference so scene\nlifetime keeps the bake alive.",
-							"line": 307
+							"line": 314
 						},
 						{
 							"kind": "method",
 							"name": "SetNavData",
 							"signature": "void SetNavData(Ref<RefCounted> data)",
-							"line": 310
+							"line": 317
 						},
 						{
 							"kind": "method",
@@ -31314,14 +31919,14 @@
 							"signature": "static void SetFocusHighlightProvider(EntityID (*provider)(World&))",
 							"static": true,
 							"doc": "Focus-highlight provider (plugin seam): the interaction system used\nto be named here directly; now whoever owns \"what entity should the\nrenderer highlight\" registers a captureless provider. Process-wide.",
-							"line": 317
+							"line": 324
 						},
 						{
 							"kind": "method",
 							"name": "EntityID",
 							"signature": "static EntityID (*GetFocusHighlightProvider())(World&)",
 							"static": true,
-							"line": 318
+							"line": 325
 						},
 						{
 							"kind": "method",
@@ -31329,54 +31934,54 @@
 							"signature": "static EntityID FindUnboundPlacedNetworkEntity(World& world, const char* prefabPath, const Vec3& position, uint64_t placedGuid)",
 							"static": true,
 							"doc": "Replication seam: the scene-placed entity a client-side Spawn packet\nshould ADOPT instead of materializing a fresh ghost. Server and client\nload the same scene file, so a placed NetworkObject already exists in\nthe client's world when its Spawn arrives — spawning a ghost on top of\nit is the placed-object double-spawn.\n\n`placedGuid` is the authored identity off the Spawn packet and settles\nthe match on its own when both sides have it. It is 0 for a runtime\nspawn, a pre-v4 sender, or a scene saved before the stamp existed, and\nthen the match falls back to what shipped before: the authored prefab\npath plus the nearest pose among still-unbound candidates — which pairs\ninterchangeable twins wrongly once they have moved. Anything already\nbound to a NetworkId or spawned by a previous packet is never\nconsidered. INVALID_ENTITY = no candidate (dynamic spawn — the caller\nmaterializes a ghost as before).",
-							"line": 335
+							"line": 342
 						},
 						{
 							"kind": "method",
 							"name": "AssignPlacedNetworkGuids",
 							"signature": "uint32_t AssignPlacedNetworkGuids()",
 							"doc": "Stamp a stable identity on every scene-placed NetworkObject that lacks\none, and break any collision an old copy-paste left behind. Returns how\nmany entities were changed. Called from the save path so authoring an\nobject is all a designer has to do; exposed because a scene assembled in\ncode (tests, a generator) needs the same guarantee before it is hosted.",
-							"line": 342
+							"line": 349
 						},
 						{
 							"kind": "method",
 							"name": "ReleaseAdoptedPlacedNetworkEntities",
 							"signature": "uint32_t ReleaseAdoptedPlacedNetworkEntities()",
 							"doc": "Hand every scene-placed NetworkObject back to the scene when a session\nends. `networkId` and `spawnedRemotely` are session state written onto an\nentity the SCENE owns, and nothing else clears them, so a placed twin a\njoin adopted stays marked as somebody's ghost forever. The next join then\nskips it in FindUnboundPlacedNetworkEntity and materializes a second copy\n— the double-spawn adoption exists to prevent, returning through leave →\nrejoin. Runtime-spawned ghosts are left alone: they belong to the session,\nnot the scene, and the reload path already discards them. Returns how many\nentities were released.",
-							"line": 353
+							"line": 360
 						},
 						{
 							"kind": "method",
 							"name": "GetOrCreatePointCloudAccumulator",
 							"signature": "FPointCloudAccumulator* GetOrCreatePointCloudAccumulator(EntityID id, const FPointCloudBudget& budget)",
 							"doc": "Scanned point clouds. The Scene owns the accumulator behind every\nPointCloudComponent (keyed by entity), exactly so the save path has an\nowner to flush: SaveToFile writes each cloud's .mpcl companion and\nrecords its path on the component before the scene is serialized, and\nLoadFromFile rebuilds the accumulator from that path — the same shape\nas the terrain flush and the nav-mesh companion. Game code asks the\nscene for the accumulator instead of owning one; the component's\nruntime pointer is a non-owning view of the scene-owned object.",
-							"line": 363
+							"line": 370
 						},
 						{
 							"kind": "method",
 							"name": "GetPointCloudAccumulator",
 							"signature": "FPointCloudAccumulator* GetPointCloudAccumulator(EntityID id) const",
-							"line": 364
+							"line": 371
 						},
 						{
 							"kind": "method",
 							"name": "AdoptPointCloudBlob",
 							"signature": "bool AdoptPointCloudBlob(EntityID id, const uint8_t* bytes, size_t size)",
 							"doc": "Replace one entity's cloud from a `.mpcl` blob the caller already holds.\nThe save path restores clouds from slot-owned sidecars rather than from\nthe component's authored cloudPath — a saved game must not write back\nover the scene's shipped scan, and two slots of the same level have to\nhold two different revealed worlds.",
-							"line": 371
+							"line": 378
 						},
 						{
 							"kind": "method",
 							"name": "SaveToFile",
 							"signature": "bool SaveToFile(const std::string& path)",
 							"doc": "Serialization",
-							"line": 374
+							"line": 381
 						},
 						{
 							"kind": "method",
 							"name": "LoadFromFile",
 							"signature": "bool LoadFromFile(const std::string& path)",
-							"line": 375
+							"line": 382
 						},
 						{
 							"kind": "method",
@@ -31384,136 +31989,136 @@
 							"signature": "static bool IsExternalActorMap(const std::string& path)",
 							"static": true,
 							"doc": "True when a save to `path` splits the level: a `.mmap` that already is a\nWorld package (world settings in the map, one `.actor` per actor under\n__ExternalActors__/, FExternalActorFiles), or a new one in a project on\nthe package asset format. A plain `.mmap` stays one file.",
-							"line": 381
+							"line": 388
 						},
 						{
 							"kind": "method",
 							"name": "LoadFromDocument",
 							"signature": "bool LoadFromDocument(const std::string& path, MDF::MdfDocument& doc)",
 							"doc": "The second half of LoadFromFile for a document the caller already read\nand parsed — on a worker, say, since the read and the parse are the part\nof an open that needs no world. `path` is what the scene remembers as\nits file.",
-							"line": 386
+							"line": 393
 						},
 						{
 							"kind": "method",
 							"name": "GetNewerContentReason",
 							"signature": "const std::string& GetNewerContentReason() const",
 							"doc": "Why SaveToFile will refuse this scene (empty = it will not): the load\nread content a newer build wrote, and saving would drop what it added.",
-							"line": 389
+							"line": 396
 						},
 						{
 							"kind": "method",
 							"name": "ReloadBakedGi",
 							"signature": "void ReloadBakedGi()",
 							"doc": "Loads <scene>.mgi, the baked GI fallback, into the environment (or clears\nit). LoadFromFile calls it; the editor calls it again after a bake.",
-							"line": 394
+							"line": 401
 						},
 						{
 							"kind": "method",
 							"name": "SerializeToMDF",
 							"signature": "std::string SerializeToMDF(ESceneSerializeScope scope = ESceneSerializeScope::Session) const",
-							"line": 395
+							"line": 402
 						},
 						{
 							"kind": "method",
 							"name": "DeserializeFromMDF",
 							"signature": "bool DeserializeFromMDF(const std::string& mdfStr)",
-							"line": 396
+							"line": 403
 						},
 						{
 							"kind": "method",
 							"name": "SerializeToDocument",
 							"signature": "void SerializeToDocument(MDF::MdfDocument& outDoc, ESceneSerializeScope scope = ESceneSerializeScope::Session) const",
 							"doc": "Document-level (de)serialization — no text round-trip. SaveGame\nand other binary paths compose/consume the scene node directly.",
-							"line": 400
+							"line": 407
 						},
 						{
 							"kind": "method",
 							"name": "DeserializeFromDocument",
 							"signature": "bool DeserializeFromDocument(MDF::MdfDocument& doc)",
-							"line": 401
+							"line": 408
 						},
 						{
 							"kind": "method",
 							"name": "CapturePlayState",
 							"signature": "void CapturePlayState(ScenePlaySnapshot& out) const",
-							"line": 403
+							"line": 410
 						},
 						{
 							"kind": "method",
 							"name": "RestorePlayState",
 							"signature": "bool RestorePlayState(const ScenePlaySnapshot& snapshot)",
-							"line": 404
+							"line": 411
 						},
 						{
 							"kind": "method",
 							"name": "AddComponentByDisplayName",
 							"signature": "bool AddComponentByDisplayName(EntityID id, const std::string& displayName)",
 							"doc": "Type-erased component add/remove by reflection display name\n(\"Light\", \"Terrain\", ...). Backs the editor's Add Component menu;\nthe name→type table mirrors the reflected-serialization lists in\nScene.cpp until TypeDescriptor grows factory hooks.",
-							"line": 410
+							"line": 417
 						},
 						{
 							"kind": "method",
 							"name": "RemoveComponentByDisplayName",
 							"signature": "bool RemoveComponentByDisplayName(EntityID id, const std::string& displayName)",
-							"line": 411
+							"line": 418
 						},
 						{
 							"kind": "method",
 							"name": "MergeEntitiesFromMdf",
 							"signature": "int MergeEntitiesFromMdf(const std::string& mdfStr)",
 							"doc": "Additive load: parses a serialized scene and appends its entities to\nthis scene with *fresh* UUIDs (so two additive loads of the same MDF\ndon't collide). Environment settings, name, and path are left\nuntouched. Returns the number of entities successfully merged (0 if\nthe MDF failed to parse). Parent links are resolved only within the\nmerged set — cross-scene parenting is not supported.",
-							"line": 419
+							"line": 426
 						},
 						{
 							"kind": "method",
 							"name": "SerializeEntityTreeToMdf",
 							"signature": "std::string SerializeEntityTreeToMdf(EntityID rootId) const",
 							"doc": "Serialize a single entity and all its descendants as a stand-alone\nMDF fragment. Same per-entity encoding as SerializeToMDF — each\nentity becomes an Entity{} root with its saved UUID, components,\nand a Relationship sub-node when parented inside the tree. The\n*outer* parent of the root is intentionally not encoded; callers\n(undo for delete, copy/paste) restore that link separately.",
-							"line": 427
+							"line": 434
 						},
 						{
 							"kind": "method",
 							"name": "RestoreEntityTreeFromMdf",
 							"signature": "EntityID RestoreEntityTreeFromMdf(const std::string& mdfStr, const FWorldStateJournal* skipJournal = nullptr)",
 							"doc": "Inverse of SerializeEntityTreeToMdf. Recreates every entity in the\nfragment with its *original* UUID (so external references — saved\ngames, replication ghosts, sibling Constraints — keep resolving),\nrestores their components, and rewires parent links within the\ntree. Returns the root entity id on success or INVALID_ENTITY on\nparse/restore failure. Existing entities with colliding UUIDs are\nskipped — undo never silently merges over a live entity.",
-							"line": 436
+							"line": 443
 						},
 						{
 							"kind": "method",
 							"name": "SerializeEntityStateToMdf",
 							"signature": "std::string SerializeEntityStateToMdf(EntityID id, bool includeTransform = true, bool includeComponents = true) const",
-							"line": 438
+							"line": 445
 						},
 						{
 							"kind": "method",
 							"name": "ApplyEntityStateFromMdf",
 							"signature": "bool ApplyEntityStateFromMdf(EntityID id, const std::string& mdfStr)",
-							"line": 439
+							"line": 446
 						},
 						{
 							"kind": "method",
 							"name": "SerializeEntityTreeToNode",
 							"signature": "bool SerializeEntityTreeToNode(EntityID rootId, MDF::MdfNode& outTree) const",
 							"doc": "The node forms the world-state journal keeps, so a record stays a node\nfrom capture to save to overlay and is never text reparsed per entity.\nThe tree form fills an `EntityTree` node, the state form one `Entity`.",
-							"line": 444
+							"line": 451
 						},
 						{
 							"kind": "method",
 							"name": "RestoreEntityTreeFromNode",
 							"signature": "EntityID RestoreEntityTreeFromNode(const MDF::MdfNode& tree, const FWorldStateJournal* skipJournal = nullptr)",
-							"line": 445
+							"line": 452
 						},
 						{
 							"kind": "method",
 							"name": "SerializeEntityStateToNode",
 							"signature": "bool SerializeEntityStateToNode(EntityID id, bool includeTransform, bool includeComponents, MDF::MdfNode& outEntity) const",
-							"line": 446
+							"line": 453
 						},
 						{
 							"kind": "method",
 							"name": "ApplyEntityStateFromNode",
 							"signature": "bool ApplyEntityStateFromNode(EntityID id, const MDF::MdfNode& entityNode)",
-							"line": 447
+							"line": 454
 						},
 						{
 							"kind": "method",
@@ -31521,136 +32126,149 @@
 							"signature": "static std::unordered_map<std::string, std::string> RemapCopiedTrees(const std::vector<MDF::MdfNode*>& trees)",
 							"static": true,
 							"doc": "Copy/paste and duplicate of a SET of trees (each an `EntityTree` node\nfrom SerializeEntityTreeToNode): one remap across the whole set, so\nevery entity gets a fresh uuid and every parent link and actor or\ncomponent reference naming another member of the set follows it to the\ncopy. Pasting the trees one by one gave each its own remap, and a copy\nkept pointing at the original of anything copied beside it. Returns\nold uuid string -> new.",
-							"line": 456
+							"line": 463
 						},
 						{
 							"kind": "method",
 							"name": "ResolveActorReferencesInTrees",
 							"signature": "void ResolveActorReferencesInTrees(const std::vector<const MDF::MdfNode*>& trees)",
 							"doc": "After every tree of a set is restored: re-resolves the actor references\nof each restored actor, so an edge to an actor from a later tree of the\nset lands (a single restore resolves only within its own tree).",
-							"line": 461
+							"line": 468
 						},
 						{
 							"kind": "method",
 							"name": "IsEntityRuntimeSpawned",
 							"signature": "bool IsEntityRuntimeSpawned(EntityID id) const",
-							"line": 463
+							"line": 470
+						},
+						{
+							"kind": "method",
+							"name": "IsEntityTransient",
+							"signature": "bool IsEntityTransient(EntityID id) const",
+							"doc": "Generated content: an entity an editor-time actor made for preview. It is\nleft out of every serialization (the level file, the Play copy, save games)\nand hidden from the Outliner by default. An actor's own transient flag counts\ntoo, and so does a transient parent. Neither call touches the dirty state.",
+							"line": 476
+						},
+						{
+							"kind": "method",
+							"name": "SetEntityTransient",
+							"signature": "void SetEntityTransient(EntityID id, bool transient)",
+							"line": 477
 						},
 						{
 							"kind": "method",
 							"name": "GetWorldStateJournal",
 							"signature": "FWorldStateJournal* GetWorldStateJournal() const",
-							"line": 465
+							"line": 479
 						},
 						{
 							"kind": "method",
 							"name": "SerializePrefabFromEntities",
 							"signature": "std::string SerializePrefabFromEntities(const std::vector<EntityID>& roots, const std::string& prefabName, std::unordered_map<EntityID, int32_t>* outIndices = nullptr, const std::string& selfSourcePath = {}) const",
 							"doc": "Author a `.mdfprefab` document from a live actor selection: every given\nroot plus its descendants is written as index/parent_index Entity nodes\ncarrying their reflected components, in the container shape PrefabAsset\nloads and PrefabInstantiator instantiates. A single selected root becomes\nthe prefab root; multiple roots are collected under a synthesized group\nentity at the origin so the result is always single-rooted. Returns the\nMDF text (empty on failure). outIndices (optional) receives the entry\nindex assigned to each serialized entity — the caller that overwrites\nan existing .mdfprefab needs it to restamp the instance's\nprefabSourceIndex values so a later propagation pairs entities with\nthe right entries (the serializer numbers entries fresh each time).\nselfSourcePath: the prefab file this serialization will overwrite.\nInstantiated members are stamped with their source path, so without it\nan instance's own children read as nested instances and get written as\n`nested_prefab` references to the very file being rewritten — the\ninstantiator's cycle guard then refuses them and the applied prefab\nsilently loses every child. Pass empty when authoring a NEW prefab\n(a stamped child there is a genuinely foreign nested instance).",
-							"line": 487
+							"line": 501
 						},
 						{
 							"kind": "method",
 							"name": "SetPrefabOverride",
 							"signature": "void SetPrefabOverride(EntityID id, const std::string& key, const std::string& value)",
 							"doc": "Prefab override metadata (editor-only; serialized into the scene\nfile so they survive save/reopen and source-prefab reimport).\nStored as opaque MDF-string key/value pairs — the inspector encodes\n\"Transform.position.x\" → \"5.0\" and decodes them on apply.",
-							"line": 493
+							"line": 507
 						},
 						{
 							"kind": "method",
 							"name": "GetPrefabOverride",
 							"signature": "std::string GetPrefabOverride(EntityID id, const std::string& key) const",
-							"line": 494
+							"line": 508
 						},
 						{
 							"kind": "method",
 							"name": "HasPrefabOverride",
 							"signature": "bool HasPrefabOverride(EntityID id, const std::string& key) const",
-							"line": 495
+							"line": 509
 						},
 						{
 							"kind": "method",
 							"name": "GetPrefabOverrides",
 							"signature": "const std::unordered_map<std::string, std::string>* GetPrefabOverrides(EntityID id) const",
-							"line": 496
+							"line": 510
 						},
 						{
 							"kind": "method",
 							"name": "ClearPrefabOverrides",
 							"signature": "void ClearPrefabOverrides(EntityID id)",
-							"line": 497
+							"line": 511
 						},
 						{
 							"kind": "method",
 							"name": "ForEachEntity",
 							"signature": "template<typename Func> void ForEachEntity(Func&& func)",
 							"doc": "Iteration",
-							"line": 500
+							"line": 514
 						},
 						{
 							"kind": "method",
 							"name": "ForEachRootEntity",
 							"signature": "template<typename Func> void ForEachRootEntity(Func&& func)",
 							"doc": "Iterate only root entities (no parent)",
-							"line": 504
+							"line": 518
 						},
 						{
 							"kind": "method",
 							"name": "ForEachGameObject",
 							"signature": "template<typename Func> void ForEachGameObject(Func&& func)",
-							"line": 507
+							"line": 521
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityCount",
 							"signature": "size_t GetEntityCount() const",
 							"doc": "Entity count",
-							"line": 511
+							"line": 525
 						},
 						{
 							"kind": "method",
 							"name": "PreserveUnknownComponent",
 							"signature": "void PreserveUnknownComponent(EntityID id, const MDF::MdfNode& node)",
 							"doc": "Passthrough for content this build cannot represent. Both are\nreplace-by-identity so a repeated prefab reapply cannot stack\nduplicates onto the same entity.",
-							"line": 570
+							"line": 585
 						},
 						{
 							"kind": "method",
 							"name": "PreserveUnknownActor",
 							"signature": "void PreserveUnknownActor(EntityID id, const MDF::MdfNode& node)",
-							"line": 571
+							"line": 586
 						},
 						{
 							"kind": "method",
 							"name": "CarryUnknownKeys",
 							"signature": "void CarryUnknownKeys(EntityID id, const TypeDescriptor& desc, const MDF::MdfNode& node)",
 							"doc": "Keeps the keys of `node` that `desc` does not know for the next save,\nreplacing what was kept for that component before.",
-							"line": 574
+							"line": 589
 						},
 						{
 							"kind": "method",
 							"name": "GetPreservedComponents",
 							"signature": "const std::vector<MDF::MdfNode>* GetPreservedComponents(EntityID id) const",
-							"line": 575
+							"line": 590
 						},
 						{
 							"kind": "method",
 							"name": "UpdateHairStrands",
 							"signature": "void UpdateHairStrands(float dt, bool simulate)",
 							"doc": "Steps (or, with simulate false, rest-poses) every Hair Strands\ncomponent's guides and rebuilds its render strands. The runtime and\nsimulate ticks call it with dynamics on, the editor tick with them off.",
-							"line": 705
+							"line": 721
 						},
 						{
 							"kind": "method",
 							"name": "GetHairInstanceCount",
 							"signature": "uint32_t GetHairInstanceCount() const",
-							"line": 706
+							"line": 722
 						},
 						{
 							"kind": "method",
 							"name": "GetMeshRenderProxies",
 							"signature": "const FMeshRenderProxyCache& GetMeshRenderProxies() const",
-							"line": 709
+							"line": 725
 						}
 					]
 				},
@@ -31660,19 +32278,19 @@
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "Which side of the authoring/Play line the frame being gathered is on.\nLatched by OnUpdateEditor / OnUpdateRuntime — they are the only callers\nthat know, and OnRender runs after them.",
-					"line": 164,
+					"line": 171,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Editor",
 							"signature": "Editor",
-							"line": 165
+							"line": 172
 						},
 						{
 							"kind": "enumerator",
 							"name": "Runtime",
 							"signature": "Runtime",
-							"line": 166
+							"line": 173
 						}
 					]
 				},
@@ -31681,7 +32299,7 @@
 					"name": "Scene::MWorld",
 					"namespace": "Mowo",
 					"doc": "Access to the actor world (UE-style gameplay layer). Lives as long\nas the scene does — created by Initialize, destroyed by Shutdown —\nso placed actors are visible while editing, not only between Play\nand Stop. Spawn gameplay actors through this; their components\nmirror onto backing ECS entities in m_world.",
-					"line": 237,
+					"line": 244,
 					"members": []
 				},
 				{
@@ -31689,115 +32307,121 @@
 					"name": "Scene::EntityInfo",
 					"namespace": "Mowo",
 					"doc": "Entity metadata (stored alongside ECS World)",
-					"line": 516,
+					"line": 530,
 					"members": [
 						{
 							"kind": "field",
 							"name": "id",
 							"signature": "EntityID id",
 							"doc": "UUID-based persistent ID",
-							"line": 517
+							"line": 531
 						},
 						{
 							"kind": "field",
 							"name": "name",
 							"signature": "std::string name",
-							"line": 518
+							"line": 532
 						},
 						{
 							"kind": "field",
 							"name": "tag",
 							"signature": "std::string tag = \"Untagged\"",
-							"line": 519
+							"line": 533
 						},
 						{
 							"kind": "field",
 							"name": "layer",
 							"signature": "uint32_t layer = 0",
 							"doc": "Layer index (0-31) for rendering/physics filtering",
-							"line": 520
+							"line": 534
 						},
 						{
 							"kind": "field",
 							"name": "active",
 							"signature": "bool active = true",
 							"doc": "Active state (inactive entities skipped by systems)",
-							"line": 521
+							"line": 535
 						},
 						{
 							"kind": "field",
 							"name": "editorHidden",
 							"signature": "bool editorHidden = false",
 							"doc": "Editor-only: hide from scene view",
-							"line": 522
+							"line": 536
 						},
 						{
 							"kind": "field",
 							"name": "editorLocked",
 							"signature": "bool editorLocked = false",
-							"line": 523
+							"line": 537
 						},
 						{
 							"kind": "field",
 							"name": "folderPath",
 							"signature": "std::string folderPath",
 							"doc": "Editor-only: outliner organizational folder (\"\" = none)",
-							"line": 524
+							"line": 538
 						},
 						{
 							"kind": "field",
 							"name": "prefabSourcePath",
 							"signature": "std::string prefabSourcePath",
 							"doc": "Editor-only: path to source prefab (empty if not a prefab instance)",
-							"line": 525
+							"line": 539
 						},
 						{
 							"kind": "field",
 							"name": "prefabSourceIndex",
 							"signature": "int32_t prefabSourceIndex = -1",
 							"doc": "Source prefab entry index this instance entity came from (-1 = none)",
-							"line": 526
+							"line": 540
 						},
 						{
 							"kind": "field",
 							"name": "runtimeSpawned",
 							"signature": "bool runtimeSpawned = false",
-							"line": 527
+							"line": 541
+						},
+						{
+							"kind": "field",
+							"name": "transient",
+							"signature": "bool transient = false",
+							"line": 542
 						},
 						{
 							"kind": "field",
 							"name": "prefabOverrides",
 							"signature": "std::unordered_map<std::string, std::string> prefabOverrides",
 							"doc": "Prefab override map — key is a reflected component display name\n(\"Transform\", \"Light\", ...), value is that component serialized\nas a CDO-delta MDF blob (only the properties that differ from the\nclass default). Only present on prefab-instance entities\n(prefabSourcePath set). CapturePrefabOverride populates it as the\nuser edits an instance; PropagatePrefabInstance rebuilds the\nentity from the prefab source and then re-applies these blobs, so\nlocal edits survive a prefab edit while everything untouched\ntracks the source.",
-							"line": 538
+							"line": 553
 						},
 						{
 							"kind": "field",
 							"name": "preservedComponents",
 							"signature": "std::vector<MDF::MdfNode> preservedComponents",
 							"doc": "Component nodes this session could not decode, kept exactly as\nthey were read. A scene opened while the plugin that owns a\ncomponent is disabled has no live component for the writer to\nserialize, so before these existed the first save silently\ndeleted every one of them out of the file. Not an ECS component\non purpose: nothing that walks components can mistake it for\nlive state, and it needs no reflected type — which is precisely\nwhat is missing.",
-							"line": 548
+							"line": 563
 						},
 						{
 							"kind": "field",
 							"name": "preservedActorNode",
 							"signature": "std::optional<MDF::MdfNode> preservedActorNode",
 							"doc": "The entity's `Actor` node when its class is not registered. Same\nloss one layer up — an actor that cannot respawn leaves nothing\nbehind for the writer, and the save strips the entity's class,\nits Visual Script graphs and its variables.",
-							"line": 554
+							"line": 569
 						},
 						{
 							"kind": "field",
 							"name": "carriedUnknownKeys",
 							"signature": "std::vector<MDF::MdfNode> carriedUnknownKeys",
 							"doc": "One node per decoded component holding only the keys its type does\nnot know, put back by the writer. A field a newer build added\nwithout a version bump looks like any other unknown key, and before\nthis the first save from an older build deleted it.",
-							"line": 560
+							"line": 575
 						},
 						{
 							"kind": "field",
 							"name": "carriedActorKeys",
 							"signature": "std::optional<MDF::MdfNode> carriedActorKeys",
 							"doc": "The same for the live actor: its `Actor` node's keys its class has\nno field for (FActorSerializer::ExtractUnknownActorKeys).",
-							"line": 564
+							"line": 579
 						}
 					]
 				}
@@ -31807,19 +32431,19 @@
 					"kind": "function",
 					"name": "ForEachEntity",
 					"signature": "template<typename Func> void Scene::ForEachEntity(Func&& func)",
-					"line": 741
+					"line": 757
 				},
 				{
 					"kind": "function",
 					"name": "ForEachRootEntity",
 					"signature": "template<typename Func> void Scene::ForEachRootEntity(Func&& func)",
-					"line": 750
+					"line": 766
 				},
 				{
 					"kind": "function",
 					"name": "ForEachGameObject",
 					"signature": "template<typename Func> void Scene::ForEachGameObject(Func&& func)",
-					"line": 767
+					"line": 783
 				}
 			]
 		},

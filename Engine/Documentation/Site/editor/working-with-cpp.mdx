@@ -3,8 +3,9 @@ title: Working with C++
 description: Add C++ classes to your project's game module, rebuild and hot reload it or patch it with Live Coding, browse classes, and open sources in your IDE.
 order: 13
 sources:
+  - Engine/Source/Runtime/Game/Public/Game/FViewerRegistry.h
   - Engine/Source/Runtime/Game/Public/Game/HotReload.h
-verifiedAt: 5922e6e5e
+verifiedAt: 90e6739a9
 ---
 
 Gameplay code in Mowo is C++ in your project's **game module**, a DLL built from `<Project>/Source/`. The editor can create classes in that module, rebuild it while you keep working, and swap the new binary into the running session. This page covers that loop from the editor's side. For how to write the classes themselves, see the [Gameplay](/docs/gameplay/) section.
@@ -96,6 +97,8 @@ See [Gameplay](/docs/gameplay/) for what to put in the class, and the [Game API]
 mbt build -t <Module> --hot-reload --frozen-engine --extra-source <Project>/Source
 ```
 
+With several game modules, Compile builds every module that no other project module depends on (read from every string in each `.Build.cs`, comments excluded, so multi-line lists count; a static-library module is built with its users and never swapped on its own). If one module fails to build, the ones that built are still swapped and the toast names the failure. When the swap is deferred until Play stops, a second compile keeps the modules still waiting one after another and swaps them together once all have built. Building a module also rebuilds what it depends on, so nothing is left stale behind a success message. A module that others depend on stays loaded and locked while the editor runs, so it cannot be swapped: keep logic you want to hot reload in a static library module (`BinaryType = ModuleBinaryType.StaticLibrary`), which links into the DLL that uses it, or restart the editor after changing a shared DLL.
+
 - `--frozen-engine` builds only your module and links it against the engine binaries already on disk. The editor has the engine DLLs loaded and locked, so relinking them would fail.
 - `--hot-reload` emits a versioned DLL that can be loaded next to the old one.
 
@@ -117,12 +120,44 @@ Property values are matched by name, so a field that moved in the class still re
 Fields whose bytes hide a heap pointer, such as a struct containing a `std::string` or a container, are not carried across a reload; they return to their constructor defaults. A plain struct holding a raw pointer would carry a stale address, so mark such fields `MOWO_RUNTIME_ONLY`.
 </Callout>
 
+### Projects with several game modules
+
+A project can hold several modules under `Source/`, for example a server-safe `Foo` and a `FooClient` that depends on it, plus static-library modules. List the dependency in the dependent's `.Build.cs`; the editor reads that list.
+
+- On open, the editor loads each module after the modules it imports, whatever their folder names, and registers every module's classes.
+- Anything that stops a module loading is written to the Output Log as an error with the reason: the file it looked for, the dependency DLL the loader could not find, the build ids of a stale module (the one on disk and the one the build manifest records) or the operating system's own message. Rebuild with the command in the message.
+- If the project's game mode class belongs to a module that did not load, Play shows an error toast and logs the module's reason before falling back to the default game mode.
+
 ### When you must restart
 
 If your module needs something the engine binaries on disk do not export (for example, after pulling engine changes), the frozen-engine link fails with a message telling you the engine binaries are older than the engine source. Close the editor, run `mbt build` from a terminal, and reopen the project.
 
-## Live Coding
+## Actors that run in the editor
 
+Placed actors are inert until Play. An actor that previews generated content in edit mode, such as a procedural world, overrides:
+
+```cpp
+bool ShouldTickInEditor() const override { return true; }
+void TickInEditor(float deltaSeconds) override;
+```
+
+The edit world calls `TickInEditor` once per editor frame, within the `ed.TickBudgetMs` budget (default 4 ms; 0 is unlimited). When the budget is spent the remaining actors run first on the next frame, so a slow generator cannot freeze the editor. `Tick` and `BeginPlay` stay play-only, and nothing runs while Play is active: the edit world is paused behind the play copy and resumes on Stop. A tick that only adds transient (generated) actors does not mark the level modified, so generating a preview never asks you to save or wakes the autosave; a tick that creates or changes authored content does mark it, and `TickInEditor` should not do that. It creates no undo entries unless it records one itself.
+
+Ask where the viewers are with `FViewerRegistry::Get().GetViewers(world)`. In the edit world it returns the cameras of the visible editor viewports; in Play it returns the player's camera, in a game the main camera. A scene system that only has the ECS world passes that instead.
+
+### Generated content
+
+Mark what an editor-time actor creates as transient with `owner->MarkGenerated(child)`:
+
+- it is not written to the level, not copied into the Play world (which regenerates its own from `BeginPlay`) and not part of save games;
+- it is left out of one-file-per-actor levels as well, and so are its children in the hierarchy (a transient parent takes its subtree with it);
+- it is hidden from the Outliner until you switch on **Show Generated** in the type filter menu;
+- clicking it in the viewport selects the actor that generated it;
+- `owner->ClearGeneratedContent()` destroys it, together with the owner's transient components, before a regenerate and at `EndPlay`.
+
+A Regenerate control is a plain property: declare `MPROPERTY(EditAnywhere) bool regenerate = false;`, and in `TickInEditor` call `ClearGeneratedContent()`, rebuild, and set it back to false. It shows as a checkbox in Details, and editing any generation setting there reaches the next `TickInEditor` the same way.
+
+## Live Coding
 Live Coding patches changed function bodies into the running editor without unloading anything, so all state stays as it is. Edit a `.cpp`, then press <Kbd>Ctrl+Alt+F11</Kbd>, click **Live Coding** on the toolbar, choose **Tools ▸ Live Coding**, or type `LiveCoding` in the console.
 
 1. `mbt livecoding` recompiles the `.cpp` files newer than the running binaries, with their modules' own flags.

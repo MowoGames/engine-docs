@@ -2606,11 +2606,59 @@
 						},
 						{
 							"kind": "method",
+							"name": "GetLoadFailure",
+							"signature": "std::string GetLoadFailure(const std::string& name) const",
+							"doc": "Why the last attempt to load `name` failed, in a sentence a person can act\non: the missing file or dependency DLL, both build ids of a mismatch, the\nOS's own error text. Empty when the last attempt succeeded or none was made.\nThe same text goes to stderr; this is how a host with a log (the editor's\nOutput Log) reports it too.",
+							"line": 120
+						},
+						{
+							"kind": "method",
+							"name": "NoteLoadFailure",
+							"signature": "void NoteLoadFailure(const std::string& name, const std::string& reason)",
+							"doc": "Records a reason a host knows before it ever calls LoadModule (the binary\nis not built), so GetLoadFailures and the Play error can report it.",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "SetProjectSourceDir",
+							"signature": "void SetProjectSourceDir(const std::string& dir)",
+							"doc": "The project whose game modules the failures belong to: its Source/ folder\nis what an out-of-tree build needs as --extra-source. ClearLoadFailures runs\nwhen a project opens so one project's failures never read as another's.",
+							"line": 131
+						},
+						{
+							"kind": "method",
+							"name": "ClearLoadFailures",
+							"signature": "void ClearLoadFailures()",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "OrderByImports",
+							"signature": "std::vector<std::string> OrderByImports(const std::vector<std::string>& modules) const",
+							"doc": "`modules` ordered so a module that imports another's binary comes after it,\nso the dependency's InitializeModule has run when the dependent's does. The\nOS loads an import by itself, without running InitializeModule, which is why\ndirectory order alone is wrong whenever a dependent sorts first. Ties and\ncycles keep the given order.",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "BuildCommand",
+							"signature": "std::string BuildCommand(const std::string& module) const",
+							"doc": "The one spelling of \"build this module\" every refusal quotes.",
+							"line": 142
+						},
+						{
+							"kind": "method",
+							"name": "GetLoadFailures",
+							"signature": "std::vector<std::pair<std::string, std::string>> GetLoadFailures() const",
+							"doc": "Every module whose last load failed, as (name, reason).",
+							"line": 145
+						},
+						{
+							"kind": "method",
 							"name": "ModuleApiVersion",
 							"signature": "static uint32_t ModuleApiVersion()",
 							"static": true,
 							"doc": "The version the loader compares against; a module exports the same\nnumber through MOWO_IMPLEMENT_MODULE_API_VERSION().",
-							"line": 117
+							"line": 149
 						},
 						{
 							"kind": "method",
@@ -2618,7 +2666,7 @@
 							"signature": "static const char* BuildAbi()",
 							"static": true,
 							"doc": "The engine's own MOWO_BUILD_ABI_SIGNATURE, as compiled into Core.",
-							"line": 122
+							"line": 154
 						},
 						{
 							"kind": "method",
@@ -2626,7 +2674,7 @@
 							"signature": "static std::string CompatibilityProblem(bool hasVersionExport, uint32_t version, const char* buildAbi)",
 							"static": true,
 							"doc": "Why a module with these exports may not load, or empty when it may.\n`buildAbi` is null when the module exports no MowoModuleBuildAbi.\nPure, so the refusal rules can be pinned without building a binary for\nevery way of getting them wrong.",
-							"line": 128
+							"line": 160
 						},
 						{
 							"kind": "method",
@@ -2634,34 +2682,34 @@
 							"signature": "static bool IsEngineOwnedModule(const std::string& name)",
 							"static": true,
 							"doc": "Engine runtime modules (\"MowoEngine.<Name>\") ship with the loader and\nneed no version export; every other module (plugin, game, sandbox)\nmust carry one or is refused. A layout question only: anyone can name a\nDLL \"MowoEngine.X\", so no trust decision may read it — the signature\ngate verifies every module it is handed, whatever the name.",
-							"line": 135
+							"line": 167
 						},
 						{
 							"kind": "method",
 							"name": "UnloadModule",
 							"signature": "bool UnloadModule(const std::string& name)",
 							"doc": "Calls the optional ShutdownModule export, then frees the\nlibrary. Returns false when the module isn't loaded.",
-							"line": 139
+							"line": 171
 						},
 						{
 							"kind": "method",
 							"name": "IsModuleLoaded",
 							"signature": "bool IsModuleLoaded(const std::string& name) const",
-							"line": 141
+							"line": 173
 						},
 						{
 							"kind": "method",
 							"name": "GetModuleHandle",
 							"signature": "void* GetModuleHandle(const std::string& name) const",
 							"doc": "Native handle (HMODULE / dlopen handle) as void*. nullptr when\nnot loaded. Pass to MClassRegistry::UnregisterAllInModule.",
-							"line": 145
+							"line": 177
 						},
 						{
 							"kind": "method",
 							"name": "FindModuleBinary",
 							"signature": "std::string FindModuleBinary(const std::string& name) const",
 							"doc": "Path of the binary LoadModule would pick for `name` right now:\nthe highest `<name>.v<N>.dll` in the executable directory, else\n`<name>.dll`, else empty when neither exists.",
-							"line": 150
+							"line": 182
 						}
 					]
 				}

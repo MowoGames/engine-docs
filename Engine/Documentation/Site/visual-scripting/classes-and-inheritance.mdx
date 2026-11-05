@@ -1,6 +1,6 @@
 ---
 title: Classes and inheritance
-description: Parents and backing classes, how members resolve through a parent chain, how class defaults reach instances, and how component slots work.
+description: Parents, backing classes and native parents, member resolution, class and native defaults, and component slots.
 order: 6
 sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
@@ -8,10 +8,12 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassValidator.h
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptCharacter.h
-verifiedAt: 5922e6e5e
+  - Engine/Source/Runtime/Game/Public/Game/MVisualScriptHostComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/VisualScriptNativeDefaults.h
+verifiedAt: 500ca4e36
 ---
 
-Every visual class has a parent: a native C++ class or another visual class. The class inherits graphs, functions, variables and component slots from it. This page explains how that chain resolves, which native class actually runs an instance, where class defaults live, and how component slots give a class its mesh, light or trigger.
+Every visual class has a parent: a native C++ class or another visual class. The class inherits graphs, functions, variables and component slots from it. This page explains how that chain resolves, which native class actually runs an instance, where class defaults live, how a class tunes the C++ class it extends, and how component slots give a class its mesh, light or trigger.
 
 ## The parent chain
 
@@ -21,9 +23,9 @@ A class's parent defaults to `AActor` <Source symbol="VisualScriptClass" />. Whe
 
 ### Backing classes
 
-An instance is always an object of a native **backing class**. The registry walks the declared parent's native chain and takes the first base with a registered backing <Source symbol="VisualScriptClassRegistry::AddBackingClass" />:
+When the declared native parent is one of the engine's common bases, the instance is an object of a native **backing class** that carries the graphs. The registry matches the declared parent against the registered backings <Source symbol="VisualScriptClassRegistry::AddBackingClass" />:
 
-| Native parent, or anything derived from it | Backing class | What the class gets |
+| Native parent | Backing class | What the class gets |
 | --- | --- | --- |
 | `ACharacter` | `AVisualScriptCharacter` | Character movement, health and `ACharacter`'s functions on self |
 | `APawn` | `AVisualScriptPawn` | Possession and the controller link |
@@ -32,9 +34,40 @@ An instance is always an object of a native **backing class**. The registry walk
 | `AGameState` | `AVisualScriptGameState` | Replicated match state |
 | `AActor` | `AVisualScriptActor` | The actor surface |
 
-So a class under your own `ACharacter` subclass is an `AVisualScriptCharacter` too, and a visual child inherits its visual parent's backing. Every backing class owns one `FVisualScriptRuntime` and forwards its lifecycle there after its native base's own, so a Character class behaves like an Actor class in the graph and a `Tick` graph reads where the character has already moved <Source symbol="FVisualScriptRuntime" />. C++ that needs the visual state of any backed object asks `FVisualScriptRuntime::Of(object)`.
+A visual child inherits its visual parent's backing. Every backing class owns one `FVisualScriptRuntime` and forwards its lifecycle there after its native base's own, so a Character class behaves like an Actor class in the graph and a `Tick` graph reads where the character has already moved <Source symbol="FVisualScriptRuntime" />. C++ that needs the visual state of any object that runs a visual class asks `FVisualScriptRuntime::Of(object)`.
 
-A native parent that is not in the backing class's ancestry, such as a component class, is rejected: the class is reparented onto the backing class and an error is logged. A parent name that does not resolve yet is left alone, because it may be a visual class that registers later. Classes register parents first, whatever the file order.
+A parent name that does not resolve yet is left alone, because it may be a visual class that registers later. Classes register parents first, whatever the file order.
+
+### Native parents
+
+Any other reflected actor class works as a parent: your own `ACharacter` subclass, a first-person or third-person character, a camera rig, a vehicle. The instance is a real object of that class, built by its own constructor, so it keeps its components, its camera, its input binding and every C++ rule it had. A **host component** is attached to it and runs the graphs <Source symbol="MVisualScriptHostComponent" />. The actor reports your visual class from `GetClass()`, so `IsA`, spawning by class and saving all name the visual class while a cast to the native class succeeds.
+
+<Flow steps={["BP_Hero (visual)", "AFirstPersonCharacter (native, built as itself)", "host component runs the graphs"]} caption="A visual class on a native parent. The spawned object is an AFirstPersonCharacter." />
+
+The graphs see the lifecycle events the host receives: `OnConstruct`, `BeginPlay`, `Tick`, `EndPlay` and `Destroyed`, input action events, hit and overlap events, and every reflected function of the native parent on self. `AnyDamage` stays with the backing classes, because it hooks the actor's own damage function, which a host component cannot intercept.
+
+A parent that is exactly one of the backing parents in the table above keeps using the backing class. Everything below that parent, such as your own `ACharacter` subclass, is hosted on itself.
+
+### Component classes
+
+A class whose parent is `MActorComponent` is a **component class**. Add it to an actor like any component. Its graphs run against the actor that owns it: `self` is the owning actor, and the lifecycle events follow the component's own register, begin play, tick and end play.
+
+A component class under a more specific native component, such as a mesh component, is not supported yet: the registry reports the parent as incompatible and reparents the class.
+
+### Native defaults
+
+A visual class can retune its native parent without code. **Native defaults** are property and value pairs for the parent's reflected properties, set in the class and applied once the parent is built, before `OnConstruct` <Source symbol="FVisualScriptNativeDefaults" />.
+
+| Part | Rule |
+| --- | --- |
+| Path | `Property` on the parent itself, or `Component.Property` on one of its components. |
+| Value | Text in the property's own form: `2.5`, `true`, an enumerator name, `1 2 3` for a vector, `a;b` for a string list. |
+| Inheritance | A child's entry for the same path replaces its parent's. |
+| Instances | The values become the class default, so a placed instance saves only what it changes. |
+
+A path that names no reflected property, a value that does not read as the property's type (`abc` for a float, `1.5x`) and a property type with no text form yet (object references, structs, arrays) are errors: the class logs each one when it registers and keeps the native value. A project can have at most 512 visual classes hosted on native parents; the next one fails to register with an error. Native defaults are stored in the `.vscript` file as `NativeDefault` blocks, see [the file format](/docs/visual-scripting/visual-script-file-format/).
+
+In the Content Browser, **New > Visual Script Class** lists the common bases, then **Other Actor Class** and **Component Class**, which list every reflected actor or component class the project and engine define.
 
 ## How members resolve
 
