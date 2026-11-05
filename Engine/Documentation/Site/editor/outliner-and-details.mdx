@@ -5,7 +5,7 @@ description: Find and organize actors in the Outliner, edit reflected properties
 order: 3
 sources:
   - Engine/Source/Runtime/Reflection/Public/Reflection/Reflect.h
-verifiedAt: c1d08db53
+verifiedAt: 38224a3a8
 ---
 
 The Outliner and the Details panel sit on the right of the default layout and work as a pair. The Outliner lists every actor in the open scene; the Details panel shows the properties of whatever you select. Both read the same selection as the viewport, so a click in any of the three updates the other two.
@@ -112,6 +112,16 @@ Below the header the **Components** box lists the actor, its root component and 
 ### Adding components
 
 **Add** opens the component picker, the same one the Outliner's row menu and the Actor Editor use. It lists every reflected component the actor does not already have, as **Favourites** (star a row to keep it there), **Recent** (your last picks this session), then by category. Each row has a one-line description. Type to filter by label, type name or category; <Kbd>Up</Kbd>/<Kbd>Down</Kbd> and <Kbd>Enter</Kbd> pick, <Kbd>Esc</Kbd> closes. Adding a component is one undo entry.
+
+The list also offers the project's own C++ component classes (any concrete `MActorComponent` subclass that is not an engine ECS-mirrored one) under **C++ Classes**. Adding one attaches it to this actor only, in a section of its own with a remove button; the level saves the component's class and name with its property values, so it comes back on load, in Play and after a hot reload. Removing it is also one undo entry, and undoing a removal puts the component back in its old place in the list. A class that derives from an engine ECS-mirrored component is not offered, so a removed component cannot leave mirrored data behind; keep `OnRegister` of such a class free of effects outside the component, because there is no unregister hook.
+
+### C++ actor and component properties
+
+The rows above come from the ECS components on the actor's entity. The `MPROPERTY` fields you declare on your own `AActor` and `MActorComponent` classes get their own sections below them: one for the actor, named for its class, and one per component, named for the component. A field marked `EditAnywhere` is editable and one marked `VisibleAnywhere` is read-only; `Category=` groups them, `Tooltip=` and `ClampMin=`/`ClampMax=` shape the row, and a field without either marker stays out of Details. The widget follows the type: a check box for `bool`, a number field for integers and floats, one field per axis for `Vec2`/`Vec3`/`Vec4`, a text box for `std::string`, a drop-down for an enum and a searchable class picker for a `TSubclassOf<T>` (a class that is not loaded shows as **Missing: Name** and is kept in the level until you pick another). Arrays, maps and structs show a one-line summary and are edited in code or by the script that owns them.
+
+A field that differs from its class default has an emphasized label and a reset arrow, and the **Show only modified** filter finds it. Every edit is one undo entry, and the value is saved with the level and carried into Play. A tool or a script that needs to react to an edit (rerunning construction, for one) can subscribe to the property-changed event, which names the actor, the component and the property and also fires for undo and redo.
+
+Fields of the engine's own ECS-backed components, and of `AActor`, `MActorComponent` and `MSceneComponent`, are not repeated here; they are edited in the reflected sections above.
 
 ### Widgets
 

@@ -7027,6 +7027,13 @@
 							"name": "Set",
 							"signature": "Set",
 							"line": 189
+						},
+						{
+							"kind": "enumerator",
+							"name": "Class",
+							"signature": "Class",
+							"doc": "TSubclassOf<T> / MClass*: a class reference, not an object edge. The GC\ndoes not trace it (MClass is registry-owned, not collected); saves and\nhot-reload snapshots store it by class name.",
+							"line": 193
 						}
 					]
 				},
@@ -7035,89 +7042,89 @@
 					"name": "FMPropertyValueOps",
 					"namespace": "Mowo",
 					"doc": "What the kind alone cannot say about an MPROPERTY field: whether its BYTES\nare its whole value, and — for a std::vector field — how to walk and resize\nit without naming the element type. Both answers come from the C++ compiler\nat codegen time and cannot be recovered from the type's spelling, which is\nwhy they travel with the property row.\n\n`triviallyCopyable` is the same line MREPLICATED draws: a Struct or Custom\nfield whose bytes hide a heap pointer must not be copied verbatim into\nstorage that outlives the object, so a consumer that stores raw bytes\nchecks this first. It does NOT promise the bytes are meaningful in another\nprocess or after the referent dies — a POD struct holding a raw pointer\npasses the trait and still restores a stale address; mark those\nMOWO_RUNTIME_ONLY.",
-					"line": 205,
+					"line": 209,
 					"members": [
 						{
 							"kind": "field",
 							"name": "triviallyCopyable",
 							"signature": "bool triviallyCopyable = false",
-							"line": 206
+							"line": 210
 						},
 						{
 							"kind": "method",
 							"name": "size_t",
 							"signature": "size_t (*arraySize)(const void* field) = nullptr",
 							"doc": "Null on every non-vector field.",
-							"line": 208
+							"line": 212
 						},
 						{
 							"kind": "method",
 							"name": "void",
 							"signature": "void (*arrayResize)(void* field, size_t count) = nullptr",
-							"line": 209
+							"line": 213
 						},
 						{
 							"kind": "field",
 							"name": "elementSize",
 							"signature": "uint32_t elementSize = 0",
-							"line": 212
+							"line": 216
 						},
 						{
 							"kind": "field",
 							"name": "elementTriviallyCopyable",
 							"signature": "bool elementTriviallyCopyable = false",
-							"line": 213
+							"line": 217
 						},
 						{
 							"kind": "field",
 							"name": "elementIsPointer",
 							"signature": "bool elementIsPointer = false",
 							"doc": "A vector of pointers is a reference LIST, not data: copying its bytes\npreserves addresses that a hot reload or a save/load has already\ninvalidated, so consumers resolve the elements by identity instead.",
-							"line": 217
+							"line": 221
 						},
 						{
 							"kind": "method",
 							"name": "size_t",
 							"signature": "size_t (*containerSize)(const void* field) = nullptr",
 							"doc": "Null on every field that is not a map or a set. For a map, elementSize\nand elementTriviallyCopyable describe the mapped value; a set has no\nvalue, so `visit` receives null for it and `fill` writes only the key.\n`containerAdd` default-constructs a key (and value), lets `fill` write\nthem, then inserts — replacing an entry already under that key.",
-							"line": 224
+							"line": 228
 						},
 						{
 							"kind": "method",
 							"name": "void",
 							"signature": "void (*containerClear)(void* field) = nullptr",
-							"line": 225
+							"line": 229
 						},
 						{
 							"kind": "method",
 							"name": "void",
 							"signature": "void (*containerForEach)(const void* field, void* ctx, void (*visit)(void* ctx, const void* key, const void* value)) = nullptr",
-							"line": 226
+							"line": 230
 						},
 						{
 							"kind": "method",
 							"name": "void",
 							"signature": "void (*containerAdd)(void* field, void* ctx, void (*fill)(void* ctx, void* key, void* value)) = nullptr",
-							"line": 227
+							"line": 231
 						},
 						{
 							"kind": "field",
 							"name": "keySize",
 							"signature": "uint32_t keySize = 0",
-							"line": 228
+							"line": 232
 						},
 						{
 							"kind": "field",
 							"name": "keyTriviallyCopyable",
 							"signature": "bool keyTriviallyCopyable = false",
-							"line": 229
+							"line": 233
 						},
 						{
 							"kind": "field",
 							"name": "keyIsPointer",
 							"signature": "bool keyIsPointer = false",
 							"doc": "A map keyed by an object is a reference container too; a set's element\nis its key, so for a set this and elementIsPointer agree.",
-							"line": 232
+							"line": 236
 						}
 					]
 				},
@@ -7127,14 +7134,14 @@
 					"namespace": "Mowo",
 					"template": "template<typename T>",
 					"doc": "Emitted next to each MPROPERTY row. The vector specialisation is what lets a\nconsumer resize and index a std::vector field it cannot name the type of.",
-					"line": 237,
+					"line": 241,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static const FMPropertyValueOps* Get()",
 							"static": true,
-							"line": 240
+							"line": 244
 						}
 					]
 				},
@@ -7144,14 +7151,14 @@
 					"namespace": "Mowo",
 					"template": "template<typename E>",
 					"bases": ":vector<E>>",
-					"line": 255,
+					"line": 259,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static const FMPropertyValueOps* Get()",
 							"static": true,
-							"line": 258
+							"line": 262
 						}
 					]
 				},
@@ -7162,14 +7169,14 @@
 					"template": "template<>",
 					"bases": ":vector<bool>>",
 					"doc": "std::vector<bool> is a bit proxy with no element addresses at all, so it\ngets the plain no-ops rather than array access that cannot exist.",
-					"line": 289,
+					"line": 293,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static const FMPropertyValueOps* Get()",
 							"static": true,
-							"line": 292
+							"line": 296
 						}
 					]
 				},
@@ -7179,14 +7186,14 @@
 					"namespace": "Mowo",
 					"template": "template<typename M>",
 					"doc": "Shared by the std::map and std::unordered_map specialisations.",
-					"line": 300,
+					"line": 304,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Make",
 							"signature": "static FMPropertyValueOps Make()",
 							"static": true,
-							"line": 303
+							"line": 307
 						}
 					]
 				},
@@ -7196,14 +7203,14 @@
 					"namespace": "Mowo",
 					"template": "template<typename S>",
 					"doc": "Shared by the std::set and std::unordered_set specialisations.",
-					"line": 337,
+					"line": 341,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Make",
 							"signature": "static FMPropertyValueOps Make()",
 							"static": true,
-							"line": 340
+							"line": 344
 						}
 					]
 				},
@@ -7213,14 +7220,14 @@
 					"namespace": "Mowo",
 					"template": "template<typename K, typename V, typename C, typename A>",
 					"bases": ":map<K, V, C, A>>",
-					"line": 369,
+					"line": 373,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static const FMPropertyValueOps* Get()",
 							"static": true,
-							"line": 372
+							"line": 376
 						}
 					]
 				},
@@ -7230,14 +7237,14 @@
 					"namespace": "Mowo",
 					"template": "template<typename K, typename V, typename H, typename E, typename A>",
 					"bases": ":unordered_map<K, V, H, E, A>>",
-					"line": 379,
+					"line": 383,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static const FMPropertyValueOps* Get()",
 							"static": true,
-							"line": 382
+							"line": 386
 						}
 					]
 				},
@@ -7247,14 +7254,14 @@
 					"namespace": "Mowo",
 					"template": "template<typename K, typename C, typename A>",
 					"bases": ":set<K, C, A>>",
-					"line": 389,
+					"line": 393,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static const FMPropertyValueOps* Get()",
 							"static": true,
-							"line": 392
+							"line": 396
 						}
 					]
 				},
@@ -7264,14 +7271,14 @@
 					"namespace": "Mowo",
 					"template": "template<typename K, typename H, typename E, typename A>",
 					"bases": ":unordered_set<K, H, E, A>>",
-					"line": 399,
+					"line": 403,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static const FMPropertyValueOps* Get()",
 							"static": true,
-							"line": 402
+							"line": 406
 						}
 					]
 				},
@@ -7280,49 +7287,49 @@
 					"name": "FMPropertyFlags",
 					"namespace": "Mowo",
 					"doc": "The MPROPERTY specifiers a consumer acts on, as the header tool parsed them.\nRuntimeOnly is the one with teeth: the actor serializer never writes such a\nfield, so state play computes cannot leak into an authored level.",
-					"line": 412,
+					"line": 416,
 					"members": [
 						{
 							"kind": "field",
 							"name": "None",
 							"signature": "static constexpr uint32_t None = 0",
 							"static": true,
-							"line": 413
+							"line": 417
 						},
 						{
 							"kind": "field",
 							"name": "RuntimeOnly",
 							"signature": "static constexpr uint32_t RuntimeOnly = 1 << 0",
 							"static": true,
-							"line": 414
+							"line": 418
 						},
 						{
 							"kind": "field",
 							"name": "EditAnywhere",
 							"signature": "static constexpr uint32_t EditAnywhere = 1 << 1",
 							"static": true,
-							"line": 415
+							"line": 419
 						},
 						{
 							"kind": "field",
 							"name": "VisibleAnywhere",
 							"signature": "static constexpr uint32_t VisibleAnywhere = 1 << 2",
 							"static": true,
-							"line": 416
+							"line": 420
 						},
 						{
 							"kind": "field",
 							"name": "ReadOnly",
 							"signature": "static constexpr uint32_t ReadOnly = 1 << 3",
 							"static": true,
-							"line": 417
+							"line": 421
 						},
 						{
 							"kind": "field",
 							"name": "Hidden",
 							"signature": "static constexpr uint32_t Hidden = 1 << 4",
 							"static": true,
-							"line": 418
+							"line": 422
 						},
 						{
 							"kind": "field",
@@ -7330,7 +7337,7 @@
 							"signature": "static constexpr uint32_t Config = 1 << 5",
 							"static": true,
 							"doc": "MPROPERTY(Config): settable from the class's INI section. No other\nfield is, so a config file cannot reach state the class computes.",
-							"line": 421
+							"line": 425
 						},
 						{
 							"kind": "field",
@@ -7338,7 +7345,7 @@
 							"signature": "static constexpr uint32_t SaveGame = 1 << 7",
 							"static": true,
 							"doc": "MPROPERTY(SaveGame): captured into the world-state journal for a placed\nactor whose entity persists its components, so the save restores it.",
-							"line": 424
+							"line": 428
 						},
 						{
 							"kind": "field",
@@ -7346,7 +7353,22 @@
 							"signature": "static constexpr uint32_t AssetRef = 1 << 6",
 							"static": true,
 							"doc": "MPROPERTY(AssetRef) on a std::string: the path names an asset. The\nactor serializer writes it as a typed reference, which is what the cook\nand the registry follow without guessing from the string's shape.",
-							"line": 428
+							"line": 432
+						},
+						{
+							"kind": "field",
+							"name": "HasClampMin",
+							"signature": "static constexpr uint32_t HasClampMin = 1 << 8",
+							"static": true,
+							"doc": "ClampMin= / ClampMax= (Range= sets both) were written, so a bound of 0 is a\nbound and not an unset field.",
+							"line": 435
+						},
+						{
+							"kind": "field",
+							"name": "HasClampMax",
+							"signature": "static constexpr uint32_t HasClampMax = 1 << 9",
+							"static": true,
+							"line": 436
 						}
 					]
 				},
@@ -7355,59 +7377,135 @@
 					"name": "FMPropertyInfo",
 					"namespace": "Mowo",
 					"doc": "FMPropertyInfo — one MPROPERTY field of an MCLASS type, as emitted\nby MowoHeaderTool into the .refl.cpp. Core sits below Reflection in\nthe dep DAG and can't use TypeDescriptor, so the generator resolves\nthe semantic kind here instead.",
-					"line": 435,
+					"line": 443,
 					"members": [
 						{
 							"kind": "field",
 							"name": "name",
 							"signature": "FName name",
-							"line": 436
+							"line": 444
 						},
 						{
 							"kind": "field",
 							"name": "cxxType",
 							"signature": "const char* cxxType",
 							"doc": "Type as clang spelled it (\"float\", \"MWorld *\",\n\"std::vector<MActorComponent *>\"). Static string in the\ngenerated TU.",
-							"line": 440
+							"line": 448
 						},
 						{
 							"kind": "field",
 							"name": "offset",
 							"signature": "uint32_t offset",
 							"doc": "32-bit: truncating a >64 KB offset would silently aim the GC trace and\nthe actor serializer at the wrong bytes.",
-							"line": 443
+							"line": 451
 						},
 						{
 							"kind": "field",
 							"name": "size",
 							"signature": "uint32_t size",
-							"line": 444
+							"line": 452
 						},
 						{
 							"kind": "field",
 							"name": "kind",
 							"signature": "EMPropertyKind kind = EMPropertyKind::Unknown",
-							"line": 445
+							"line": 453
 						},
 						{
 							"kind": "field",
 							"name": "valueOps",
 							"signature": "const FMPropertyValueOps* valueOps = nullptr",
 							"doc": "Trailing so the codegen's positional aggregate init stays ABI-additive.\nnullptr on rows emitted before it existed.",
-							"line": 448
+							"line": 456
 						},
 						{
 							"kind": "field",
 							"name": "flags",
 							"signature": "uint32_t flags = FMPropertyFlags::None",
-							"line": 449
+							"line": 457
 						},
 						{
 							"kind": "field",
 							"name": "customTypeKey",
 							"signature": "const char* customTypeKey = nullptr",
 							"doc": "The MOWO_CUSTOM key of a Custom field — the PropertyTypeRegistry handler\nthat saves it. Null on every other row.",
-							"line": 452
+							"line": 460
+						},
+						{
+							"kind": "field",
+							"name": "metaClassName",
+							"signature": "const char* metaClassName = nullptr",
+							"doc": "Trailing like the fields above: rows emitted before they existed read as\nnull/zero. The class a Class row's value must derive from (TSubclassOf<X>\n-> \"X\", MClass* -> MetaClass=, default \"MObject\").",
+							"line": 464
+						},
+						{
+							"kind": "field",
+							"name": "tooltip",
+							"signature": "const char* tooltip = nullptr",
+							"doc": "MPROPERTY(Tooltip=...) / Category=...; editor-only text, null in a build\nwithout the editor.",
+							"line": 467
+						},
+						{
+							"kind": "field",
+							"name": "category",
+							"signature": "const char* category = nullptr",
+							"line": 468
+						},
+						{
+							"kind": "field",
+							"name": "rangeMin",
+							"signature": "float rangeMin = 0.0f",
+							"doc": "ClampMin/ClampMax/Range, valid for the side the HasClamp* flag names. A row\nemitted before the flags existed carried a range as min != max, which the\naccessors still honour.",
+							"line": 472
+						},
+						{
+							"kind": "field",
+							"name": "rangeMax",
+							"signature": "float rangeMax = 0.0f",
+							"line": 473
+						},
+						{
+							"kind": "field",
+							"name": "step",
+							"signature": "float step = 0.0f",
+							"line": 474
+						},
+						{
+							"kind": "method",
+							"name": "HasClampMin",
+							"signature": "bool HasClampMin() const noexcept",
+							"doc": "The min != max reading is for rows with no flag bit at all; once either\nbit is set the unset side is exactly that, whatever its stored zero says.",
+							"line": 478
+						},
+						{
+							"kind": "method",
+							"name": "HasClampMax",
+							"signature": "bool HasClampMax() const noexcept",
+							"line": 481
+						},
+						{
+							"kind": "method",
+							"name": "HasClampFlags",
+							"signature": "bool HasClampFlags() const noexcept",
+							"line": 484
+						},
+						{
+							"kind": "method",
+							"name": "HasRange",
+							"signature": "bool HasRange() const noexcept",
+							"line": 487
+						},
+						{
+							"kind": "method",
+							"name": "ClampLow",
+							"signature": "float ClampLow() const noexcept",
+							"line": 490
+						},
+						{
+							"kind": "method",
+							"name": "ClampHigh",
+							"signature": "float ClampHigh() const noexcept",
+							"line": 493
 						}
 					]
 				},
@@ -7417,97 +7515,97 @@
 					"namespace": "Mowo",
 					"bases": "uint8_t",
 					"doc": "Core-side mirror of the Reflection module's FunctionInfo — Core sits\nBELOW Reflection in the dep DAG and can't include it. Thunk ABI:\nvoid Thunk(void* instance, void** args, void* ret)\n(instance + per-arg pointers in, return through ret; nullptr ret for void).",
-					"line": 459,
+					"line": 502,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Void",
 							"signature": "Void",
-							"line": 460
+							"line": 503
 						},
 						{
 							"kind": "enumerator",
 							"name": "Bool",
 							"signature": "Bool",
-							"line": 461
+							"line": 504
 						},
 						{
 							"kind": "enumerator",
 							"name": "Int",
 							"signature": "Int",
-							"line": 462
+							"line": 505
 						},
 						{
 							"kind": "enumerator",
 							"name": "UInt32",
 							"signature": "UInt32",
-							"line": 463
+							"line": 506
 						},
 						{
 							"kind": "enumerator",
 							"name": "Int64",
 							"signature": "Int64",
-							"line": 464
+							"line": 507
 						},
 						{
 							"kind": "enumerator",
 							"name": "UInt64",
 							"signature": "UInt64",
-							"line": 465
+							"line": 508
 						},
 						{
 							"kind": "enumerator",
 							"name": "Float",
 							"signature": "Float",
-							"line": 466
+							"line": 509
 						},
 						{
 							"kind": "enumerator",
 							"name": "Double",
 							"signature": "Double",
-							"line": 467
+							"line": 510
 						},
 						{
 							"kind": "enumerator",
 							"name": "Vec2",
 							"signature": "Vec2",
-							"line": 468
+							"line": 511
 						},
 						{
 							"kind": "enumerator",
 							"name": "Vec3",
 							"signature": "Vec3",
-							"line": 469
+							"line": 512
 						},
 						{
 							"kind": "enumerator",
 							"name": "Vec4",
 							"signature": "Vec4",
-							"line": 470
+							"line": 513
 						},
 						{
 							"kind": "enumerator",
 							"name": "Quat",
 							"signature": "Quat",
-							"line": 471
+							"line": 514
 						},
 						{
 							"kind": "enumerator",
 							"name": "String",
 							"signature": "String",
-							"line": 472
+							"line": 515
 						},
 						{
 							"kind": "enumerator",
 							"name": "Object",
 							"signature": "Object",
-							"line": 473
+							"line": 516
 						},
 						{
 							"kind": "enumerator",
 							"name": "Custom",
 							"signature": "Custom",
-							"line": 474
+							"line": 517
 						}
 					]
 				},
@@ -7515,14 +7613,14 @@
 					"kind": "struct",
 					"name": "FMParamFlags",
 					"namespace": "Mowo",
-					"line": 477,
+					"line": 520,
 					"members": [
 						{
 							"kind": "field",
 							"name": "None",
 							"signature": "static constexpr uint16_t None = 0",
 							"static": true,
-							"line": 478
+							"line": 521
 						},
 						{
 							"kind": "field",
@@ -7530,7 +7628,7 @@
 							"signature": "static constexpr uint16_t Out = 1 << 0",
 							"static": true,
 							"doc": "A non-const reference parameter: the callee writes it, and a script\ncaller reads it back as an output pin after the call.",
-							"line": 481
+							"line": 524
 						}
 					]
 				},
@@ -7538,32 +7636,32 @@
 					"kind": "struct",
 					"name": "FMFunctionParam",
 					"namespace": "Mowo",
-					"line": 484,
+					"line": 527,
 					"members": [
 						{
 							"kind": "field",
 							"name": "name",
 							"signature": "const char* name",
-							"line": 485
+							"line": 528
 						},
 						{
 							"kind": "field",
 							"name": "type",
 							"signature": "FMValueType type",
-							"line": 486
+							"line": 529
 						},
 						{
 							"kind": "field",
 							"name": "flags",
 							"signature": "uint16_t flags = FMParamFlags::None",
-							"line": 487
+							"line": 530
 						},
 						{
 							"kind": "field",
 							"name": "typeName",
 							"signature": "const char* typeName = nullptr",
 							"doc": "The C++ type a Custom parameter holds (\"FTransform\"), looked up in\nFMStructRegistry; null for every other type.",
-							"line": 490
+							"line": 533
 						}
 					]
 				},
@@ -7571,63 +7669,63 @@
 					"kind": "struct",
 					"name": "FMFunctionFlags",
 					"namespace": "Mowo",
-					"line": 493,
+					"line": 536,
 					"members": [
 						{
 							"kind": "field",
 							"name": "None",
 							"signature": "static constexpr uint16_t None = 0",
 							"static": true,
-							"line": 494
+							"line": 537
 						},
 						{
 							"kind": "field",
 							"name": "Static",
 							"signature": "static constexpr uint16_t Static = 1 << 0",
 							"static": true,
-							"line": 495
+							"line": 538
 						},
 						{
 							"kind": "field",
 							"name": "Const",
 							"signature": "static constexpr uint16_t Const = 1 << 1",
 							"static": true,
-							"line": 496
+							"line": 539
 						},
 						{
 							"kind": "field",
 							"name": "Server",
 							"signature": "static constexpr uint16_t Server = 1 << 2",
 							"static": true,
-							"line": 497
+							"line": 540
 						},
 						{
 							"kind": "field",
 							"name": "Client",
 							"signature": "static constexpr uint16_t Client = 1 << 3",
 							"static": true,
-							"line": 498
+							"line": 541
 						},
 						{
 							"kind": "field",
 							"name": "Multicast",
 							"signature": "static constexpr uint16_t Multicast = 1 << 4",
 							"static": true,
-							"line": 499
+							"line": 542
 						},
 						{
 							"kind": "field",
 							"name": "Reliable",
 							"signature": "static constexpr uint16_t Reliable = 1 << 5",
 							"static": true,
-							"line": 500
+							"line": 543
 						},
 						{
 							"kind": "field",
 							"name": "RpcMask",
 							"signature": "static constexpr uint16_t RpcMask = Server | Client | Multicast",
 							"static": true,
-							"line": 501
+							"line": 544
 						}
 					]
 				},
@@ -7635,64 +7733,64 @@
 					"kind": "struct",
 					"name": "FMFunctionInfo",
 					"namespace": "Mowo",
-					"line": 504,
+					"line": 547,
 					"members": [
 						{
 							"kind": "field",
 							"name": "name",
 							"signature": "FName name",
-							"line": 505
+							"line": 548
 						},
 						{
 							"kind": "field",
 							"name": "returnType",
 							"signature": "FMValueType returnType",
-							"line": 506
+							"line": 549
 						},
 						{
 							"kind": "field",
 							"name": "params",
 							"signature": "const FMFunctionParam* params",
 							"doc": "nullptr when paramCount == 0",
-							"line": 507
+							"line": 550
 						},
 						{
 							"kind": "field",
 							"name": "paramCount",
 							"signature": "uint32_t paramCount",
-							"line": 508
+							"line": 551
 						},
 						{
 							"kind": "field",
 							"name": "flags",
 							"signature": "uint16_t flags",
-							"line": 509
+							"line": 552
 						},
 						{
 							"kind": "method",
 							"name": "void",
 							"signature": "void (*invoke)(void* instance, void** args, void* ret)",
-							"line": 510
+							"line": 553
 						},
 						{
 							"kind": "field",
 							"name": "description",
 							"signature": "const char* description = nullptr",
 							"doc": "One-line prose from a MOWO_TOOLTIP written before MFUNCTION, or nullptr.\nNull and \"\" are not the same answer: a caller shows the authored line\nwhen there is one and falls back to the signature when there is not, so\nan undescribed function must stay null rather than default to empty.",
-							"line": 515
+							"line": 558
 						},
 						{
 							"kind": "field",
 							"name": "returnTypeName",
 							"signature": "const char* returnTypeName = nullptr",
 							"doc": "The struct a Custom return holds, as FMFunctionParam::typeName.",
-							"line": 517
+							"line": 560
 						},
 						{
 							"kind": "method",
 							"name": "Invoke",
 							"signature": "void Invoke(void* instance, void** args, void* ret) const",
-							"line": 519
+							"line": 562
 						}
 					]
 				},
@@ -7701,19 +7799,19 @@
 					"name": "FMMetaEntry",
 					"namespace": "Mowo",
 					"doc": "One `key = value` of a class's open metadata: MCLASS(meta=(Key=Value)) and\nthe specifiers without a dedicated field (Config=Game lands as \"Config\").",
-					"line": 526,
+					"line": 569,
 					"members": [
 						{
 							"kind": "field",
 							"name": "key",
 							"signature": "const char* key",
-							"line": 527
+							"line": 570
 						},
 						{
 							"kind": "field",
 							"name": "value",
 							"signature": "const char* value",
-							"line": 528
+							"line": 571
 						}
 					]
 				},
@@ -7722,21 +7820,21 @@
 					"name": "FMClassFlags",
 					"namespace": "Mowo",
 					"doc": "What MCLASS(...) / MINTERFACE said about a class beyond its members.",
-					"line": 532,
+					"line": 575,
 					"members": [
 						{
 							"kind": "field",
 							"name": "None",
 							"signature": "static constexpr uint32_t None = 0",
 							"static": true,
-							"line": 533
+							"line": 576
 						},
 						{
 							"kind": "field",
 							"name": "Abstract",
 							"signature": "static constexpr uint32_t Abstract = 1 << 0",
 							"static": true,
-							"line": 534
+							"line": 577
 						},
 						{
 							"kind": "field",
@@ -7744,28 +7842,28 @@
 							"signature": "static constexpr uint32_t Interface = 1 << 1",
 							"static": true,
 							"doc": "The M half of an MINTERFACE pair: a descriptor only, registered by name.",
-							"line": 536
+							"line": 579
 						},
 						{
 							"kind": "field",
 							"name": "Transient",
 							"signature": "static constexpr uint32_t Transient = 1 << 2",
 							"static": true,
-							"line": 537
+							"line": 580
 						},
 						{
 							"kind": "field",
 							"name": "NotPlaceable",
 							"signature": "static constexpr uint32_t NotPlaceable = 1 << 3",
 							"static": true,
-							"line": 538
+							"line": 581
 						},
 						{
 							"kind": "field",
 							"name": "Deprecated",
 							"signature": "static constexpr uint32_t Deprecated = 1 << 4",
 							"static": true,
-							"line": 539
+							"line": 582
 						},
 						{
 							"kind": "field",
@@ -7773,7 +7871,15 @@
 							"signature": "static constexpr uint32_t Config = 1 << 5",
 							"static": true,
 							"doc": "MCLASS(Config=<File>): the file is the \"Config\" meta entry.",
-							"line": 541
+							"line": 584
+						},
+						{
+							"kind": "field",
+							"name": "EcsMirrored",
+							"signature": "static constexpr uint32_t EcsMirrored = 1 << 6",
+							"static": true,
+							"doc": "Set by the header tool on a class that declares RefreshMirror /\nPullFromMirror: its fields reach the renderer through an ECS component,\nand that component's inspector rows are the way to edit them. Own\ndeclaration only -- the flag is not inherited.",
+							"line": 589
 						}
 					]
 				},
@@ -7782,161 +7888,161 @@
 					"name": "MClass",
 					"namespace": "Mowo",
 					"doc": "MClass — the reflection descriptor for an MObject-derived type. One\nstatic instance per MCLASS type lives in the codegen-emitted\n.refl.cpp; MClassRegistry maps typeid → MClass.\nAggregate — codegen brace-initialises every field in declaration\norder; keep new fields at the end.",
-					"line": 549,
+					"line": 597,
 					"members": [
 						{
 							"kind": "field",
 							"name": "className",
 							"signature": "FName className",
-							"line": 551
+							"line": 599
 						},
 						{
 							"kind": "field",
 							"name": "superClassName",
 							"signature": "FName superClassName",
 							"doc": "Name of the direct base class as parsed from the header. The\nbase may live in another module's .refl.cpp (or not be\nregistered at all — e.g. MObject itself for hand-written\nroots), so the pointer link resolves lazily by name.",
-							"line": 556
+							"line": 604
 						},
 						{
 							"kind": "field",
 							"name": "superClass",
 							"signature": "MClass* superClass = nullptr",
 							"doc": "Lazily resolved + cached by GetSuperClass(). nullptr until the\nfirst lookup (or forever, when the super isn't registered).",
-							"line": 559
+							"line": 607
 						},
 						{
 							"kind": "field",
 							"name": "classSize",
 							"signature": "uint32_t classSize = 0",
-							"line": 560
+							"line": 608
 						},
 						{
 							"kind": "method",
 							"name": "void",
 							"signature": "void (*gcTrace)(MObject* self, FReferenceCollector& collector) = nullptr",
 							"doc": "Codegen-emitted GC trace — walks this class's OWN MPROPERTY\nfields (not inherited ones; the GC walks the super chain).\nnullptr when the class has no MPROPERTY fields.",
-							"line": 564
+							"line": 612
 						},
 						{
 							"kind": "field",
 							"name": "functions",
 							"signature": "const FMFunctionInfo* functions = nullptr",
 							"doc": "Codegen-emitted MFUNCTION table — this class's OWN reflected methods.\nA bare array (not an accessor like getProperties) because the thunks\nare free functions in the generated TU that only call PUBLIC methods,\nso no befriended access is needed. nullptr when the class has no\nMFUNCTION methods. Kept at the end so the codegen's aggregate init\nstays ABI-additive.",
-							"line": 582
+							"line": 630
 						},
 						{
 							"kind": "field",
 							"name": "functionCount",
 							"signature": "uint32_t functionCount = 0",
-							"line": 583
+							"line": 631
 						},
 						{
 							"kind": "field",
 							"name": "userData",
 							"signature": "void* userData = nullptr",
 							"doc": "Subsystem extension slot — opaque per-class data a higher layer can\nattach without Core knowing the type. Visual Scripting uses it to point a synthetic\n(data-driven) MClass back at its VisualScriptClass definition (the source of the\nBeginPlay/Tick graphs). Codegen never sets it: aggregate brace-init of a\ngenerated MClass omits trailing fields, leaving this value-initialised —\ntrailing placement keeps the layout ABI-additive.",
-							"line": 591
+							"line": 639
 						},
 						{
 							"kind": "field",
 							"name": "defaultObject",
 							"signature": "MObject* defaultObject = nullptr",
 							"doc": "Cached Class Default Object — see GetDefaultObject(). Codegen never\nsets it (trailing field, value-initialised by aggregate init).",
-							"line": 595
+							"line": 643
 						},
 						{
 							"kind": "field",
 							"name": "interfaces",
 							"signature": "const FName* interfaces = nullptr",
 							"doc": "MIMPLEMENTS interface names — this class's OWN declarations; walk\nthe super chain with ImplementsInterface for inherited ones. Bound\nby a follow-up initialiser in the generated TU (they trail the\nvalue-initialised fields, so the aggregate stays ABI-additive).",
-							"line": 601
+							"line": 649
 						},
 						{
 							"kind": "field",
 							"name": "interfaceCount",
 							"signature": "uint32_t interfaceCount = 0",
-							"line": 602
+							"line": 650
 						},
 						{
 							"kind": "field",
 							"name": "classFlags",
 							"signature": "uint32_t classFlags = FMClassFlags::None",
 							"doc": "FMClassFlags, and the open metadata MCLASS(...) carried — bound by the\nsame follow-up initialiser as the interfaces.",
-							"line": 606
+							"line": 654
 						},
 						{
 							"kind": "field",
 							"name": "meta",
 							"signature": "const FMMetaEntry* meta = nullptr",
-							"line": 607
+							"line": 655
 						},
 						{
 							"kind": "field",
 							"name": "metaCount",
 							"signature": "uint32_t metaCount = 0",
-							"line": 608
+							"line": 656
 						},
 						{
 							"kind": "method",
 							"name": "HasClassFlag",
 							"signature": "bool HasClassFlag(uint32_t flag) const",
-							"line": 610
+							"line": 658
 						},
 						{
 							"kind": "method",
 							"name": "FindMeta",
 							"signature": "const char* FindMeta(const char* key) const",
 							"doc": "The value of an own meta entry (no super-chain walk), or nullptr.",
-							"line": 615
+							"line": 663
 						},
 						{
 							"kind": "method",
 							"name": "FindFunction",
 							"signature": "const FMFunctionInfo* FindFunction(FName name) const",
 							"doc": "Find an own reflected method by name (no super-chain walk).",
-							"line": 633
+							"line": 681
 						},
 						{
 							"kind": "method",
 							"name": "GetDefaultObject",
 							"signature": "MObject* GetDefaultObject()",
 							"doc": "Class Default Object. Lazily constructed via the codegen factory\non first request, GC-rooted for process lifetime, named\n\"Default__<Class>\".\n\nSpawnActorByClass clones the CDO's reflected values onto a fresh\nactor and the scene writer emits only the properties that differ\nfrom it, so raising a class default reaches every instance that\nnever overrode the field. Both go through FActorSerializer, which\nowns the supported-value-kind rule: an edge into the archetype itself\nor its own components is never cloned (constructors and BeginPlay\nre-establish it), while value containers, reflected structs, Custom\nfields and references to other placed actors are cloned and diffed.\n\nReturns nullptr for abstract / non-default-constructible classes,\nin which case spawn constructs plainly and the writer emits the\nfull property set.",
-							"line": 658
+							"line": 706
 						},
 						{
 							"kind": "method",
 							"name": "ImplementsInterface",
 							"signature": "bool ImplementsInterface(FName interfaceName)",
 							"doc": "Chain-aware MIMPLEMENTS query — the data-driven complement of a\ndynamic_cast to the C++ interface. Non-const: walks lazy supers.",
-							"line": 662
+							"line": 710
 						},
 						{
 							"kind": "method",
 							"name": "GetSuperClass",
 							"signature": "MClass* GetSuperClass()",
 							"doc": "Resolve + cache the super MClass via MClassRegistry name lookup.\nBenign race: concurrent callers write the same pointer. Returns\nnullptr for roots and for supers that aren't registered.",
-							"line": 676
+							"line": 724
 						},
 						{
 							"kind": "method",
 							"name": "IsChildOf",
 							"signature": "bool IsChildOf(const MClass* base)",
 							"doc": "Walks the super chain. Non-const because the walk resolves lazy\nsuper links.",
-							"line": 680
+							"line": 728
 						},
 						{
 							"kind": "method",
 							"name": "GetProperties",
 							"signature": "const FMPropertyInfo* GetProperties(uint32_t& outCount)",
 							"doc": "Returns nullptr + count 0 when the class has no MPROPERTY fields.",
-							"line": 683
+							"line": 731
 						},
 						{
 							"kind": "method",
 							"name": "FindProperty",
 							"signature": "const FMPropertyInfo* FindProperty(FName name)",
 							"doc": "Find an own property by name (no super-chain walk).",
-							"line": 692
+							"line": 740
 						}
 					]
 				}

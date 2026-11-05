@@ -7,8 +7,10 @@ sources:
   - Engine/Source/Runtime/Reflection/Public/Reflection/Reflect.h
   - Engine/Source/Runtime/ECS/Public/ECS/Component.h
   - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Core/Public/Core/TSubclassOf.h
+  - Engine/Source/Runtime/Core/Public/Core/ClassRefUtils.h
   - Engine/Source/Runtime/Game/Public/Gameplay/GameplayDelegates.h
-verifiedAt: 5922e6e5e
+verifiedAt: 38224a3a8
 ---
 
 Reflection is what lets a C++ field save into a level, show in the Details panel, keep its target alive in the garbage collector and replicate, and what lets a function be called by name from Visual Scripting. You opt in with macros in your headers. At build time **MowoHeaderTool** (MHT) reads them and generates the descriptor tables and glue code.
@@ -64,6 +66,17 @@ From this MHT generates:
 
 On an `MCLASS`, only `MPROPERTY` fields are reflected, and they may be private. Object references must be `TObjectPtr<T>`; see [Objects and garbage collection](/docs/programming/objects-and-gc/#the-tobjectptr-rule).
 
+### Class references
+
+A field that names a class rather than an object is a `TSubclassOf<T>`:
+
+```cpp title="ASpawner.h"
+MPROPERTY(EditAnywhere, Category="Spawning")
+TSubclassOf<APickup> m_PickupClass;
+```
+
+It holds an `MClass*` (a class is not a garbage-collected object, so there is no `TObjectPtr` and no trace), converts to and from `MClass*`, and answers `IsChildOf`. In the Details panel it is a searchable class picker that lists only the registered classes deriving from `T`, Visual Scripting classes among them. The level stores the class **name** and resolves it again on load and after a hot reload. A class lives in its module's image, so unloading the module clears every reflected class field that points into it and remembers the name; the field is filled again when a class of that name registers. A name that no loaded module knows (the module is not loaded, the class was renamed, a Visual Scripting class is not registered yet) leaves the field at its default and logs a warning, but the name is kept beside the object: the next save writes it back unchanged, the Details picker shows it as **Missing: Name**, and the reference is restored as soon as the class appears. Only picking another class replaces it. A class that does not derive from `T` is refused. A class reference on a Visual Scripting class follows a hot reload by name only through the actor snapshot; a Visual Scripting class that is retired and replaced is not re-resolved in the fields that still point at the old one, so re-pick it if a field shows a stale class. Outside reflection (a local, a cache) keep the name and look the class up with `MClassRegistry::FindByName` when you use it. A plain `MClass*` field works the same way and accepts any class unless `MetaClass=Name` narrows it. <Source path="Engine/Source/Runtime/Core/Public/Core/TSubclassOf.h" />
+
 ### Class specifiers
 
 | Specifier | Effect |
@@ -87,6 +100,7 @@ An unknown specifier is a build error that lists the known ones.
 | `Replicated`, `ReplicatedUsing=Fn`, `RepCondition=`, `NetQuantize=` | Property replication; see [Multiplayer](/docs/multiplayer/) |
 | `AssetRef`, `AssetType=` | A `std::string` that holds an asset path, saved as a typed asset reference |
 | `Key=`, `DisplayName=`, `Tooltip=`, `Range=`, `ClampMin=`, `ClampMax=`, `Step=`, `Units=`, `Color`, `LayerMask`, `EditCondition=`, `Hidden`, `ReadOnly`, `RuntimeOnly`, `Custom=`, `Nested=` | The same meanings as the field markers below |
+| `MetaClass=Name` | On an `MClass*` field: the class a picked value must derive from. A `TSubclassOf<Name>` field already says so in its type |
 | `meta=(...)` | Anything else, carried into the module's JSON export |
 
 
