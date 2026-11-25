@@ -2,7 +2,7 @@
 title: World building
 description: Place actors, sculpt and paint terrain, edit water and splines, paint foliage and props, bake navigation, and set up world partition streaming and data layers.
 order: 6
-verifiedAt: 5922e6e5e
+verifiedAt: 620f5a46f
 ---
 
 World building is the set of tools for shaping a level rather than editing single actors: placing actors from a palette, sculpting and painting terrain, drawing water and splines, scattering props and foliage, baking navigation, and splitting a large world into streamed cells. Each terrain or painting tool is a viewport **tool mode**: it takes over the mouse while active and gives it back to selection when you leave it.
@@ -55,7 +55,7 @@ The Landscape panel has three tabs:
 
 | Tab | Contents |
 | --- | --- |
-| Sculpt | Tools: Sculpt, Smooth, Flatten, Ramp, Erosion, Hydro (a hydraulic erosion pass over the whole terrain), Noise, Retop. The **Brush** section: brush type (circle, alpha mask, or the mask tiled as a pattern), falloff (Smooth, Linear, Tip), size, falloff, strength, and **Use slope flatten**, which flattens toward the slope under the brush instead of a level height |
+| Sculpt | Tools: Sculpt, Smooth, Flatten, Ramp, Erosion, Hydro (a hydraulic erosion pass over the whole terrain), Noise, Retop, Mirror, Region, Copy (see [Landscape](/docs/editor/landscape/)). The **Brush** section: brush type (circle, alpha mask, or the mask tiled as a pattern), falloff (Smooth, Linear, Tip), size, falloff, strength, and **Use slope flatten**, which flattens toward the slope under the brush instead of a level height |
 | Paint | The weight layers, each with its coverage, plus the visibility (hole) layer |
 | Manage | New, Select, Add (import a tile grid) and Import, plus edit layers, landscape splines, noise-stack generation, erosion, tile streaming and heightmap export |
 
@@ -73,17 +73,28 @@ Switch to **Paint**, choose a layer and stroke. Painting the visibility layer cu
 
 Each stroke is one undo entry, whatever its length.
 
+### Layer tiling, cliffs and distance variation
+
+The terrain's **Layer Tiling** sets how often the layer textures repeat across the whole terrain. Three groups of properties on the terrain refine it:
+
+| Property | Effect |
+|---|---|
+| **Layer 1-8 Tiling Scale** | Multiplies Layer Tiling for one layer, so a fine gravel and a broad rock can share a terrain. 1 keeps the base tiling. |
+| **Slope Triplanar Angle**, **Slope Triplanar Tile Size** | Surfaces steeper than the angle read each of the four splat layers in world space along the two vertical planes, so cliffs do not smear down the heightmap UVs. 0 turns it off; the tile size is in metres. |
+| **Macro Variation Scale**, **Macro Variation Strength** | Modulates the albedo with a low-frequency read of layer 1, fading in between 20 m and 120 m from the camera, so a far view of repeating layers shows variation instead of a grid. Scale is a fraction of Layer Tiling; 0 turns it off. |
+
+The options apply to the four-layer splat shading on both the clustered terrain and the fallback chunk mesh (which takes the cliff normal from its mesh normals). The cached virtual-texture composite (see [Virtual texturing](/docs/rendering/virtual-texturing/)) honors all of them too, with two differences: a cached page has no camera, so macro variation fades in with the page's mip (none at mip 0, full from mip 2), and cliffs use a coarse 512-square copy of the heightmap's normals and heights.
 ### Where terrain edits are saved
 
 Sculpted heights and painted weights are written when you save the level: heights as a 16-bit `.r16` file and weights as `_Weights.png` images in `Content/Terrain/`. The terrain component points at those files, so the level records them like any other asset reference.
 
-<Callout type="warning">
-The 16-bit height format is unsigned and square-only. Terrain sculpted below height zero is clamped to zero when saved, and a non-square heightfield refuses to save.
+<Callout type="note">
+The 16-bit height format is unsigned and square-only. A terrain sculpted below height zero saves with a negative **Height Offset** on the terrain component so the valleys survive; a non-square heightfield refuses to save. See [Landscape](/docs/editor/landscape/).
 </Callout>
 
 ## Water
 
-**Water** mode (<Kbd>Shift+4</Kbd>) and **Window ▸ Water** edit water bodies. The panel lists the level's bodies and creates oceans, lakes, rivers and custom bodies, and has a table of the selected body's spline points. In the viewport, <Kbd>Ctrl</Kbd>+click places a body, and dragging a point moves it on the body's own water plane, so a lake above the ground keeps its height. Panel edits and viewport drags make the same single undo entry. **Lake** and **River** in the palette spawn a water actor with a preset spline.
+**Water** mode (<Kbd>Shift+4</Kbd>) and **Window ▸ Water** edit water bodies. The panel lists the level's bodies and creates oceans, lakes, rivers and custom bodies, and has a table of the selected body's spline points. In the viewport, <Kbd>Ctrl</Kbd>+click places a body, and dragging a point moves it on the body's own water plane, so a lake above the ground keeps its height. Panel edits and viewport drags make the same single undo entry. **Lake** and **River** in the palette spawn a water actor with a preset spline. Body types, waves, flow, blending, zones and floating are covered in [Water bodies](/docs/editor/water-bodies/).
 
 ## Splines
 
@@ -110,7 +121,7 @@ The 16-bit height format is unsigned and square-only. Terrain sculpted below hei
 Click **Add Type** and pick a mesh; leave the mesh empty for a grass clump.
 </Step>
 <Step title="Tune the type">
-The type's settings open as a tab beside Details: density, radius (minimum spacing between instances of the type), scale range and scaling mode (Uniform, Free, Lock XY), align to normal with a maximum angle, random yaw, slope and height limits, and cull distance.
+The type's settings open as a tab beside Details: density, radius (minimum spacing between instances of the type), scale range and scaling mode (Uniform, Free, Lock XY), align to normal with a maximum angle, random yaw, slope and height limits, cull distance, impostor use, collision and whether the type affects navigation (see [Foliage](/docs/editor/procedural-foliage/)).
 </Step>
 <Step title="Paint">
 Drag in the viewport. <Kbd>[</Kbd> and <Kbd>]</Kbd> or the wheel resize the brush, <Kbd>Delete</Kbd> erases under the cursor, and <Kbd>Esc</Kbd> cancels a stroke.
@@ -129,7 +140,7 @@ Drag in the viewport. <Kbd>[</Kbd> and <Kbd>]</Kbd> or the wheel resize the brus
 **Surface** chooses whether the brush lands on Terrain, Meshes or Both.
 
 <Callout type="tip">
-A grass type with no mesh, no cull distance of its own and no align-to-normal is drawn as a GPU batch: one draw for the whole row. Giving it a cull distance or aligning it to the surface moves it to the slower per-instance path.
+A grass type with no mesh, no cull distance of its own and no align-to-normal is drawn as a GPU batch: one draw for the whole row. Giving it a cull distance or aligning it to the surface moves it to the slower per-instance path. Mesh types are GPU batches too, with impostors, unless they align to the surface or scale per axis. Painted instances that stand on the terrain follow it when you sculpt.
 </Callout>
 
 ## Navigation
@@ -171,8 +182,9 @@ After you move streamable actors, use **Regenerate streaming**.
 - The runtime state is what the game, a dedicated server and Play in editor start with; game code changes it later with Set Data Layer Active.
 - Buttons add a new layer and add or remove the selected actors from the layer under the cursor.
 - The level instance button places another level inside this one: its actors join at load, offset by the instance's position, and stay edited in their own level.
+- One instance can differ from the others without forking the level: an override replaces a property of one actor of the instanced level (for example a light's intensity) in this instance only, and an instance can leave an actor out, with the actors parented to it. Both are written with the instance in the level's own file and are set over MCP (`level_instance_set_override`, `level_instance_set_removed`).
 
-Layers and membership are written to the level's own files, so they merge per actor under source control.
+Layers and membership are written to the level's own files, so they merge per actor under source control. Every change here, from adding a layer to moving or removing a level instance, is one step in the undo history, so Ctrl+Z puts the files and the open level back.
 
 ## Related
 

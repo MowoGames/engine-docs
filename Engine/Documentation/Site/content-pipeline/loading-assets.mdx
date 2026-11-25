@@ -5,6 +5,7 @@ order: 12
 sources:
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetManager.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/RuntimeAssetManager.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetLoadHandle.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetHandle.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Asset.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetRegistry.h
@@ -14,7 +15,7 @@ sources:
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/DataTableAsset.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/DataAsset.h
   - Engine/Source/Runtime/Core/Public/Core/TObjectPtr.h
-verifiedAt: 08e26df3d
+verifiedAt: d9fe08503
 ---
 
 The asset system loads, caches and tracks every asset a game uses: levels, prefabs, materials, meshes, textures, audio, UI and data. Assets are identified by id and addressed by project-relative path, they load in two phases (CPU, then GPU), and the asset manager evicts what nothing uses when memory runs short.
@@ -69,7 +70,32 @@ static void PrefetchLootTable(Mowo::TSoftObjectPtr<Mowo::DataTableAsset>& table)
 }
 ```
 
-A soft reference returns null when its path is empty, when no resolver is installed for the type (a headless tool that never started the asset module), or when the load fails.
+A soft reference returns null when its path is empty, when no resolver is installed for the type (a headless tool that never started the asset module), or when the load fails. A pointer built from an `FName` loads by the path that name spells.
+
+## Async loads and handles
+
+`RuntimeAssetManager::RequestAsyncLoad(ids, options, onComplete)` loads a set of assets off-thread and returns an `FAssetLoadHandle`, the same shape as Unreal's streamable handle:
+
+```cpp title="AsyncLoad.cpp"
+#include "AssetSystem/RuntimeAssetManager.h"
+
+static void WarmLevelAssets(Mowo::RuntimeAssetManager& assets, const std::vector<Mowo::UUID>& ids) {
+	Mowo::FAssetLoadOptions options;
+	options.Priority = Mowo::IOPriority::High;
+
+	Mowo::Ref<Mowo::FAssetLoadHandle> handle = assets.RequestAsyncLoad(ids, options, [](Mowo::FAssetLoadHandle& done) {
+		if (done.HasFailed()) {
+			return;
+		}
+	});
+}
+```
+
+- Requests for the same asset share one load, whether they come from handles or from `LoadAssetAsync` callers.
+- With `LoadDependencies` (the default) the registry's hard dependencies load with the request, and the handle completes when all of them have landed. Soft references are not followed.
+- Every callback, `onComplete` and `OnComplete` included, runs from `Update()` on the main thread and never inside the call that requested it, even when everything is already cached or the list is empty.
+- `IsComplete()`, `HasFailed()`, `GetProgress()`, `GetAsset(id)` and `GetFailedIds()` report the state; `Cancel()` completes the handle at once with `WasCancelled()` set.
+- A path poll (`RequestAssetAsync`) that failed is not retried every frame, but mounting an archive or a DLC clears that, so content that arrives after the first request loads on the next poll.
 
 ## Two-phase loading
 

@@ -4,6 +4,17 @@ description: Rigid bodies, colliders, collision channels, character movement, sc
 order: 8
 sources:
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicsSystem.h
+  - Engine/Source/Runtime/Physics/Public/Physics/RoutePath.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/RouteFollowerComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/GrabHandleComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsGrab.h
+  - Engine/Source/Runtime/Game/Public/Game/MGrabStatics.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/RopeComponent.h
+  - Engine/Source/Runtime/Physics/Public/Physics/RopeSolver.h
+  - Engine/Source/Runtime/Physics/Public/Physics/ContactAudio.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsRecorder.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/ContactSoundTableAsset.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/ContactSoundSystem.h
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicsWorld.h
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicsQuery.h
   - Engine/Source/Runtime/Physics/Public/Physics/CollisionChannel.h
@@ -31,7 +42,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/MPhysicsInteractableStatics.h
   - Engine/Source/Runtime/Game/Public/Game/MPhysicsStatics.h
   - Engine/Source/Runtime/Game/Public/Game/MConstraintStatics.h
-verifiedAt: 72eec6f7f
+verifiedAt: e92af4498
 ---
 
 Mowo simulates physics with [Jolt Physics](https://github.com/jrouwe/JoltPhysics). You describe bodies with reflected ECS components, a `PhysicsSystem` steps the simulation at a fixed rate, and a `PhysicsWorld` answers ray casts, sweeps and overlaps. Each scene has its own physics world.
@@ -52,14 +63,23 @@ The physics step runs at a fixed 1/60 s. Frame time accumulates, and the system 
 | `p.PositionSteps` | 2 | Solver position iterations per step (Jolt's default): how hard penetrations are pushed apart. Read when the world comes up |
 | `p.CharacterEdgeRemoval` | off | Character controllers spend extra effort removing ghost contacts on the internal edges of a triangle mesh, so a capsule slides over seams instead of catching. Read when a controller is created |
 | `p.OverlapDuringPhysics` | on | Runs the frame's physics steps on a worker while the `DuringPhysics` actor tick group runs |
+| `p.QueryDuringStep` | on | Traces, sweeps and overlaps run while a step is in flight instead of waiting for it, so `DuringPhysics` ticks and AI perception keep the overlap. A query then sees bodies as of the step in progress. Set 0 to make every query wait for the step again |
+| `p.MaxBodies` | 10240 | Rigid bodies one physics world can hold. Read when the world comes up |
+| `p.MaxBodyPairs` | 10240 | Body pairs the broad phase can queue per step |
+| `p.MaxContactConstraints` | 4096 | Contacts the solver can hold per step; past it contacts are dropped and a warning is logged |
+| `p.TempAllocatorMB` | 10 | Scratch memory one step may use, in megabytes |
+| `p.AsyncColliderCook` | 8 | A frame that has to cook at least this many mesh or hull colliders from model geometry (a level load) cooks them on the background pool; their bodies appear on the ticks after the shape is ready. 0 cooks on the game thread |
+| `p.OptimizeBroadPhaseThreshold` | 256 | A frame that adds at least this many bodies (a level load) ends with one broad phase rebuild; 0 turns it off |
 | `p.Debug` | off | Master switch for the physics debug visualizer; `p.DebugShapes`, `p.DebugContacts`, `p.DebugCOM`, `p.DebugAABB`, `p.DebugVelocity` and `p.DebugConstraints` pick what it draws |
 | `p.Stats` | 0 | Logs a physics stats snapshot every N frames |
 
-**Max Substeps**, **Async Physics Tick**, **Velocity Steps**, **Position Steps** and **Character Mesh Edge Smoothing** are also on the **Engine › Physics** page of Project Settings.
+**Max Substeps**, **Async Physics Tick**, **Velocity Steps**, **Position Steps**, **Character Mesh Edge Smoothing** and the **Capacity** group (Max Bodies, Max Body Pairs, Max Contact Constraints, Temp Allocator, Broad Phase Rebuild Threshold, Queries During Physics Step) are also on the **Engine › Physics** page of Project Settings.
 
 The solver steps trade stability for cost. The `solver-steps-test` row stacks sixteen 5 kg boxes and measures how far the top box ends up from where it should rest after four seconds: 0.38 m at 2 velocity and 1 position step, 0.038 m at the default 10 and 2, and 0.009 m at 30 and 6. Raise the counts for tall piles and towers; leave them alone for ordinary scenes.
 
-Dynamic bodies render at a pose interpolated between the last two physics steps, so motion stays smooth at any refresh rate. Kinematic bodies, static bodies and character controllers are written without interpolation. <Source symbol="PhysicsSystem" />
+Dynamic bodies render at a pose interpolated between the last two physics steps, so motion stays smooth at any refresh rate. The pose is read after every fixed step, also when a frame ran several steps on a worker, so the two poses are always exactly one step apart. Character controllers step once per fixed step, and a joint breaks if the load of any step in the frame crossed its threshold. Only bodies that moved are visited: a level of settled props costs the pose sync nothing, and a body that falls asleep has its resting pose written once. Kinematic bodies, static bodies and character controllers are written without interpolation. <Source symbol="PhysicsSystem" />
+
+To switch a body between `Dynamic` and `Kinematic` while the game runs, call `PhysicsSystem::SetBodyKinematic(entity, kinematic)` rather than editing the component's `type`. It changes the component, the physics body and the render interpolation together, so a body coming back to dynamic starts from where it is instead of blending from the pose it had before it went kinematic. It keeps the body's velocity, so set the velocity you want after the switch. Only a body created `Dynamic` can come back: a body created kinematic has no mass. [Item authority leases](/docs/multiplayer/item-authority-leases/) use this on every handover.
 
 <Callout type="engine">
 Determinism is a same-machine guarantee for replays and server rewind. Multiplayer is server-authoritative; nothing promises that two machines step to the same bits.
@@ -101,6 +121,7 @@ Useful `RigidBodyComponent` fields:
 | `allowSleeping`, `startAsleep` | Keep a body awake, or place a settled prop asleep so it costs nothing until touched |
 | `applyGyroscopicForce` | Gyroscopic precession for fast spinners such as a thrown axe |
 | `freezePositionX/Y/Z`, `freezeRotationX/Y/Z` | Lock individual axes |
+| `lockToPlane` | 2D mode: the body moves in X and Y and spins about Z only, whatever the freeze toggles say. See [2D Sprites and Tilemaps](/docs/gameplay/2d-sprites-and-tilemaps/) |
 
 ### Compound colliders
 
@@ -128,6 +149,10 @@ When two bodies meet, the pair ignores if either side ignores, blocks only if bo
 Characters do not use rigid bodies. They move with a kinematic character controller and a movement component with walking, falling, swimming, ladder and mantling modes. See [Character movement](/docs/gameplay/character-movement/).
 
 A character honours the [contact modifiers](#contact-modifiers) of what it touches: it can jump up through a one-way platform and is carried by a conveyor. It also stands on, and is carried by, a moving platform. Turn on `Collide With Characters` on the `CharacterController` component to make characters block each other even when they have no physical presence.
+
+## Capacity
+
+Jolt fixes its limits when a world is built. The defaults above suit most levels; a destruction or voxel level that fills them gets a warning in the log (`manifold cache full`, `body pair cache full`, `contact constraint buffer full`) and the **query joins / capacity errors** rows on `stat physics`, because Jolt drops the contacts it has no room for and bodies interpenetrate. Raise the limits for the whole project with the `p.Max*` variables (Project Settings, Console Variables), or for one level in **World Settings › Physics**: Max Bodies, Max Body Pairs, Max Contact Constraints and Temp Allocator MB, where 0 means the project default. A level's values rebuild the empty world when Play starts. Memory grows with the limits, so raise only what the warning names.
 
 ## Scene queries
 
@@ -199,7 +224,7 @@ physics->OnCollisionEnterEvents().Add([](uint64_t entityId, const Mowo::Collisio
 
 ## Retune a live body
 
-The `RigidBody` fields above are read when the body is created. To change a running body, use `FPhysicsBodyTuning` from C++ (`SetGravityScale`, `SetMaxLinearVelocity`, `SetMaxAngularVelocity`, `SetAllowSleeping`) or, from Visual Scripting and Wolang, `MPhysicsStatics`: `SetActorGravityScale`, `SetActorMaxLinearVelocity` and `SetActorAllowSleeping`. Each updates the component too, so a later body rebuild keeps the value. Raising the gravity scale of a body that settled while it was zero wakes it. <Source symbol="FPhysicsBodyTuning" />
+The `RigidBody` fields above are read when the body is created. To change a running body, use `FPhysicsBodyTuning` from C++ (`SetGravityScale`, `SetMaxLinearVelocity`, `SetMaxAngularVelocity`, `SetAllowSleeping`) or, from Visual Scripting, `MPhysicsStatics`: `SetActorGravityScale`, `SetActorMaxLinearVelocity` and `SetActorAllowSleeping`. Each updates the component too, so a later body rebuild keeps the value. Raising the gravity scale of a body that settled while it was zero wakes it. <Source symbol="FPhysicsBodyTuning" />
 
 ## Push a body
 
@@ -238,7 +263,7 @@ A `ForceField` component turns an entity into a volume that pushes the dynamic b
 
 `Strength` is a force in newtons; turn on `As Acceleration` to read it as m/s² so heavy and light bodies move alike. A body is inside when its centre of mass is. Fields act through the persistent-force channel, so the effect does not depend on how many fixed steps a frame runs.
 
-For a one-off blast, `FPhysicsForceFields::ApplyRadialImpulse` in C++ and `MPhysicsStatics::ApplyRadialImpulse` in Visual Scripting and Wolang push every dynamic body in a radius with an impulse that fades to the edge; `upwardsBias` lifts the blast origin so props rise as well as scatter. `MPhysicsStatics::AddActorForce` and `AddActorTorque` push one actor for the current frame. <Source symbol="FPhysicsForceFields" />
+For a one-off blast, `FPhysicsForceFields::ApplyRadialImpulse` in C++ and `MPhysicsStatics::ApplyRadialImpulse` in Visual Scripting push every dynamic body in a radius with an impulse that fades to the edge; `upwardsBias` lifts the blast origin so props rise as well as scatter. `MPhysicsStatics::AddActorForce` and `AddActorTorque` push one actor for the current frame. <Source symbol="FPhysicsForceFields" />
 
 ## Contact modifiers
 
@@ -285,7 +310,70 @@ Pick the other body in the **Connected Body** row of the Details panel: a drop-d
 - While a joint is selected the viewport draws both anchors, the axis of each side, a line between them and the joint's limits: the hinge arc, the slider's travel, the distance spheres, the six-axis linear box and twist range. The cone, pulley, gear, rack and path types draw their cone, rope, wheels, rail and curve. A joint with a break threshold turns from orange to red as its load approaches the limit; a broken joint is red and a switched-off one grey.
 - A joint with a break threshold records the force and torque it carried last step in `loadForce` and `loadTorque`.
 
-From Visual Scripting and Wolang, `MConstraintStatics` switches a joint on and off, re-points it at another actor, toggles collision between the joined bodies, changes its break thresholds, reads its load, drives a hinge motor and re-forms a snapped joint with `ResetConstraint`. <Source symbol="MConstraintStatics" />
+From Visual Scripting, `MConstraintStatics` switches a joint on and off, re-points it at another actor, toggles collision between the joined bodies, changes its break thresholds, reads its load, drives a hinge motor and re-forms a snapped joint with `ResetConstraint`. <Source symbol="MConstraintStatics" />
+
+## Follow a route
+
+Add a `RouteFollower` component next to a Kinematic rigid body to carry it along waypoints: a crawler on a gantry, a patrol cart, an elevator. The body is moved through its transform each fixed step, so what stands on it rides along and contacts stay correct.
+
+| Field | Effect |
+| --- | --- |
+| `waypoints` | World-space points of the route, at least two |
+| `closed` | Joins the last point back to the first and loops |
+| `ping_pong` | On an open route, turns round at each end instead of stopping |
+| `speed`, `acceleration` | Travel speed in m/s, and how fast it ramps up or brakes (0 = instant) |
+| `paused`, `reversed` | Hold still, or walk the route backwards |
+| `start_distance` | Where along the route it begins, in metres |
+
+Edit the waypoints while it runs and the follower keeps its place along the new route. <Source symbol="RouteFollowerComponent" />
+
+## Hold and carry a body
+
+Add a `GrabHandle` component to a Dynamic rigid body to hold it with a stiff, damped spring: picking a tool up, dragging a crate, carrying a part. The body keeps colliding while it is held, so a held box stops at a wall instead of passing through it, and the spring never overpowers the solver.
+
+| Field | Effect |
+| --- | --- |
+| `holding` | The hold is active while this is on. Turning it off lets go |
+| `holder_entity`, `hold_offset` | Hold the grab point at an offset in this actor's space, for example in front of the camera. With no holder, the body is held at `target_position` |
+| `grab_point` | The point on the body, in its own space, that is pulled to the target |
+| `frequency`, `damping` | Spring stiffness in Hz and how quickly it settles. Higher frequency is a tighter hold |
+| `max_force`, `max_torque` | The most the spring can push or twist, per axis. A body heavier than `max_force` divided by its weight sags and cannot be lifted |
+| `rotation` | `Free` lets it spin, `Damped` resists spinning, `Follow` keeps the orientation it was grabbed with relative to the holder |
+| `break_distance` | Lets go when the body lags this far behind the target, for example when it is jammed; `broken` is then set. Zero never lets go |
+
+`speedScale` reads how well the spring copes with the weight, from 1 for a light body down to 0.1, so a character can walk slower while carrying something heavy. `distance` is how far the grab point lags.
+
+Two handles on the same body add their forces, which is how two players carry one object: create them through `PhysicsWorld::GrabBody`, which returns an `FPhysicsGrabHandle` to update with `UpdateGrab` and give back with `ReleaseGrab`. From Visual Scripting, `MGrabStatics` grabs an actor by a holder or at a point, releases it, and reports whether it is held, whether the hold broke and its speed scale. <Source symbol="GrabHandleComponent" />
+
+## Ropes, cables and hoses
+
+A `Rope` component simulates a rope as a chain of `segments` points held together by position-based distance constraints, so it stays stable at any frame rate and costs a few hundred operations per rope. It hangs under gravity, swings, drapes over what it touches and, when pulled taut, drags the dynamic bodies it is tied to.
+
+| Field | Effect |
+| --- | --- |
+| `length`, `segments` | Resting length and how many pieces it is cut into. Change `length` while playing to pay out or wind in a winch |
+| `stiffness` | 1 is an inextensible cable, lower stretches like a bungee |
+| `bend_stiffness` | 0 is a loose rope, 1 a springy hose that resists tight bends |
+| `damping`, `gravity_scale` | Air drag, and how much of the world's gravity it feels |
+| `radius`, `collide_with_world` | Thickness, and whether it collides with static geometry |
+| `start_entity`, `start_socket`, `start_offset`, `start_point` | Ties the start to an actor (at a mesh socket or an offset), or holds it at a point. `end_*` does the same for the end |
+| `end_free` | Leaves the end loose so the rope dangles from its start |
+| `apply_to_bodies` | Lets a taut rope pull the dynamic bodies it is tied to |
+| `debug_draw` | Draws the rope as lines |
+
+`tension` and `currentLength` report what the rope is doing. The rope draws itself as a ribbon through a `LineRenderer` on the same actor, thickened to its `radius`. The simulation runs a fixed number of substeps and iterations, so the same inputs give the same rope. <Source symbol="RopeComponent" />
+
+## Contact sounds
+
+Hits, scrapes and rolls can drive sound without per-actor code. Physics reports each contact with the surface type of both shapes (`CollisionInfo::surface` and `otherSurface`), and the contact sound system gathers them into one event per body pair at 30 Hz: an impact carries the impulse, a slide the tangential speed and a roll the spinning speed. A second hit on the same pair inside 0.12 s is swallowed, and a body that has gone to sleep makes no sound. <Source symbol="FContactAudioAggregator" />
+
+Rules in an `FContactSoundTable` choose the sound: a rule names the kind, optionally one or both surfaces, and a cue. The most specific rule wins (a surface pair beats a single surface beats the catch-all) and a pair matches in either order. Volume and pitch follow the impulse or speed between `minInput` and `maxInput`. Impacts are limited to a budget per time window so a pile collapsing does not flood the voice budget, and a slide or roll is a loop that starts with the contact, follows its speed and stops a moment after it ends. <Source symbol="FContactSoundSystem" />
+
+Author the table as a `.mcontactsound` asset: each rule names the kind, the two surfaces (or `Any`), the sound, the input range that maps to volume and the pitch range. Open it in the asset editor like any data asset, then load it at level start with `FContactSoundSystem::LoadTableAsset(path)` or the Visual Scripting node `LoadContactSoundTable`. With no rules nothing plays. Rules can also be added from code with `GetTable().AddRule(...)`. <Source symbol="ContactSoundTableAsset" />
+
+## Record and compare physics
+
+Set `p.Record 1` to record every body's pose after each physics step into a `FPhysicsRecording`, and `p.Record 0` to stop. Frames store only the bodies that moved, so a settled scene costs a few bytes per step. `FPhysicsRecording::SaveToFile` writes a `.mphysrec` file and `LoadFromFile` reads it back. `FPhysicsRecording::FindDivergence(a, b, tolerance)` names the first frame and body where two recordings part, which is how a determinism or net-sync difference is found: record both runs and compare. Two runs only match when the simulation is deterministic, so turn on `p.Deterministic` for both. Bodies are compared in the order they were created, because entity ids differ from run to run. <Source symbol="FPhysicsRecorderSystem" />
 
 ## Physics materials and surfaces
 
@@ -364,7 +452,7 @@ When the scene has a focus point (the main camera by default), dynamic bodies fa
 
 The physics world can be saved and restored whole, which is what rollback netcode, time rewind and "undo the last second" need. Turn on **Deterministic Physics** in Project Settings under Physics first: jobs then run in a fixed order, so the same inputs replay to the same bits on the same build and CPU. **Rollback Snapshot Frames** sets how many whole-world snapshots the ring keeps; each is a full copy of every body, constraint and the contact cache that warm-starts the next step.
 
-From Visual Scripting or Wolang, call `CapturePhysicsSnapshot(tick)` once per tick, `RestorePhysicsSnapshot(tick)` to go back, and `ResimulatePhysics(fromTick, toTick)` to restore a tick and step forward to another. `GetPhysicsChecksum` and `GetPhysicsSnapshotChecksum(tick)` return a hash of the state as 16 hex digits; two peers that simulated the same inputs get the same string, so comparing them catches a desync. A snapshot is the world before its tick is simulated, and capturing a tick drops every later one, because a corrected past invalidates what was recorded after it.
+From Visual Scripting, call `CapturePhysicsSnapshot(tick)` once per tick, `RestorePhysicsSnapshot(tick)` to go back, and `ResimulatePhysics(fromTick, toTick)` to restore a tick and step forward to another. `GetPhysicsChecksum` and `GetPhysicsSnapshotChecksum(tick)` return a hash of the state as 16 hex digits; two peers that simulated the same inputs get the same string, so comparing them catches a desync. A snapshot is the world before its tick is simulated, and capturing a tick drops every later one, because a corrected past invalidates what was recorded after it.
 
 In C++, `FPhysicsResimulator::Run` does the same with a callback that runs before each replayed step, the place to re-apply that tick's forces and impulses. It records every replayed tick back into the ring and reports the first tick whose state differs from the first run, so an input that changed shows up as a divergence at the tick after it and a non-deterministic step shows up as a mismatch with unchanged inputs.
 
@@ -386,7 +474,7 @@ With `p.Debug 1` the physics world draws itself over the viewport. Each aspect h
 | `p.DebugIslands` | a box around each island, the awake bodies joined by a contact or a constraint, each in its own colour |
 | `p.DebugBroadPhase` | each body's bounds tinted by its object layer, dimmer for the non-moving broad phase |
 
-`stat physics` opens an overlay with the body count against the budget, the dynamic, kinematic and static split, how many are active and how many sleeping, the island count, contacts, constraints and the last and average step time. The island count is only worked out while the overlay or the island view is on, so the panel costs nothing when hidden. <Source symbol="PhysicsStats" />
+`stat physics` opens an overlay with the body count against the budget, the dynamic, kinematic and static split, how many are active and how many sleeping, the island count, contacts, constraints and the last and average step time. It also shows the threading counters: queries that waited for a step (`query joins`) against queries that ran alongside it, the job backlog, and steps that dropped contacts for want of capacity. The island count is only worked out while the overlay or the island view is on, so the panel costs nothing when hidden. <Source symbol="PhysicsStats" />
 
 ## More physics
 

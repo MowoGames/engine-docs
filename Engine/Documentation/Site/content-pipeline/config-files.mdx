@@ -5,9 +5,10 @@ order: 5
 sources:
   - Engine/Source/Runtime/Core/Public/Core/ConfigIni.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
+  - Engine/Source/Runtime/Core/Public/Core/ConfigWatcher.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/TextureImportSidecar.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetRegistry.h
-verifiedAt: 7f8f31f8d
+verifiedAt: 424689d47
 ---
 
 Project and engine configuration is INI, in the dialect Unreal developers know: sections, `Key=Value` lines, array operators and layered files where a project overrides the engine and a user overrides the project <Source symbol="FConfigIniFile" />. Game data is [MDF](/docs/content-pipeline/mdf/); the `.mproject` and `.mplugin` manifests are JSON; per-user editor state nobody edits by hand is binary MDF (`.mdfb`).
@@ -51,6 +52,12 @@ When a project opens, the editor builds the `Engine` and `Game` hierarchies, app
 ## Console variables
 
 `[ConsoleVariables]` sets cvars as project settings. A name that is not registered yet (a plugin that loads later) is remembered and applied when it registers, so a plugin that is off does not fail the load. `Scalability.ini` sections named `[<Group>@<Level>]` set the cvars a scalability level adds, for example `[ShadowQuality@3]`. See the [console variable reference](/docs/reference/console-variables/).
+
+## Editing config files while the editor runs
+
+The editor watches the config files of the open project. When another tool (a text editor, a git checkout) changes `Config/Engine.ini`, any `DefaultEngine.ini` or platform layer, or your user `Engine.ini`, it waits for the file to stop changing for half a second, re-reads the layers in the same order as at startup, and applies every `[ConsoleVariables]` entry that differs. A key you delete falls back to the next layer down, or to the variable's default. A change that cannot take effect without a restart is not applied; the editor shows a **Restart required** notice naming it instead. Changes the editor wrote itself (a Project Settings page saving) are recognised and never reported as outside edits. `Plugins.ini` and the `.mproject` only raise a notice, because plugins load at startup and the start scene and game mode are read when a project opens.
+
+Hosts started with `--no-user-config` never watch the user file. Set `editor.ReloadConfigOnDiskChange` to `0` to read config files at startup only.
 
 ## Class config sections
 

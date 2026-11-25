@@ -3,6 +3,8 @@ title: Components
 description: The difference between actor components and ECS components, how they connect, and how to write each kind.
 order: 2
 sources:
+  - Engine/Source/Runtime/Camera/Public/Camera/Components/CameraComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MActorStatics.h
   - Engine/Source/Runtime/Game/Public/Game/MActorComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MSceneComponent.h
   - Engine/Source/Runtime/Game/Public/Game/AActor.h
@@ -19,7 +21,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/Components/SpringArmComponent.h
   - Engine/Source/Runtime/Game/Public/Movement/GameplayMovementSystem.h
   - Engine/Source/Runtime/Game/Public/Game/MMovementStatics.h
-verifiedAt: 5922e6e5e
+verifiedAt: 5557d921c
 ---
 
 Mowo has two kinds of component, and they are not interchangeable. An **actor component** is an object with state, methods and a lifecycle, attached to an actor. An **ECS component** is a plain data struct attached to an entity and processed in bulk by a system. Most gameplay code uses actor components; the engine uses ECS components for data that thousands of entities share.
@@ -121,6 +123,8 @@ static float DamageTarget(Mowo::AActor* target, float amount, Mowo::AActor* inst
 ```
 
 ### Engine actor components
+
+A mesh component keeps its own local location, rotation and scale relative to the actor's root, and the draw follows it, so a body can sit below or turn about the root. `MSkeletalMeshComponent` takes its animation graph as data: `controllerPath` names the `.animgraph` and is saved with the actor, and `hiddenBones` lists bones (and everything under them) collapsed out of the skinned draw, such as `Head` on a first-person body, while sockets and bone queries keep the true pose. On any mesh component `ownerNoSee` hides it from the actor that owns the camera the frame is drawn from and `onlyOwnerSee` shows it only to that actor (first-person arms); the editor view, which has no owner, shows both. A camera rig is an actor of its own, so the rig names the actor it follows as the owner (`CameraComponent` view owner, set every frame); a camera with no rig is its own owner. Socket attachment finds the component that owns the socket: `AttachActorToSocket` with a bone name such as `hand_r` follows that bone of the parent's skeletal mesh, so a held sword rides in the hand.
 
 A few ready-made actor components you will reach for early:
 

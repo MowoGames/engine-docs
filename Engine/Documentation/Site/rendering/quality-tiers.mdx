@@ -9,7 +9,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/QualityAutoTier.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/DeviceProfiles.h
   - Engine/Config/BaseDeviceProfiles.ini
-verifiedAt: 4312aef10
+verifiedAt: f1dfd4d02
 ---
 
 A quality tier is one setting that decides which rendering features run and how much each one may spend. Mowo has five tiers: **Low, Medium, High, Epic and Cinematic** (). High is the code default.
@@ -213,7 +213,7 @@ One dial is sometimes too blunt: a machine can be short of fill rate and long on
 | `sg.ReflectionQuality` | SSR, SDF, ray-traced and translucent reflections |
 | `sg.PostProcessQuality` | Bloom, motion blur, depth of field kernel, auto-exposure, subsurface scattering |
 | `sg.AntiAliasingQuality` | Render scale and upscaler quality |
-| `sg.TextureQuality` | Anisotropy, terrain virtual texture |
+| `sg.TextureQuality` | Anisotropy, terrain virtual texture, the share of the automatic texture streaming pool |
 | `sg.EffectsQuality` | Particle budgets, volumetric fog, clouds |
 | `sg.FoliageQuality` | Foliage density |
 
@@ -255,6 +255,7 @@ The two tables above list the switches and the headline budgets. These are the r
 | Cloud implementation | 2.5D | 2.5D | 2.5D | raymarched | raymarched |
 | Particle overdraw budget (screens) | 6 | 12 | 24 | unlimited | unlimited |
 | Hi-Z occlusion cull | on | on | on | on | off, so a capture never loses a caster |
+| Secondary directional lights (moon, fill; unshadowed) | 0 | 2 | 2 | 2 | 2 |
 
 Low gives up Global Illumination, screen-space reflections, ambient occlusion, bloom and motion blur and renders at 0.75 of the output resolution with Performance upscaling, which is the budget of an RTX 3050 class card at 1440p. The Steam Deck device profile borrows the Medium Global Illumination row on top of Low. Ray-traced passes, the hardware GI gather, virtual shadow maps, MegaLights, volumetric fog and the meshlet path start at Epic, and ray-traced sun shadows only on Cinematic.
 
@@ -287,8 +288,16 @@ Values from this file sit below every other INI and below the player's own setti
 |---|---|---|
 | `r.DynamicRes` | -1 | -1 auto, 0 off, 1 on |
 | `r.DynamicRes.TargetMs` | 16.6 | GPU frame-time target in milliseconds |
-| `r.DynamicRes.MinScale` | 0.6 | Lowest render scale |
-| `r.DynamicRes.MaxScale` | 1.0 | Highest render scale |
+| `r.DynamicRes.MinScale` | 0.75 | Lowest render scale as a fraction of the upscaler preset's own scale, never below the upscaler's minimum (TSR 0.25, vendor upscalers 0.33) |
+| `r.DynamicRes.MaxScale` | 1.0 | Highest render scale; the preset's own scale is always the ceiling |
+| `r.DynamicRes.GI` | 1 | Lower the screen-probe Global Illumination trace density before the render scale |
+| `r.DynamicRes.GI.MinShare` | 0.2 | Share of the GPU frame the screen-probe passes must take before a density step is worth it |
+
+A device that runs hot gives quality back before the OS throttles it. `thermal.Governor` (default 1) reads the thermal state the platform reports (the Android thermal status, the macOS thermal state) and lowers the dynamic resolution ceiling to 0.9, 0.75 and 0.6 of the band at fair, serious and critical, and tightens the GPU time target to 0.85 and 0.7 at serious and critical. It takes quality away at once and gives one level back after `thermal.RelaxSeconds` (20) of a cooler reading; `thermal.PollSeconds` (1) is how often the state is read, and `thermal.Force` (0 to 3) replaces the reading to try a level on a desk. It acts only while dynamic resolution is on.
+
+The band is per upscaler preset: Quality (0.667) moves between 0.5 and 0.667, Performance (0.5) between 0.375 and 0.5 under TSR. TAA and no upscaler render at the output scale and leave the band alone. A frame that takes no step keeps the scale exactly, so the preset's own scale is held without snapping to the 0.05 grid.
+
+When the frame runs late and Global Illumination uses screen probes, the controller first steps the probe trace density down, to about 0.6 then 0.35 of the tier's rays, because the screen-probe passes are the largest single cost of the frame. Only when that is spent does the render scale drop. The climb back runs the other way: the render scale first, then the density. Low and Medium tiers use the legacy gather and are not affected. The change needs no reallocation; the first frames after a step converge from the previous history.
 
 A scale step reallocates nothing: passes render into a sub-rectangle of full-size targets, so temporal histories survive it.
 

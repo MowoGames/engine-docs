@@ -10,7 +10,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Session/FNetSession.h
   - Engine/Source/Runtime/Game/Public/Game/AActor.h
   - Engine/Source/Runtime/Math/Public/Math/FRotator.h
-verifiedAt: 5922e6e5e
+verifiedAt: 588510704
 ---
 
 This guide builds a door that works in a co-op session. Any player can open or close it, the host decides the result, and every machine sees the same state. It follows the pattern of the engine's own sandbox example, `ANetShooterActor`, which wires its networking in `BeginPlay` so no host code has to change.
@@ -263,13 +263,27 @@ Build the game module, place an `ANetDoor` in your scene and save the scene. In 
 The door adds its `NetworkObjectComponent` at runtime, so it has no placed-object id stamped at save time. The client then matches the host's spawn to its own copy of the door by prefab path and nearest pose <Source symbol="NetworkObjectComponent" />. Identical doors that start in the same place can pair up the wrong way round.
 </Callout>
 
+## Ask who has authority
+
+Every actor answers the question without touching the session <Source symbol="AActor::HasAuthority" />:
+
+| Function | Answer |
+|---|---|
+| `HasAuthority()` | True on the machine whose copy is the real one: always in a standalone game, the host in a session, and a client for an actor only it created. |
+| `GetLocalRole()` | `Authority`, `SimulatedProxy`, or `AutonomousProxy` (the client that owns the actor). |
+| `GetRemoteRole()` | The role the other machines give it: `None` when the actor is not replicated. |
+| `IsLocallyControlled()` | True for a pawn the player on this machine drives. |
+| `GetNetMode()`, `IsNetMode(mode)` | `Standalone`, `DedicatedServer`, `ListenServer` or `Client`. |
+
+They are reflected, so a [Visual Scripting](/docs/visual-scripting/) graph calls the same functions on any actor. Guard a host-only change with `HasAuthority()` and let `IsLocallyControlled()` decide who plays the camera shake or reads the input.
+
 ## Checklist
 
 - The backing entity has a `NetworkObjectComponent`.
 - Synchronized state is in `MREPLICATED` fields on a reflected component, or in the replicated transform.
 - Requests are `MFUNCTION(Server)` methods, allowed for the right callers.
 - Only the host changes authoritative state.
-- `RegisterReplicatedActor` in `BeginPlay` and `UnregisterReplicatedActor` in `EndPlay`.
+- `RegisterReplicatedActor` in `BeginPlay` and `UnregisterReplicatedActor` in `EndPlay`. An actor destroyed by gameplay drops out of the registry on its own, so a lookup never returns a destroyed actor.
 - Every machine runs the same build. A changed replicated field changes the schema id, and mismatched peers refuse each other.
 
 ## Related

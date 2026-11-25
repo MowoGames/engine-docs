@@ -3,14 +3,16 @@ title: Post-processing and volumes
 description: Tonemapping, exposure, bloom, depth of field and grading, and how post-process volumes blend them by priority as the camera moves.
 order: 13
 sources:
+  - Engine/Source/Runtime/Renderer/Public/Renderer/PostMaterialChain.h
+  - Engine/Source/Runtime/Camera/Public/Camera/Components/CameraComponent.h
   - Engine/Source/Runtime/Volumes/Public/Volumes/VolumeManager.h
   - Engine/Source/Runtime/Volumes/Public/Volumes/VolumeProfile.h
   - Engine/Source/Runtime/Volumes/Public/Volumes/VolumeProfileSerialize.h
   - Engine/Source/Runtime/Volumes/Public/Volumes/Components/VolumeComponent.h
   - Engine/Source/Runtime/Game/Public/Game/APostProcessVolume.h
-  - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/AcesOutputTransform.h
-verifiedAt: df96684dd
+  - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
+verifiedAt: 6d0eb4f37
 ---
 
 The post-processing chain turns the lit HDR image into the final frame: depth of field, motion blur, auto-exposure, bloom, tonemapping, color grading, lens flare and sharpening. Each scene has a baseline set of post-process values. **Volumes** override those values in regions of the world, or everywhere, and blend between each other as the camera moves.
@@ -21,15 +23,16 @@ The post-processing chain turns the lit HDR image into the final frame: depth of
 
 | Effect | Notes | Main controls |
 |---|---|---|
-| Depth of field | Circle of confusion from depth; a separable gaussian below Epic, a circular bokeh disk at Epic and Cinematic | `r.DoF.Bokeh` (-1 tier, 0 gaussian, 1 disk) |
+| Depth of field | Circle of confusion from depth; a separable gaussian below Epic, a circular bokeh disk at Epic and Cinematic. With the physical camera on, the blur follows the f-stop, the focal length and the focus distance (see below). | `r.DoF.Bokeh` (-1 tier, 0 gaussian, 1 disk), `r.DepthOfField.PhysicalCamera` |
 | Motion blur | Tile-based; uses per-object velocity when available. Off at Low. Skipped on a view's first frame, on a camera cut (a jump of more than 25 m or a turn past 90 degrees) and on the frame after a stall of more than 0.25 s, so a teleport or a load hitch never smears the picture. | `r.MotionBlurObject` (default 1) |
 | Auto-exposure | Runs before bloom, so the bloom threshold works on exposed luminance | `r.AutoExposure.*` |
 | Local exposure | Lifts shadows and holds highlights locally after lighting | `r.LocalExposure` (-1 scene, 0 off, 1 on) |
 | Bloom | A mip chain of 4 to 6 levels depending on tier. Off at Low. | `r.Bloom.Mips` |
-| Tonemap | See below | `r.Tonemap` |
+| Tonemap | See below, including the tone curve | `r.Tonemap` |
+| Translucency | Glass, water and soft-blended meshes composite onto the depth-of-field result, so in-focus glass stays sharp over a blurred background. Particles still draw before depth of field. | `r.Translucency.AfterDoF` (default 1; 0 restores the old order) |
 | Color grading | Contrast, saturation, white balance, lift-gamma-gain, a 3D LUT, chromatic aberration, film grain | `r.ColorGradingLUT` (a `.cube` path; 1D and 3D files both load, a 1D curve is expanded to a 33-cube) |
 | Vignette | Darkens the frame edges before the tonemap, like a lens. Intensity scales the darkening and is bounded, so the corners never fall below half brightness; the default is subtle. | Volume and scene settings |
-| Post-process material | A PostProcess-domain material evaluated as a fullscreen pass after tonemapping | `r.PostProcessMaterial` |
+| Post-process material | An ordered, weighted list of PostProcess-domain materials at four points (see below) | `r.PostProcessMaterial` for the single After Tonemap path |
 | Lens flare | Screen-space ghosts and halo | Volume and scene settings |
 | Sharpening | Contrast-adaptive sharpening in the final pass | `r.Sharpness` (percent) |
 
@@ -42,8 +45,8 @@ The project-wide defaults are on **Project Settings > Engine > Post Process**.
 | Value | Operator |
 |---|---|
 | -1 | The scene's setting |
-| 0 | ACES (fitted curve) |
-| 1 | AgX |
+| 0 | ACES (fitted curve). The operator scenes saved before AgX became the default keep. |
+| 1 | AgX. The default for a new level; it keeps the hue of bright saturated lights, where the fitted ACES curve shifts them (blue toward purple, orange toward yellow). |
 | 2 | Reinhard |
 | 3 | Clamp |
 | 4 | ACES reference transform with an output transform for the display () |
@@ -51,24 +54,69 @@ The project-wide defaults are on **Project Settings > Engine > Post Process**.
 
 For HDR displays, see [Display, frame rate and HDR](/docs/rendering/display-and-hdr/#hdr-output).
 
+#### The tone curve
+
+Switch on **Tone Curve** in the scene's Tonemap section (or in a volume profile) to shape contrast ahead of whichever operator is selected. The curve works on luminance, in stops around mid-grey, and scales the colour by the result, so hue is kept:
+
+| Control | Effect |
+|---|---|
+| Slope | Contrast around mid-grey. 1 leaves it alone. |
+| Toe | Positive lifts the stops below mid-grey, negative crushes them. |
+| Shoulder | Positive softens the stops above mid-grey, negative sharpens them. |
+| Black Clip | A linear luminance removed before shaping; pixels under it go black. |
+| White Clip | Pushes the top end past the operator's white, so highlights clip sooner. |
+
+With every control at its neutral value the curve is the operator alone. The curve is skipped when Tonemap is off.
+
 ### Exposure
 
 Manual exposure is a multiplier, default 1.8. Turn on the **physical camera** in the scene's post-process settings to expose from f-stop, shutter time and ISO instead; the multiplier is then ignored.
 
-Auto-exposure is on at every tier. Metering is average, spot, center-weighted or a histogram percentile window (`r.AutoExposure.Metering`). The variables below override the scene's values for testing:
+Auto-exposure is on at every tier. It meters the scene's absolute luminance over about 30 stops (2^-10 to 2^20 cd/m2), so a scene lit in lux or lumens meters correctly: a white wall under a 100000 lux sun and the same wall under moonlight both settle on mid-grey with one camera setup. Metering is average, spot, center-weighted or a histogram percentile window (`r.AutoExposure.Metering`).
+
+The limits of the adapted exposure are **Min EV100** and **Max EV100**, on the same scale as the physical camera (exposure = 1 / (1.2 x 2^EV100)). Min EV100 is the darkest scene the adaptation lifts to, Max EV100 the brightest it darkens for. The defaults (about -4.3 and 4.1) reproduce the fixed 0.05 to 16 clamp older scenes used, which suits lights authored in Legacy units; for a scene lit in lux or lumens widen the range (about -6 to 18 covers moonlight to a noon sun). Scenes saved before the range was EV100 are converted on load, so they look the same.
+
+The variables below override the scene's values for testing:
 
 | Variable | Meaning |
 |---|---|
 | `r.AutoExposure.EV` | Compensation in stops added on top of the scene's |
-| `r.AutoExposure.MinEV`, `r.AutoExposure.MaxEV` | Limits of the adapted exposure in stops. Lower the maximum to stop a dark scene being lifted to grey. |
+| `r.AutoExposure.MinEV100`, `r.AutoExposure.MaxEV100` | Limits of the adapted exposure in EV100. Raise the minimum to stop a dark scene being lifted to grey. |
 | `r.AutoExposure.SpeedUp`, `r.AutoExposure.SpeedDown` | Adaptation rates toward brighter and darker scenes |
 | `r.AutoExposure.LowPercent`, `r.AutoExposure.HighPercent` | The percentile window for histogram metering |
 
-The exposure limits belong on volumes in a real scene: a dark room can lower the ceiling and release it outdoors.
+The exposure limits belong on volumes in a real scene: a dark room can raise the minimum and release it outdoors.
+
+### Depth of field from the camera
+
+With the physical camera on and **Physical Depth Of Field** enabled (the default), the blur is the thin-lens circle of confusion of the camera's f-stop, the focal length the field of view implies on the **Sensor Width** (36 mm is full frame) and the focus distance. f/1.4 and f/16 then change the blur as well as the exposure. Max Blur still caps the blur radius, at 16 pixels per unit. With the physical camera off, or Physical Depth Of Field off, depth of field uses Focus Range and Max Blur as before. `r.DepthOfField.PhysicalCamera 0` forces the artistic path.
 
 ### Accessibility
 
 After the tonemap, `r.ColorBlind.Mode` applies color-vision correction (1 protanopia, 2 deuteranopia, 3 tritanopia) at `r.ColorBlind.Strength`. `r.ColorBlind.Simulate` previews the frame as a viewer with that deficiency sees it. `r.DisplayGamma` (1.8 to 2.6, default 2.2) re-encodes the SDR image for the player's panel.
+
+### Post-process materials
+
+A post-process material is a material graph in the PostProcess domain that runs as a fullscreen pass over the scene. Several can run in one frame, each at one of four points:
+
+| Point | Reads | Writes | Notes |
+|---|---|---|---|
+| Before Tonemap | The HDR scene | An HDR image | The tonemapper, bloom grading and exposure see the result. Bloom was already built from the unmodified scene. |
+| Replace Tonemapper | The HDR scene, after the Before Tonemap materials | An LDR image that takes the tonemapped picture's place | The material owns the tonemap and the bloom composite. The built-in tonemap still runs underneath for the passes that read its image, so this point does not save its cost. |
+| After Tonemap | The tonemapped image | An LDR image | The default, and the only point the single `r.PostProcessMaterial` path used before. |
+| After TAA | The anti-aliased image | An LDR image | Never enters the temporal history, so a scanline or a grain effect does not smear. |
+
+At one point materials run in priority order, lowest first, and a tie runs in path order. At most eight run at a point. Each has a weight from 0 to 1 that blends its result over its input (`lerp(input, result, weight)`, on top of the graph's own opacity), so an effect fades in and out without a shader change.
+
+The list comes from three places and is merged every frame:
+
+- **The scene**: `ScenePostProcess::postMaterials`, and the older single path (`r.PostProcessMaterial`, or the scene or volume's Post Material path), which counts as an After Tonemap entry that runs first.
+- **Post-process volumes**: a volume profile saves `post_material_entry` children with `path`, `point`, `priority` and `weight`. Each volume's weights are scaled by its blend weight at the camera, and the same material at the same point from several volumes adds up to at most 1.
+- **Cameras**: the Camera component's **Post Process** category has a material, a point (0 before the tonemapper, 1 after it, 2 in place of it, 3 after TAA), a priority and a weight. A camera adds an entry for the view it renders; it never changes another camera's chain.
+
+The first After Tonemap material runs as a pass of the post graph, so it takes part in the graph's barriers and transient aliasing. The others record as direct fullscreen passes with their own persistent LDR or HDR targets, two per format, ping-ponged so a pass never reads the image it writes.
+
+A post-process material reads its first four parameter lanes from its named parameters and from [Material parameter collections](/docs/rendering/material-parameter-collections/), so a collection value can drive a pulse, a vignette or a distortion strength.
 
 ## Volumes
 
@@ -105,12 +153,13 @@ The renderer reads the blended `ScenePostProcess` at `BeginScene`, so it needs n
 
 | Group | Slots |
 |---|---|
-| Tonemap and exposure | Tonemap on/off, exposure; auto-exposure metering, compensation, minimum and maximum EV, adaptation speeds, low and high percentiles |
+| Tonemap and exposure | Tonemap on/off, exposure; the tone curve (on/off, slope, toe, shoulder, black and white clip); auto-exposure metering, compensation, minimum and maximum EV100, adaptation speeds, low and high percentiles |
 | Bloom | On/off, intensity, threshold, clamp |
 | SSAO | On/off, radius, intensity, bias |
 | SSR | On/off, intensity, max distance, max steps, thickness, roughness cutoff |
 | Anti-aliasing | Scene AA mode |
 | Color grading | Contrast, saturation, temperature, lift, gamma, gain, LUT path and strength, post-process material path |
+| Post-process materials | The list of materials with their point, priority and weight; a volume adds entries instead of replacing the list |
 | Vignette, chromatic aberration, film grain | On/off and their parameters |
 | Depth of field | On/off, focus distance, focus range, max blur |
 | Motion blur | On/off, intensity, max velocity |

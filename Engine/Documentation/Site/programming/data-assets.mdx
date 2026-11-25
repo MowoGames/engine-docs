@@ -1,0 +1,90 @@
+---
+title: Data assets as objects
+description: Author designer data as a C++ class with properties, functions and instanced sub-objects, save it as a .data file, and reference it by type.
+order: 6
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/MDataAsset.h
+  - Engine/Source/Runtime/Game/Public/Game/TDataAssetRef.h
+  - Engine/Source/Runtime/Game/Public/Game/MDataAssetStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/MDataAssetProbe.h
+verifiedAt: 55f27937c
+---
+
+A data asset is data a designer edits and code reads: a weapon, an enemy, a loot table. An object data asset is a class. It has `MPROPERTY` fields, `MFUNCTION`s that Visual Scripting can call, inheritance, and sub-objects it owns. It is saved as a `.data` file and loaded as an `MObject`.
+
+## Declare one
+
+```cpp title="MWeaponData.h" nocompile
+MCLASS()
+class MWeaponData : public Mowo::MDataAsset {
+public:
+	MGENERATED_BODY()
+
+	MPROPERTY(EditAnywhere, Category = "Combat")
+	float Damage = 12.5f;
+
+	MPROPERTY(EditAnywhere, Instanced)
+	TObjectPtr<MMuzzleFlash> Flash;
+
+	MPROPERTY(EditAnywhere, Instanced)
+	std::vector<TObjectPtr<MHitEffect>> HitEffects;
+
+	MPROPERTY(EditAnywhere)
+	Mowo::TDataAssetRef<MWeaponData> Upgrade;
+
+	MFUNCTION()
+	float DamageWithBonus(float Bonus) const {
+		return Damage + Bonus;
+	}
+};
+```
+
+- **Instanced** fields own their object. The file nests the sub-object under the field, and loading builds a separate copy for every load. Instanced fields on actors and components are saved with the level the same way.
+- **`TDataAssetRef<T>`** is a typed reference. It saves as an asset reference, so the cook and the asset picker follow it, and `Get()` loads the asset and checks its class.
+- Override `PostLoad()` to derive state after the properties are read.
+
+## Load and save
+
+```cpp nocompile
+MWeaponData* rifle = static_cast<MWeaponData*>(Mowo::FDataAssetStore::LoadAs("Content/Weapons/Rifle.data", MWeaponData::StaticClass()));
+MWeaponData* upgrade = rifle->Upgrade.Get();
+```
+
+`FDataAssetStore` builds the object from the file, roots it and returns the same pointer on every later load of that path, until `Unload`. `Create` makes one in memory and `Save` writes it. From a graph, the **Load Data Asset** nodes return the object, and **Get Property** and function calls work on it like on any object.
+
+<Source path="Engine/Source/Runtime/Game/Public/Game/MDataAsset.h" />
+
+## The file
+
+A `.data` object asset is an asset package: it has an id and an import table for the assets it references, so the Content Browser, delete-safety and redirects treat it like any other asset. The payload is the data asset document:
+
+```mdf
+Package "DataAsset" {
+    id = uuid("0f4c1a52-6d3e-4b7a-9c21-5e8a7b3d9f10")
+}
+
+DataAsset "Data" {
+    schema_version = 3
+    data_class = "MWeaponData"
+    Object {
+        class = "MWeaponData"
+        Damage = 40
+        Instanced "Effects:Flash" {
+            class = "MMuzzleFlash"
+            Power = 3
+        }
+    }
+}
+```
+
+Only the properties that differ from the class defaults are written, so raising a default in C++ reaches every asset that never overrode it, and adding a field does not rewrite the files that exist. An instanced sub-object is stored under its own name (`Effects:Flash`), so inserting an element in the middle of a list changes one node instead of renumbering the rest. A field a newer build added is kept when an older build saves the file. A class can raise its own version with `FDataAssetStore::RegisterClassVersion` and a migration that runs on older files before any property is read. A bare document from before the package format still loads, and its next save writes the package.
+
+## Struct data assets keep working
+
+The earlier form, one reflected struct inside a `DataAsset`, still loads and saves as before; its file has `data_type` instead of `data_class`, and `FDataAssetStore` leaves it alone. To move one to an object, declare a class with the struct's fields as `MPROPERTY` fields and write the same values into a new `.data` file (`FDataAssetStore::Create`, set the fields, `Save`). Both forms can live in one project.
+
+## In the editor
+
+Right-click in the Content Browser, **More > Data Asset from C++ Class**, and pick the class. A `.data` file is created with the class defaults and opens in the Data Asset editor on double-click. The editor shows the asset's fields; an `Instanced` object field has a class picker (with a "None" entry unless the field is `NoClear`), and an `Instanced` list has an add picker, and per-element Up, Down and Remove buttons (not on an `EditFixedSize` list). Each instanced object appears as a section of its own with its fields. Every change is an undo step.
+
+Moving and removing from the middle of a list is available for lists of pointers and plain values; a list of strings or structs can be grown and shrunk at its end only.

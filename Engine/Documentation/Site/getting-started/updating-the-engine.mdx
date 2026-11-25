@@ -1,0 +1,114 @@
+---
+title: Update the engine
+sidebarTitle: Update
+description: How the Project Launcher finds, downloads, verifies and installs a new Mowo Engine beside your old versions, and how to control channels, timing and projects.
+order: 15
+sources:
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EngineUpdateState.h
+verifiedAt: 6b7cce991
+---
+
+The Mowo Project Launcher keeps the engine up to date for you. It checks for a new version, downloads only what changed since the version you have, verifies every byte and signature, and installs the new version **next to** the ones you already use. It never replaces a version a project uses, never touches an editor that is running, and never changes a project until you ask it to.
+
+## Find out when there is a new version
+
+The launcher checks when it starts and then every 24 hours while it stays open. When a newer version exists, a slim banner appears at the top of the launcher (**Engine 1.2.0 is available**) and a card appears at the bottom of the sidebar. Neither blocks anything: close the launcher or ignore them.
+
+You can also check by hand:
+
+- In the launcher, open **Engine installs** and choose **Check for updates**.
+- In Mowo Editor, choose **Help > Check for Updates...**. It opens the launcher on the **Engine installs** page and checks there.
+
+When the launcher has found a newer version, Mowo Editor also shows an **Update 1.2.0** item on the left of its status bar. Clicking it opens the launcher. The editor never updates itself.
+
+<Screenshot id="launcher-engine-update-banner" alt="Mowo Project Launcher, Projects page: a slim blue-bordered banner under the title bar reading 'Engine 1.2.0 is available.' with View and Skip buttons, and the update card above the account row in the sidebar." />
+
+## Install an update
+
+Open **Engine installs**. The card at the top says what is available and offers:
+
+| Button | What it does |
+|---|---|
+| **Update now** | Downloads, verifies and installs the new version in one go. |
+| **Download in background** | Downloads and verifies it, then waits. **Install now** finishes in a moment. |
+| **Release notes** | Shows what changed. |
+| **Skip this version** | Hides this version until a newer one comes out. Not offered for a security update. |
+
+While a download runs you can **Pause** it and **Resume** it later, also after closing the launcher: it continues from the chunks it already has. **Cancel** throws the partial download away.
+
+Updates are chunked. If the update server has a patch for the version you run, the launcher downloads only the pieces that changed and copies the rest from your installed version. Otherwise it downloads the whole version in pieces. Either way every piece is checked against its hash as it arrives.
+
+<Screenshot id="launcher-engine-update-panel" alt="Mowo Project Launcher, Engine installs page: the update card with the title 'Mowo 1.2.0 is available', the download size line, Update now, Download in background, Release notes and Skip this version buttons, and below it the Channel, When an update is found, Check automatically, Download speed and Install new versions in rows." />
+
+### Where the new version goes
+
+The new version installs into its own folder, `Mowo Engine 1.2.0`, in the same folder as the version you installed with (for example `%LOCALAPPDATA%\Programs\Mowo Games` on Windows). If that folder is not writable, or you prefer another place, set **Install new versions in** on the same page. The launcher needs free space for the whole new version plus the download, and tells you how much if there is not enough.
+
+An update that finishes shows **Mowo 1.2.0 is installed**. Choose **Switch to its launcher** to continue in the new version's launcher, or **Upgrade projects...** (see below).
+
+## Your projects stay where they are
+
+A project opens in the engine version it names. Installing a new version changes no project. To move projects to a new version, open **Engine installs**, open the version's **...** menu and choose **Upgrade projects to this version...**. The launcher lists the projects that use an older version and asks first. Back your projects up before you do: once a newer editor saves a project, an older version may not read it. A project's own right-click menu can switch it back.
+
+## Channels
+
+| Channel | For |
+|---|---|
+| **Stable** | Production work. The default. |
+| **Beta** | New versions earlier. They can be unstable and can save projects in a format your stable version cannot read. |
+
+Choosing **Beta** shows a warning you must accept. A beta installs next to your stable versions and is marked **Beta** in the list, so you can use both.
+
+## When an update is found
+
+**When an update is found** picks what the launcher does by itself:
+
+- **Notify only** (the default): shows the banner and does nothing else.
+- **Download in background**: downloads and verifies the update, then waits for you to choose **Install now**.
+- **Install when idle**: downloads in the background and installs it while the launcher window is minimized.
+
+Installing only adds a folder next to your other versions, so it is safe at any moment. It never starts anything and never moves a project.
+
+**Download speed** limits the update download to 2 MB/s, 10 MB/s or leaves it unlimited. The download uses your system's proxy settings.
+
+## Remove old versions
+
+Open a version's **...** menu on **Engine installs**. **Remove...** deletes a version the updater installed. It is refused, with the reason, when:
+
+- projects still use the version (upgrade them first),
+- the version is the default,
+- it is the version this launcher runs from, or
+- an editor or launcher of that version is running.
+
+Versions you installed with the Windows installer are removed with **Uninstall...**, as before. Your projects are never touched either way.
+
+## What is checked before anything is installed
+
+- The update server's answer is signed. The launcher refuses it if the signature does not match the key built into your engine.
+- Every address in it must be `https` and on a Mowo host. A signed answer that points somewhere else is refused.
+- Every downloaded piece must match its hash, and every assembled file must match the signed manifest.
+- The new version's engine libraries must match the signed module statement that ships with it. On macOS the app bundles must also pass `codesign`, and a notarized update must pass Gatekeeper.
+
+If any check fails, the download is discarded and nothing is installed; the launcher says which check failed. The download happens in a hidden staging folder next to the engines and moves into place in one step at the end, so an interrupted update leaves your installed versions exactly as they were.
+
+## Privacy and turning updates off
+
+A check sends one request with your engine version, your platform (`win-x64` or `osx-arm64`), the channel and the launcher version. It sends no account, computer or project information.
+
+To stop checks:
+
+- Turn off **Check automatically** in **Engine installs**. **Check for updates** still works on request.
+- Set the environment variable `MOWO_DISABLE_UPDATE_CHECK=1` to disable checks, downloads and the editor's update chip completely. Use it on build machines.
+
+Studios that host their own update server can point the launcher at it with `MOWO_UPDATE_URL`, or with `ServerUrl` under `[EngineUpdates]` in the user `Engine.ini`. Hosts the server's answer may name (besides the server itself and Mowo's own) go in `MOWO_UPDATE_HOSTS` or `AllowedHosts` in the same section, separated by commas. Addresses are always `https`.
+
+## Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| **Updates are not available here** with "This is a source build" | Engines built from source update with git and `mbt`. |
+| "No folder next to the installed engines can be written to" | Choose **Install new versions in** and pick a folder you own. |
+| "The update needs 2.3 GB of free disk space" | Free that space on the drive it names, or choose another install folder. |
+| "failed its signature check and was discarded" | Try again. If it repeats, download the installer from mowoengine.com and report it with **Help > Report a Bug**. |
+| "This update needs Mowo Engine 1.1.0 or newer to install it" | This launcher is too old to install it. Download the installer from mowoengine.com once. |
+| The launcher shows the last release and says it is offline | There is no connection to the update server. It checks again in 15 minutes. |

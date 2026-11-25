@@ -1,0 +1,69 @@
+---
+title: Delegates and async actions
+description: Let graphs bind to your C++ delegates, and write latent nodes as C++ classes that appear in Visual Scripting without registering anything.
+order: 7
+sources:
+  - Engine/Source/Runtime/Game/Public/Gameplay/GameplayDelegates.h
+  - Engine/Source/Runtime/Game/Public/Game/MDelegateStatics.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/MAsyncAction.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptReflectedAsync.h
+  - Engine/Source/Runtime/Game/Public/Game/MAsyncActionProbe.h
+verifiedAt: 55f27937c
+---
+
+## Delegates a graph can bind
+
+A multicast delegate member is bindable from Visual Scripting when it is marked. Nothing else is generated: the delegate carries its own bind, unbind and broadcast operations, typed by its arguments.
+
+```cpp title="AGoal.h" nocompile
+MPROPERTY(ScriptAssignable, ScriptCallable)
+Mowo::TMulticastDelegate<int32_t, float> OnScored;
+
+MPROPERTY(ScriptAssignable, ScriptCallable)
+Mowo::TMulticastDelegate<> OnReset;
+```
+
+- **Bind Delegate** takes the target object, the delegate's property name, a Visual Scripting object and the name of one of its functions. The function receives the delegate's arguments, in order, as its parameters. It returns a handle.
+- **Unbind Delegate** takes the handle back.
+- **Broadcast Delegate** fires a `ScriptCallable` delegate that has no arguments. A delegate with arguments is fired from C++.
+
+A binding holds its Visual Scripting object weakly: when the object is destroyed the binding does nothing instead of calling into it. Arguments that a graph can hold (numbers, bool, strings, vectors, quaternions, object pointers) are passed; other argument types arrive empty.
+
+## Async actions as classes
+
+Derive from `MAsyncAction`, describe the node in the class meta, make its inputs `ExposeOnSpawn` fields, and implement `Activate` and `Update`:
+
+```cpp title="UWaitForDoor.h" nocompile
+MCLASS(meta = (AsyncAction = "Wait For Door", AsyncPins = "OnOpened, OnTimeout"))
+class UWaitForDoor : public Mowo::MAsyncAction {
+public:
+	MGENERATED_BODY()
+
+	MPROPERTY(ExposeOnSpawn, EditAnywhere)
+	float TimeoutSeconds = 5.0f;
+
+	void Activate() override {
+		m_Elapsed = 0.0f;
+	}
+
+	bool Update(float deltaSeconds) override {
+		m_Elapsed += deltaSeconds;
+		if (m_Elapsed >= TimeoutSeconds) {
+			Fire("OnTimeout");
+
+			return false;
+		}
+
+		return true;
+	}
+
+private:
+	float m_Elapsed = 0.0f;
+};
+```
+
+The class appears in the node palette as **Wait For Door** with an input pin for each `ExposeOnSpawn` field and one exec output per name in `AsyncPins`. Call `Fire("OnOpened", { outputValue })` to run an output; a fire ends the action and resumes the graph past the node unless you pass `false` for `terminal`, which keeps it alive for progress outputs. `Update` returns false to retire the action. If the graph is torn down first, `Cancelled` runs so you can release what `Activate` took.
+
+Registration happens when the node catalog rebuilds (editor start, module load, hot reload); the hand-written registration of built-in actions stays available for engine code.
+
+<Source path="Engine/Source/Runtime/VisualScripting/Public/VisualScripting/MAsyncAction.h" />

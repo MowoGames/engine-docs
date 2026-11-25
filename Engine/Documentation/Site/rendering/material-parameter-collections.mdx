@@ -1,0 +1,97 @@
+---
+title: Material parameter collections
+sidebarTitle: Parameter collections
+description: Shared named scalar and vector values that every material reads through one node, set per world from C++, Visual Scripting or MCP without recompiling a shader.
+order: 15
+sources:
+  - Engine/Source/Runtime/Renderer/Public/Renderer/MaterialParameterCollection.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialParameterCollectionAsset.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialGraph.h
+  - Engine/Source/Runtime/Game/Public/Game/MMaterialParameterStatics.h
+  - Engine/Source/Runtime/SceneTypes/Public/Renderer/SceneEnvironment.h
+verifiedAt: 6d0eb4f37
+---
+
+A material parameter collection is a `.mpc` asset that holds named scalar and vector values. Any number of materials read them through a **Collection Parameter** node, and gameplay changes them once per world: a scan pulse tint, a flashlight cone, a fog colour or a wetness amount reaches every material that names it on the next frame, with no shader recompile.
+
+## Make a collection
+
+Right-click in the Content Browser and choose **Material Parameter Collection**. A new one holds a scalar `Intensity` and a vector `Tint`. Open it to edit its parameters: each is a `Param` entry with a `name`, a `kind` (`scalar` or `vector`) and a `default`. A collection holds up to 256 parameters. Names are case sensitive and unique inside a collection.
+
+```mdf
+MaterialCollection "ScanPulse" {
+	schema_version = 1
+	Param {
+		name = "PulseRadius"
+		kind = "scalar"
+		default = 2.0
+	}
+	Param {
+		name = "PulseTint"
+		kind = "vector"
+		default = (0.1, 0.6, 1.0, 1.0)
+	}
+}
+```
+
+Saving the asset reloads it: the running scene and every material that reads it follow at once. A world that never wrote a parameter sees the new default; a world that did keeps its value for every name that still exists.
+
+## Read a parameter in a material
+
+Add a **Collection Parameter** node (Parameters in the palette) and fill its Details:
+
+| Field | Meaning |
+|---|---|
+| Collection | The `.mpc` path |
+| Parameter | The parameter's name inside the collection |
+| Kind | `scalar` or `vector`. Picking a collection and a name that exist sets it and the fallback value for you. |
+
+A scalar reads as a float4 with the value in every channel, like a Scalar Parameter. The node compiles to one read of a parameter lane the renderer fills per draw, so two materials that read different collections with the same layout share one shader.
+
+<Callout type="note">
+The node works in every pixel stage that runs a material graph: the G-Buffer, forward, masked shadow depth, velocity, light functions and post-process materials. A World Position Offset subtree refuses it, because the vertex-only passes carry no parameter block. A decal graph reads the collection's authored default, because the decal pass has no parameter lanes yet. A post-process material reads the first four parameter lanes.
+</Callout>
+
+## Change values at runtime
+
+Values live in the world, not in the asset. Each scene environment holds an instance per collection, copied when Play starts so the edited level is never touched.
+
+<CodeTabs>
+```cpp tab="C++" title="ScanPulse.cpp" wrap
+#include "AssetSystem/Assets/MaterialParameterCollectionAsset.h"
+#include "Renderer/SceneEnvironment.h"
+#include "Scene/Scene.h"
+
+void SetScanPulse(Mowo::Scene& scene, float radius) {
+	Mowo::FMaterialParameterCollectionAsset::Acquire("Content/Fx/ScanPulse.mpc");
+	Mowo::FMaterialCollectionSet& values = scene.GetEnvironment().materialCollections;
+	values.SetScalar("Content/Fx/ScanPulse.mpc", "PulseRadius", radius);
+	values.SetVector("Content/Fx/ScanPulse.mpc", "PulseTint", Mowo::Vec4(0.1f, 0.6f, 1.0f, 1.0f));
+}
+```
+```text tab="Visual Scripting"
+Material Parameter Library > Set Scalar Parameter
+	Collection = "Content/Fx/ScanPulse.mpc"
+	Parameter = "PulseRadius"
+	Value = 5.5
+```
+</CodeTabs>
+
+The Material Parameter Library (`MMaterialParameterStatics`) offers Set Scalar, Set Vector and Set Color Parameter, Get Scalar and Get Vector Parameter, and Reset Collection. A setter returns false when the collection or the parameter does not exist, or when the kind does not match.
+
+The MCP authoring tools cover the same ground for an agent: `collection_create`, `collection_read`, `collection_edit` (add, remove, rename and set default), `collection_set_value` and `collection_get_value`. `material_graph_edit` adds a Collection Parameter node with the `collection` and `param_name` fields.
+
+## How it reaches the GPU
+
+Each frame the renderer takes one sorted snapshot of every collection's values for the world being drawn. A material whose graph reads a collection carries a small list of bindings (which lane and component a collection value belongs in). When the renderer builds a material's entry in the frame's graph-parameter buffer, it copies the material's own lane values and patches the bound ones from the snapshot. Nothing else about the draw changes: no extra descriptor, no push-constant growth and no per-material shader. Post-process materials and light functions patch the same lanes into their push constants.
+
+## Limits
+
+- Paths are project paths such as `Content/Fx/ScanPulse.mpc`, compared without regard to case or separators.
+- A collection must be loaded before a value is set. The Visual Scripting library and the MCP tools load it for you; from C++ call `FMaterialParameterCollectionAsset::Acquire` once.
+- Removing or renaming a parameter that a material still names leaves that read on the node's fallback value until the node is re-pointed.
+- A graph with more than four parameter lanes keeps the extra lanes in the wide layout; a post-process material or a light function reads only the first four.
+
+## API reference
+
+`FMaterialCollectionSet` holds a world's values, `FMaterialParameterCollectionAsset` reads and writes `.mpc` files, and `MMaterialParameterStatics` is the Visual Scripting library. The generated [API reference](/docs/api/) lists the public ones.

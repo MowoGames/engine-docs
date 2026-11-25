@@ -3,7 +3,7 @@ title: Editor automation
 sidebarTitle: Automation
 description: Drive the editor from a script for batch edits, reproduction steps, checks and screenshots.
 order: 23
-verifiedAt: 2991e0c70
+verifiedAt: f7a8a127c
 ---
 
 The editor can be driven by a script instead of by hand, for repeatable work: batch edits, reproduction steps, checks and screenshots.
@@ -13,6 +13,8 @@ The editor can be driven by a script instead of by hand, for repeatable work: ba
 An editor script is a list of commands that run through the editor's real operations: the same level, undo history, asset manager, Play and screen capture the UI uses. A script edit is an ordinary, undoable editor edit.
 
 Run a script in a live editor through the [MCP server](/docs/editor/mcp-server/)'s `run_script` tool. The editor executable has no command-line switch for scripts.
+
+The same server has verbs a script does not need. `list_actors` and `find_actors` read the level with each actor's class, world position, parent, tag, transient and visible flags, and `compile_game_module` with `compile_status` build the project's C++ and hot-swap it into the running editor, so a test or a tool can drive the edit–compile–reload loop without a click ([Compiling and hot reloading](/docs/editor/mcp-server/#compiling-and-hot-reloading)).
 
 ### Script format
 
@@ -41,8 +43,8 @@ quit
 | `new-scene`, `open-scene`, `save-scene` | `[path]` | Create, open or save a level |
 | `spawn` | `<class> [name]` | Spawn an actor; it becomes the current actor |
 | `select`, `select-add`, `delete` | `<name>` | Select, add to the selection, or delete an actor |
-| `set` | `<Component.field> <value>` | Set a property on the current actor; `Script.<field>`, `Script:<component>.<field>` and `Vars.<field>` set a Wolang field, a Wolang component's field and a Visual Script variable as a Details edit does (an actor reference by the actor's name) |
-| `assert-prop` | `<Component.field> <value>` | Fail on mismatch; numbers compare with a tolerance; the same script paths read script variables |
+| `set` | `<Component.field> <value>` | Set a property on the current actor; `Vars.<field>` sets a Visual Script variable as a Details edit does (an actor reference by the actor's name) |
+| `assert-prop` | `<Component.field> <value>` | Fail on mismatch; numbers compare with a tolerance; the same `Vars.<field>` path reads a Visual Script variable |
 | `assert-exists`, `assert-not-exists` | `<name>` | Fail unless the actor does (not) exist |
 | `cvar` | `<name> <value>` | Set a console variable |
 | `console` | `<line…>` | Run a console line |
@@ -68,6 +70,8 @@ quit
 | `refresh-thumbnail` | `<asset>` | Draw an asset's thumbnail again, as **Refresh Thumbnail** does |
 | `mark-validation`, `assert-validation-clean` | | Remember the graphics debug layer's error count, then fail if it has grown since. Needs the debug layer (`--gpu-validation`) |
 | `quit` | | End the script with success |
+
+Coordinates are logical window units as the editor lays out on Windows, under the in-window title bar. On macOS the menus sit in the system menu bar and the window has no title row, so the editor shifts a script's `y` up by that row's height, and `window size <w> <h>` makes the window that much shorter: the panels below the title bar land where they do on Windows and the same script clicks the same widgets on both. In the same way, `Ctrl` in a `key` chord means the shortcut modifier, which is <Kbd>Cmd</Kbd> on macOS, so `key Ctrl+Z` undoes on both.
 
 `set` and `assert-prop` take a `Component.field` path resolved through the same reflection tables the Details panel uses. The component matches by display name (`Transform`) or type name (`TransformComponent`), and the field by its C++ name or serialized key. Vectors take a comma list (`1,2,3`) or one component (`Transform.position.x`).
 

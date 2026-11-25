@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorExtensionRegistry.h
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorPanelRegistry.h
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorViewportMode.h
-verifiedAt: 8f1cfbd42
+verifiedAt: a241046e0
 ---
 
 A plugin is a folder with a `.mplugin` manifest that can carry content, runtime modules and editor modules. This page covers the **Plugins** window, where you turn plugins on and off, build and create them, and the **EditorFramework** module that editor plugins use to add to the editor. How plugins load and package is covered in [Programming](/docs/programming/).
@@ -35,7 +35,7 @@ The engine's feature modules (AI and Navigation, Narrative, Voice Chat, Sequence
 
 The check box writes `enabled.<Name>` to `<Project>/Config/Plugins.ini`, which overrides the manifest's `enabledByDefault`. Ticking a plugin also ticks the plugins it depends on; unticking one that others depend on warns that they stop loading.
 
-Content mounts and unmounts immediately. C++ modules stay loaded once loaded, so a change to a plugin with modules waits for a restart. **Restart now** saves every unsaved document and relaunches the editor on the same project and level.
+Content mounts and unmounts immediately, and enabling a plugin loads its modules at once. Disabling a project plugin unloads its modules at once too, when no live object of its classes, no editor module and no other loaded plugin still uses them; otherwise the banner says what holds it and the change waits for a restart. Built-in engine plugins and feature modules always wait for a restart. **Restart now** saves every unsaved document and relaunches the editor on the same project and level.
 
 ### Building
 
@@ -45,7 +45,7 @@ Right-click a row for **Enable** / **Disable**, **Build**, **Show in Explorer**,
 
 ### Creating a plugin
 
-**New Plugin…** asks for the name, display name, author, category and description, and three choices: **Location** (Project or Engine), **Content folder** and **Editor module**. The name must be a valid C++ identifier and not already taken. **Create Plugin** writes:
+**New Plugin…** asks for the name, display name, author, category and description, and these choices: **Location** (Project or Engine), **Content folder**, **Editor module**, **Content only**, **Importer** and **Vendored library**. The category must be one of the fixed categories (see [Programming](/docs/programming/)); anything else becomes Other. The name must be a valid C++ identifier and not already taken. **Create Plugin** writes:
 
 ```text
 <Plugins>/MyPlugin/
@@ -58,7 +58,7 @@ Right-click a row for **Enable** / **Disable**, **Build**, **Show in Explorer**,
   Content/                             with Content folder
 ```
 
-The files come from the plugin template that ships with `mbt`. Creating over an existing folder is refused. The new plugin has no binary yet: build it with `mbt build -t <Name>`, then restart the editor. To declare reflected types, enable the header tool in the generated `.Build.cs`.
+The files come from the plugin templates under `Templates/TemplateResources/Plugin`, which ship with the installed editor. **Content only** writes just the manifest and `Content/`. **Importer** writes a module of type `Uncooked` that registers a sample import translator, so the editor and the cook load it and a package never does. **Vendored library** adds `Source/ThirdParty/<Name>Lib`, a source-built library the plugin carries. If several are on, Importer wins over Vendored library, which wins over Content only. Creating over an existing folder is refused. The new plugin has no binary yet: build it with `mbt build -t <Name>`, then restart the editor. To declare reflected types, enable the header tool in the generated `.Build.cs`.
 
 <Callout type="note">
 The window lists what discovery found. It does not download or update plugins; **Marketplace** only filters by the manifest field.

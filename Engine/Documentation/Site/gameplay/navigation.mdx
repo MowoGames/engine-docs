@@ -8,6 +8,8 @@ sources:
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavMeshBuilder.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavMeshAsset.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavMeshRebuildSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavInvokerSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavInvokerComponent.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/NavMeshObstacleSystem.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/ANavMeshBoundsVolume.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/VisualScriptAIMoveProvider.h
@@ -16,7 +18,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshLinkComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshModifierComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshObstacleComponent.h
-verifiedAt: dc043afc1
+verifiedAt: ac53762bc
 ---
 
 Agents find their way over a navigation mesh baked from the level with Recast, and move with Detour's crowd steering, which adds local avoidance so agents walk round each other.
@@ -103,6 +105,21 @@ On a tiled mesh, the rebuild system watches for static geometry that moved, appe
 | `nav.Rebuild.MaxDelay` | 2.0 | Rebuild anyway after this long |
 | `nav.Rebuild.MaxTiles` | 16 | Tiles per pass |
 | `nav.UseCrowd` | 1 | 0 uses single-agent path following without avoidance |
+
+## Navigation invokers
+
+A level with no baked navigation mesh of its own, such as a generated one or a very large one, can still be walked. Put a `NavInvoker` component on the actors the AI follows, or give an actor the `Nav.Invoker` gameplay tag in its `AITags`, and the engine builds a tiled mesh grid for the level's bounds and bakes only the tiles within the invoker's generation radius. Tiles are baked on a worker a few at a time, nearest the invoker first, and dropped again once every invoker has left them and their removal radius. A level that has its own baked mesh is left alone.
+
+A mesh the invokers drive is not rebuilt by the geometry watcher; the tiles it touches are cleared and generated again if an invoker still wants them. `NavInvoker` has `generationRadius` (default 30 m) and `removalRadius` (0 keeps the tiles to the generation radius plus `nav.Invoker.RemovalMargin`).
+
+| Console variable | Default | Effect |
+| --- | --- | --- |
+| `nav.Invoker` | 1 | Invoker generation on or off |
+| `nav.Invoker.Interval` | 0.5 | Seconds between planning passes |
+| `nav.Invoker.MaxTiles` | 9 | Tiles one bake covers |
+| `nav.Invoker.MaxRemovals` | 8 | Tiles dropped per pass |
+| `nav.Invoker.RemovalMargin` | 10 | Metres past the generation radius a tile is kept |
+| `nav.Invoker.DefaultRadius` | 30 | Radius of a tagged actor with no `NavInvoker` |
 
 ## Related
 

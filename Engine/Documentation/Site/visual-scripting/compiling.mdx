@@ -1,0 +1,37 @@
+---
+title: Compiling Visual Scripts
+sidebarTitle: Compiling
+description: How a Visual Script class becomes a compiled program, which backend runs it, and what falls back to the node walker.
+order: 12
+sources:
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptProgram.h
+  - Engine/Source/Runtime/VisualScriptCompiler/Public/VisualScriptCompiler/VisualScriptCompiler.h
+verifiedAt: 92c3f98b5
+---
+
+A Visual Script class is compiled before it runs: its graphs are checked, macros are inlined, every pin gets a type, and the result is a compact register program that a small interpreter runs. The program is plain data, so it can be cached or shipped next to the class as a `.vsprog` file.
+
+## Which backend runs a graph
+
+The console variable `vs.Backend` chooses between two ways of running the same graphs.
+
+| Value | Backend | Use |
+| --- | --- | --- |
+| 0 | The node walker, which follows the graph's nodes directly. | The reference the interpreter is judged against; it is removed after 2027-04-19. |
+| 1 (default) | The bytecode interpreter, which runs the compiled program. | What a game runs. |
+
+A class the compiler cannot lower yet (a node it has no lowering for, or a constant that has no stored form) is not an error: the editor's Compile button reports a warning and that class keeps running on the node walker, whatever `vs.Backend` says. The same happens while the Visual Script debugger is enabled.
+
+## Where the program comes from
+
+The first time a class runs under backend 1 the engine looks for a program in this order.
+
+1. A `.vsprog` file next to the `.vscript`, when its events and functions are exactly the class's.
+2. The compiler, run on the spot when the class loads.
+
+A compiled program is relinked against the live classes whenever a class registers or unregisters, so a hot reload never leaves a call pointing at a function that no longer exists.
+
+## Waiting nodes
+
+Delay, Timeline and async actions park the program's registers and its position when they suspend, and continue from there on a later frame, the same way they do on the node walker.

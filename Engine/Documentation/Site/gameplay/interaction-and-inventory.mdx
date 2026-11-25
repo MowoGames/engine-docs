@@ -6,10 +6,10 @@ sources:
   - Engine/Plugins/Combat/Combat.mplugin
   - Engine/Source/Runtime/Game/Public/Game/Components/InteractableComponent.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/RecipeAsset.h
-verifiedAt: 5922e6e5e
+verifiedAt: 588510704
 ---
 
-These systems come with the **Combat, Interaction & RPG** plugin (off by default; enable it in the Plugins window). The same components drive a horror game's scanner pickup, a shop simulator's shelf and a survival game's crafting bench. The First Person and Simulator templates use them. <Source path="Engine/Plugins/Combat/Combat.mplugin" />
+These systems come with the **Combat, Interaction & RPG** plugin (off by default; enable it in the Plugins window). The same components drive a horror game's scanner pickup, a shop simulator's shelf and a survival game's crafting bench. The First Person template uses them. <Source path="Engine/Plugins/Combat/Combat.mplugin" />
 
 ## Interaction
 
@@ -39,7 +39,12 @@ A `Carryable` component makes a dynamic body physically carryable: `holdDistance
 | Heavy | 25 to 80 kg | Two people carry it together |
 | Immovable | 80 kg and up | Nobody lifts it |
 
-In multiplayer, the server owns the physics of a carry; clients predict pickups, drops and throws and reconcile with the server's answer. `MCarryStatics` offers `IsCarrying`, `GetCarriedActor`, `ForceDrop`, `GetMassClassName` and `GetCarrierCount`.
+In multiplayer the host decides every carry: clients predict pickups, drops and throws and reconcile with the host's answer. Who simulates the object depends on its class:
+
+- **Light and Medium, carried by a client:** the client simulates it on an [item authority lease](/docs/multiplayer/item-authority-leases/#carrying-a-leased-item), so the object moves with that player's hands with no round-trip delay. The host still checks every pose the client sends. Dropping or throwing the object hands it back to the host with the velocity it was let go at.
+- **Heavy, two-person, or carried by the host's own player:** the host simulates the hold, and the object is marked host-held so no client can lease it in the middle of the carry.
+
+When two players grab the same object in one tick, the first claim the host sees wins. The other player's prediction is rolled back, and the object blends back to where the host shows it. `MCarryStatics` offers `IsCarrying`, `GetCarriedActor`, `ForceDrop`, `GetMassClassName` and `GetCarrierCount`.
 
 ## Items
 
@@ -66,6 +71,8 @@ Item "crate" {
 `MInventoryComponent` gives an actor a slot-based inventory with a capacity, stack caps and an optional mass budget. Picking up a carryable whose `itemId` is set stores it and removes the world object; dropping spawns its world form back.
 
 `MInventoryStatics` offers `AddItemByPath`, `RemoveItem`, `GetItemCount`, `HasItem` and `DropItem`. The HUD can bind `inventory.slotN.icon`, `inventory.slotN.count`, `inventory.slotN.name`, `inventory.slots`, `inventory.used` and `inventory.mass`.
+
+In a session the bag replicates to its owner. The host publishes its stacks as a fast array bound to the actor's entity, one item per occupied slot, so picking up one more of a stack resends that slot alone; the owning client adopts the stacks into its own `InventoryComponent` and `onChanged` fires for each change. Other players never receive your bag, and a client's local edits are overwritten by the next update, so change items on the host.
 
 ## Crafting and gathering
 

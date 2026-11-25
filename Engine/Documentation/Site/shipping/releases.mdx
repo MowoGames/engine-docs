@@ -1,0 +1,92 @@
+---
+title: Releases, updates and uploads
+description: Record each shipped version, keep the next one patch-friendly, write updates as patch paks, verify reproducible packages and push builds to Steam and itch.io.
+order: 7
+verifiedAt: 4b1b9470c
+---
+
+`mbt package` wipes its output folder every time it runs, so once you ship `1.0.0` nothing on disk says what `1.0.0` contained. A release record keeps that, so `1.1.0` can be laid out to patch cleanly against it and you can ship only what changed.
+
+## Record a release
+
+```powershell
+./mbt.cmd package -c release --release 1.0.0
+```
+
+Besides the package, this writes `Releases/1.0.0/` at the game root:
+
+| File | What it holds |
+|---|---|
+| `release.json` | Every pak's name, size and sha256, and for each content pak its entries in write order with the size and hash of each |
+| `Manifest.txt` | The package's file manifest (sha256 and size per shipped file) |
+| `BuildInfo.json` | The version and build id baked into the package |
+| `<Product>-chunks.json` | The chunk report |
+| `IoStore/*.mutoc` | With `--iostore`, the table of contents of each container, the base a later patch container is made against |
+
+Commit or archive the folder with the release it describes. Packaging refuses to overwrite a recorded release: delete the folder yourself if you really mean to replace it.
+
+## Lay out the next release against it
+
+```powershell
+./mbt.cmd package -c release --release 1.1.0 --based-on 1.0.0
+```
+
+Every content pak keeps the entry order of `1.0.0`. Entries that are new go at the end, entries the new build dropped close up, and nothing else moves. Without this, a texture whose name sorts first would shift every entry after it, and every byte-comparing update tool (`mbt patch`, the launcher's chunk store, IoStore chunk reuse) would see a changed file instead of a small change.
+
+`--compact` ignores the old order and lays the paks out fresh, which is the way to defragment after many releases. The comparison against `1.0.0` still runs.
+
+## Ship only what changed
+
+```powershell
+./mbt.cmd package -c release --release 1.1.0 --based-on 1.0.0 --patch-out D:/Builds/1.1.0-patch
+```
+
+`--patch-out` writes `Content_patch_1_1_0.meaf`, a patch pak (see [Patches, chunks and DLC](/docs/shipping/patches-and-dlc/)) holding exactly the entries whose bytes changed or that are new, plus a JSON report of what was changed, added and removed. A pak that overrides cannot delete a key, so removed keys are listed in the report for a studio that ships a full update instead. With `--iostore` the folder also gets a patch container per pak, holding only the chunks that differ from the previous release.
+
+The build log prints the diff per pak:
+
+```text
+Release diff 6f1c...meaf: 1 changed, 0 added, 0 removed, 412 unchanged
+```
+
+## Verify a package is reproducible
+
+```powershell
+./mbt.cmd package -c release --verify-reproducible
+```
+
+After packaging, mbt packages the same inputs again into a scratch folder and compares the two file manifests. Any file whose bytes differ is named and the command fails. A package that changes between two runs of the same inputs makes every update bigger than it needs to be, so a difference here is a bug to fix before you ship. The second run cooks from the sources again (your cooked intermediates are set aside while it runs and put back after), so cooking, packing, staging, stamping and signing are all judged. Add `--verify-keep-cooked` to reuse the first run's cooked textures and meshes for a faster check.
+
+## Where the time goes
+
+Every `mbt package` prints a table of its steps (build, shaders, cook and pack, runtime staging, engine and shader paks, IoStore, launcher and signing, file manifest, zip, installer) with seconds and share, and writes `<Product>-package-trace.json` beside the package. Open the trace in `chrome://tracing` or Perfetto to see the steps as slices.
+
+## Distribute from the editor
+
+**Build > Distribute...** opens a Distribute document over the same commands. Set the release label, the platforms and, if you want a patch, the release to base it on, switch on the Steam, itch.io and Mowo launcher steps, then press **Release**; **Plan** prints the steps first, **Resume** continues an interrupted release, and **Cancel** ends the whole process tree. **Upload to Steam**, **Push to itch.io** and **Publish to Mowo** run one upload on the last package. Output streams into the log and errors reach the Message Log. Secrets are not asked for here: the Steam account, the Sentry token and the signing certificate come from the environment or from **Editor Preferences > Accounts**.
+
+## The whole ship in one command
+
+```powershell
+./mbt.cmd release --release-version 1.1.0 --based-on 1.0.0 --platforms win64,linux --launcher --steam --itch me/mygame
+```
+
+`mbt release` runs the steps as ordinary `mbt` commands, in order: the test gate (`mbt test --cpu-only`, skipped with `--skip-test`), one `mbt package` per platform with the release flags, the launcher chunk store, the Steam upload and the itch.io push. It saves its state in the output folder after each step, and `--resume` continues after a failure instead of repeating a long package. When it finishes it writes `release-artifacts.json`, every produced file with its size and sha256. `--plan` prints the steps and stops.
+
+## itch.io
+
+```powershell
+./mbt.cmd itch-upload --target me/mygame --platform-dir win64=D:/Builds/Win --platform-dir linux=D:/Builds/Linux
+```
+
+`mbt itch-upload` runs [butler](https://itch.io/docs/butler/) once per platform with the channel itch.io uses to tag the download (`windows`, `linux`, `osx`) and `--userversion` set to the project's version. Set `platform.itchTarget` in the `.mproject` to skip `--target`. butler uploads a binary patch against the channel's last build, so the whole package folder is pushed every time. Set `BUTLER_API_KEY` or run `butler login` once.
+
+## Steam depots and symbols
+
+`mbt steam-upload` excludes each platform's debug files from its depot: `*.pdb` on Windows, `*.debug` on Linux, `*.dSYM` on macOS. Symbols go to your crash server instead; see [Crash reporting](/docs/shipping/crash-reporting/).
+
+## Related
+
+- [Patches, chunks and DLC](/docs/shipping/patches-and-dlc/)
+- [Package a game](/docs/shipping/package-a-game/)
+- [Steam](/docs/shipping/steam/)

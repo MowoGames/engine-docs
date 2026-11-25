@@ -1,0 +1,86 @@
+---
+title: Horror template
+sidebarTitle: Horror
+description: "A first-person horror game: a textured sci-fi facility lit by failing lamps, a flashlight you control, and a stalker that hunts by sound. Solo or co-op."
+order: 12
+sources:
+  - Templates/TP_Horror/README.md
+  - Templates/TP_Horror/ASSET_LICENSES.md
+  - Templates/TP_Horror/Config/TemplateDefs.ini
+  - Templates/TP_Horror/Config/DefaultEngine.ini
+  - Templates/TP_Horror/Content/AI/Stalker.resident
+  - Templates/TP_Horror/Content/Characters/Survivor.animgraph
+  - Templates/TP_Horror/Content/Characters/Stalker.animgraph
+  - Templates/TP_Horror/Content/Audio/Footsteps/Default.cuegraph
+  - Templates/TP_Horror/Content/Audio/Music/Horror.music
+  - Templates/TP_Horror/Content/Materials/LF_Flicker.mat
+  - Engine/Plugins/HorrorKit/HorrorKit.mplugin
+  - Engine/Plugins/HorrorKit/Public/HorrorKit/AHorrorPlayer.h
+  - Engine/Plugins/HorrorKit/Public/HorrorKit/AHorrorStalker.h
+  - Engine/Plugins/HorrorKit/Public/HorrorKit/AHorrorGameMode.h
+verifiedAt: 6ab23b40e
+---
+
+The Horror template starts in a briefing room of a dark sci-fi facility. You follow a corridor to a laboratory with a flashlight in your hand and a stalker somewhere in the dark. It never sees you: it hears your footsteps and walks to where it thinks you were. Everything shipped is CC0 and listed in `ASSET_LICENSES.md` at the template root.
+
+## Controls
+
+| Input | Action |
+|---|---|
+| <Kbd>W</Kbd> <Kbd>A</Kbd> <Kbd>S</Kbd> <Kbd>D</Kbd> | Move |
+| Mouse | Look |
+| <Kbd>Space</Kbd> | Jump |
+| <Kbd>Left Shift</Kbd> | Sprint (loud) |
+| <Kbd>Left Ctrl</Kbd> | Crouch (quiet) |
+| <Kbd>F</Kbd> | Flashlight on or off |
+| <Kbd>E</Kbd> | Interact, for example pick up the supply crate |
+| <Kbd>Q</Kbd> or right mouse button | Throw what you carry |
+
+Rebind them in `Content/Input/IMC_Default.inputcontext`.
+
+## Variants
+
+Pick a variant when you create the project.
+
+| Variant | Game mode | What you get |
+|---|---|---|
+| Solo | `AHorrorGameMode` | One survivor, the flashlight and the stalker |
+| Co-op | `AHorrorCoopGameMode` | The same level with four spawn points; the game mode registers the survivor pawn with the network session |
+
+Both play the moment the project opens: the gameplay is the HorrorKit plugin, enabled in `Config/Plugins.ini`, and the manifest names its game mode directly, with the flashlight, the stalker and the fail state. For co-op, start the host with `--host-session` and the other players with `--connect <ip>`. See [Multiplayer](/docs/multiplayer/).
+
+## How it is built
+
+| Part | What it does |
+|---|---|
+| `Content/Scenes/Main.mmap` | The facility from 4 m kit pieces: briefing room, corridor, locker room, storage room and laboratory, with invisible collision boxes behind the walls and floors. The environment turns off the fallback light, keeps ambient light near zero and adds a height-fog actor, so only lamps and the flashlight light the level |
+| Ceiling lamps | A kit light piece with a point light under it. Some lamps use the light function `LF_Flicker.mat`, a noise over time that makes them stutter |
+| `AHorrorPlayer` | A first-person pawn with a spot-light flashlight that follows your pitch, flickers and clicks when toggled, a Quaternius body that plays the torch idle, walk, jog, sprint, crouch, jump and interact clips, and a footstep component |
+| `AHorrorStalker` | A skeletal actor carrying a Trilobite model, a `NavAgent`, a `Resident` and an `AIPerception`. It reads its speed from the agent and feeds `Stalker.animgraph` |
+| `Stalker.resident` | The creature's senses and speeds: hearing radius, belief decay, search points and the speed of each stage. See [Resident AI](/docs/gameplay/resident-ai/) |
+| Footsteps | `Content/Audio/Footsteps/<Surface>.cuegraph`; each step also reports a noise to the AI, louder when you sprint and quieter when you crouch. See [Audio](/docs/gameplay/audio/) |
+| `Horror.music` | A four-state score: Explore, Tension, Combat and Aftermath, built from dark ambience loops |
+
+<Screenshot id="getting-started-horror-corridor" alt="Mowo Editor game view of the Horror template: the first-person view down the facility corridor with fog around the ceiling lamps and the survivor's hand holding the light" caption="The corridor, lit by lamps and haze." />
+
+## Make it yours
+
+- Build more rooms from the pieces in `Content/Facility/Models`: walls are 4 m wide and 3 m tall, the top strip adds 2 m, and floor plates are 4 m square. Every placed mesh actor has a unit collision box; turn `Collider.enabled` off on pieces that should not block, and add one invisible box per wall run.
+- Make the creature hear farther or hunt faster by editing `hearing_radius` and the Hunting `speed` in `Stalker.resident`.
+- Tune the light in `AHorrorPlayer`: `flashlightIntensity`, `flashlightRange` and `flickerStrength`.
+- Swap the stalker model by changing `meshPath` in `AHorrorStalker` and naming your clips in `Stalker.animgraph`.
+
+## Doors and the fail state
+
+Four doorways have doors (`BP_FacilityDoorA` to `D`): each is a Visual Script class whose `OnInteract` slides the door leaf up and back and plays a Kenney door sound. The stalker attacks when it reaches the survivor (`attackRange`, `attackCooldown` on `AHorrorStalker`): its `Attack` clip plays and `AHorrorPlayer::Caught()` is the fail state, a low stinger, a two-second flashlight blackout and a return to the player start.
+
+## Known gaps
+
+- The first-person hand holds no torch prop.
+
+## Related
+
+- [Templates](/docs/getting-started/templates/)
+- [Resident AI](/docs/gameplay/resident-ai/)
+- [Navigation](/docs/gameplay/navigation/)
+- [Animation](/docs/gameplay/animation/)

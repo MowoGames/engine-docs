@@ -3,11 +3,12 @@ title: Materials
 description: The PBR material model, the material graph and how it compiles, domains, shading models, blend modes, material instances and Substrate slabs.
 order: 14
 sources:
+  - Engine/Source/Runtime/Renderer/Public/Renderer/MaterialParameterCollection.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/Material.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialGraph.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/MaterialFunction.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/MaterialShaderCompileService.h
-verifiedAt: e41a4451a
+verifiedAt: 849a08804
 ---
 
 A Mowo material is a physically based parameter set: base color, metallic, roughness, normal, emissive, ambient occlusion and opacity, plus a shading model and flags for clear coat, anisotropy, subsurface, hair, detail maps and parallax. You author it as a node graph in the Material Editor and save it as a `.mat` file. Material instances (`.matinst`) override a parent's parameters, and material functions (`.matfunc`) are reusable sub-graphs. The renderer draws opaque materials in the G-Buffer pass and translucent ones in the forward pass.
@@ -57,7 +58,7 @@ Its **Domain** decides where the graph runs (<Source symbol="MaterialGraph" />):
 | Group | Nodes |
 |---|---|
 | Constants | Constant, Constant3 Vector, Time |
-| Math | Multiply, Add, Lerp, One Minus, Dot, Normalize, Saturate, Power, Clamp, Sine, Length |
+| Math | Multiply, Add, Lerp, One Minus, Dot, Normalize, Saturate, Power, Clamp, Sine, Length, Frac, DDX, DDY, Distance Blend |
 | Coordinates | Texture Coordinate, Panner, Rotator, Tiling & Offset |
 | Vectors | World Normal, View Direction, World Position, Vertex Color |
 | Scene | Scene Depth, Custom Depth, Custom Stencil (Post Process domain only; they read zero elsewhere) |
@@ -85,13 +86,15 @@ The shading model is a per-material setting, not a graph expression (<Source sym
 |---|---|
 | `DefaultLit` | Ordinary GGX surfaces |
 | `Unlit` | Emissive-only surfaces; lighting is skipped |
-| `Subsurface` | Wrap diffuse, blurred by the screen-space subsurface pass (skin, wax) |
+| `Subsurface` | Wrap diffuse, blurred by the screen-space subsurface pass (skin, wax, marble, jade). **SSS Radius (m)** sets how far the light scatters in metres of world space, so the look does not change with the camera; **SSS Reach R/G/B** scales that reach per channel (skin keeps 1, 1, 1, wax pulls blue in, jade pulls red in). A radius of 0 keeps the screen-space width of `r.SSS.Width` pixels. **SSS Profile** names a shared `.sssprofile` asset (Create > Subsurface Profile; its `radius` and `reach` are edited in the generic asset editor) that replaces the material's own radius and reach, so one "wax" or "skin" profile drives every material that references it; the material re-reads it when it reloads. Up to 255 distinct radius and reach pairs per session; `r.SSS.MaxRadiusPixels` caps the blur on close-ups and `r.SSS.PerChannelReach 0` shares one reach for speed. |
 | `ClearCoat` | A second specular lobe (car paint, lacquer). `r.Material.ClearCoat 0` turns the lobe off everywhere. |
 | `Hair` | Kajiya-Kay strands over the anisotropy tangent frame |
 | `TwoSidedFoliage` | Back-lit transmission for leaves |
 | `Cloth` | A sheen lobe for velvet, felt and brushed fabric |
 | `ThinTranslucent` | Colored glass that tints what is behind it |
 | `Eye` | Iris and cornea shading |
+
+The **Anisotropy** flag (0 to 1, either sign) stretches a surface's specular highlight into a brushed-metal streak. The streak direction follows the surface normal, not the camera: a fixed frame built from the normal, so moving or rolling the view never turns the brushing. The G-Buffer has no lane for an authored brush direction, so the direction is the same for every anisotropic material.
 
 ## Opacity and blending
 
@@ -130,12 +133,33 @@ glass->SetReflective(true);
 An instance does not own its parent. Whoever holds the parent's reference, usually its asset, must outlive the instance. In-place hot reload replaces a material's internals, so hold the `Ref` and never cache a raw `Material*`.
 </Callout>
 
+## Shared parameters
+
+A **Collection Parameter** node reads one named value of a `.mpc` Material Parameter Collection. Every material that names it follows the value, which gameplay sets per world; see [Material parameter collections](/docs/rendering/material-parameter-collections/). Use it for values that many materials share (a scan pulse, a flashlight tint, global wetness) and a Scalar or Vector Parameter for values that belong to one material or its instances.
+
 ## Textures
 
 - Normal maps are block-compressed to BC5, which stores two channels. Every shader rebuilds Z with `MowoUnpackTangentNormal`; do the same in your own HLSL.
 - While a temporal upscaler is active, texture samples take a negative mip bias so they keep output-resolution detail (`r.MaterialMipBias.Auto`).
 - Terrain and large surfaces can use [virtual texturing](/docs/rendering/virtual-texturing/).
 - Each texture picks its own filter: Nearest for pixel art, Bilinear, Trilinear or Anisotropic with a level. See [Filtering and pixel art](/docs/content-pipeline/importing/#filtering-and-pixel-art).
+
+### Tiling and address modes
+
+A surface that repeats a texture needs three things the graph now covers.
+
+- **UV channel and tiling.** The **Texture Coordinate** node picks UV0 or UV1 (the mesh vertex format carries two sets; translucent materials in the forward pass read UV0 for both). **Tiling & Offset** takes its tiling and offset from wired pins, so a Vector Parameter lets a material instance change them without recompiling; unwired, it uses the numbers in its Details. The flat material has a base UV tiling and offset too (`base_uv_tiling` and `base_uv_offset` in the `.mat`) that move every map of the material together; a material instance edits them in the **UV Transform** section of its instance rail and inherits them from its parent until it sets its own. It is not meant for a graph material, whose Texture Coordinate node already carries the same controls.
+- **Sampler Source** on a Texture Sample node overrides the texture's address mode for that sample: the texture's own, Wrap, Mirror or Clamp. The override remaps the UV in the shader and keeps the original gradients, so mips stay correct at the seam and no extra sampler is bound.
+- **Mip Bias** on the same node is added to the frame's material bias for that sample.
+
+To hide repetition, a Texture Sample node has two more settings:
+
+| Setting | Choices |
+|---|---|
+| **Projection** | UV; Triplanar (world position blended by the world normal, with a tile size in metres and a blend sharpness); World top-down (world X and Z) |
+| **Anti-tiling** | Off; Hex tiling (three rotated and offset taps on a hex grid, blended by barycentric weights); Texture bombing (four random-offset, mirrored taps blended at the cell border) |
+
+Hex tiling and bombing cost three and four samples, triplanar three times that again; use them on the one or two layers that visibly repeat. A triplanar sample reads colour and masks; wire a normal map through a UV projection (triplanar normals are not blended). **Distance Blend** crossfades its Near pin into its Far pin between two camera distances (10 m and 60 m by default); wire a low-frequency sample into Far for macro variation. Passes that carry no camera keep the Near value. **DDX** and **DDY** are screen derivatives, **Frac** is the fractional part; none of the derivative or texture nodes may feed World Position Offset.
 
 ### Texture arrays
 

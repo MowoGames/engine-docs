@@ -14,7 +14,7 @@ sources:
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetPackageMigration.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
   - Engine/Source/Runtime/ML/Public/ML/OnnxSession.h
-verifiedAt: e41a4451a
+verifiedAt: d9fe08503
 ---
 
 Importing turns a file from a content tool into a project asset. The editor builds the file, from where it lies, into [asset packages](/docs/content-pipeline/asset-formats/) in the `Content/` folder you import into: a model into mesh, skeleton, animation, texture and material packages, a texture into a `.tex`, a sound into a `.sound`. Each package records its source and the options you chose, so a reimport replays them.
@@ -29,6 +29,7 @@ Keep source files outside `Content/`, in a `SourceArt/` folder beside it at the 
 |---|---|---|
 | Model | `.fbx`, `.gltf`, `.glb`, `.obj` | Static Mesh (`.mesh`) or Skeletal Mesh (`.skmesh`), with `.skel`, `.anim`, `.tex` and `.mat` packages |
 | Texture | `.png`, `.jpg`, `.jpeg`, `.tga`, `.bmp`, `.hdr`, `.exr` | Texture (`.tex`) |
+| Scene (plugin) | `.usd`, `.usda`, `.usdc`, `.usdz`, `.abc` | Same packages as a model; enable the USD Importer or Alembic Importer plugin. See [USD](/docs/content-pipeline/importing-usd/) and [Alembic](/docs/content-pipeline/importing-alembic/) |
 | Audio | `.wav`, `.ogg`, `.mp3`, `.flac` | Sound Wave (`.sound`) |
 
 The model list comes from the file-type table. An `.exr` is decoded by the engine's own reader and treated like `.hdr`: linear, HDR group, BC6H. Deep and multi-part EXR files are refused with a message asking for a single-part export.
@@ -78,16 +79,38 @@ Reimporting the same source into the same folder keeps every package's id, so re
 | | **Up Axis** | Auto, X-up, Y-up or Z-up: rotates the source's up axis into the engine's +Y |
 | | **Bake pivot to origin** | Moves the root so the model's bottom center sits at the origin. Skipped for skinned models. |
 | LOD generation | **Auto-generate** | Builds reduced levels of detail from LOD0 |
-| | **LOD count**, **LOD1 / LOD2 reduction** | Total levels (at most 3) and the target triangle ratio per level |
+| | **LOD count**, **LOD1 / LOD2 reduction** | Total levels including LOD0 (up to 6) and the target triangle ratio of LOD1 and LOD2 (35% and 12% by default, the same as the `r.LOD1TriangleRatio` / `r.LOD2TriangleRatio` cvars and the LOD groups). Levels past LOD2 keep shrinking by the LOD1-to-LOD2 step. |
+| | **Use authored LODs** | Meshes named `Name_LOD1`, `Name_LOD2`, ... fold into `Name` as its cooked levels instead of staying separate meshes |
+| | **Hard-edge angle** | When the source has no normals, faces meeting at more than this angle (60 degrees by default) keep a hard edge; the rest are smoothed. FBX smoothing groups and OBJ `s` groups are honoured, and glTF without normals is faceted as its specification requires. |
+| | **Max bone influences** | Per-vertex influence cap (1 to 4); the strongest are kept and renormalized |
+| | **Optimize vertex order** | Reorders LOD0 for the vertex cache, overdraw and vertex fetch, as generated LODs always are |
 | | **Build meshlets** | Clusters the mesh for the mesh-shading path |
 | Materials & textures | **Import new** / **Reuse existing** | Create Material packages, or bind ones already in the search path |
 | | **Search path** | Folder for the materials |
 | | **Import textures** | Package the textures the materials use |
 | Skeleton | **Import** / **Skip (static mesh)** | Keep the skeleton and clips, or import the geometry as a static mesh |
 
+### Lightmap UVs, more UV channels and more bone influences
+
+A mesh without a usable second UV set gets one at import (`import.Mesh.LightmapUvs`, on by default): charts are unwrapped once with a gutter and shared by every instance, and the model is flagged so the Lightmap Baker uses them instead of unwrapping each instance. An authored second set is kept when it lies inside 0-1 and is not a copy of the first. UV channels 2 and 3 are kept beside the vertex in the model file and appear in the preview's UV menu. Skinned meshes keep four influences per vertex unless the project raises `import.Mesh.MaxBoneInfluences` (up to 8); the extra four are used by the GI and cluster pre-skin path.
+
+Levels of detail authored in the source are read as well: meshes named `Name_LOD1`, `Name_LOD2`, FBX LOD groups and glTF `MSFT_lod` become the model's LOD1, LOD2 and so on, and a glTF `MSFT_screencoverage` value sets where a level takes over.
+
+### Inspecting the result
+
+In the static mesh editor, the UV menu lists Normals, Vertex Colour, the UV channels, Meshlet Clusters, LOD Colours and Overdraw views for the preview. The Content Browser marks a mesh that imported with warnings or went over the triangle budget, and the Asset Audit panel has LODs, Vertex bytes and UVs columns.
+
+### Import report
+
+Every model import records what it noticed and did not stop for: removed degenerate triangles, near-zero-area slivers, triangles that cover most of the surface, non-manifold edges, a missing normal or UV set, UV channels beyond the two the cooked format holds, bone influences above the cap, materials no mesh uses, and a model over the triangle budget (`import.Mesh.TriangleBudget`, 0 for none; set it per project under `[ConsoleVariables]`). The warnings appear in the Message Log after the import, and the package keeps the report with its tags: `lods`, `lod1_triangles`, `vertex_bytes`, `uv_channels`, `meshlets`, `skinned`, `has_lightmap_uvs`, `over_budget`, `max_influences` and `import_warnings`, all usable in Content Browser filters.
+
 The engine target is **Y-up, right-handed, 1 unit = 1 meter**. The defaults are correct for standard glTF and FBX exports, where the importer reads the source's up axis and unit from the file. If a model still comes in sideways or at the wrong size, fix it with **Up Axis** and **Import Scale**. For a whole pipeline with the same problem, the `import.ForceUpAxis` and `import.UniformScale` cvars apply to every import.
 
+A glTF `COLOR_0` attribute is dropped on import: most kits keep a dirt or wear mask there for their own shaders, and the base pass multiplies vertex colour into the albedo, which stained such pieces red. A mesh whose colours you want (a Vertex Color node in a material, painted tint) opts in with `vertex_colors=1` in its translator options (`translator_options` in the mesh sidecar's Import block).
+
 The glTF material extensions for emissive strength, clear coat, sheen, transmission and anisotropy carry into the generated materials. A material is marked **masked** (alpha-tested) when the source says so (glTF `alphaMode` MASK), has an opacity texture, or its base color alpha is clearly two-valued (`import.AutoCutoutAlpha`), so foliage and fences do not render as solid quads. glTF `alphaMode` BLEND imports as an alpha-blended (translucent) material whose coverage comes from the base color texture's alpha, and the glTF sampler wrap (`REPEAT`, `MIRRORED_REPEAT`, `CLAMP_TO_EDGE`) of the base color texture sets how the material's textures wrap; a texture with no sampler repeats. Materials without a declared wrap repeat their textures.
+
+A glTF that lists an extension under `extensionsRequired` the importer does not implement (Draco or meshopt compression, for example) is refused with an error naming it, instead of importing garbled geometry; re-export it without that extension.
 
 A `.gltf` or `.obj` names other files: buffers, images and `.mtl` libraries. Keep them beside the source at their relative layout so the import resolves them.
 
@@ -105,10 +128,22 @@ A `.gltf` or `.obj` names other files: buffers, images and `.mtl` libraries. Kee
 | **Blend mip levels** | Off or on (Nearest and Bilinear) |
 | **Anisotropy** | 2x, 4x, 8x, 16x (Anisotropic) |
 | **Nearest upscale** | Off, 2x, 4x, 8x, 16x |
+| **Address U / V** | Wrap, Mirror, Clamp, Border |
+| **LOD bias** | 0 to 4 mips dropped at upload |
 
 The settings are stored in the `.tex` package, and the cook honors them when it builds the mip chain. **Auto** compression picks by group: BC6H for HDR, BC5 for normal maps, BC7 for everything else. Normal maps, masks and HDR textures always sample linear.
 
 **Alpha coverage** keeps alpha-tested foliage, fences and hair cards from thinning out with distance: each mip's alpha is rescaled so the same share of texels passes the alpha test as in mip 0. Match it to your material's cutoff.
+
+### Mip filtering, resizing and tiling
+
+The cook builds every mip in floating point and rounds once per level, in light for colour (sRGB) textures, so neither the average brightness nor a normal map's tilt drifts down the chain. Normal-map mips are renormalised level by level. Odd sizes keep their last row and column (each mip texel averages the whole span it covers). A **Max size** clamp is a Lanczos downscale, not a texel pick, and each side lands on a multiple of 4 so a block-compressed texture stays legal.
+
+**Address U / V** set what a UV outside 0 to 1 reads, per axis, for materials sampling the texture. Wrap is the default and what every texture used before. While either axis is Wrap the cook filters the mips across the tile seam, so a tiling texture shows no seam in its distant mips; set both to Clamp, Mirror or Border for a sprite or atlas and the borders stay separate. Changing the address mode recooks the texture. A Texture Sample node can override the mode per use (see [Tiling and address modes](/docs/rendering/materials/#tiling-and-address-modes)).
+
+**LOD bias** drops that many top mips when the texture is uploaded, halving its resolution per step. It adds to `r.Texture.LODBias` and to the quality tier's texture bias (the Low tier drops one mip), which `r.Texture.LODBias.Color`, `.Normal`, `.Linear` and `.Hdr` offset per texture group; a value of -1 on `.Normal` keeps normal maps at full resolution under a tier that drops one. Textures already uploaded keep the mips they were created with, and the bias applies to cooked textures only.
+
+**Normal variance to roughness** keeps a distant tiled normal map from sparkling. A roughness or mask texture can name the normal map that goes with it (`normal_variance_source` in its `.tex` import settings, with `normal_variance_channel`: 0 for R, 1 for G in an ORM pack). The cook then widens each mip's roughness by the variance the normals average away (a Toksvig-style term), so a mirror-smooth floor of fine bumps reads rougher in the distance. Mip 0 is untouched, only the named channel changes, and editing the normal map recooks the roughness texture. It applies to linear (mask) textures only.
 
 ### Filtering and pixel art
 

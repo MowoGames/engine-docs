@@ -1,0 +1,400 @@
+---
+title: AIGG screens
+sidebarTitle: Screens and bindings
+description: How a .ui asset describes a game screen, how the screen stack mounts it, and how bindings, events, animations and controller classes bring it to life.
+order: 3
+sources:
+  - Engine/Source/Runtime/AIGG/Public/AIGG/FAIGGAsset.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/FAIGGWidgetFactory.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/CAIGGScreenStack.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/FAIGGActionRegistry.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/FAIGGControllerResolver.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/FAIGGBindingLibrary.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/FAIGGAnimPlayer.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/FAIGGModalInputGate.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Statics/MUIStatics.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/ECS/Components/AIGGComponent.h
+  - Engine/Source/Runtime/GameHost/Public/GameHost/MGameEngine.h
+verifiedAt: 55f27937c
+---
+
+A game screen in Mowo is a `.ui` asset: an MDF document holding a widget tree, data bindings, event wiring and animations. At run time the **screen stack** (`CAIGGScreenStack`) builds the asset into Arc widgets, mounts it over the game view, and keeps it in sync with gameplay every tick.
+
+## The lifecycle of a screen
+
+<Flow steps={["Load .ui", "Factory builds Arc widgets", "Mount on stack", "Tick: bindings + animations", "Events → actions / graphs"]} highlight={3} caption="What the screen stack does with an asset, frame after frame." />
+
+1. `FAIGGAsset` reads the MDF file <Source symbol="FAIGGAsset" />.
+2. `FAIGGWidgetFactory` turns each node into a live Arc widget and wires its bindings and events <Source symbol="FAIGGWidgetFactory" />.
+3. The stack composites every mounted screen into one overlay widget, sorted by z-order.
+4. Each `Tick` re-resolves bindings, advances animations, and advances the settings-screen countdown.
+5. Widget events run built-in verbs, controller graphs or the host's handlers.
+
+## The .ui format
+
+A screen is a `.ui` file (older projects used `.ui`, which still loads and is renamed when the project opens). A file starts with a `Package` block that carries the asset id and the assets it imports, then the `AIGG` document. This is an excerpt of the test project's main menu:
+
+```mdf title="Content/UI/MainMenu.ui (excerpt)"
+AIGG "Widget" {
+    design_width: 1920
+    design_height: 1080
+
+    Animations {
+        Anim "MenuIn" {
+            auto_play: true
+
+            Track {
+                target: "MenuPanel"
+                property: opacity
+
+                Key {
+                    t: 0.0
+                    v: 0.0
+                }
+                Key {
+                    t: 0.35
+                    v: 1.0
+                    easing: cubic_out
+                }
+            }
+        }
+    }
+    Widget "Root" {
+        class: "CanvasPanel"
+        anchor: Stretch
+
+        Widget "StartButton" {
+            class: "Button"
+            variable: true
+            anchor: Center
+            position: vec2(0.0, -120.0)
+            size: vec2(360.0, 52.0)
+
+            Props {
+                label: "Start Match"
+                text_key: "Menu.start"
+            }
+            Events {
+                On {
+                    event: "clicked"
+                    action: "PlayAnim:StartNudge"
+                }
+                On {
+                    event: "clicked"
+                    action: "StartMatch"
+                }
+            }
+        }
+    }
+}
+```
+
+### Root properties
+
+| Property | Meaning |
+| --- | --- |
+| `schema_version` | Written on every save; currently `1` <Source symbol="FAIGGAsset" /> |
+| `design_width`, `design_height` | The resolution the numbers in the tree are authored in. The root canvas scales the screen to the viewport. |
+| `theme` | Optional `.theme` for color, font and metric tokens. See [Arc styling](/docs/ui/arc-styling/#game-themes-theme). |
+| `visual_script_class` | Optional Visual Scripting class (`.vscript`) that acts as the screen's controller. See [Controller classes](#controller-classes). |
+| `controller_class` | Optional reflected C++ class (an actor or actor component) that acts as the screen's controller, by class name. A screen has one controller: this key is read only when `visual_script_class` is empty. See [C++ controllers](#c-controllers). |
+
+### Node properties
+
+Every `Widget` node has a `class` and a name. The name is what bindings, animation `target`s and `FindNamed` use.
+
+| Property | Meaning |
+| --- | --- |
+| `anchor` | `TopLeft`, `TopCenter`, `TopRight`, `CenterLeft`, `Center`, `CenterRight`, `BottomLeft`, `BottomCenter`, `BottomRight` or `Stretch` <Source symbol="FAIGGAsset" /> |
+| `position`, `size` | Offset from the anchor and size, in design units |
+| `anchor_min`, `anchor_max`, `alignment` | Fractional anchors and pivot, overriding the preset |
+| `offset_high` | The far inset on a stretched axis |
+| `size_to_content_x`, `size_to_content_y` | Take the widget's desired size on that axis |
+| `z_order` | Paint and hit-test order inside a canvas |
+| `variable` | Expose the widget by name to the controller |
+| `slot_margin`, `slot_fill`, `slot_h_align`, `slot_v_align` | Slot settings when the parent is a box, overlay or grid |
+| `nav_up`, `nav_down`, `nav_left`, `nav_right` and their `_target`s, `clip_to_bounds`, `flow_direction` | Gamepad navigation rules, clipping and reading direction. See [Arc widgets and layout](/docs/ui/arc-widgets-and-layout/#navigation-rules-in-ui-assets). |
+| `design_hidden`, `design_locked` | Designer-only; ignored unless the factory runs in designer mode |
+
+### Text properties
+
+`Text` nodes take these optional properties; a node that sets no font property keeps the style's font:
+
+| Property | Meaning |
+| --- | --- |
+| `text` | The source text, also the fallback for `text_key` |
+| `text_key` | `Namespace.key` in the string tables. See [Localization](/docs/ui/localization/). |
+| `font`, `font_size`, `bold`, `italic` | Font family, size in logical pixels and face |
+| `line_height`, `letter_spacing` | Pixels between baselines (0 means the face's own) and tracking |
+| `font_features` | OpenType features, such as `tnum` for tabular figures |
+| `justify` | `left`, `center` or `right`; logical, so a right-to-left paragraph's left is the right edge |
+| `wrap`, `ellipsis` | Wrap at the arranged width; elide at the `tail`, `head` or `middle` |
+| `text_direction` | `auto`, `ltr` or `rtl` |
+| `shadow_x`, `shadow_y`, `shadow_color` | A drop shadow under the text |
+
+Child blocks: `Props` (class-specific key/value pairs), `Bindings`, `Events`, and nested `Widget` nodes. `Props` is schema-tolerant: unknown keys are kept through a save.
+
+<Callout type="note">
+Fields are written only when they differ from their default, so opening and saving an untouched asset gives a byte-identical file. `slot_h_align` and `slot_v_align` default to `Default`, which means "keep the parent's own alignment".
+</Callout>
+
+## Widget types
+
+The factory knows these class names:
+
+| Kind | Classes |
+| --- | --- |
+| Panels | `CanvasPanel`, `ClipBox`, `HorizontalBox`, `VerticalBox`, `GridPanel`, `UniformGridPanel`, `WrapPanel`, `Overlay`, `ScrollBox`, `Border`, `SizeBox`, `ScaleBox`, `RetainerBox`, `WidgetSwitcher` |
+| Text | `Text`, `RichText`, `RichTextBlock`, `EditableTextBox`, `MultiLineEditableTextBox`, `Hyperlink` |
+| Input | `Button`, `CheckBox`, `ToggleSwitch`, `ComboBox`, `Slider`, `KeyCap`, `KeyCapture` |
+| Data | `ListView`, `TreeView` |
+| Display | `Image`, `ProgressBar`, `Spinner`, `Spacer`, `VideoPlayer`, `Breadcrumb` |
+| Composite | `UserWidget`, `SettingsScreen`, `RebindScreen`, `LobbyScreen` |
+
+A `ListView` takes an `items` array and one child node as its row template. Strings in the template can use `$item`, `$index`, or `$0`, `$1`… for fields of an array item.
+
+A `UserWidget` embeds another `.ui`. `ClipBox` is a canvas panel that always clips. Nesting deeper than `MaxUserWidgetDepth` (8), or a reference back to an asset that is already being expanded, becomes a placeholder and a build error instead of a crash <Source symbol="FAIGGWidgetFactory" />.
+
+## The screen stack
+
+There are two ways to mount a screen.
+
+**World screens.** Add an `AIGG` component to an entity. It has `asset`, `z_order`, `visible` and `auto_focus` <Source symbol="AIGGComponent" />. `SyncFromWorld` mounts every visible one.
+
+**Code screens.** Call `PushScreen(assetPath, zOrder, modal)`. It returns a handle for `PopScreen`, or `0` if the asset failed to load. `PopTopScreen()` pops the most recent one <Source symbol="CAIGGScreenStack" />. In a game, `MGameEngine` wraps these as `PushUIScreen` and `PopUIScreen`.
+
+```cpp title="MainMenuFlow.cpp"
+#include <AIGG/CAIGGScreenStack.h>
+
+static int32_t g_mainMenu = 0;
+
+void ShowMainMenu(Mowo::CAIGGScreenStack& stack)
+{
+	g_mainMenu = stack.PushScreen("Content/UI/MainMenu.ui", 1000, true);
+}
+
+void HideMainMenu(Mowo::CAIGGScreenStack& stack)
+{
+	if (g_mainMenu != 0) {
+		stack.PopScreen(g_mainMenu);
+		g_mainMenu = 0;
+	}
+}
+```
+
+Map an action string from a `.ui` event, such as the sample's `StartMatch`, to a C++ handler with `MGameEngine::RegisterUIAction(action, handler)` or, from code with no engine pointer, the [action registry](#the-action-registry). `QuitGame` is registered by default and stops the engine. Play-in-editor dispatches through the same registry.
+
+### Modal screens
+
+A modal screen:
+
+- keeps gamepad focus inside itself;
+- is drawn over a full-screen scrim that eats clicks and wheel input, so nothing reaches screens or gameplay below;
+- switches the input mode to `UIOnly` and gives back the previous mode when it pops.
+
+The input-mode rule is re-checked every tick against the stack's own `HasModalScreen()`, so it works however the screen was pushed, including from a graph and in Play-In-Editor <Source symbol="FAIGGModalInputGate" />.
+
+### Safe zone
+
+`SetSafeZoneInsets(x, y)` insets every screen's root canvas by a fraction of each axis, clamped to 0–0.25. The default is zero.
+
+## Bindings
+
+A `Bind` entry drives one widget property from a source every tick. The widget is written only when the value changes.
+
+```mdf title="Content/UI/VisualScriptDemo.ui (excerpt)"
+Bindings {
+    Bind {
+        property: "text"
+        source: "visualscript.UiDemoController.GetStatus"
+    }
+}
+```
+
+**Bindable properties**:
+
+| Property | Widgets |
+| --- | --- |
+| `text` | Text, RichText, EditableTextBox |
+| `percent` | ProgressBar |
+| `value` | Slider, ProgressBar |
+| `checked` | CheckBox, ToggleSwitch |
+| `visible` | any widget |
+| `image` | Image (an asset path; empty clears it) |
+| `active_index` | WidgetSwitcher |
+| `spinning` | Spinner |
+| `media`, `playing`, `volume` | VideoPlayer |
+
+**Sources**, in the order the stack tries them:
+
+<Steps>
+<Step title="Published values">
+An exact name published with `MUIStatics::SetBindingValue` or `SetBindingNumber`. This is how a controller pushes values to the screen.
+</Step>
+<Step title="Controller functions">
+`visualscript.<Class>.<Function>` calls a function on the screen's controller class. `controller.<Name>` reads a field or a zero-argument getter of a C++ controller class. See below.
+</Step>
+<Step title="The host resolver">
+A custom hook first, then numeric literals (`"0.75"`), then reflection paths `Entity.Component.Property[.x|.y|.z|.w]`. The entity is found by scene name and the component by its reflected name <Source symbol="FAIGGBindingLibrary" />.
+</Step>
+</Steps>
+
+## Events
+
+An `On` entry wires a widget event to an action string. Several entries for the same event all run, in order.
+
+| Event | Fired by |
+| --- | --- |
+| `clicked` | Button, Hyperlink |
+| `changed` | CheckBox, ToggleSwitch, ComboBox, Slider |
+| `committed` | EditableTextBox, MultiLineEditableTextBox |
+| `link` | RichText links; the payload is the link target |
+| `drop`, `drop_outside` | Widgets with `drop_target` / `drag_source` props |
+| `closed`, `rebind` | SettingsScreen (`closed` also on RebindScreen and LobbyScreen) |
+
+Actions are resolved in this order:
+
+1. Built-in animation verbs: `PlayAnim:Name`, `PlayAnimReverse:Name`, `StopAnim:Name`.
+2. `VisualScript:<Class>.<Event>[:payload]`, which runs an event graph on the controller class.
+3. A handler registered in the [action registry](#the-action-registry) under the action name (or under the part before the first `:`, with the rest as the payload). The narrowest scope wins: this screen, then this host, then global.
+4. A zero-argument function of that name on the screen's [C++ controller](#c-controllers), optionally written `Controller:<Function>`.
+5. Anything else reaches the host's event sink, which only logs, and is reported once as an error: `UI action '<name>' has no handler`. In play-in-editor the same case also raises a warning toast. A screen with a Visual Scripting controller is exempt: that controller receives every action through `OnUIEvent`.
+
+The packaged game, play-in-editor and the editor's test hosts all run this one path, so a button behaves the same in each.
+
+## Animations
+
+An `Anim` is a named timeline. Each `Track` animates one property of one named node: `opacity`, `translation_x`, `translation_y`, `scale` or `rotation`. Color tracks tint Text and RichText widgets. Keys have a time `t`, a value, and an `easing` into that key: `linear`, or `quad`, `cubic`, `quart`, `quint`, `sine`, `expo`, `circ`, `back`, `bounce`, `elastic` with `_in`, `_out` or `_in_out`.
+
+`auto_play` starts a timeline when the screen mounts; `loop` wraps it. From C++, use `PlayAnimation(assetPath, name, params)` with `FAIGGAnimPlayParams` (`Loop`, `Reverse`, `OnFinished`) <Source symbol="FAIGGAnimPlayParams" />. Every finished run also reports `anim_finished` through the event sink.
+
+## Controller classes
+
+A screen can be driven entirely from [Visual Scripting](/docs/visual-scripting/). Set `visual_script_class` at the root to a `.vscript` class, then:
+
+- **Pull values** with `visualscript.<Class>.<Function>` bindings. The stack keeps one shared instance per class and caches each source's result per tick. Evaluation runs under a 50,000-step budget, so a runaway loop warns and yields nothing.
+- **Push events** with `VisualScript:<Class>.<Event>` actions. Before the graph runs, the stack sets the variables `WidgetName`, `EventName`, `PinPayload`, `ScreenPath` and `OwnerEntity`.
+- **React to the screen**: the controller receives `OnScreenShown`, `OnScreenHidden`, and `OnUIEvent` for every widget event on the screen.
+- **Reach back** with the `MUIStatics` functions: `SetWidgetText`, `SetWidgetVisible`, `SetProgress`, `PlayWidgetAnim`, `StopWidgetAnim`, `PushScreen`, `PopScreen`, `SetBindingValue`, `SetBindingNumber` and the video controls <Source symbol="MUIStatics" />.
+
+<Callout type="warning">
+UI graphs run with no actor behind them. Calls that need a target actor do nothing and log an error; go through `MUIStatics` or gameplay events instead. Pushing or popping screens during a binding evaluation is refused, so a binding can never rebuild the screen it is drawing.
+</Callout>
+
+The test project pairs `Content/UI/VisualScriptDemo.ui` with `Content/UI/UiDemoController.vscript`. For graph authoring, see [Functions, macros and dispatchers](/docs/visual-scripting/functions-macros-dispatchers/) and [Calling C++](/docs/visual-scripting/calling-cpp/).
+
+## The action registry
+
+`FAIGGActionRegistry` maps an action name to a handler <Source symbol="FAIGGActionRegistry" />. It is one process-wide table that every host reads, so game-module code registers without holding an engine pointer:
+
+```cpp
+class AMenuDirector : public AActor {
+	void BeginPlay() override {
+		m_quit = FAIGGActionRegistry::Get().Register("QuitToDesktop", [] { /* ... */ }, FAIGGActionScope::ForActiveStack());
+	}
+
+	void EndPlay() override {
+		m_quit.Reset();
+	}
+
+	FAIGGActionHandle m_quit;
+};
+```
+
+- **Handles own the registration.** Dropping or resetting an `FAIGGActionHandle` unregisters the handler, so hold it exactly as long as the object the handler touches. `Detach()` leaves the entry registered for the life of its scope.
+- **Scopes.** `FAIGGActionScope()` is global. `ForHost(stack)` limits a handler to one screen stack and `ForScreen(stack, assetPath)` to one `.ui` asset; `ForActiveStack()` is the stack gameplay UI is on right now (`MUIStatics::GetActiveStack`). A stack takes its registrations with it when it is destroyed, and play-in-editor drops its stack's registrations on Stop. A global handler is never cleared by a session, so release it from the object that owns it.
+- **Duplicates.** Registering the same name in the same scope again replaces the earlier handler (the earlier handle reads invalid); a replacement from another module logs a warning.
+- **Modules.** An entry records the module that registered it and is removed when that module unloads, so a hot reload never leaves a click calling into freed code. Pass the optional `owner` argument only if you register on behalf of another module.
+- **Handler shape.** A handler is invocable as `void()` or `void(const FAIGGActionContext&)`; the context carries the action, payload, widget, event and screen path. A handler may unregister itself or register another action while it runs.
+- **The game host.** `MGameEngine::RegisterUIAction(name, handler)` is a thin forwarder that registers in the registry scoped to the engine's stack.
+
+An action nobody took is logged once per name as an error (`ReportUnhandled`); registering the name re-arms that report.
+
+## C++ controllers
+
+A screen's root may name any reflected actor or actor component class as its controller (`controller_class`, set from the Designer's **C++ Controller Class** picker). No Visual Scripting is involved:
+
+```cpp
+MCLASS()
+class AMainMenuController : public AActor {
+public:
+	MGENERATED_BODY()
+
+	MPROPERTY()
+	int32_t Score = 0;
+
+	MFUNCTION()
+	void OnPlayPressed() { ++Score; }
+};
+```
+
+With that class as the root's controller, a button whose `clicked` event has the action `OnPlayPressed` calls the function, and a text widget bound to `controller.Score` shows the field. Details:
+
+- **Which instance.** The first live actor of that class in the active world, or else the first actor component of that class. Place one in the level. The lookup is repeated whenever the instance is destroyed or the world changes (a play session ends, travel, hot reload), and nothing keeps a pointer to a dead object. With no instance the call does nothing and a warning is logged once.
+- **Functions.** Only functions with no parameters are called by an action; one with parameters is refused with a warning. `OnScreenShown` and `OnScreenHidden`, when present, run as the screen mounts and unmounts.
+- **Bindings.** `controller.<Name>` reads an `MPROPERTY` that is a bool, an integer, a float, a double, a string or an enum, or a zero-argument getter `MFUNCTION` with a bool, number or string result. Use `controller.<Class>.<Name>` to read from a controller other than the screen's own.
+- **Visual Scripting classes** keep working as before and take precedence for a name that is both.
+- **Layering.** AIGG (Arc In-Game Graphics) knows nothing of actors. The Game layer installs the `FAIGGControllerResolver` hooks through `FUIControllerBridge::Install(stack, worldProvider)`, which the packaged game and play-in-editor each call for their stack <Source symbol="FAIGGControllerResolver" />.
+
+## Input modes
+
+A modal screen forces UI-only input and gives the previous mode back when it pops. The packaged game and play-in-editor apply the same `FAIGGModalInputGate`, once per tick, so the transition does not depend on how the screen was pushed <Source symbol="FAIGGModalInputGate" />.
+
+## Localization and hot reload
+
+A `text_key` such as `Menu.start` resolves through the string tables; the part before the first dot is the namespace. See [Localization](/docs/ui/localization/). `LoadLocalization(rootDir, locale)` loads `key=value` tables from `<rootDir>/<locale>/` <Source symbol="CAIGGScreenStack" />.
+
+`EnableHotReload(true)` watches loaded `.ui` files. Saving one rebuilds every screen that uses it on the next tick <Source symbol="CAIGGScreenStack" />.
+
+## Bound lists
+
+A `ListView` with `items_source` set to a collection name shows that collection instead of a fixed `items` array. Fill it from C++ with `FAIGGCollectionRegistry::Get().GetOrCreate("name").Set(key, fields)` or from Visual Scripting with `MUIStatics.SetCollectionField`, `RemoveCollectionItem` and `ClearCollection`. The row template is the first child; `$key` and `$item.<field>` fill it. Rows are keyed, so a refresh rebuilds only the rows whose values changed, and `AListView` virtualizes the list. The `selected` and `activated` events carry the row key as `$payload`, and `GetCollectionSelection` returns the selected key <Source symbol="FAIGGCollection" />.
+
+## Layers and focus
+
+`PushScreenOnLayer(path, layer)` pushes onto a named layer: `game`, `menu`, `modal` (modal) or `toast`. Each layer owns a z band, so a toast never lands under a menu. Popping a screen gives focus back to the widget that held it when the screen opened. `SetScreenBackHandler(handle, fn)` makes back a per-screen decision before the global handler <Source symbol="FAIGGScreenLayers" />.
+
+## View models and screen instances
+
+A view model holds named fields and notifies listeners when one changes. `vm.<Model>.<field>` binds to a shared model. Push a screen with `PushScreenWithViewModel` and bind `self.<field>`: two copies of one screen then hold separate state. `SetWidgetTextOnScreen(handle, ...)` and its siblings address one instance <Source symbol="FAIGGViewModel" />.
+
+## Widget types from plugins
+
+`FAIGGWidgetTypeRegistry::Register` adds a widget type with a build function, properties, bindable properties and events, without editing the factory. A child with `slot: "name"` is reachable from a registered widget through `SlotChildren`. The on-screen joystick and button register through it. Entries are removed when the module unloads <Source symbol="FAIGGWidgetTypeRegistry" />.
+
+## Menu input
+
+Both hosts feed one `FAIGGInputRouter`. D-pad and the left stick navigate with hold-to-repeat, South accepts, East goes back, shoulders switch tabs and the right stick scrolls. `BindPadButton` rebinds an action, and `SerializeBindings` / `LoadBindings` persist it. Enhanced Input actions named `UI.Accept`, `UI.Back` and so on drive the router through `FeedNamedAction`. `prompt.<Action>` and `prompt.bar` bind the current button label for the active device and controller family <Source symbol="FAIGGInputRouter" />.
+
+## Safe zone and scale
+
+Safe-area insets are per side. `safe_zone` on a root canvas picks sides (`all`, or the letters `l`, `t`, `r`, `b`). `scale_rule` is `fit` (default), `shortest_side`, `longest_side`, `width`, `height`, `fixed` or `curve`, with `scale_fixed`, `scale_min`, `scale_max` and `scale_curve` (`"360:0.75,1080:1.5"`). `ui.SafeZone.Overscan` is the player's TV-overscan margin and `ui.DebugSafeZone` previews an inset. A stack can carry its own insets (`SetSafeInsets`), so split-screen viewports and PIE windows do not share one value <Source symbol="FAIGGSafeZone" />.
+
+## Named slots
+
+A `NamedSlot` node marks a place in a widget asset where whoever embeds it supplies content. In the embedding `UserWidget` node, give each child a `slot` prop naming the slot; the child is built inside that slot. A single unnamed slot also takes children with no `slot`. A child naming a slot the asset does not have is dropped <Source symbol="FAIGGWidgetFactory" />.
+
+## Prompts and the action bar
+
+`KeyPrompt` shows the button or key bound to a UI action for the device in use (`action`: `Accept`, `Back`, `TabPrev` ...). `ActionBar` shows a line of prompts such as `A Select   B Back` (`actions`: a comma-separated list). Both follow rebinding and the controller family (Xbox, PlayStation, Switch, Steam Deck) and are listed under Input in the designer palette <Source symbol="FAIGGGlyphTable" />.
+
+## Split screen
+
+With more than one local player the game keeps one screen stack per player. Each stack has its own screens, focus and router, is laid out inside that player pane, and receives the gamepad assigned to the player. Per-player menu actions (`UI.Accept`, `UI.Back`, `UI.NavUp` ...) are read from that player input action system <Source symbol="FAIGGPlayerStacks" />.
+
+## Menu actions from input assets
+
+Define actions named `UI.Accept`, `UI.Back`, `UI.NavUp`, `UI.NavDown`, `UI.NavLeft`, `UI.NavRight`, `UI.TabPrev`, `UI.TabNext`, `UI.ScrollUp` and `UI.ScrollDown` in a mapping context and the menu follows them, with the same hold-to-repeat as the gamepad. Keyboard keys reach the router only when bound with `BindKey`, so Arc own keyboard handling is never doubled <Source symbol="FAIGGActionBridge" />.
+
+## Game UI Inspector
+
+Developer menu, Game UI Inspector (Ctrl+Shift+U) attaches to the play-in-editor UI. It lists the screens and layers, every focusable widget with the target each direction leads to, the router bindings and, when switched on, a log of routed UI events. Save snapshot writes the same text to the project Saved/UiSnapshots folder <Source symbol="FAIGGInspector" />.
+
+## Pointer options
+
+`arc.CoalesceMouseMove 1` routes only the last of consecutive mouse-motion events in one drain. `arc.HitTest.Grid 1` prunes the hit test through a grid built once per frame; `2` also runs the plain walk and counts any difference in `arc.HitTest.Stats` (Mismatches). Both default to off.
+
+## Related
+
+- [AIGG Designer](/docs/ui/aigg-designer/) to author these assets visually.
+- API: [AIGG reference](/docs/api/aigg/), including `CAIGGScreenStack`, `FAIGGAsset`, `FAIGGWidgetFactory`, `FAIGGBindingLibrary`, `MUIStatics`, `AIGGComponent`.

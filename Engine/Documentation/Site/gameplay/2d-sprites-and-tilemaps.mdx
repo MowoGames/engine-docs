@@ -1,0 +1,191 @@
+---
+title: 2D Sprites and Tilemaps
+description: Sprites, flipbooks, tilemaps with auto-tiling, sheet slicing, parallax, a following pixel-perfect camera, 2D colliders, and the Sprite Editor and Tile Palette.
+order: 41
+sources:
+  - Engine/Plugins/Sprites2D/Sprites2D.mplugin
+  - Engine/Source/Runtime/Camera/Public/Camera/PixelPerfect.h
+  - Engine/Source/Runtime/Physics/Public/Physics/Components/RigidBodyComponent.h
+  - Engine/Plugins/Sprites2D/Public/Sprites2D/SpriteSheetSlicer.h
+  - Engine/Plugins/Sprites2D/Public/Sprites2D/TilePainter.h
+  - Engine/Plugins/Sprites2D/Public/Sprites2D/TilePaletteSession.h
+  - Engine/Plugins/Sprites2D/Public/Sprites2D/Presentation2D.h
+  - Engine/Plugins/Sprites2D/Public/Sprites2D/Collider2DSystem.h
+  - Engine/Plugins/Sprites2D/Public/Sprites2D/SpriteEditorModel.h
+verifiedAt: e5ecdd45c
+status: in-development
+---
+
+The **Sprites2D** plugin is the engine's 2D runtime and its editor tools: five asset types, sorting layers, chunked tile layers with auto-tiling, tilemap collision from tile flags, parallax, a following camera, 2D colliders, queries on the XY plane and a state hook for animation. Enable it in the Plugins window. A pixel-perfect orthographic camera and a lock-to-plane flag for rigid bodies live in the camera and physics components, so a 2D game uses them without the plugin and a 3D game never sees them. <Source path="Engine/Plugins/Sprites2D/Sprites2D.mplugin" />
+
+<Callout type="note">With the plugin on, the editor adds the Sprite Editor and Tile Palette panels, the Tile Palette and Move 2D viewport modes, Content Browser actions that slice textures, and a New entry for each 2D asset. See [Editor tools](#editor-tools). Everything is also a reflected component field or a text asset, so a script or a merge can do the same by hand.</Callout>
+
+The **2D Platformer** template is a finished example that uses every part of this page. <Source path="Templates/TP_Platformer2D/README.md" />
+
+## Assets
+
+All five are text assets in the Mowo data format, so a merge reads them and `mbt cook` packs them.
+
+| Asset | File | What it holds |
+|---|---|---|
+| Sprite | `.sprite` | A rectangle of a texture, or a named frame of an atlas, with its pivot and pixels per unit |
+| Sprite Atlas | `.spriteatlas` | One texture cut into named frames |
+| Flipbook | `.flipbook` | Sprites played in order at a frame rate, with holds, a loop mode and named events |
+| Tileset | `.tileset` | A texture cut into a grid of tiles, with behaviour flags and tile animation |
+| Tilemap | `.tilemap` | Layers of cells that name tiles, each layer with its own sorting layer, order and collision switch |
+
+```mdf title="Content/Art/hero.sprite"
+Sprite "sprite" {
+    schema_version: 1
+    pixels_per_unit: 16
+    pivot_x: 0.5
+    pivot_y: 0
+    nearest: true
+    texture: @"Content/Art/hero.png"
+    texture_width: 64
+    texture_height: 16
+    x: 0
+    y: 0
+    width: 16
+    height: 16
+}
+```
+
+A sprite's **pivot** is normalized from the bottom-left of its rectangle, so `(0.5, 0)` stands a character on its feet at the entity's position. Its **world size** is the rectangle's pixel size divided by `pixels_per_unit`. Turn **nearest** on for pixel art: the texture is sampled without filtering and clamps at its edges.
+
+An atlas sprite names `atlas` and `frame` instead of a rectangle. The atlas stores its texture's pixel size beside the path, so frames resolve to UV rectangles without loading the texture.
+
+### Flipbooks
+
+A flipbook plays its `Frame` children at `fps`. A frame's `hold` keeps it up for that many ticks. `loop` is `once`, `loop` or `pingpong`; ping pong returns without repeating either end, so a four frame bounce plays `0 1 2 3 2 1`. An `Event` child names a frame and fires when the playhead enters it.
+
+### Tilesets and tilemaps
+
+A tile's id is its index in the sheet, row by row from the top-left. Each `Tile` child carries `flags`, a `|` separated list of `Solid`, `OneWay`, `Hazard`, `Ladder`, `Water`, `Ice` and `Custom0` to `Custom7` (your own meanings). A tile with `anim_frames` swaps its picture for other tiles of the sheet at `anim_fps`.
+
+A tilemap's rows run bottom to top, so a cell's y points the way world y does. Each row is a run-length line of `value:count` pairs, and rows that are empty are not written. A cell value is `0` for empty and otherwise the tile id plus one; the top bits hold the horizontal and vertical flips.
+
+### Chunked tile layers
+
+A tile layer draws as 16 by 16 cell chunks. Each chunk is its own mesh, so the renderer culls the chunks that are off screen, empty chunks cost nothing, and painting one cell rebuilds only the chunk it sits in. Animated tiles rebuild the chunks that hold them on the frames where a tile changes its picture.
+
+### Auto-tiling terrains
+
+A tileset can hold **terrains**. A terrain lists which tile to draw for each pattern of neighbours, so painting a ground tile picks the edge or corner tile by itself and repainting its neighbours keeps the whole shape consistent.
+
+```mdf title="Content/Levels/Platformer.tileset"
+Terrain "Ground" {
+    mode: "edge4"
+    fallback: 15
+    rules: "0:0,1:1,4:2,5:3,16:4,17:5,20:6,21:7,64:8,65:9,68:10,69:11,80:12,81:13,84:14,85:15"
+}
+```
+
+`rules` is a list of `mask:tile` pairs. In `edge4` mode the mask adds 1 for a neighbour to the north, 4 east, 16 south and 64 west. In `blob8` mode the diagonals add 2, 8, 32 and 128 for north-east, south-east, south-west and north-west, and a diagonal only counts when both of its edges are present, which is the usual 47-tile layout. `fallback` is the tile used when no rule matches. A cell belongs to the terrain when its tile is `fallback` or appears in `rules`, and the edge of the map counts as a neighbour, so ground reaches the border without a seam.
+
+### Slicing a sheet
+
+**Slice Into Sprites** on a PNG, JPG, TGA or BMP in the Content Browser writes a `.spriteatlas` beside the image and one `.sprite` per frame. The Sprite Editor panel sets how it cuts:
+
+| Setting | Meaning |
+|---|---|
+| Grid | Fixed cell width and height with an optional margin and spacing. Empty cells are skipped and keep their numbers, so frame names stay stable. **Trim to content** shrinks each cell to its opaque pixels |
+| Automatic | Finds every island of pixels above the alpha threshold. **Merge distance** joins islands separated by that many empty pixels, **Minimum size** drops specks, and frames number left to right in rows |
+| Pivot | Center, the edges and corners, or a custom point. **Snap pivot to a pixel** rounds it to a whole texel of the frame so a sprite never rests between pixels |
+| Pixels per unit, Nearest | Written to the atlas, so the sprites inherit them |
+
+**Create Flipbook From Atlas** on a `.spriteatlas` writes a `.flipbook` of every frame, and the Sprite Editor can write one for a range of frames at a chosen rate.
+
+## Components
+
+| Component | Use |
+|---|---|
+| Sprite | Draws a Sprite asset as a quad on the entity's XY plane, with tint, flips, blend (alpha or additive), sorting layer and order in layer |
+| Flipbook | Plays a Flipbook asset with the same visual fields, play speed, a loop override and the animation state table |
+| Tilemap | Places a Tilemap asset; its layers draw at their own sorting position and its collision layers become static bodies |
+| Parallax | Moves the entity against the main camera by a factor per axis |
+| Camera Follow 2D | Moves a Camera after the 2D target with a dead zone, smoothing, look-ahead and bounds |
+| Camera Target 2D | Marks the entity the camera and sprite followers track |
+| Sprite Follower | Puts a Flipbook on the target and picks its animation state from how the target moves |
+| Collider 2D | A box, circle, capsule or convex polygon collider for the 3D physics world, on the XY plane |
+
+Add them from the Add Component menu under **2D**. Sprites are drawn through the scene's static mesh path with a fully rough, non-metallic material, so they sit correctly among 3D objects and are lit like any surface: the quad faces the camera along +Z, so a directional light and the ambient term shade it. They neither cast nor receive shadows. Turn **Lit** off on a Sprite, Flipbook or Tilemap to draw it at its own colours with no lighting, for glowing effects and UI-like sprites; lit and unlit sprites never share a batch. Texture filtering is set per sprite or atlas with **Nearest**, which also clamps at the edges.
+
+## Sorting
+
+Sorting layers are named, back to front, on the **Project Settings > 2D Sprites** page (the `sprites2d.SortingLayers` console variable, default `Background,Default,Foreground`). The page appears while the plugin is enabled and also holds the depth step and the pixel-perfect camera defaults. A sprite or tilemap layer names its sorting layer; an unknown name draws in `Default`. Within a layer, **Order In Layer** decides, and sprites that tie keep their submission order so they never swap between frames.
+
+Every sprite, flipbook and tile layer of a frame sorts together. Neighbours that share a texture, filter and blend merge into one batch, and a different texture breaks it. Draw order survives the depth-tested transparent pass because each entry is lifted toward the camera by `sprites2d.DepthStep` world units (default `0.001`, squeezed so the whole stack stays within half a unit). `sprites2d.Enabled 0` switches the 2D batches off without removing the plugin.
+
+## Pixel-perfect camera
+
+On a Camera component with an orthographic projection, turn on **Pixel Perfect**. The view then shows a whole number of screen pixels per texel: the largest integer multiple of **Reference Height** that fits the window sets the scale, and **Ortho Size** is ignored. With a 1080 pixel tall window, a reference height of 180 and 16 pixels per unit, the scale is 6 and the view is 11.25 units tall. **Snap To Pixel Grid** rounds the camera position along its own axes to a whole screen pixel, so panning never lands a sprite between pixels. A camera whose Pixels Per Unit or Reference Height is 0 takes the project defaults from the same settings page (`camera.PixelPerfect.PixelsPerUnit`, default 16, and `camera.PixelPerfect.ReferenceHeight`, default 180). The editor viewport and Play in Editor panes resolve the same way, so the preview matches the game. A window shorter than the reference height keeps scale 1 and crops instead of shrinking the art. <Source path="Engine/Source/Runtime/Camera/Public/Camera/PixelPerfect.h" />
+
+### Following the player
+
+Put **Camera Follow 2D** on the Camera entity. The camera tracks the entity with a **Camera Target 2D** component; with none placed it takes the first entity that has a Character Movement, which is what a Platformer Kit character is. The camera ignores the target while it stays inside the **Dead Zone**, then moves by the excess, eased at **Smoothing** per second, leading the target's horizontal motion by up to **Look Ahead** units and clamped to **Bounds** when **Use Bounds** is on. The first frame snaps onto the target. The pixel-perfect camera then snaps the result to its pixel grid. The follow runs while the game plays, not in the editor viewport. <Source path="Engine/Plugins/Sprites2D/Public/Sprites2D/Presentation2D.h" />
+
+### Parallax
+
+Give a background Sprite a **Parallax** component. It remembers where the entity and the main camera were on the first frame and then sits at its start position plus the camera's travel times **Factor X** and **Factor Y**: 1 sticks to the camera, 0 stays in the world and values between scroll slower than the world. **Wrap Width** repeats the layer every that many units along X, so a backdrop W units wide, placed as three copies W apart with a wrap width of 3 x W, never runs out. **Snap Pixels Per Unit** lands the layer on a whole texel so pixel art does not shimmer while it scrolls.
+
+## Physics in the plane
+
+Turn on **Lock To XY Plane** on a RigidBody component and the body moves in X and Y and spins about Z only, whatever the freeze toggles say. Give the collider some depth along Z so bodies meet each other and the floor. Tilemap collision boxes follow the Tilemap component's **Collision Depth** (a half thickness along Z).
+
+Collision layers of a tilemap become static boxes built from the tileset's `Solid` flags: runs of solid tiles merge into as few rectangles as a row-then-column sweep finds, and they rebuild when the tilemap, its tileset, its position or its depth changes. Collision needs an unrotated tilemap. A RigidBody whose freeze toggles and Lock To XY Plane leave no free axis is created static, with a warning in the log. `OneWay` and the other flags are not turned into bodies; read them with the tile flags query in your game code.
+
+### Collider 2D
+
+A **Collider 2D** component describes a shape on the XY plane and the engine mirrors it into a regular Collider when the game starts and whenever you change it, so Jolt solves it like any other body. The shapes are a box (size), a circle (radius), a capsule (width and height, standing upright) and a convex polygon (**Polygon Points** in entity space, extruded through **Depth**; a concave outline is replaced by its convex hull and fewer than three points falls back to a unit box). **Offset** shifts the shape on the plane, **Is Trigger** makes it a sensor, and **Friction** and **Restitution** feed the material. With **Lock Body To Plane** on, a RigidBody on the same entity is locked to the plane too, so a dynamic or kinematic 2D body is a RigidBody plus a Collider 2D. Without a RigidBody the collider is a static body, which is how you make a platform. <Source path="Engine/Plugins/Sprites2D/Public/Sprites2D/Collider2DSystem.h" />
+
+### Queries
+
+The 2D queries are the 3D ones with the shape centred on one Z: a ray runs along `(x, y)` at that Z, a circle is a sphere on it, and a box takes the probe depth along Z. The Visual Scripting nodes take a `Vec3` whose Z is the plane.
+
+| Node | Result |
+|---|---|
+| `Raycast2DDistance` | Distance to the first hit, or `-1` |
+| `OverlapCircle2DCount` | Bodies a circle touches |
+| `IsPointSolid2D` | Whether any body contains the point |
+
+## Animation states
+
+A Flipbook component keeps a table of states, each a `name=flipbook path` entry. An animation graph or a Visual Scripting graph sets the state by name, and the component switches flipbooks and restarts the playhead when the name maps to a different flipbook; a name the table does not know changes nothing. The graph never holds an asset path.
+
+| Node | Use |
+|---|---|
+| `SetAnimationState` / `GetAnimationState` | Switch and read the state |
+| `PlayFlipbook` | Play a flipbook by path, clearing the state |
+| `SetFlipbookPlaying`, `SetFlipbookSpeed` | Pause, resume and scale time |
+| `GetFlipbookFrame`, `IsFlipbookFinished` | Read the playhead |
+| `GetLastFlipbookEvent`, `GetFlipbookEventSerial` | Poll the event the flipbook fired last; the serial moves on every event, so repeats are not missed |
+| `SetSpriteFlip`, `SetSpriteTint` | Face and colour a Sprite or Flipbook |
+
+C++ code can listen for events with `FSpriteAnimationHooks::AddEventHandler`; handlers run on the game thread at the end of the flipbook update.
+
+### Sprite follower
+
+A **Sprite Follower** on an entity with a Flipbook mirrors the 2D target's position plus an **Offset** and sets the Flipbook's animation state from the target's speed: the **Fall State** or **Jump State** when its vertical speed passes **Air Threshold**, else the **Run State** above **Run Threshold**, else the **Idle State**. It flips the sprite to face the direction of travel (turn **Art Faces Right** off for art drawn facing left). This is how a Platformer Kit character, whose body is a capsule you hide with its Body Visible default, gets an animated sprite without any code. Fill the Flipbook's state table with entries such as `run=Content/Art/Flipbooks/hero_run.flipbook`.
+
+## Editor tools
+
+<Screenshot id="gameplay-2d-tile-palette" alt="Level viewport with the Tile Palette mode active over a tilemap, the grid overlay and a green brush cell visible, and the Tile Palette panel docked beside it showing tools, layer and the tile list" caption="Painting a tilemap with the Tile Palette" />
+
+| Tool | Where | What it does |
+|---|---|---|
+| Sprite Editor | Window menu, dock panel | Slice settings, the list of frames, **Write atlas and sprites**, and a flipbook builder. Pick the image with **Sprite Editor: Select** in the Content Browser |
+| Tile Palette | Viewport modes bar, plus the Tile Palette panel | Paint, erase, line, rectangle, fill and pick on the selected Tilemap entity, with flips, layers and terrains. Drag in the viewport; the grid and the cells you will change are drawn over the map |
+| Move 2D | Viewport modes bar | Drags the selected entities on the XY plane, snapping to a pixel (from Pixels Per Unit) or a grid size, one undo step per drag. Hold <Kbd>Alt</Kbd> to skip snapping. **Keep Z** leaves depth alone |
+| Content Browser actions | Right-click | **Slice Into Sprites**, **Create Sprite**, **Create Tileset** (tile size from the Sprite Editor's cell size) on images; **Create Flipbook From Atlas**; **Tile Palette: Edit** on a `.tilemap` |
+| New menu | Content Browser | Sprite, Flipbook, Sprite Atlas, Tileset and Tilemap (32 by 18 with a collision layer) |
+
+<Callout type="note">Tile Palette strokes have their own Undo and Redo buttons in the panel and keep the last 256 strokes; they are not part of the editor's undo list. **Save tilemap** writes the `.tilemap` file. Tiles in the panel are listed by number, a trailing `#` marks a solid tile, and they do not show a thumbnail yet.</Callout>
+
+## Related
+
+- [2D Platformer template](/docs/getting-started/template-platformer-2d/)
+
+- [Cameras](/docs/gameplay/camera/)
+- [Physics](/docs/gameplay/physics/)
+- [Components](/docs/gameplay/components/)

@@ -1,0 +1,53 @@
+---
+title: Playing geometry caches
+sidebarTitle: Geometry caches
+description: Play a .gcache with the GeometryCache component, control it from Visual Scripting or C++, drive it from a cutscene, and tune streaming.
+order: 18
+status: in-development
+sources:
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/GeometryCacheComponent.h
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/GeometryCachePlayback.h
+  - Engine/Source/Runtime/Game/Public/Game/MGeometryCacheComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/MGeometryCacheStatics.h
+  - Engine/Source/Runtime/Game/Public/Game/AGeometryCacheActor.h
+verifiedAt: 791d08149
+---
+
+The **GeometryCache** component plays a [geometry cache](/docs/content-pipeline/geometry-caches/) asset. Place a `.gcache` in the level and the editor creates an actor with the component.
+
+## Properties
+
+| Property | Meaning |
+|---|---|
+| Geometry Cache | The `.gcache` asset |
+| Play On Start | Start playing when the level starts |
+| Loop | The last frame blends into the first |
+| Play Rate | Speed multiplier; negative plays backwards |
+| Start Time | Where playback begins and where Stop returns to, in seconds |
+| Play In Editor | Plays in the edit world without pressing Play |
+| Cast Shadows, Receive Shadows, Light Channels | As on a mesh |
+| Motion Blur | Writes per-vertex velocity for temporal anti-aliasing and motion blur; off draws the object transform only |
+| Material Slots | One material per material section of the cache |
+
+## Control from Visual Scripting and C++
+
+The geometry cache library exposes `PlayGeometryCache`, `PauseGeometryCache`, `StopGeometryCache`, `SetGeometryCacheTime`, `GetGeometryCacheTime`, `GetGeometryCacheDuration`, `GetGeometryCacheFrameCount`, `SetGeometryCachePlayRate`, `SetGeometryCacheLooping`, `IsGeometryCachePlaying` and `SetGeometryCacheAsset`. Each takes the actor. The actor's component class has `Play`, `Pause`, `Stop` and `SetPlaybackTime`, and the events `OnFinished` and `OnLooped`.
+
+## Cutscenes
+
+The geometry cache actor has an `Interp` property, `PlaybackTime`. Key it on a Sequencer actor property track and turn on `DrivePlaybackTime`: the cache then pauses and shows the frame at that time, so scrubbing the sequence scrubs the cache.
+
+## Streaming
+
+Chunks decode on the background thread pool. A playing cache decodes ahead of the playhead; if a chunk is late the last frame stays on screen and the stall is counted. A paused or scrubbed cache decodes its chunk at once.
+
+| Console variable | Default | Meaning |
+|---|---|---|
+| `gcache.PrefetchChunks` | 2 | Chunks decoded ahead of the playhead |
+| `gcache.CacheBudgetMB` | 64 | Decoded chunks kept per cache; the least recently used go first |
+| `gcache.UsePooledMesh` | 0 | Upload constant-topology frames through the shared dynamic mesh pool |
+| `gcache.SyncDecodeOnSeek` | 1 | Decode a paused or first frame immediately |
+
+<Callout type="note">
+A cache with variable topology always uses the shared dynamic mesh pool, because the vertex count changes.
+</Callout>

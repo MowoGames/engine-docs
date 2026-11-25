@@ -6,7 +6,7 @@ order: 5
 sources:
   - Engine/Source/Runtime/RHI/Public/RHI/HdrMetadata.h
   - Engine/Source/Runtime/RHI/Public/RHI/Renderer.h
-verifiedAt: 4d3133579
+verifiedAt: b10f5a304
 ---
 
 A shipped game remembers how the player wants it displayed: window mode, monitor, resolution, refresh rate and VSync. The frame-rate cap and HDR output are console variables that the in-game settings screen exposes. This page covers what each setting does, where it is stored and how launch switches override it.
@@ -22,6 +22,8 @@ The player's settings screen has a **Display** category with these rows ():
 | Frame Rate Cap | `t.MaxFPS` |
 | HDR Display Output, Paper White, Peak Luminance | `r.HDROutput`, `r.HDRPaperWhiteNits`, `r.HDRMaxNits` |
 | UI Scale Override | `arc.UIScale` (read at startup) |
+
+`arc.MinUIScale` puts a floor under the effective UI scale, whichever of the display's scale or the override produced it, so a small override cannot shrink text below what a handheld panel can show. It is 0 (no floor) by default and the Steam Deck device profile sets it to 1.
 
 The Resolution and Refresh Rate lists come from the modes the selected monitor reports, with a **Desktop** entry that keeps the monitor's own mode. Building the settings screen itself is covered in the [UI section](/docs/ui/).
 
@@ -77,7 +79,7 @@ For NVIDIA Reflex, AMD Anti-Lag 2 and Intel XeLL, see [Upscaling and anti-aliasi
 
 If the requested mode is not offered, the engine logs a warning once and stays SDR; it never fails. On Windows the surface lists HDR formats only while Windows HDR is turned on.
 
-In HDR mode the tonemapper replaces the SDR curve with a highlight rolloff toward `r.HDRMaxNits` (default 1000). The grading chain runs before the display encode, in the same range LUTs are authored for. Scene value 1.0, ordinary SDR white, maps to `r.HDRPaperWhiteNits` (default 200). The post-tonemap targets switch to RGBA16F so the encode keeps its precision.
+In HDR mode the tonemapper keeps the scene's tone operator below paper white, so the filmic look is the one an SDR display shows, and spends the headroom above paper white on a highlight rolloff toward `r.HDRMaxNits` (default 1000). The grade (contrast, saturation, lift/gamma/gain, the LUT and the film grain) runs on the display-encoded values up to paper white, exactly as in SDR, so the same settings and a LUT authored for sRGB give the same picture on both; highlights above paper white keep the grade's brightness change. Scene value 1.0, ordinary SDR white, maps to `r.HDRPaperWhiteNits` (default 200). The post-tonemap targets switch to RGBA16F so the encode keeps its precision.
 
 The swapchain also sends mastering metadata (primaries, white point, `r.HDRMaxNits` as peak and MaxCLL, paper white as MaxFALL) on D3D12, D3D11 and Vulkan, so the OS does not guess the range. Metal does not send it yet.
 

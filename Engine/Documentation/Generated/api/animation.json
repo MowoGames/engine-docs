@@ -5255,10 +5255,10 @@
 						{
 							"kind": "method",
 							"name": "Sample",
-							"signature": "static void Sample(const AnimationClip& clip, const Skeleton& skeleton, float timeInSeconds, std::vector<Mat4>& localTransforms, const std::vector<uint8_t>* requiredBones = nullptr)",
+							"signature": "static void Sample(const AnimationClip& clip, const Skeleton& skeleton, float timeInSeconds, std::vector<Mat4>& localTransforms, const std::vector<uint8_t>* requiredBones = nullptr, bool looping = true)",
 							"static": true,
-							"doc": "Sample the clip at the given time (in seconds), output local transforms per bone\nlocalTransforms must be pre-sized to skeleton bone count\n\nrequiredBones (Skeleton::GetLodRequiredBones) skips the key interpolation\nfor bones a coarse LOD does not animate; they keep their bind local, so\ntheir subtree rides the parent rigidly. nullptr = animate everything,\nwhich is what every caller that does not care about LOD passes.",
-							"line": 23
+							"doc": "Sample the clip at the given time (in seconds), output local transforms per bone\nlocalTransforms must be pre-sized to skeleton bone count\n\nrequiredBones (Skeleton::GetLodRequiredBones) skips the key interpolation\nfor bones a coarse LOD does not animate; they keep their bind local, so\ntheir subtree rides the parent rigidly. nullptr = animate everything,\nwhich is what every caller that does not care about LOD passes.\n\nlooping = false clamps the time to [0, duration] instead of wrapping it, so a\none-shot that has finished holds its last frame; a wrapped time read back as the\nfirst frame (Fmod(duration, duration) == 0) and the pose snapped to the start.",
+							"line": 27
 						}
 					]
 				}
@@ -6053,428 +6053,435 @@
 						},
 						{
 							"kind": "field",
+							"name": "hiddenBones",
+							"signature": "std::vector<std::string> hiddenBones",
+							"doc": "Bones (and everything under them) collapsed out of the skinned draw, by\nname: a first-person body hides its head so the camera inside it sees no\nneck. The pose itself is untouched, so sockets and bone queries still work.",
+							"line": 138
+						},
+						{
+							"kind": "field",
 							"name": "modelPath",
 							"signature": "std::string modelPath",
 							"doc": "Model path for serialization",
-							"line": 136
+							"line": 143
 						},
 						{
 							"kind": "field",
 							"name": "controller",
 							"signature": "Ref<AnimationController> controller",
 							"doc": "Optional state machine controller for advanced transitions\nWhen set, overrides basic currentAnimation/currentTime playback",
-							"line": 143
+							"line": 150
 						},
 						{
 							"kind": "field",
 							"name": "controllerPath",
 							"signature": "std::string controllerPath",
 							"doc": "Authored .animgraph controller asset, resolved once by AnimationSystem into\n`controller` above so every hydration path picks it up.",
-							"line": 147
+							"line": 154
 						},
 						{
 							"kind": "field",
 							"name": "controllerResolveAttempted",
 							"signature": "bool controllerResolveAttempted = false",
-							"line": 152
+							"line": 159
 						},
 						{
 							"kind": "field",
 							"name": "graphInstance",
 							"signature": "FAnimGraphInstance graphInstance",
 							"doc": "Per-entity runtime state for the controller's pose graph (clip clocks,\nbool-blend state, cached-pose slots) — never shared across entities\neven when the controller asset is.",
-							"line": 157
+							"line": 164
 						},
 						{
 							"kind": "field",
 							"name": "linkedLayers",
 							"signature": "std::unordered_map<std::string, std::shared_ptr<const FAnimGraph>> linkedLayers",
 							"doc": "Graphs linked into named layers (UE linked anim layers): a Linked Anim\nLayer node in the controller's graph runs the one linked under its name,\nso carrying a torch, an injury or a two-handed object swaps a whole\nlocomotion sub-graph instead of bloating one graph with bool switches.",
-							"line": 163
+							"line": 170
 						},
 						{
 							"kind": "field",
 							"name": "prevTimeTicks",
 							"signature": "float prevTimeTicks = 0.0f",
 							"doc": "Animation events.\nPrevious time in ticks (for event detection between frames)",
-							"line": 167
+							"line": 174
 						},
 						{
 							"kind": "field",
 							"name": "prevNotifyClipIndex",
 							"signature": "int32_t prevNotifyClipIndex = -1",
 							"doc": "The clip prevTimeTicks was measured on. When the playing clip's identity\nchanges (state switch, blend-space representative change), the interval\n[prevTimeTicks, now] spans two unrelated timelines — firing it would\nreplay the new clip's whole notify backlog, and a shorter new clip reads\nas a loop wrap. Event detection re-anchors instead.",
-							"line": 173
+							"line": 180
 						},
 						{
 							"kind": "field",
 							"name": "eventCallbacks",
 							"signature": "std::unordered_map<std::string, AnimEventCallback> eventCallbacks",
 							"doc": "Event callbacks: name -> callback.",
-							"line": 175
+							"line": 182
 						},
 						{
 							"kind": "field",
 							"name": "globalEventCallback",
 							"signature": "AnimEventCallback globalEventCallback",
 							"doc": "Global callback for all events (useful for scripting dispatch)",
-							"line": 177
+							"line": 184
 						},
 						{
 							"kind": "field",
 							"name": "lodAccumDt",
 							"signature": "float lodAccumDt = 0.0f",
 							"doc": "Update-rate LOD — banked dt + frame counter while the\nAnimationSystem skips this animator (far from the LOD focus).",
-							"line": 181
+							"line": 188
 						},
 						{
 							"kind": "field",
 							"name": "lodFrameCounter",
 							"signature": "uint32_t lodFrameCounter = 0",
-							"line": 182
+							"line": 189
 						},
 						{
 							"kind": "field",
 							"name": "animLod",
 							"signature": "uint32_t animLod = 0",
 							"doc": "Which per-LOD required-bone set the skeleton should apply this frame\n(Skeleton::SetLodBonesToRemove). AnimationSystem writes it from the same\ndistance/significance tier that picks the update rate — a rig far enough\nto sample every 16th frame is also far enough to stop animating its\nfingers. A skeleton with no authored masks ignores it entirely.",
-							"line": 189
+							"line": 196
 						},
 						{
 							"kind": "field",
 							"name": "lastRenderedSerial",
 							"signature": "uint64_t lastRenderedSerial = 0",
 							"doc": "The AnimationSystem update serial at which the scene last drew this\nanimator inside the camera frustum (AnimationSystem::NoteRendered), and\nhow many frames in a row the budget has deferred it — the input to\na.OffscreenInterval and the starvation guard of a.BudgetMs.",
-							"line": 195
+							"line": 202
 						},
 						{
 							"kind": "field",
 							"name": "budgetDeferredFrames",
 							"signature": "uint32_t budgetDeferredFrames = 0",
-							"line": 196
+							"line": 203
 						},
 						{
 							"kind": "field",
 							"name": "rootMotionEnabled",
 							"signature": "bool rootMotionEnabled = false",
 							"doc": "Root motion.\nDeltas are FRAME-TO-FRAME (UE5 semantics), so `delta / dt` is a velocity.\nLoop wraps and clip changes are compensated in ExtractRootMotion; the\nprev* fields are its running state, not an output.",
-							"line": 202
+							"line": 209
 						},
 						{
 							"kind": "field",
 							"name": "rootMotionIncludeVertical",
 							"signature": "bool rootMotionIncludeVertical = false",
 							"doc": "Keep the authored vertical in the DELTA (vault/jump/mantle clips move\nthe capsule up) instead of leaving it in the pose and zeroing the\ndelta's Y. Off by default: idle/walk clips bob the root, and without\nthis flag that bob stays cosmetic in the pose.",
-							"line": 208
+							"line": 215
 						},
 						{
 							"kind": "field",
 							"name": "rootMotionFromMontagesOnly",
 							"signature": "bool rootMotionFromMontagesOnly = false",
 							"doc": "UE's RootMotionFromMontagesOnly: the delta comes from the montage\nplayhead alone (weight-scaled), so locomotion blends can never feed\nthe capsule — montage-driven attacks/dodges still do. Slot montages\nare not sourced, only the main montage player.",
-							"line": 214
+							"line": 221
 						},
 						{
 							"kind": "field",
 							"name": "rootMotionDeltaPosition",
 							"signature": "Vec3 rootMotionDeltaPosition",
-							"line": 216
+							"line": 223
 						},
 						{
 							"kind": "field",
 							"name": "rootMotionDeltaRotation",
 							"signature": "Quat rootMotionDeltaRotation = Quat::Identity()",
-							"line": 217
+							"line": 224
 						},
 						{
 							"kind": "field",
 							"name": "rootMotionHasPrev",
 							"signature": "bool rootMotionHasPrev = false",
-							"line": 218
+							"line": 225
 						},
 						{
 							"kind": "field",
 							"name": "rootMotionPrevPosition",
 							"signature": "Vec3 rootMotionPrevPosition",
-							"line": 219
+							"line": 226
 						},
 						{
 							"kind": "field",
 							"name": "rootMotionPrevRotation",
 							"signature": "Quat rootMotionPrevRotation = Quat::Identity()",
-							"line": 220
+							"line": 227
 						},
 						{
 							"kind": "field",
 							"name": "animCurves",
 							"signature": "std::unordered_map<std::string, float> animCurves",
 							"doc": "Named curve values evaluated THIS frame from the playing clips —\nblend-space weighted like the pose, montage-lerped like the pose.\nConsumers (material param routing, gameplay) read GetCurveValue.",
-							"line": 225
+							"line": 232
 						},
 						{
 							"kind": "field",
 							"name": "poseClipContributions",
 							"signature": "std::vector<FAnimPoseClipContribution> poseClipContributions",
 							"doc": "What composed THIS frame's pose, with the same weights and per-clip\n(phase-matched) times the pose blend used. Base entries first, montage\noverlays after, in application order. Empty when the animator was not\nevaluated this frame.",
-							"line": 231
+							"line": 238
 						},
 						{
 							"kind": "method",
 							"name": "GetCurveValue",
 							"signature": "float GetCurveValue(const std::string& curveName, float fallback = 0.0f) const",
-							"line": 233
+							"line": 240
 						},
 						{
 							"kind": "field",
 							"name": "layers",
 							"signature": "std::vector<AnimationLayer> layers",
 							"doc": "Animation layers (additive blending).",
-							"line": 239
+							"line": 246
 						},
 						{
 							"kind": "field",
 							"name": "montage",
 							"signature": "MontagePlayer montage",
 							"doc": "Montage — one-shot sectioned clip blended over the base pose.",
-							"line": 242
+							"line": 249
 						},
 						{
 							"kind": "field",
 							"name": "ownedMontage",
 							"signature": "std::shared_ptr<Montage> ownedMontage",
 							"doc": "MontagePlayer keeps a raw Montage* it does not own. A transient driver\n(behaviour-tree task, gameplay ability) hands its data over through\nPlayOwnedMontage so the description outlives the driver rather than the\nplayer pointing into freed storage when the driver goes away.",
-							"line": 248
+							"line": 255
 						},
 						{
 							"kind": "field",
 							"name": "montageSlots",
 							"signature": "std::unordered_map<std::string, FMontageSlot> montageSlots",
-							"line": 250
+							"line": 257
 						},
 						{
 							"kind": "field",
 							"name": "montageAssets",
 							"signature": "std::vector<std::string> montageAssets",
 							"doc": "Montage ASSETS (.montage) this animator can play by name. Authored on\nthe component so a designer wires the attack montages onto a character\nwithout a line of C++; FMontageDocument::ResolveForAnimator loads each\none once, after the model's clips are in, because a montage names its\nsections' clips by name and cannot be built before they exist.",
-							"line": 257
+							"line": 264
 						},
 						{
 							"kind": "field",
 							"name": "montageAssetInstances",
 							"signature": "std::unordered_map<std::string, std::shared_ptr<Montage>> montageAssetInstances",
 							"doc": "Built descriptions, keyed by the montage's own name — its stable\nidentity, which is also what replication hashes into a montage id.",
-							"line": 264
+							"line": 271
 						},
 						{
 							"kind": "field",
 							"name": "montageAssetsResolved",
 							"signature": "bool montageAssetsResolved = false",
-							"line": 265
+							"line": 272
 						},
 						{
 							"kind": "method",
 							"name": "FindMontageAsset",
 							"signature": "const Montage* FindMontageAsset(const std::string& montageName) const",
-							"line": 267
+							"line": 274
 						},
 						{
 							"kind": "method",
 							"name": "PlayMontageAsset",
 							"signature": "bool PlayMontageAsset(const std::string& montageName, const std::string& startSection = \"\")",
 							"doc": "Play a resolved montage asset by name. Routes through PlayMontage, so\nthe asset's own slotName decides where it lands.",
-							"line": 275
+							"line": 282
 						},
 						{
 							"kind": "method",
 							"name": "PlayOwnedMontage",
 							"signature": "void PlayOwnedMontage(std::shared_ptr<Montage> montageData, const std::string& startSection = \"\")",
-							"line": 286
+							"line": 293
 						},
 						{
 							"kind": "method",
 							"name": "PlayMontageOnSlot",
 							"signature": "void PlayMontageOnSlot(const std::string& slot, const Montage* montageData, const std::string& startSection = \"\")",
-							"line": 291
+							"line": 298
 						},
 						{
 							"kind": "method",
 							"name": "PlayMontage",
 							"signature": "void PlayMontage(const Montage* montageData, const std::string& startSection = \"\")",
 							"doc": "Routes by the montage's own authored slotName, so the asset decides\nwhere it plays instead of every call site restating (or contradicting)\nit. PlayMontageOnSlot stays as the explicit override.",
-							"line": 299
+							"line": 306
 						},
 						{
 							"kind": "method",
 							"name": "StopMontageSlot",
 							"signature": "void StopMontageSlot(const std::string& slot, float blendOut = -1.0f)",
-							"line": 307
+							"line": 314
 						},
 						{
 							"kind": "method",
 							"name": "SetMontageSlotBoneMask",
 							"signature": "void SetMontageSlotBoneMask(const std::string& slot, const std::unordered_set<uint32_t>& mask)",
-							"line": 314
+							"line": 321
 						},
 						{
 							"kind": "method",
 							"name": "GetMontageSlot",
 							"signature": "MontagePlayer* GetMontageSlot(const std::string& slot)",
-							"line": 318
+							"line": 325
 						},
 						{
 							"kind": "method",
 							"name": "LinkAnimLayer",
 							"signature": "void LinkAnimLayer(const std::string& layer, std::shared_ptr<const FAnimGraph> graph)",
 							"doc": "A null graph unlinks; the layer node then passes its input through.",
-							"line": 324
+							"line": 331
 						},
 						{
 							"kind": "method",
 							"name": "UnlinkAnimLayer",
 							"signature": "void UnlinkAnimLayer(const std::string& layer)",
-							"line": 333
+							"line": 340
 						},
 						{
 							"kind": "field",
 							"name": "transitionInertializer",
 							"signature": "FInertializer transitionInertializer",
 							"doc": "State-machine transition inertialization.\nA controller transition captures the outgoing pose here and decays the\nper-bone offset to zero over the transition window, so state changes are\npop-free (C0/C1 continuous) and can be interrupted mid-blend by a higher\npriority transition. lastPose/prevPose are the on-screen pose from the\nprevious two frames — the inertializer's source + source velocity.",
-							"line": 343
+							"line": 350
 						},
 						{
 							"kind": "field",
 							"name": "lastPose",
 							"signature": "std::vector<Mat4> lastPose",
-							"line": 344
+							"line": 351
 						},
 						{
 							"kind": "field",
 							"name": "prevPose",
 							"signature": "std::vector<Mat4> prevPose",
-							"line": 345
+							"line": 352
 						},
 						{
 							"kind": "field",
 							"name": "transitionBlendProfileName",
 							"signature": "std::string transitionBlendProfileName",
 							"doc": "A transition's blend profile resolved against THIS entity's skeleton\n(per-bone blend windows). Cached by name because a locomotion graph fires\nthe same handful of transitions over and over, and never on the shared\ncontroller asset because animation evaluates on job workers.",
-							"line": 351
+							"line": 358
 						},
 						{
 							"kind": "field",
 							"name": "transitionBlendProfile",
 							"signature": "FBlendProfileResolved transitionBlendProfile",
-							"line": 352
+							"line": 359
 						},
 						{
 							"kind": "field",
 							"name": "transitionBoneBlendTimes",
 							"signature": "std::vector<float> transitionBoneBlendTimes",
-							"line": 353
+							"line": 360
 						},
 						{
 							"kind": "field",
 							"name": "motionWarpTargets",
 							"signature": "std::unordered_map<std::string, FMotionWarpTarget> motionWarpTargets",
 							"doc": "Motion warping — gameplay-set targets keyed by name, matched against a\nclip's authored warp windows. During a window the root-motion delta is\nredistributed so the accumulated motion lands the character exactly on\nthe target's world transform at the window's end.",
-							"line": 359
+							"line": 366
 						},
 						{
 							"kind": "method",
 							"name": "SetMotionWarpTarget",
 							"signature": "void SetMotionWarpTarget(const std::string& name, const Vec3& position, const Quat& rotation)",
-							"line": 361
+							"line": 368
 						},
 						{
 							"kind": "method",
 							"name": "SetMotionWarpTarget",
 							"signature": "void SetMotionWarpTarget(const std::string& name, const Vec3& position)",
-							"line": 370
+							"line": 377
 						},
 						{
 							"kind": "method",
 							"name": "RemoveMotionWarpTarget",
 							"signature": "void RemoveMotionWarpTarget(const std::string& name)",
-							"line": 379
+							"line": 386
 						},
 						{
 							"kind": "method",
 							"name": "ClearMotionWarpTargets",
 							"signature": "void ClearMotionWarpTargets()",
-							"line": 383
+							"line": 390
 						},
 						{
 							"kind": "field",
 							"name": "warpWindowActive",
 							"signature": "bool warpWindowActive = false",
 							"doc": "Warp runtime state, captured on window entry and streamed each frame.",
-							"line": 388
+							"line": 395
 						},
 						{
 							"kind": "field",
 							"name": "warpActiveClipIndex",
 							"signature": "int32_t warpActiveClipIndex = -1",
-							"line": 389
+							"line": 396
 						},
 						{
 							"kind": "field",
 							"name": "warpActiveWindowName",
 							"signature": "std::string warpActiveWindowName",
-							"line": 390
+							"line": 397
 						},
 						{
 							"kind": "field",
 							"name": "warpHasTargetRotation",
 							"signature": "bool warpHasTargetRotation = false",
-							"line": 391
+							"line": 398
 						},
 						{
 							"kind": "field",
 							"name": "warpLocalTargetPos",
 							"signature": "Vec3 warpLocalTargetPos",
-							"line": 392
+							"line": 399
 						},
 						{
 							"kind": "field",
 							"name": "warpLocalTargetRot",
 							"signature": "Quat warpLocalTargetRot = Quat::Identity()",
-							"line": 393
+							"line": 400
 						},
 						{
 							"kind": "field",
 							"name": "warpClipTotal",
 							"signature": "Vec3 warpClipTotal",
-							"line": 394
+							"line": 401
 						},
 						{
 							"kind": "field",
 							"name": "warpClipRotTotal",
 							"signature": "Quat warpClipRotTotal = Quat::Identity()",
-							"line": 395
+							"line": 402
 						},
 						{
 							"kind": "field",
 							"name": "warpClipConsumed",
 							"signature": "Vec3 warpClipConsumed",
-							"line": 396
+							"line": 403
 						},
 						{
 							"kind": "field",
 							"name": "warpClipRotConsumed",
 							"signature": "Quat warpClipRotConsumed = Quat::Identity()",
-							"line": 397
+							"line": 404
 						},
 						{
 							"kind": "field",
 							"name": "warpEmittedTransl",
 							"signature": "Vec3 warpEmittedTransl",
-							"line": 398
+							"line": 405
 						},
 						{
 							"kind": "field",
 							"name": "warpEmittedRot",
 							"signature": "Quat warpEmittedRot = Quat::Identity()",
-							"line": 399
+							"line": 406
 						}
 					]
 				}
@@ -11529,71 +11536,77 @@
 						},
 						{
 							"kind": "method",
+							"name": "CollapseBones",
+							"signature": "void CollapseBones(const std::vector<std::string>& names, std::vector<Mat4>& globalTransforms) const",
+							"doc": "Compute final bone matrices for GPU upload\nglobalTransforms: array of bone-space -> model-space transforms (computed by animation)\noutMatrices: finalMatrix[i] = globalTransform[i] * offsetMatrix[i]\nCollapses the named bones and everything under them to a point at their\nown origin, in a copy of the global pose meant for skinning: a first-person\nbody hides its head this way while the true pose (sockets, the camera\nriding a head bone) keeps its rotation. Unknown names are ignored.",
+							"line": 66
+						},
+						{
+							"kind": "method",
 							"name": "ComputeSkinningMatrices",
 							"signature": "void ComputeSkinningMatrices(const std::vector<Mat4>& globalTransforms, std::vector<Mat4>& outMatrices) const",
-							"doc": "Compute final bone matrices for GPU upload\nglobalTransforms: array of bone-space -> model-space transforms (computed by animation)\noutMatrices: finalMatrix[i] = globalTransform[i] * offsetMatrix[i]",
-							"line": 62
+							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "ComputeGlobalTransforms",
 							"signature": "void ComputeGlobalTransforms(const std::vector<Mat4>& localTransforms, std::vector<Mat4>& outGlobalTransforms) const",
 							"doc": "Compute global transforms from local transforms (hierarchy walk)",
-							"line": 66
+							"line": 72
 						},
 						{
 							"kind": "method",
 							"name": "SetLodBonesToRemove",
 							"signature": "void SetLodBonesToRemove(uint32_t lod, const std::vector<std::string>& boneNames)",
 							"doc": "\nA distant character does not need its finger, jaw or twist bones\nanimated: the pixels those bones move are smaller than the error. Naming\na bone here excludes it AND its whole subtree from evaluation at that\nLOD and every coarser one — a child cannot be animated by a parent that\nis not, and UE's authoring model is the same \"remove this branch\".\n\nAn excluded bone is not deleted: it keeps its BIND local transform, so\nits subtree still rides its parent rigidly and the palette keeps its\nlength. That is what makes this safe to switch per frame — nothing\ndownstream (skinning matrices, sockets, attachment) changes shape.\n\nLOD 0 is always fully required; a level that was never authored inherits\nthe closest coarser one that was, so a mesh with masks at 1 and 3 does\nthe right thing at 2 without the caller repeating itself.",
-							"line": 85
+							"line": 91
 						},
 						{
 							"kind": "method",
 							"name": "GetLodRequiredBones",
 							"signature": "const std::vector<uint8_t>* GetLodRequiredBones(uint32_t lod) const",
 							"doc": "nullptr = every bone is required at this LOD (the common case — no\ncaller should have to build an all-ones mask to ask the question).\nOtherwise one byte per bone, 1 = evaluate it.",
-							"line": 90
+							"line": 96
 						},
 						{
 							"kind": "method",
 							"name": "GetLodCount",
 							"signature": "uint32_t GetLodCount() const",
 							"doc": "Highest authored LOD index + 1 (0 when nothing is authored).",
-							"line": 93
+							"line": 99
 						},
 						{
 							"kind": "method",
 							"name": "GetLodRequiredBoneCount",
 							"signature": "uint32_t GetLodRequiredBoneCount(uint32_t lod) const",
 							"doc": "Bones actually evaluated at this LOD — what a test or a stat reads to\nsee the work the mask removed.",
-							"line": 99
+							"line": 105
 						},
 						{
 							"kind": "method",
 							"name": "AddVirtualBone",
 							"signature": "int32_t AddVirtualBone(const std::string& name, const std::string& sourceBone, const std::string& targetBone)",
 							"doc": "\nAn IK goal or an aim point that lives in one bone's space but sits where\nanother bone is — a hand target under the spine, a weapon point under\nthe head — without re-authoring the skeleton in a DCC. The bone is\nappended after every real bone and carries no skin weights, so the skin\npalette, the clip bindings and every existing index stay valid. Its drive\nhappens inside ComputeGlobalTransforms, the one hierarchy walk every pose\nconsumer (animation system, anim graph, control rig, retargeting, the\neditors' previews) goes through, so it follows Target on every frame of\nevery one of them.\n\n-1 when the name is empty or taken, a bone is missing, source equals\ntarget, or the skeleton is at the bone limit.",
-							"line": 115
+							"line": 121
 						},
 						{
 							"kind": "method",
 							"name": "IsVirtualBone",
 							"signature": "bool IsVirtualBone(uint32_t index) const",
-							"line": 116
+							"line": 122
 						},
 						{
 							"kind": "method",
 							"name": "RemoveVirtualBones",
 							"signature": "void RemoveVirtualBones()",
 							"doc": "Drops every virtual bone and keeps the imported rig. The object stays\nthe one the level's animators share, so a re-authored set can be laid\nonto it in place; a pose buffer sized for the old count is resized by\nthe next ComputeGlobalTransforms.",
-							"line": 122
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "GetVirtualBones",
 							"signature": "const std::vector<FVirtualBone>& GetVirtualBones() const",
-							"line": 123
+							"line": 129
 						}
 					]
 				}

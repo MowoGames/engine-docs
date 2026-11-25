@@ -1,0 +1,93 @@
+---
+title: Agent surface - discovery, docs, UI and headless
+sidebarTitle: MCP agent surface
+description: How an agent learns the editor over MCP - class and cvar schemas, documentation search, resources, prompts, the tool catalog, UI tools and PIE input.
+order: 26
+sources:
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/McpServer.h
+verifiedAt: 45e35eb8f
+---
+
+The [MCP server](/docs/editor/mcp-server/) and the [authoring tools](/docs/editor/mcp-authoring/) let an agent change a project. This page is about the other half: how an agent finds out what exists, so it does not guess names, and how it drives the parts of the editor that have no tool of their own.
+
+## Learning the engine
+
+These tools read the running engine, so they also cover classes from your own game module, which no generated reference can.
+
+| Tool | Access | Answers |
+| --- | --- | --- |
+| `list_classes` | Read | Every reflected class and component: base class, flags, property and function counts, whether it can be spawned. Filter by name, base class, kind or placeable; pages with `limit` and `offset` |
+| `class_schema` | Read | One class or component in full: base classes, interfaces, every property with its type, range, tooltip, category, enum values and whether it is editable or serialized, every function with its signature, and an actor class's default components |
+| `list_enums` | Read | Enums that reflected properties use; with `name`, the values with numbers, labels and metadata |
+| `list_cvars` | Read | Console variables with help, type, value, flags, who set them last, whether an agent may set them, and whether a change is live or needs a restart (with the reason) |
+| `list_commands` | Read | Console commands with their help line |
+| `asset_format_schema` | Read | A JSON Schema of how data is stored: a component's serialized node, a class's serialized properties, or the project manifest (`project`) |
+| `docs_search` | Read | Ranked matches across the guides (split by section), the API reference, console variables and commands, each with a snippet and a URI |
+| `docs_read` | Read | A guide or generated file, in pieces for large files |
+| `tool_catalog` | Read | Every tool, resource and prompt with schemas, as one JSON document |
+
+Enum properties take value names, not numbers; `class_schema` and `list_enums` list them. `settings_set` and `list_cvars` use the same restart table as Project Settings, so `restart_required`, `restart_reason` and the apply mode (`live`, `next_use`, `restart`, `conditional`) agree with what the editor shows a person.
+
+### Structured results
+
+Tools that answer JSON also declare an `outputSchema` in `tools/list` and return the object as `structuredContent` next to the text, so a client can validate and use it without parsing text.
+
+### The tool catalog
+
+`mcp.ExportCatalog` writes the whole surface to `Saved/Config/Editor/McpToolCatalog.json`; the editor also rewrites that file each time its MCP service starts. `mcp.ExportCatalog <path>.json` writes inside the project instead. An agent that has the file knows every tool, its access level and its schema before it connects.
+
+## Resources
+
+An MCP client lists and reads resources without calling a tool.
+
+| URI | What |
+| --- | --- |
+| `mowo-project://<path>` | A text file of the open project: config, manifest, source, data. Saved data, caches and the MCP endpoint file are never served |
+| `mowo-docs://<guide>.mdx` | A guide; `mowo-docs://search/{query}` answers a ranked search as JSON |
+| `mowo-api://<module>` | The generated API of a module as JSON; `console`, `cli` and `facts` are the console, the `mbt` command line and engine facts |
+| `mowo-log://editor/recent`, `mowo-log://editor/errors` | The newest log entries, or only warnings and errors |
+| `mowo-catalog://tools` | The tool catalog |
+
+Resources are read-only and follow the same project confinement as the tools.
+
+## Prompts
+
+`prompts/list` offers starting messages for common workflows: `build_level`, `author_material`, `write_visual_script`, `fix_errors`, `profile_scene`, `add_cpp_gameplay`, `configure_project`, `test_play`, `drive_editor_ui` and `explore_api`. Each names the tools to use in order and the rules that matter, and takes its goal as an argument.
+
+## Driving the editor UI
+
+Where no tool covers a task, an agent can operate the editor's own UI as data instead of by pixel coordinates.
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `ui_snapshot` | Read | The widget tree as a flat list: `id`, `parent`, `type`, accessible `role`, `name`, `value`, `bounds`, and enabled, focused and hovered state. Narrow with `filter`, `role`, `interactive_only` and `window` |
+| `ui_click` | Full | Click a widget by `id`, or by its label with `text` and optional `role`; `button` right opens a context menu |
+| `ui_type` | Full | Focus a text widget and type into it; `clear` replaces the content and `submit` presses Enter |
+| `ui_key` | Full | Press a key chord such as `Ctrl+S` |
+| `ui_wait_for` | Read | Wait until a widget with some text appears, becomes enabled or disappears |
+
+Ids belong to one snapshot: take a new `ui_snapshot` after every action. Clicks and keys go through the same input path as a mouse and keyboard, so they can do anything the UI can, including deleting and quitting; that is why they need Full access.
+
+## Playing with input
+
+`viewport_pie_input` (Edit) sends keys, mouse buttons and look deltas to a running Play in Editor session. `actions` is a list: `{type:"key", key:"W", state:"press", hold:3, at:0}`, `{type:"mouse_button", button:"left"}`, `{type:"look", dx:40, dy:0}` and `{type:"wait", at:30}`; `at` is the frame, counted from the call, on which an action fires. The call answers when the last action has fired.
+
+## Other tools
+
+`capture_gpu_frame` records one frame of GPU work, `asset_bulk` applies one operation to many assets, `mpc_list`, `mpc_get` and `mpc_set` read and write material parameter collections, and `ai_debug_dump` shows what residents and AI controllers think. A build that does not include the system behind one of them answers `not_available` and names what is missing.
+
+## Headless editor
+
+`MowoEditor.exe --headless --project <Project>.mproject --mcp-stdio` runs the editor with no visible window, for CI jobs and machines nobody sits at. `--mcp-only` is the same switch.
+
+- The window is created hidden and never shown; no splash, no crash-report window. The frame rate is capped low.
+- Without `--mcp-stdio` or `--mcp-port=<n>`, the editor listens on the HTTP port of `editor.mcp.port` and writes the endpoint file as usual.
+- Everything an agent can do in a normal session works: levels, assets, Play, screenshots, tests and the UI tools. The editor still creates a graphics device, so the machine needs a GPU adapter or a software one. On Linux without a display, `--video-driver=offscreen` picks SDL's offscreen video driver.
+- Nobody can answer a save prompt, so `editor_quit` refuses while the level has unsaved changes; call `save_level` first or pass `discard`.
+- Add `--no-crash-reporter` in CI so a crash writes its report and exits without opening a window.
+
+`editor_status` reports `headless`.
+
+## New projects start with agent docs
+
+A new project gets `AGENTS.md` (layout, the attach command, the tool families, the C++ rules when the project has a game module), `CLAUDE.md` (a pointer to it) and `.mcp.json`, which launches the editor over stdio for the project. A template that ships its own copy of one of these keeps it. `.mcp.json` holds the path of the editor that created the project: correct it when the engine moves.

@@ -1,0 +1,147 @@
+---
+title: Anti-cheat
+description: Keep cheating clients out of a dedicated server with the anti-cheat service interface, the Anti-Cheat project settings and the managed server-authority plugin.
+order: 14
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/AntiCheat/AntiCheatService.h
+  - Engine/Source/Runtime/Networking/Public/Networking/AntiCheat/AntiCheatGate.h
+  - Engine/Source/Runtime/Networking/Public/Networking/AntiCheat/AntiCheatSettings.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Subsystems/MAntiCheatSubsystem.h
+  - Engine/Plugins/AntiCheatReference/AntiCheatReference.mplugin
+  - Engine/Plugins/AntiCheatReference/Public/AntiCheatReference/ManagedAuthorityAntiCheat.h
+  - Engine/Plugins/AntiCheatReference/Public/AntiCheatReference/ServerValidators.h
+verifiedAt: a592fa42e
+---
+
+The engine ships the seam for anti-cheat, not a product. `IAntiCheatService` is the interface an anti-cheat integration implements; the dedicated server asks it whether each joining client is trusted and keeps the ones that are not out of the session. A vendor integration (Easy Anti-Cheat, BattlEye) is a separate plugin that registers the same interface. The engine includes one reference plugin, `AntiCheatReference`, a managed server-authority implementation that needs no client agent.
+
+<Callout type="warning">
+Server-side validation raises the cost of cheating; it does not make cheating impossible. A cheat that stays inside what the server accepts, such as an aimbot that never sends an impossible input, passes. The engine adds no kernel-level protection of any kind.
+</Callout>
+
+## How it fits together
+
+<Flow steps={["Client connects", "Service registers it", "Challenge and response", "Trusted", "Admitted to the session"]} highlight={3} caption="The reference plugin's handshake. A vendor service replaces the middle steps with its own." />
+
+1. A client connects. The server registers it with the active service, passing its address and, on a server that authenticates players, its platform user id once the join identity check admits it (a Steam, Mowo ID or Discord account).
+2. The service and the client exchange integrity messages. They travel on the existing reliable net channel under their own packet tag, so they never mix with replication or the ticket handshake. The engine does not look inside them.
+3. The service reports a verdict: pending, trusted or untrusted. The server polls it every tick and also hears it when the service announces a change.
+4. With **Require trusted clients** on, a joining client is held outside the session until it is trusted. The server spawns no pawn for it and sends it no world state; its join request is parked and its other traffic is dropped. A peer that turns untrusted, or is still pending when the grace window ends, is disconnected.
+5. The service can also ask for a kick at any time, for example when it catches a speed hack. The server disconnects the peer and tells the service to forget it.
+
+With no anti-cheat plugin enabled the gate has nothing to ask. Every client counts as trusted and nothing changes for your game.
+
+## Turn it on
+
+<Steps>
+<Step title="Enable a service">
+Open **Plugins** and enable **Anti-Cheat (Managed Server Authority)**, or the vendor plugin your game uses. Only one service is active at a time; the first to load wins.
+</Step>
+<Step title="Open the settings">
+Open **Project Settings > Anti-Cheat**.
+</Step>
+<Step title="Choose how strict to be">
+Switch on **Require trusted clients** to refuse any client the service does not report as trusted. Leave it off to let the service watch and kick on its own while every client is admitted.
+</Step>
+</Steps>
+
+<Screenshot id="multiplayer-anti-cheat-settings" alt="Project Settings window on the Anti-Cheat page: the Require trusted clients toggle switched on, the Trust grace field showing 15 s, and the Messages section with the two limits" caption="Project Settings > Anti-Cheat." />
+
+| Setting | Default | Meaning |
+|---|---|---|
+| Require trusted clients | off | Refuse a client the service does not report as trusted |
+| Trust grace | 15 s | How long a joining client may stay pending before it is dropped |
+| Max message size | 4096 bytes | Largest integrity message a client may send; bigger ones are dropped |
+| Max messages per second | 30 | A client that keeps sending past this is dropped |
+
+The settings are saved to `Config/DefaultAntiCheat.ini`, which you commit with the project. The dedicated server reads it when it starts hosting, so a change needs a server restart.
+
+## Visual Scripting
+
+The nodes live on the anti-cheat subsystem and work on a server graph. Peers are the ids the server gives players.
+
+| Node | Result |
+|---|---|
+| Is Anti Cheat Active | True when a service is registered |
+| Is Trusted | True when the service trusts the peer. With no service every peer is trusted, so a graph needs no special case |
+| Get Client Status | `unknown`, `pending`, `trusted` or `untrusted` |
+| Kick | Disconnects the peer with the reason you give. False when the peer is not connected |
+
+## The managed server-authority plugin
+
+`AntiCheatReference` is the baseline for a game without a vendor integration, and the worked example of the interface.
+
+- **Handshake.** The server sends each joining client a random challenge. The client echoes it with its build id. A client that echoes it wrongly, or reports a build different from the one the server expects, is untrusted.
+- **Movement.** `FMovementValidator` flags a step faster than the speed limit (with a tolerance) or farther than the teleport distance. Call `ReportMovement` from your server code with the new position and the time step.
+- **Rate limiting.** `FTokenBucketRateLimiter` caps how often a client may send integrity messages; a client that keeps going is kicked.
+- **Input replay.** `FInputReplayVerifier` re-simulates the inputs a client sent through a simulator you provide and compares the state against the checkpoint the client claims. A client whose state does not follow from its inputs is kicked.
+- **Bans.** `FBanList` keeps banned user ids with a reason and serializes them to text. A banned id is refused at the door, and `Ban` kicks the client if it is connected.
+
+The kick reasons the service reports are integrity violation, speed hack, teleport, rate limit, input replay mismatch, banned, service error and custom.
+
+## Write your own service
+
+Implement `IAntiCheatService` and register it when your plugin module loads. Everything except `Name` and `Initialize` has a default.
+
+```cpp title="MyAntiCheat.cpp"
+#include <Networking/AntiCheat/AntiCheatService.h>
+
+#include <memory>
+#include <unordered_map>
+
+class FMyAntiCheat : public Mowo::IAntiCheatService {
+public:
+	const char* Name() const override {
+		return "MyAntiCheat";
+	}
+
+	bool Initialize(const Mowo::FAntiCheatInitParams& params, const Mowo::FAntiCheatCallbacks& callbacks) override {
+		m_callbacks = callbacks;
+		m_isServer = params.IsServer;
+
+		return true;
+	}
+
+	bool IsAvailable() const override {
+		return true;
+	}
+
+	bool RegisterClient(Mowo::FAntiCheatClientId client, const Mowo::FAntiCheatClientInfo& info) override {
+		m_status[client] = Mowo::EAntiCheatClientStatus::Pending;
+
+		return true;
+	}
+
+	void UnregisterClient(Mowo::FAntiCheatClientId client) override {
+		m_status.erase(client);
+	}
+
+	Mowo::EAntiCheatClientStatus GetClientStatus(Mowo::FAntiCheatClientId client) const override {
+		auto it = m_status.find(client);
+
+		return it != m_status.end() ? it->second : Mowo::EAntiCheatClientStatus::Unknown;
+	}
+
+private:
+	bool m_isServer = true;
+	Mowo::FAntiCheatCallbacks m_callbacks;
+	std::unordered_map<Mowo::FAntiCheatClientId, Mowo::EAntiCheatClientStatus> m_status;
+};
+
+void RegisterMyAntiCheat() {
+	Mowo::FAntiCheatServices::Register(std::make_unique<FMyAntiCheat>());
+}
+```
+
+Use `callbacks.SendToClient` and `callbacks.SendToServer` for your messages, and `callbacks.ClientStatusChanged` and `callbacks.KickRequested` to report back; call them on the game thread. The server hands every client message to `OnMessageFromClient`, and a client hands the server's messages to `OnMessageFromServer`.
+
+<Callout type="note">
+The server calls `Initialize` with `IsServer` set; a client calls it with `IsServer` unset when it joins a session. The same service object serves both roles in different processes.
+</Callout>
+
+## Limits
+
+- The gate runs on dedicated servers and on the listen server a player hosts, and it covers clients that join through Steam the same way. The hosting player is trusted by construction: it runs the simulation and has no peer to refuse.
+- If the service cannot start while `bRequireTrustedClients` is on, the gate fails closed: no peer is ever admitted and each one is disconnected when its grace window ends, and the server logs an error saying so. With `bRequireTrustedClients` off, a service that cannot start leaves the gate open, as with no service at all.
+- The wait is bounded by the trust grace. A client whose verdict has not arrived when the window ends is disconnected, so give the grace more time than your service's slowest handshake.
+- Reconnecting after a kick starts a new handshake. Persisting bans across server restarts is up to your game: save `FBanList::Serialize` and load it back with `Deserialize`.

@@ -7,9 +7,11 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptValue.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVarSync.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptType.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptPinTyper.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptSpawnParams.h
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
-verifiedAt: 5922e6e5e
+verifiedAt: bb3cd1f16
 ---
 
 Variables are the state a class keeps between events. Set a value in `BeginPlay`, read it again in `Tick`. Each variable has a name, a type and a default that seeds every new instance. This page covers the types a pin can carry, containers, struct and object values, and the flags that change how a variable behaves.
@@ -31,6 +33,27 @@ Every value in flight is a `VisualScriptValue`: a tagged value that uses the ref
 When a node calls a reflected C++ function, the VM converts each input to the parameter's declared type first, so a float wired into an `int32_t` parameter is converted, not reinterpreted.
 
 Some C++ types ride a pin that already exists, converted inside the generated thunk: enums and narrow integers as Int, `FName` and gameplay tags as String, `FRotator` as a Vec3 of pitch, yaw and roll in degrees, a `TSoftObjectPtr` as its asset path, and an `MClass*` as its class name.
+
+## Link rules
+
+Every data pin has a static type, derived from what the node refers to: the function it calls, the variable it reads, the function's parameters. The editor and the load-time check judge a link with the same rules, so a link the editor accepts is a link that loads.
+
+| From | To | Result |
+| --- | --- | --- |
+| The same type | | Connects. |
+| `Int` | `Int64`, or `UInt32` to a wider integer | Widens silently. |
+| `Int` | `Float` or `Double` | Connects and converts. |
+| `Float` or `Double` | `Int` | Connects with a warning: the fraction is truncated. |
+| An enum | `Int` | Widens silently. |
+| `Bool`, `Int`, `String`, vectors and `Quat` | each other | Refused. Vectors and `Quat` never cross. |
+| Struct | A struct of another name | Refused. |
+| `Object<A>` | `Object<B>` when A derives from B | Connects. The other way is refused: use **Cast**. |
+| Container | A container of other element types | Refused. Element types must match exactly. |
+| Anything | A wildcard pin | Connects, and the wildcard takes the type. |
+
+While you drag a wire over a pin that refuses it, the reason appears beside the cursor. A **Reroute** takes the type of the pin that feeds it. A chain of reroutes that nothing concrete decides reports `VS1103`; a refused link reports `VS1102`.
+
+A file written before typed pins (schema 10 and older) loads whatever its links say, with each refusal logged as a warning. A graph saved under the typed-pin schema is refused at load on the same links, naming the class, graph and node.
 
 ## Class variables
 

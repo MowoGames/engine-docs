@@ -1,0 +1,36 @@
+---
+title: Settings classes
+description: Give your game a Project Settings page by declaring a C++ class whose Config fields are the settings.
+order: 9
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/MDeveloperSettings.h
+verifiedAt: 55f27937c
+---
+
+Derive from `MDeveloperSettings`, mark the class `Config=Game` and each setting `Config`. The class gets its own page under **Project Settings > Game**, named by its `DisplayName` (or its class name without the leading `M`).
+
+```cpp title="MHeistSettings.h" nocompile
+MCLASS(Config = Game, DisplayName = "Heist")
+class MHeistSettings : public Mowo::MDeveloperSettings {
+public:
+	MGENERATED_BODY()
+
+	MPROPERTY(Config, EditAnywhere, Tooltip = "Seconds before the alarm sounds.")
+	float AlarmDelay = 30.0f;
+
+	MPROPERTY(Config, ConfigRestartRequired)
+	int32_t MaxGuards = 6;
+
+	MPROPERTY(Config)
+	std::string StartLevel = "Content/Maps/Vault";
+};
+```
+
+- The page shows a row for each `Config` field of bool, integer, float, double and string type. `Tooltip` is the row hint.
+- Changes are written to `Config/DefaultGame.ini` under `[/Script/<Module>.<Class>]` and read back into the class default object when the module loads.
+- Read a value in code with `Mowo::MDeveloperSettings::Get<MHeistSettings>()->AlarmDelay`.
+- `ConfigRestartRequired` makes the page say the change takes effect after a restart.
+
+## Per-class and global config
+
+A `Config` field is read from the section of its own class and then from the section of each subclass, the most derived winning, so a subclass can retune its parent settings in the INI. `GlobalConfig` reads only the declaring class section, whichever subclass is being configured.

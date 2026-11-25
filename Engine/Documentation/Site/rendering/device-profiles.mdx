@@ -8,7 +8,7 @@ sources:
   - Engine/Config/BaseDeviceProfiles.ini
   - Engine/Source/Runtime/Game/Public/Streaming/VramPressureGovernor.h
   - Engine/Source/Runtime/Game/Public/Streaming/TextureStreamingManager.h
-verifiedAt: 77b5ea1b2
+verifiedAt: c6c835140
 ---
 
 A device profile is a rule that recognises a GPU and adjusts the engine for it: it caps the [quality tier](/docs/rendering/quality-tiers/) the auto-detection may pick and sets console variables. It is Mowo's form of Unreal Engine's `DeviceProfiles.ini`. The same files carry a **driver blocklist** that names driver versions known to break the engine and tells the player what to do.
@@ -62,6 +62,7 @@ What a rule does:
 | `TierCap` | the highest tier the first-run benchmark or the GPU heuristic may pick: `Low` to `Cinematic`. An explicit `r.Quality` and a platform's recommended tier are never capped. |
 | `+CVars=name=value` | set at device-profile priority: above the tier, below every INI, the player's settings and the command line, so nothing you or the player chose is overwritten |
 | `CVarsUpToTier` | the cvars apply only while the resolved tier is at or below this |
+| `CVarsFromTier` | ... and only while it is at or above this; with `CVarsUpToTier` the two make a tier window |
 | `Description` | shown in the log and in **Project Settings > Engine > Scalability** |
 
 ## The shipped profiles
@@ -81,6 +82,8 @@ What a rule does:
 | `Intel_ArcB`, `Intel_ArcA` | Arc B-series `0xE200-0xE2FF`; Arc A-series `0x5690-0x56BF` | Epic; High |
 | `Intel_Integrated`, `Intel_Integrated_Arc` | Intel integrated graphics; integrated Arc (Xe-LPG, Xe2) | Low; Medium |
 | `Apple_M`, `Apple_M_MaxUltra` | Apple M-series; Max and Ultra | High; Epic |
+
+On Blackwell, Ada and RDNA 4 (`NVIDIA_RTX50`, `NVIDIA_RTX40`, `AMD_RX9000`) the profile also holds a High-plus-hardware-ray-tracing row, a window of exactly the High tier: `r.GI.HWRTGather=1` and `r.RTReflections=1` trace the scene instead of the SDF gather and SSR, and `r.RTShadows=0` leaves sun shadows on the shadow maps. Epic and Cinematic set the same features from their own tier, and a project that has not enabled ray tracing (`r.RayTracing.EnableForProject`) strips them whatever the profile says. Ampere is left out until the rows are measured cheaper than SSR on the RTX 3050.
 
 The integrated and Apple profiles also set `r.TextureStreaming.PoolSizeMB` (1 to 3 GB): their dedicated VRAM is a firmware carve-out, not the memory the GPU reaches.
 
@@ -139,13 +142,15 @@ The texture streaming pool (`r.TextureStreaming.PoolSizeMB`, 0 = auto) is sized 
 | 8 GB | 3584 MB |
 | 12 GB and more | 5120 MB |
 
-Each class starts a little under its nominal size, since a 4 GB card reports less once the driver takes its share. A device profile, an INI or the player's **Texture Pool Size** setting overrides it.
+Each class starts a little under its nominal size, since a 4 GB card reports less once the driver takes its share. The automatic pool is then scaled by `sg.TextureQuality` (Low 0.5, Medium 0.75, High and Epic 1, Cinematic 1.25, never above 60 % of the card's memory). A device profile, an INI or the player's **Texture Pool Size** setting overrides it.
 
 While the game runs, the VRAM-pressure governor (`r.TextureStreaming.VramPressure`, on by default) reads the budget the OS grants the process: DXGI `QueryVideoMemoryInfo` on D3D12 and D3D11, `VK_EXT_memory_budget` on Vulkan, the recommended working set on Metal. Over 95 % of it, the pool cap drops below what is resident by the overshoot (split between the texture and mesh pools by what each holds), so the farthest textures lose mips first; under 85 % it relaxes and lifts. The log says when it starts and stops capping, and whenever the budget pass changes what it takes away:
 
 ```text
 [Runtime] Texture streaming: 41 texture(s) 63 mip level(s) below the detail their screen size wants, to fit a 1043 MB pool (VRAM 3010 / 2048 MB used, capped by VRAM pressure)
 ```
+
+The editor and Play-in-Editor stream too (`texture.Streaming.Editor`: -1 = on while a pool is set, which the automatic pool above does on a known card; 0 = off; 1 = on). Residency lives on the shared texture the materials already point at, so nothing in the open level is edited or saved differently: far textures drop to a coarse mip window with a permanently resident tail under the pool, and detail returns as the viewport camera approaches. The pool is the same class pool scaled by `sg.TextureQuality`, and the VRAM-pressure governor applies. Turning the cvar off streams every texture back to full resolution. Previews that draw a texture the level also uses see its current window; Play in the editor judges distance from the editor viewport camera.
 
 `r.TextureStreaming.ForceBudgetMB` treats the OS budget as that many megabytes, so the pressure path can be watched on a card with room to spare.
 

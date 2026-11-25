@@ -1,0 +1,78 @@
+---
+title: Mowo Online Services SDK
+sidebarTitle: Mowo Online SDK
+description: Connect a game built outside the engine to the Mowo Launcher - sign-in, friends, achievements, cloud saves and overlay - with a C library or C++ header.
+order: 15
+sources:
+  - Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos_sdk.h
+  - Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos.hpp
+  - Engine/Plugins/MowoOnlinePlatform/MowoOnlinePlatform.mplugin
+verifiedAt: 2c55dcf54
+---
+
+Mowo Online Services connects a game to the **Mowo Games Launcher** that started it: the signed-in Mowo ID player and an access token for your own backend, friends and presence, invites and **Join game**, achievements, cloud saves and the launcher overlay. The library, `mos_sdk`, has a pure C API, depends on nothing from the engine and ships as `mos_sdk.dll` (Windows x64), `libmos_sdk.dylib` (macOS arm64) or `libmos_sdk.so` (Linux x64). A game built with the engine uses it through the **MowoOnlinePlatform** plugin instead; see [Online platforms](/docs/multiplayer/online-platforms/#mowo-online).
+
+## Integrate it
+
+<Steps>
+<Step title="Ship the library">Put `mos_sdk` beside your executable and `mos/mos_sdk.h` (and, for C++, `mos/mos.hpp`) on the include path. On Windows link `mos_sdk.lib`; elsewhere link `-lmos_sdk`. Nothing else is needed.</Step>
+<Step title="Start through the launcher">Call `MOS_RestartAppIfNecessary("<product id>")` first. When it returns true, exit: the launcher starts the game again with a session. Set `MOS_NO_RESTART=1` to run without the launcher; `MOS_Initialize` then returns `MOS_NotLaunchedByLauncher` and the game should play offline.</Step>
+<Step title="Initialize and tick">Call `MOS_Initialize` with your product id, then `MOS_Tick` once per frame on the one thread you use for every other call. All callbacks run inside `MOS_Tick`.</Step>
+<Step title="Hand over the window">On Windows the SDK finds the game window itself. On macOS call `MOS_Overlay_SetWindow` with the `NSWindow*`.</Step>
+<Step title="React">Pause the game while the overlay is open, connect on a join request, and save and quit when the launcher asks you to.</Step>
+</Steps>
+
+```cpp
+#include <mos/mos.hpp>
+
+mos::Session session;
+if (mos::Succeeded(session.Open("my-game", "1.0.0"))) {
+	session.OnShutdownRequested([&](const std::string&) {
+		running = false;
+	});
+
+	session.UnlockAchievement("first_blood", [](mos::Result result, bool alreadyUnlocked, int64_t) {
+		if (!mos::Succeeded(result)) {
+			Log(mos::ToString(result));
+		}
+	});
+}
+
+while (running) {
+	session.Tick();
+}
+```
+
+`mos::Session` owns the connection (RAII), turns every completion into a `std::function`, copies the strings the C structs lend, and throws nothing. The C API in `mos_sdk.h` is the same calls with plain callbacks and `ClientData`.
+
+## Results and completion
+
+One rule covers every call.
+
+- **`MOS_Initialize`** returns a `MOS_EResult`; on failure `MOS_GetLastError()` explains.
+- **A request** (anything that takes a callback) calls back exactly once, inside a later `MOS_Tick`, or with `MOS_Canceled` inside `MOS_Shutdown`. A request that cannot be sent (bad parameters, no connection) is completed the same way on the next tick; it never calls back from within the call that made it.
+- **A setter** (`MOS_Overlay_SetEnabled`, `MOS_Overlay_SetHotkeyEnabled`, `MOS_Overlay_SetWindow`) returns a result. `MOS_NotConnected` means the value is kept and sent as soon as the launcher connects.
+- **A getter** reads what the last tick delivered and never blocks.
+
+Read an `Info` struct's other fields only when its `Result` is `MOS_Success`. Strings in it are valid until the callback returns, so copy what you keep.
+
+## Versions and compatibility
+
+The SDK version is `MAJOR.MINOR`. A new function, a new appended enum value or a new message field is a minor version; existing games keep working. Nothing that would break an existing binary changes inside a major version, and `MOS_EResult` values never change.
+
+| SDK | Works with | What it adds |
+|---|---|---|
+| 1.0 | every launcher | The original calls |
+| 1.1 | every launcher; the two new calls report `MOS_NotSupported` on an older one | `MOS_Overlay_SetEnabled`, `MOS_Overlay_ReserveChord`, the shortcut-changed event, a single-use reconnect token |
+
+A game built against 1.0 headers runs with a 1.1 library. Check `MOS_GetVersion()` or resolve the 1.1 functions at run time if you must also run with a 1.0 library.
+
+## Overlay, shortcut and fullscreen
+
+The overlay is a transparent window the launcher lays over your game; nothing is injected. It works over windowed and borderless games on Windows and macOS, and not over exclusive fullscreen, so offer borderless fullscreen. The default shortcut is **Shift+Tab**; players can record another chord, and **F11** is allowed but flagged because many games use it for fullscreen.
+
+If your game uses the shortcut itself, call `MOS_Overlay_ReserveChord` with it: the launcher then ignores the shortcut for that session, and you can still open the overlay yourself with `MOS_Overlay_Open`. `MOS_Overlay_SetHotkeyEnabled(false)` turns off only the shortcut; `MOS_Overlay_SetEnabled(false)` turns the overlay off for your game completely.
+
+## What the launcher checks
+
+The launcher only talks to the game it started: the connection must come from this machine, from the launched process or its children, and carry the single-use token the launcher issued. Messages are size- and rate-limited, so a game that floods the link is cut off; the SDK reconnects on its own after a drop, with a token the launcher hands it on every connect.

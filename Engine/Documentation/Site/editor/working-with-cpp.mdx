@@ -5,7 +5,7 @@ order: 13
 sources:
   - Engine/Source/Runtime/Game/Public/Game/FViewerRegistry.h
   - Engine/Source/Runtime/Game/Public/Game/HotReload.h
-verifiedAt: 90e6739a9
+verifiedAt: 2783e8031
 ---
 
 Gameplay code in Mowo is C++ in your project's **game module**, a DLL built from `<Project>/Source/`. The editor can create classes in that module, rebuild it while you keep working, and swap the new binary into the running session. This page covers that loop from the editor's side. For how to write the classes themselves, see the [Gameplay](/docs/gameplay/) section.
@@ -19,7 +19,7 @@ Gameplay code in Mowo is C++ in your project's **game module**, a DLL built from
 Choose **Tools ▸ New C++ Class…**, or **New C++ Class…** in the C++ Classes root of the Content Browser.
 </Step>
 <Step title="Pick a parent">
-Choose **Actor** (a placeable object with components, a transform and Tick), **Actor Component** (reusable behavior that ticks with its owner) or **Empty Class** (plain C++, no reflection). The list also offers existing reflected actor classes, such as the engine's pawns and characters, when their header can be found.
+Choose **Actor** (a placeable object with components, a transform and Tick), **Actor Component** (reusable behavior that ticks with its owner) or **Empty Class** (plain C++, no reflection). The list starts with the framework presets **AGameMode**, **APlayerController**, **ACharacter**, **AHUD**, **APlayerState** and **MSceneComponent**, each with an override of Tick (TickComponent for the scene component) ready to fill in, and then offers other reflected actor classes when their header can be found. The filter box above the list narrows both.
 </Step>
 <Step title="Name it">
 Type the class name. The dialog previews the file paths and rejects invalid names.
@@ -97,22 +97,28 @@ See [Gameplay](/docs/gameplay/) for what to put in the class, and the [Game API]
 mbt build -t <Module> --hot-reload --frozen-engine --extra-source <Project>/Source
 ```
 
-With several game modules, Compile builds every module that no other project module depends on (read from every string in each `.Build.cs`, comments excluded, so multi-line lists count; a static-library module is built with its users and never swapped on its own). If one module fails to build, the ones that built are still swapped and the toast names the failure. When the swap is deferred until Play stops, a second compile keeps the modules still waiting one after another and swaps them together once all have built. Building a module also rebuilds what it depends on, so nothing is left stale behind a success message. A module that others depend on stays loaded and locked while the editor runs, so it cannot be swapped: keep logic you want to hot reload in a static library module (`BinaryType = ModuleBinaryType.StaticLibrary`), which links into the DLL that uses it, or restart the editor after changing a shared DLL.
+With several game modules, Compile builds every module that no other project module depends on (read from every string in each `.Build.cs`, comments excluded, so multi-line lists count; a static-library module is built with its users and never swapped on its own). If one module fails to build, the ones that built are still swapped and the toast names the failure. When the swap is deferred until Play stops, a second compile keeps the modules still waiting one after another and swaps them together once all have built. Building a module also rebuilds what it depends on, so nothing is left stale behind a success message.
+
+The editor maps each game module from a private copy under `Binaries/<platform>/<configuration>/HotReload/`, so the build can overwrite the original DLL and its PDB while the old code still runs. That is what lets a module that others depend on swap too: the swap takes every changed module together with the loaded modules that import it, unloads the importers first and loads the dependency first. A static-library module has no DLL of its own; a change in it swaps the DLLs that link it.
 
 - `--frozen-engine` builds only your module and links it against the engine binaries already on disk. The editor has the engine DLLs loaded and locked, so relinking them would fail.
 - `--hot-reload` emits a versioned DLL that can be loaded next to the old one.
 
-Notifications report the start, the success, or a failure with a short detail taken from the build output. The command is disabled while a compile is running and during Play. If a compile finishes during Play, the swap waits and happens on the first frame after you stop.
+A progress card shows the build (with its Cancel button) and then the swap; cancelling the build leaves the running code untouched. Notifications report the start, the success, or a failure with a short detail taken from the build output. A failed compile also fills the **C++ compiler** page of the [Message Log](/docs/editor/logs/#the-message-log) with one row per compiler error or warning; click a row's file and line to open the source there in your IDE. A good compile clears the page. The command is disabled while a compile is running and during Play. If a compile finishes during Play, the swap waits and happens on the first frame after you stop. A project with no game module (no `Source/<Module>/<Module>.Build.cs`) is told so at once instead of starting a build of a module nobody wrote.
+
+A script, a test or an AI agent runs the same compile through the [MCP server](/docs/editor/mcp-server/#compiling-and-hot-reloading): `compile_game_module` answers with the result per module (built, swapped, the first error), and `compile_status` shows a compile in flight.
 
 ### What the swap does
 
-The swap is done by <Source symbol="FHotReload::ReloadModule" />:
+The swap is done by <Source symbol="FHotReload::ReloadModules" />:
 
-1. Snapshot and destroy every actor whose class lives in your module.
-2. Run a garbage collection pass so nothing still points into the old DLL.
-3. Unregister the module's classes and unload it.
-4. Load the newest binary.
+1. Snapshot and destroy every actor whose class lives in a module being swapped.
+2. Run a garbage collection pass so nothing still points into the old DLLs.
+3. Unregister the classes and unload the modules, dependents first.
+4. Load the newest binaries, dependencies first.
 5. Recreate the actors against the new class tables and restore their saved property values.
+
+If a new binary does not load (the file is missing, the module was built for another engine build, or its static initialisation crashes), the swap rolls back: the modules that already came in go out again, the previous binaries load back from their copies, and the actors are restored against them. The editor keeps running the old code, the Message Log gets a row naming the module and the reason, and the toast says the previous binaries are running again. Cancelling the swap from its progress card is the same rollback. A crash inside a module's static initialisation is caught on Windows (structured exceptions) and on Linux and macOS (fatal signals), but the process state after such a crash is best effort: if a rolled-back editor misbehaves, restart it.
 
 Property values are matched by name, so a field that moved in the class still restores. A removed field is skipped and a new field keeps its constructor default. References to other actors and components are restored by identity after all actors are back.
 
@@ -129,6 +135,8 @@ A project can hold several modules under `Source/`, for example a server-safe `F
 - If the project's game mode class belongs to a module that did not load, Play shows an error toast and logs the module's reason before falling back to the default game mode.
 
 ### When you must restart
+
+Anything that still keeps an old DLL mapped blocks the swap: a module outside the project that imports your DLL, or a plugin that does. The swap reports that the image is still mapped and rolls back; restart the editor after changing such a module.
 
 If your module needs something the engine binaries on disk do not export (for example, after pulling engine changes), the frozen-engine link fails with a message telling you the engine binaries are older than the engine source. Close the editor, run `mbt build` from a terminal, and reopen the project.
 
@@ -156,6 +164,8 @@ Mark what an editor-time actor creates as transient with `owner->MarkGenerated(c
 - `owner->ClearGeneratedContent()` destroys it, together with the owner's transient components, before a regenerate and at `EndPlay`.
 
 A Regenerate control is a plain property: declare `MPROPERTY(EditAnywhere) bool regenerate = false;`, and in `TickInEditor` call `ClearGeneratedContent()`, rebuild, and set it back to false. It shows as a checkbox in Details, and editing any generation setting there reaches the next `TickInEditor` the same way.
+
+Content that follows from a few properties does not need a Regenerate control. Build it in `OnConstruct` with `MarkGenerated`: the editor re-runs `OnConstruct` after every committed edit of the actor, a gizmo move included, and clears the previous output first. See [Construction in the editor](/docs/gameplay/actors-and-world/#construction-in-the-editor).
 
 ## Live Coding
 Live Coding patches changed function bodies into the running editor without unloading anything, so all state stays as it is. Edit a `.cpp`, then press <Kbd>Ctrl+Alt+F11</Kbd>, click **Live Coding** on the toolbar, choose **Tools ▸ Live Coding**, or type `LiveCoding` in the console.

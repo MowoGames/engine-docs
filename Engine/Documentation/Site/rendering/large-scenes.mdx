@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/Renderer/Public/Renderer/GeometryPool.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/MeshletPool.h
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/ImageDecode.h
-verifiedAt: 50894e884
+verifiedAt: c6c835140
 ---
 
 A level the size of the Intel Sponza (2022, with the Curtains and Ivy add-ons: about 10.8 million triangles in 450 submeshes and 80 4K PBR textures) runs on the same renderer as a small one. On a mid-range GPU its frame time is decided by the [quality tier](/docs/rendering/quality-tiers/) and the resolution far more than by the size of the meshes. This page shows where the time goes and what the engine does so the geometry itself stays cheap.
@@ -45,6 +45,8 @@ Drawing the geometry — the G-buffer pass with its culling — costs about 1 ms
 
 On Epic and Cinematic, static meshes with an import-built cluster hierarchy draw through the meshlet G-buffer: the GPU picks, per cluster, the coarsest level whose error stays under a pixel and culls clusters against the frustum and the previous frame's depth. Two things decide whether a large level gets that benefit:
 
+- **GPUs without mesh shaders cull on compute.** Metal and Direct3D 11 have no mesh pipeline, so with the meshlet G-buffer on they cull clusters in a compute pass and draw the survivors indirectly (`r.Meshlet.ComputeFallback`). Skinned and masked draws stay on the classic path.
+- **Which defaults are measured.** Whether High should run the meshlet G-buffer, and whether the compute software raster, the meshlet virtual-shadow-map casters and the coarse ray-tracing structures turn on by default, is decided from interleaved A/B frame times on the Sponza and on generated many-light and open-world levels, not assumed. Until a switch has those numbers it stays off by default and can be turned on per project.
 - **The cluster pool grows with the level.** It starts at about 63 MB. When it is full of meshes that are all still on screen, the arena that ran short doubles at the start of the next frame and the meshes come back with their page layouts. It never grows past `r.Meshlet.PoolBudgetMB` (by default a sixteenth of the GPU's memory) and never into the last tenth of the GPU's memory budget, so a level that already fills the card keeps the classic path for what does not fit instead of running out of memory. Before, the pool stopped at 65 536 clusters; the Intel Sponza fit 38 of its 446 meshes.
 - **Page layouts are built on worker threads.** The first frame that draws a mesh used to build its page layout on the render thread; the mesh now draws through the classic path for the frame or two until a worker has it ready.
 
@@ -67,6 +69,12 @@ The pool ages a mesh by frames the GPU has finished with, not by views drawn. A 
 ### Cluster pages from disk: not yet
 
 The cluster hierarchy of every mesh still lives in system memory once the mesh is loaded (179 MB for the Sponza), and the pool pages from that copy. Paging it from the cooked package is designed (the engine's internal notes hold the design) and not shipped: it needs a cook chunk of page-ordered payloads, a page source behind the pool, and asynchronous reads with a byte budget per frame. A package cooked today keeps working unchanged when it lands, because the new chunk is optional and the pool builds a layout at run time for a package without it. It was not built because no measured level needs it yet: the Sponza's cluster data is 2 % of the editor's working set on Epic, and the pool, not the system copy, is what limits large levels on an 8 GB card.
+
+## Many lights
+
+Point, spot and rectangle lights are sorted into a froxel grid (64 pixel cells, 24 depth slices) by a compute pass. A light whose lit sphere misses the view frustum is left out of the upload, and the pass tests lights in groups of 64 held in group memory, so a night street with a thousand lights costs the lights that can be seen. A cell holds at most 128 lights; when more reach it, the farthest are dropped and the log says how many clusters did so (`[Lighting] N of M light clusters hold more than 128 lights`). The `many-lights-test` row (RendererTests) lights a street with 64, 256 and 1 024 unshadowed and 16 and 64 shadowed point lights, checks that lights behind the camera are culled and a pile-up is counted, and writes its GPU times to the trend store.
+
+The screen-probe Global Illumination gather keeps its ray count near the 1080p cost: above 2 073 600 allocated pixels the rays per probe fall in proportion (`r.GI.ScreenProbes.RayBudgetPixels`, never fewer than 32).
 
 ## Many small meshes
 
@@ -105,5 +113,15 @@ To see the numbers for your own level, enable `stat.FrameStats 300` in the conso
 | `r.Texture.PackageNativeBc` | 1 | Upload a texture as its block-compressed chain; 0 decodes it and compresses it while it loads |
 | `r.Meshlet.PoolBudgetMB` | 0 | Most VRAM the meshlet cluster pool may grow to, in MB; 0 = a sixteenth of the GPU's dedicated memory, 64 to 1024 MB; 64 or less keeps the starting pool. Growth also stops short of the last tenth of the GPU's memory budget |
 | `r.Meshlet.AsyncLayouts` | 1 | Build a mesh's meshlet page layout on a worker thread the first time it is drawn; 0 builds it on the render thread (for comparison) |
+| `r.Meshlet.ComputeFallback` | 1 | Meshlet culling on a GPU without mesh shaders (Metal, Direct3D 11): 0 = off, 1 = the batched material runs are culled per cluster by a compute pass and drawn with one indirect draw each, wherever the mesh-shading path is missing; 2 = forced on every GPU (to compare). It only runs where the meshlet G-buffer is on (`r.MeshletGBuffer`, or Epic and up) |
+| `r.Meshlet.SwRaster` | -1 | Rasterize sub-pixel clusters in compute instead of the hardware: 0 = off, 1 = on, -1 = auto (off until the measured rows justify it) |
+| `r.Meshlet.SwRaster.SinglePass` | 1 | On a GPU with 64-bit buffer atomics the compute raster resolves depth and triangle in one launch; 0 forces the two-launch form every GPU can run |
+| `r.Meshlet.VsmCasters` | -1 | Draw static meshlet meshes into the virtual shadow map with the mesh-shading caster: 0 = classic draws, 1 = on, -1 = auto (off until measured) |
 | `r.MeshletResidencyStats` | 0 | Every N frames log the meshlet pool's residency, capacity, rejections and the system memory the meshes' cluster hierarchies hold |
 | `job.BackgroundWorkerReserve` | 3 | Workers kept free of background (Low priority) jobs; they hold at most all but this many at once. 0 lifts the cap |
+
+## A second reference scene: the Bistro
+
+The Amazon Lumberyard Bistro (2017, about 2.8 million triangles outside and 1 million inside, 600 textures) is the other scene the engine is measured on. It differs from the Sponza where it matters: alpha-tested foliage on the trees and many small lights across the street. Its packed material maps (occlusion, roughness and metalness in one texture) import without settings: the importer recognises the pack from its texture naming and maps each channel. The scene is not part of the engine or the sample projects; it is a CC BY 4.0 download you fetch yourself from its publisher.
+
+Credit: Amazon Lumberyard Bistro, Open Research Content Archive (ORCA), © Amazon Lumberyard, 2017, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Rendered in Mowo Engine; modified (imported and converted to Mowo assets, lighting, camera).

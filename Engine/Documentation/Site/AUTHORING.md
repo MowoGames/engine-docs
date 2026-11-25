@@ -49,8 +49,9 @@ with those names.
 
 ## Names
 
-Use the public names in prose, titles and headings: **Global Illumination** and
-**Visual Scripting**; no internal codenames. Code identifiers stay literal and in
+Use the public names in prose, titles and headings: **Global Illumination**,
+**Visual Scripting** and **AIGG (Arc In-Game Graphics)**; no internal codenames. Spell AIGG
+out on a page's first mention and say AIGG after that. Code identifiers stay literal and in
 backticks where the reader has to type or search them: the `MowoEngine.VisualScripting`
 module, `.vscript` files, class names, console variables such as `r.GI.BakedSdf`.
 
@@ -79,7 +80,9 @@ verifiedAt: 1a2b3c4d5          # required: the engine commit the page was last c
   config and public headers. Everything else the page was checked against
   (`.cpp` files, MBT, shaders) goes under `tracks`, which `mbt docs --bundle`
   strips before publishing.
-- An `Internal/` page lists everything under `sources` and has no `tracks`.
+- An `Internal/` page lists everything under `sources` and has no `tracks`. It is
+  never in the public bundle; `mbt docs --bundle --internal` publishes `Internal/`
+  alone to a private repository the site shows only to Mowo ID users with a role.
 - Both list code, config and data files, never other docs. When one of them
   changes after `verifiedAt`, `mbt docs --lint` lists the page as stale: re-read
   the page against the change, fix it, and move `verifiedAt` to the new commit.

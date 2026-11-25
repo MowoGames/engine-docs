@@ -11,10 +11,11 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/Components/WaterZoneComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/BuoyancyComponent.h
   - Engine/Source/Runtime/Game/Public/Water/BuoyancySystem.h
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/WaterBodyComponent.h
   - Engine/Source/Runtime/Game/Public/Water/CharacterWaterSystem.h
   - Engine/Source/Runtime/Game/Public/Game/MLevelStatics.h
   - Engine/Source/Runtime/Game/Public/Scene/LevelDataLayers.h
-verifiedAt: 7c4a1b166
+verifiedAt: c6c835140
 ---
 
 Terrain, water, foliage and sky are authored in the editor; see [World building](/docs/editor/world-building/) and [Rendering](/docs/rendering/). This page covers what gameplay code does with them at runtime.
@@ -30,12 +31,35 @@ A `DayNight` component drives the sun, sky and night lighting from a time of day
 | `azimuthDegrees` | 0 | Compass direction of the sun's path; any angle from -180 to 360 turns the whole arc around the vertical axis |
 | `sunIntensity`, `nightIntensity` | 1.4, 0.02 | Sun light by day and night |
 | `skyDayIntensity`, `skyNightIntensity` | 1.0, 0.15 | Sky light by day and night |
+| `moonIntensity`, `moonColor` | 0.12, pale blue | Light of every directional light whose Role is Moon at full phase, straight overhead |
+| `moonPhase`, `lunarCycleDays` | 0.5, 29.5 | 0 new, 0.5 full. With `animate` on the phase advances through one cycle every this many in-game days; the lit fraction scales the moonlight and shapes the disc in the sky |
+| `moonAzimuthOffsetDegrees`, `moonInclinationDegrees` | 20, 8 | Where the moon's arc sits relative to the sun's: it rides opposite the sun, rising as the sun sets |
+| `nightTint`, `nightTintStrength` | blue, 0.5 | The sky light's tint blends toward this colour as the sun sets, so shadowed areas read blue instead of grey. The Low quality tier shades one directional light, so this tint is what carries its night |
+
+### Physical mode
+
+**Physical Day Night** (`physical`) replaces the symmetric 12-hour cycle with a real solar position and stops the cycle from dimming the light twice. A new level has it on; a level saved before the field existed keeps the legacy cycle.
+
+| Field | Default | Effect |
+| --- | --- | --- |
+| `latitudeDegrees`, `longitudeDegrees` | 45, 0 | Where on Earth the level is. The noon sun is as high as that latitude and season allow, and a day is long or short with the season |
+| `dayOfYear` | 80 | 1 to 365. Around day 80 the day and night are equal; around 172 the northern sun climbs highest |
+| `timeZoneHours` | 0 | UTC offset of `timeOfDay`; longitude and the equation of time move solar noon away from 12:00 |
+| `sunLux` | 100 000 | The sun's illuminance above the atmosphere, written to the sun light in Lux units |
+
+The north direction is world -Z and `azimuthDegrees` turns it. The sun light keeps `sunLux` at every elevation (fading out over the last two degrees below the horizon, where the planet hides it): the sky atmosphere's transmittance alone dims and reddens it toward the horizon, where the legacy cycle also ramped the intensity and then lit the surface at N·L. The sky light's gain is neutral over a captured or procedural atmosphere sky, because that capture already follows the sun; the dusk and night tints do not apply (a Specified Cubemap sky light is left as authored). The moon is driven in lux (`moonIntensity` 0.12 is a plausible full-moon value) and the stars turn rigidly about the celestial pole, which stands as high above the horizon as the latitude, for any azimuth.
+
+To get moonlight, add a second Directional Light and set its Role to Moon; the cycle then drives its direction, colour, intensity and phase. See [Lights](/docs/rendering/lights/) for how the renderer shades more than one directional light.
 
 NPC schedules read the same clock; see [AI crowds and director](/docs/gameplay/ai-crowds-and-director/).
 
 ## Water
 
-Place water with `AWaterActor`; its `MWaterComponent` describes the body. A `WaterZone` component bounds which bodies take part and fills the horizon past them. <Source symbol="WaterZoneComponent" />
+Water comes in two kinds. `AWaterActor` is the simple one: a flat square plane with waves, described by its `MWaterComponent` (size, wave amplitude, colour). Everything else is a **Water Body** component: an ocean, a lake with a polygon shore, a river that follows a spline, or a custom shape that is queried but not drawn. Bodies are created in the editor's Water mode; see [Water bodies](/docs/editor/water-bodies/). A `WaterZone` component bounds which bodies take part and fills the horizon past them. <Source symbol="WaterZoneComponent" />
+
+The queries below answer for both kinds, and for a body they follow its transform: a lake rotated or scaled in the level is queried where it is drawn.
+
+All water in a level shares one wave clock. A body that streams in later is in phase with every other, and in a networked game the clock is steered toward the server's, so a boat floats on the wave the player sees. Waves are the same on the server and the clients to within the network delay, not to the frame.
 
 `MWaterStatics` answers water questions at any point, from C++ or Visual Scripting: <Source symbol="MWaterStatics" />
 
@@ -49,6 +73,8 @@ Place water with `AWaterActor`; its `MWaterComponent` describes the body. A `Wat
 ### Buoyancy and swimming
 
 Add a `Buoyancy` component to a dynamic rigid body to make it float: `strength`, `sampleRadius`, `maxDepth`, and `linearDrag` and `angularDrag` while in the water. <Source symbol="BuoyancyComponent" />
+
+By default four probes around the pivot decide how deep the body sits. For a hull that should pitch and roll, set `pontoonCount` (2 to 16), `pontoonHalfWidth` and `pontoonHalfLength`: the pontoons are laid out two across the hull and spread along its length in the body's own space, so they turn and scale with it and each one lifts the hull by its own submersion. A count of 0 keeps the four probes.
 
 Characters switch to swimming on their own when the water reaches their chest; see [Character movement](/docs/gameplay/character-movement/).
 

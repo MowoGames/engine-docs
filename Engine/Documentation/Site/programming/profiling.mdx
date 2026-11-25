@@ -10,8 +10,10 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/Profiler.h
   - Engine/Source/Runtime/Core/Public/Core/ProfilerCapture.h
   - Engine/Source/Runtime/Core/Public/Core/TraceWriter.h
+  - Engine/Source/Runtime/Core/Public/Core/TraceStream.h
   - Engine/Source/Runtime/Core/Public/Core/FMemoryTracker.h
-verifiedAt: 77b5ea1b2
+  - Engine/Source/Runtime/RHI/Public/RHI/GpuTimings.h
+verifiedAt: 3bb78e42a
 ---
 
 The profiling tools work the same in the editor, a development game and a dedicated server. There is no separate profiling build. Start with `stat unit` to see where a frame goes, then narrow down with counters, a capture or a trace.
@@ -24,6 +26,7 @@ Type them in the editor's Output Log console or the game console, or call `ICons
 | --- | --- |
 | `stat fps` | Frame rate and mean frame time |
 | `stat unit` | The frame, game, draw, RHI and GPU times |
+| `stat unitgraph` | The last 240 frames of the unit times as four lines (frame, game, draw, GPU) against the frame budget |
 | `stat gpu` | Per-pass GPU times from the last resolved frame |
 | `stat memory` | Live bytes per memory tag (needs a `--memtrack` build) |
 | `stat hitches` | Frame-time percentiles and hitch counts |
@@ -36,7 +39,7 @@ Type them in the editor's Output Log console or the game console, or call `ICons
 | `stat enable <group>`, `stat disable <group>` | Turns a group's measurement on or off |
 | `stat startfile [path]`, `stat stopfile` | Writes one CSV row per frame: frame number, time and deltas |
 
- The display commands toggle, so typing `stat fps` twice turns it off. Values are coloured against the frame budget (16.67 ms by default, `FFrameStats::SetBudgetMs`): amber past it, red past twice it. Hitches are counted at 1.5×, 2× and 4× the budget.
+ The stat displays are text over the scene with a drop shadow, never on an opaque background. These console variables change how they sit: `stat.Corner` (0 top right, 1 top left, 2 bottom right, 3 bottom left; at the bottom right the block stacks above `net.graph`), `stat.Opacity` (0.2 to 1), `stat.Background` (0 by default; above 0 draws a plate of that alpha), `stat.TextStyle` (0 shadow, 1 outline) and `stat.Compact` (1 collapses `stat fps` and `stat unit` to one line). `ui.DebugOverlays.Hide 1` hides the stats and the on-screen messages for a capture. In the editor the block sits inside the viewport, under its toolbar, during Play as well. The display commands toggle, so typing `stat fps` twice turns it off. Values are coloured against the frame budget (16.67 ms by default, `FFrameStats::SetBudgetMs`): amber past it, red past twice it. Hitches are counted at 1.5×, 2× and 4× the budget.
 
 ### What stat unit measures
 
@@ -78,6 +81,8 @@ The capture turns on the profiler, which takes a lock per scope and changes thre
 
 Tracy is compiled in by default in `dev` and `profile` builds on Windows and macOS, idle until a viewer connects. Elsewhere it is opt-in with `-o MOWO_ENABLE_TRACY=true`, and `=false` turns the default off. Run `tracy-profiler` on the same machine and connect to the running game or editor. The client listens on loopback only, so it opens no port to the network and the viewer must run locally.
 
+On Direct3D 12 and Vulkan the GPU zones sit where the GPU ran them, not at the CPU's frame begin: the timers read the device's calibrated clock pair and walk back to the frame's first timestamp, so a deep frame queue no longer shifts every GPU zone by the frames in flight. Other backends place them at the CPU frame begin.
+
 Game code profiles with the macros in `Core/Profiler.h` and never includes a Tracy header: the engine hosts the one Tracy client and the macros reach it through functions it exports, so a game module built against the installed engine compiles and records zones the same way. Where Tracy is compiled out, so is the Tracy half of every macro; zones still feed the CSV profile, the Profiler panel and traces. <Source path="Engine/Source/Runtime/Core/Public/Core/Profiler.h" />
 
 ```cpp
@@ -110,6 +115,35 @@ MowoGame.exe --trace=Saved/Profiling/Run.mtrace
 
 Publish your own per-frame numbers with `FTraceWriter::Get().SetCounter("DrawCalls", n)`; MowoInsights plots them.
 
+### Watching a trace live
+
+Set `mowo.Trace.Port` to a port before the trace starts and the process also serves the trace on that loopback port while it writes the file (`FTraceStreamServer` in `Core/TraceStream.h`). A viewer that joins late gets the part header and the name tables first, so what it holds is a valid trace. A viewer that cannot keep up is dropped instead of slowing the game; when the file rotates to a new part, the live view follows the newest part.
+
+```bash
+MowoGame.exe --trace=Saved/Profiling/Run.mtrace --cvar=mowo.Trace.Port=1980
+MowoInsights.exe --connect=127.0.0.1:1980
+```
+
+### Profiling a device from another machine
+
+The live port listens on loopback only, so a handheld such as the Steam Deck cannot be reached from the desktop by default. There are two ways to open it up, and both take IPv4 addresses.
+
+Bind to the network with `mowo.Trace.Bind` (`--trace-bind=<address>`). `0.0.0.0` listens on every interface, and anyone on that network can then read the trace, so use it on a network you trust.
+
+```bash
+MowoGame --trace=Saved/Profiling/Run.mtrace --cvar=mowo.Trace.Port=1980 --trace-bind=0.0.0.0
+MowoInsights.exe --connect=192.168.1.40:1980
+```
+
+Or let the game dial the viewer with `--trace-to=<host>:<port>` (`mowo.Trace.To`). The viewer listens, the game connects out, so this works through NAT and a firewall that blocks inbound connections. The game redials every couple of seconds while no viewer is connected, and a viewer that restarts picks the stream up again with the part header and name tables. Without `--trace` the trace file defaults to `Saved/Profiling/Remote.mtrace`. `--trace-to` replaces `mowo.Trace.Port` when both are set.
+
+```bash
+MowoInsights.exe --listen=1980
+MowoGame --trace-to=192.168.1.20:1980
+```
+
+A host name is not resolved; pass the viewer machine's IPv4 address. While the game is dialing an unreachable address, shutting the trace down can wait for the connection attempt to time out.
+
 ## MowoInsights
 
 MowoInsights is the standalone viewer for `.mtrace` traces and `.mprof` captures, the equivalent of Unreal Insights. It needs no editor and no project.
@@ -130,6 +164,27 @@ You can also drop a file on the window or use **Open…**; **Reload** rereads a 
 - **Hot list:** every scope summed over the trace, sorted by self time.
 - **Counters:** frame, game, draw and GPU times and every published counter, plotted over the trace.
 
+### Querying a trace without the window
+
+`--query` prints the answer as text and exits, for scripts and CI. The trace is a path, `--open=<path>` or a live `--connect=host:port` read for `--seconds=N` (default 2).
+
+```bash
+MowoInsights.exe --query=summary Run.mtrace
+MowoInsights.exe --query=scopes --sort=inclusive --top=10 --match=physics Run.mtrace
+MowoInsights.exe --query=memory --out=memory.txt Run.mtrace
+```
+
+| `--query=` | Prints |
+|---|---|
+| `summary` | Frame count and span, frame-time average and percentiles, frames over budget, dropped frames |
+| `scopes` | CPU scopes summed over the trace; `--sort=self\|inclusive\|max\|calls` |
+| `counters` | Every counter's first, last, minimum, maximum and average |
+| `memory` | Per memory tag the live bytes at the start and end, the growth and the peak, largest growth first: a tag that only climbs is a leak |
+| `frames` | The slowest frames with their lane timings |
+| `allocations` | The allocation track of a trace recorded with `mowo.Trace.Allocations` (see below): allocated, freed and live bytes per tag, and the largest blocks never freed |
+
+`--first-frame` and `--last-frame` narrow the range, `--match` filters names, and `--out=<file>` also writes the text to a file. `memory` needs a trace recorded with memory tracking (see [Memory](#memory)).
+
 ## Retained frames in the editor
 
 The editor's Profiler panel keeps a ring of recent frames you can scrub after a spike has passed, and saves it as `.mprof`. The ring is disarmed until the panel records, because copying every scope each frame has a cost. In a game or on a server, `mowo.Profiler.Capture 1` arms it. See [Editor](/docs/editor/).
@@ -137,3 +192,25 @@ The editor's Profiler panel keeps a ring of recent frames you can scrub after a 
 ## Memory
 
 `stat memory` reads the memory tracker, which is compiled out of normal builds. Build with `mbt build --memtrack` to get live bytes, peak and allocation counts per tag. Tag your own allocations with `MOWO_LLM_SCOPE(tag)`.
+
+### Allocation tracks in a trace
+
+A trace can also record when large blocks are allocated and freed, so MowoInsights can show which tag's memory keeps climbing and which blocks were never freed. It is off by default:
+
+```bash
+MowoGame.exe --trace=Saved/Profiling/Run.mtrace --cvar=mowo.Trace.Allocations=1 --cvar=mowo.Trace.AllocMinBytes=16384
+MowoInsights.exe --query=allocations --top=15 Saved/Profiling/Run.mtrace
+```
+
+`mowo.Trace.Allocations` is read when the trace starts. Only allocations of at least `mowo.Trace.AllocMinBytes` (4096 by default) are recorded, one in `mowo.Trace.AllocSample` of them (1 = all), and a free is recorded only for a block whose allocation was. The numbers are therefore lower bounds, and the query says how many events the queue dropped. Events go through the engine heap (`FMemory`), so a build with `--no-mimalloc` or `--asan` records none. Blocks carry the tag of the innermost `MOWO_LLM_SCOPE`, which needs a `--memtrack` build; without it every block is `Unknown`.
+
+The Counters view of MowoInsights plots three extra series, `Alloc.Traced.AllocatedBytes`, `Alloc.Traced.FreedBytes` and `Alloc.Traced.LiveBytes`, one value per frame.
+
+What it costs:
+
+- Off: one relaxed atomic load per allocation and per free, plus about 5.6 MB of static memory in `MowoEngine.Core` that is never touched.
+- On, for a block below the minimum: that load, a size comparison and an atomic read of the threshold.
+- On, for a recorded block: a few atomic operations, a probe of a fixed 2 MB table of live pointers and a 56-byte slot in a 64K-event queue, in the order of tens of nanoseconds. A thread that finds the queue full drops the event instead of waiting.
+- The trace writer thread drains the queue and wakes every 50 ms to do so; its own allocations are not recorded.
+
+Measure it on your game with a trace of the same scene with and without it before relying on the frame times of the run that records.

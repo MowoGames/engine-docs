@@ -25,7 +25,7 @@ sources:
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/MSituationStatics.h
   - Engine/Source/Runtime/Game/Public/Game/Components/SmartPointComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/TrespassVolumeComponent.h
-verifiedAt: 5922e6e5e
+verifiedAt: ac53762bc
 ---
 
 These systems take AI from a handful of enemies to a living level: hundreds of ambient characters at three levels of detail, a director that paces threats, and data-driven cover, smart objects, daily schedules and world events that witnesses react to and gossip about.
@@ -83,6 +83,12 @@ Behavior trees use four native tasks: `FindCover` reserves the best point away f
 
 A smart object is something an agent can claim and use: a bench, a terminal, a window. The `SmartObject` component sets its `activity`, `slotCount`, `slotSpacing`, `useDuration` and `cooldown`. Each agent holds at most one claim, and a claim dies with either end, so a despawned NPC never keeps a seat. <Source symbol="SmartObjectComponent" />
 
+### Tags, priority and cooldowns
+
+An object advertises `activityTags` and each slot can add its own: `slotTags` lists them per slot, slots separated by `;` and tags by `,` (`Size.Small;Size.Large`). `requiredUserTags` and `blockedUserTags` say which agents may claim it, judged against the agent's `AITags`. `cooldown` rests a released slot and `userCooldown` keeps the same agent from claiming the same object again for a while.
+
+`FindSlots` takes an `FSmartObjectQuery`: an optional activity, a gameplay tag query over the slot's tags, a radius, and the user and priority that would claim. `Claim(slot, user, priority)` takes a free slot, or takes a held one from a claimant of lower priority and fires `OnClaimPreempted` with the evicted agent. In a behavior tree, `FindSmartObject` reads a comma separated tag list from its asset reference and then needs no activity. The Navigation debug layer draws every slot (green free, amber resting, red claimed), where it faces and who holds it.
+
 Use them from a behavior tree with the `FindSmartObject` and `UseSmartObject` native tasks, or from Visual Scripting with `MSmartObjectStatics::ClaimNearestSmartObject(actor, activity, radius)`, `ReleaseSmartObject` and `GetSmartObjectSlotLocation`. <Source symbol="MSmartObjectStatics" />
 
 ## Schedules
@@ -116,7 +122,7 @@ A situation is a world event that witnesses learn about: `Gunshot`, `Explosion`,
 
 - Full AIs within earshot learn it, through the same walls-and-portals hearing the player's voice uses, and get blackboard keys such as `KnowsAboutSituation`, `SituationType` and `SituationPosition`. Crowd members in range panic.
 - Two AIs that stay within `ai.Situation.ConversationRange` for `ai.Situation.ConversationTime` pass what they know to each other.
-- `BodyFound` starts dormant and activates only when someone sees the body. Deaths raise one automatically (`ai.AutoBodyFound`).
+- `BodyFound` starts dormant and activates only when someone sees the body, or, for an agent with sight off, comes within its touch radius. Deaths raise one automatically (`ai.AutoBodyFound`).
 - A `TrespassVolume` component raises `Trespass` for anyone inside whose team is not authorized.
 - Situations decay after a per-type lifetime (`ai.Situation.GunshotLifetime` and so on).
 

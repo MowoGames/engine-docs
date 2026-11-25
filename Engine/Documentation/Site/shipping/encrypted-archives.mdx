@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/FModuleSignature.h
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/ProjectCryptoSettings.h
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/PackagePaks.h
-verifiedAt: 7f8f31f8d
+verifiedAt: 7afcabb52
 ---
 
 Every archive in a package is a **MEAF** file (`.meaf`). MEAF compresses each entry, and can also encrypt the archive's table of contents and payloads and sign the whole archive. With the same signing key, the packager also signs every module the game loads. Encryption keeps casual extraction tools out of your content. Signing lets the game refuse an archive or a DLL someone has swapped or modified.
@@ -94,7 +94,7 @@ With keys, the package gets:
 - **Encrypted content.** The content paks, their chunks and DLC archives. The engine pak and the shader paks stay unencrypted, because the player reads them during startup, but they are signed.
 - **Signed archives.** Every archive in `Content/Paks/`.
 - **Signed modules.** Every module in `Binaries/<platform>/` gets a detached `<file>.mowosig` signature made with the same key.
-- **Keys inside the host.** The game host reserves a key block, and the packager writes the encryption key and the signing public key into the **staged** copy of the host. Each key is split into two random shares under a position mask <Source path="Engine/Source/Runtime/Filesystem/Public/Filesystem/EmbeddedCryptoKeys.h" />. `DefaultCrypto.ini` itself is never staged, and the build tree under `Engine/Binaries` never carries a project's keys.
+- **Keys inside the host.** The game host reserves a key block, and the packager writes the encryption key and the signing public key into the **staged** copy of the host. Each key is split into two random shares under a position mask <Source path="Engine/Source/Runtime/Filesystem/Public/Filesystem/EmbeddedCryptoKeys.h" />. `DefaultCrypto.ini` itself is never staged, and the build tree under `Engine/Binaries` never carries a project's keys. Writing the block changes the host's bytes, so on macOS the packager signs the staged host again (ad hoc); Apple silicon refuses to run a binary whose signature no longer matches. Package for macOS on a Mac, or sign the host yourself before it runs.
 
 The log's `Content protection:` line says what was applied: the key id it encrypted with and the start of the signing public key.
 

@@ -4,7 +4,7 @@ description: The Smart Props plugin's parametric prop assemblies with parameters
 order: 37
 sources:
   - Engine/Plugins/SmartProps/SmartProps.mplugin
-verifiedAt: 5922e6e5e
+verifiedAt: 1cbbecbe4
 ---
 
 A Smart Prop is a parametric assembly saved as a `.prop` asset. One asset describes a family of objects: a shelf with any number of boards, a crate stack of any height, a desk whose lamp appears only when `has_lamp` is on. A placed instance stores only a reference, its parameter overrides and a seed; the parts are regenerated whenever an input changes and are never written into the level until you bake. Enable the **Smart Props** plugin in the Plugins window. <Source path="Engine/Plugins/SmartProps/SmartProps.mplugin" />
@@ -77,7 +77,7 @@ Named rules add `stack` and `clutter_fill`, which work on the prop's own parts, 
 
 ## Instances
 
-Place an `ASmartPropActor`, or add an `MSmartPropComponent` to an actor. It stores the `propPath`, a `seed` (0 derives one from the entity), a `variant`, and only the parameters that differ from the asset's defaults, so changing a default in the `.prop` reaches every instance that did not override it.
+Place an `ASmartPropActor`, or add an `MSmartPropComponent` to an actor. It stores the `propPath`, a `seed` (0 derives one from the entity: from its ID when it was placed in the level, and from its `NetworkId` when it was spawned at runtime in a multiplayer session, so the server and every client build the same parts), a `variant`, and only the parameters that differ from the asset's defaults, so changing a default in the `.prop` reaches every instance that did not override it.
 
 Generation is a pure function of the asset, the overrides, the variant and the seed: the same inputs always give the same parts. Parts are created as runtime entities that never appear in the Outliner and are never saved.
 
@@ -86,6 +86,16 @@ From Visual Scripting or C++, `MSmartPropComponent` offers `SetSmartProp`, `SetS
 ### Bake and unbake
 
 **Bake** turns the generated parts into real, individually editable level entities in one undo step and makes the instance inert. **Unbake** goes back, but only while the source asset is unchanged since the bake, so hand edits are never silently regenerated away.
+
+## Streaming levels
+
+In a level that streams in sectors, a prop generates only while the sector it stands in is loaded. The sector is worked out from the prop's position, so dragging a prop across a cell border moves it to the other cell's rules: it stops generating when the cell it left unloads and starts when the cell it entered loads. In a level that is not partitioned nothing is recorded and every prop generates at once.
+
+When a sector streams in, the props waiting in it are built nearest the camera first, within a time budget per tick (`sp.GenerationBudgetMs`, 4 ms by default; 0 builds everything at once). The rest follow on the next ticks, so a room with hundreds of props arrives over a few frames instead of in one hitch. An ordinary level is not budgeted.
+
+### Far representation (HLOD)
+
+A sector's far proxy includes the generated parts, packed repeats and painted foliage meshes. When you cook the sector manifest the engine first builds every Smart Prop and volume in the level, including those in sectors the editor has unloaded, and waits (up to ten seconds per sector) for the models behind the parts to finish loading, so the proxies are complete however the editor happened to be streaming. The cook also stores each instance's finished parts (and sockets) with its sector, so a cooked build realizes a placed prop from that copy and does not load the asset or run the generator as the sector streams in. The copy is attached only while the sector is written; your level files never carry it. Props placed by a volume are still generated at run time. If you edit a `.prop` asset after a cook, re-cook the manifest; a hot-reloaded asset regenerates its instances regardless.
 
 ## Prop sets and volumes
 

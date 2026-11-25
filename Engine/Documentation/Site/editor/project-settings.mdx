@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/Project/Public/Project/Project.h
-verifiedAt: d510a9760
+verifiedAt: 146f8a93e
 ---
 
 Two windows hold every setting you can change from the editor:
@@ -25,8 +25,8 @@ Both are separate windows, so you can keep one open beside the viewport while yo
 
 - The **category tree** on the left lists the pages by section. A number beside a page counts its rows that differ from the default.
 - The **page header** shows the breadcrumb, **Export** (writes the page's values as an `.ini` under `Saved/Exports/Settings/`) and **Reset section** (click twice to confirm).
-- **Banners** say where the page is stored (*shared* or *local*), warn when a user config overrides a value, and list changes that need a restart, with **Restart now**.
-- Each **row** has a label and description, its control, and a reset arrow. A dot marks a value that is not its default; a *restart* chip marks a value read only at startup.
+- **Banners** say where the page is stored (*shared* or *local*), warn when a user config overrides a value, and, for a change that cannot apply to the running editor, say which setting and why, with **Restart now** that reopens the same project and level.
+- Each **row** has a label and description, its control, and a reset arrow. A dot marks a value that is not its default; a *restart* chip marks a value that cannot apply to the running editor, and the row says why. Every other setting applies as soon as you save, or the next time the thing that reads it starts (a level opens, Play begins), and the row says which.
 
 **Values are written as they change.** There is no Apply button: a page is written once your edits have been still for a moment, and when the window closes. The exception is **Crypto**, which stages generated keys and has its own **Apply** and **Discard**.
 
@@ -63,13 +63,16 @@ A page whose features the active graphics API can never support is hidden. A set
 | Page | Stored in | Contents |
 | --- | --- | --- |
 | General | `.mproject` | Name, version, product, company, copyright, description |
-| Maps & Modes | `.mproject` | Start level, game mode class, game window defaults, and the **Game Splash** (`player.splashImage`) |
+| Maps & Modes | `.mproject` | Start level, the editor's startup map, game mode class, game instance class, the selected game mode's class defaults, game window defaults, the **Game Splash** (`player.splashImage`) and the **Game Icon** (`player.iconPath`, an .ico or a square PNG) |
 | Layers | `.mproject` | The named layer slots every layer mask uses |
+| Collision | `.mproject` | The physics object layers: names for the user layers, the matrix of which pairs collide (symmetric, one checkbox per pair), and presets (Default, Everything collides, Nothing collides). A project that never saves the page keeps the engine defaults |
+| Gameplay Tags | `Config/DefaultGameplayTags.ini` | Add, comment, rename and remove the tags the project declares. A rename keeps a redirect from the old spelling; the rest of the file is left as written. Added tags and redirects are live at once, a removed tag stays declared until the next start |
+| Editor Behaviour | `Config/Engine.ini` | The editor's own console variables: reload assets changed on disk, how many lines the Output Log keeps, a fixed viewport render size, how models import, and the import thread count. The full list of variables is in **Window ▸ Content ▸ Console Variables** |
 | Platform | `.mproject` | Steam, Discord and Mowo Online Services integration |
+| Packaging | `Config/Packaging.ini` | The levels a package ships (with everything they reference) and the folders it always ships, compression, monolithic or modular, IoStore, zip, installer, the dedicated server flag, strict references, the build number, and the Windows certificate, macOS identity and notary profile to sign with. Keys and certificates are names here, never secrets |
 | Crypto | `Config/DefaultCrypto.ini` | Generate the encryption and signing keys, and choose whether packages encrypt content and sign archives and modules |
 | Accessibility | `Config/Engine.ini` | Accessibility defaults for the game |
-| Live Ops | `Config/Engine.ini` | Live operations networking settings |
-| Scripting | `Config/Plugins.ini`, `Config/Engine.ini` | Wolang for the project, **Reload on Save** (`wolang.HotReload`), the debugger port (`wolang.DebugPort`), the VS Code workspace and a compile button; see [Wolang scripting](/docs/gameplay/wolang-scripting/) |
+| Anti-Cheat | `Config/DefaultAntiCheat.ini` | Server-side anti-cheat rules; the dedicated server reads the file when it starts hosting || Live Ops | `Config/Engine.ini` | Live operations networking settings |
 
 <Callout type="warning">
 Regenerating the crypto keys means archives built with the new keys cannot be opened by older builds, and patches or DLC for a shipped build must be made with that build's keys. See [Shipping](/docs/shipping/).
@@ -83,17 +86,18 @@ All Engine pages write `Config/Engine.ini`.
 | --- | --- |
 | Rendering | Rendering, Volumetrics, Global Illumination, Path Tracer, Shadows & Lighting, Geometry, Reflections, Terrain, Foliage & Water, Textures & Materials, Effects (with Scan Points), Post Processing, Upscaling & Display, Frame Generation |
 | Quality and performance | Scalability, Performance |
-| Simulation | Physics, Networking (with Rollback Netcode), Gameplay (with Time Rewind), Audio (with Geometric Acoustics), Voice Chat, AI (with Noise Map), Animation, World Partition (with HLOD) |
+| Simulation | Physics, Networking (with Rollback Netcode), Matchmaking, Gameplay (with Time Rewind), Audio (with Geometric Acoustics), Voice Chat, AI (with Noise Map), Animation, World Partition (with HLOD) |
 | Systems | Input, Save & Persistence, Content & Import, Garbage Collection |
 
 | Page | Example settings |
 | --- | --- |
-| Rendering | Graphics API and dynamic GI method (both need a restart), and the project feature switches under **Features** |
+| Rendering | Graphics API (needs a restart), the dynamic GI method (applies live), and the project feature switches under **Features** |
 | Scalability | The active quality preset (`r.Quality`) and per-category overrides |
 | Performance | Parallel command recording, async compute, pipeline deduplication, variable rate shading, and **Inference Device** under **On-device inference** |
 | Physics | Maximum substeps, distance LOD, physics debug drawing |
 | Input | Stick and trigger dead zones, per-gamepad overrides, and a gamepad slot table |
 | Networking | Encryption and pre-shared key, RPC rate limits, replication budgets, character prediction |
+| Matchmaking | Matchmaking service, matchmaker address and token, WebSocket follow, default mode, region, latency limit and search timeout |
 | Save & Persistence | Game autosave and the world persistence journal |
 | Garbage Collection | Collection interval and incremental marking and sweep budgets |
 
@@ -121,6 +125,10 @@ r.RayTracing.EnableForProject=1
 ```
 
 ### Game Splash
+
+**Project > Maps & Modes** has two groups before the window defaults. **Default Maps** holds the **Start Scene** a packaged build opens with, the **Editor Startup Map** the editor opens this project with (`project.editorStartScene`; empty means the Start Scene; the **Load level at startup** preference in Editor Preferences still chooses between this map, the last opened scene and nothing), the **Game Mode Class** (`project.gameModeClass`) and the **Game Instance Class** (`project.gameInstanceClass`; empty means the plain key-value `MGameInstance`). A level can override the game mode in **World Settings**.
+
+**Selected Game Mode** is a read-only block under them. It shows the pawn, player controller, game state, player state and HUD classes the chosen game mode class spawns, read from the class defaults, and follows the picker before you apply it. `None` means the slot uses the base class (or, for player state and HUD, spawns nothing); `-` means the class has no defaults to read. Change them on the game mode itself: its class defaults for a Visual Scripting game mode, its Details when placed in a level. See [Gameplay framework](/docs/gameplay/gameplay-framework/).
 
 **Project > Maps & Modes > Game Window > Game Splash** names a PNG, JPEG or BMP relative to the project root, Unreal's **Windows > Splash > Game Splash**. The game shows it fitted on black from the moment its window opens until the first game frame. Empty, the default, opens on a black frame and then the game, with no engine branding. Play in Editor never shows it; `--no-splash` skips it. See [Package a game](/docs/shipping/package-a-game/#how-the-game-starts).
 
@@ -154,7 +162,7 @@ Editor Preferences are per user and per project. They are written to the project
 | Multi-user editing | Display name, session port, host address, host for other machines ([Multi-user editing](/docs/editor/multi-user/)) |
 | Autosave | **Autosave** and **Autosave interval** ([Saving and recovery](/docs/editor/saving-and-recovery/)) |
 | Viewport | Mouse look sensitivity, invert mouse look Y |
-| Play | **Multiplayer client windows**: inside the editor or separate windows |
+| Play | **Multiplayer client windows**: inside the editor or separate windows; **On-screen messages** (Print String lines and the gameplay debugger over the viewport); **Message Log errors on screen**; **Stats corner**, **Stats opacity** and **Stats background** for the stat text in Play |
 | Message log | **Open on new error** |
 
 ### Appearance
@@ -169,7 +177,11 @@ Editor Preferences are per user and per project. They are written to the project
 
 ### Interface
 
-UI scale and text shaping. These are read at startup, so they need a restart.
+UI scale and text shaping. The UI scale override applies as soon as you save and every window re-lays out; text stem darkening is read once when the fonts load, so it needs a restart.
+
+### Accounts
+
+The build secrets `mbt` uses, kept in the operating system credential store (Windows Credential Manager, the macOS Keychain) instead of environment variables: the **Sentry Auth Token** that uploads crash symbols after a package, the **Windows Signing Certificate** (a thumbprint, store subject or .pfx path) and the **Steam Build Account**. Nothing is written to a project file or a log, the token field is masked and empty after you press **Apply**, and **Forget Sentry Token** removes it. A command-line flag or an environment variable (`SENTRY_AUTH_TOKEN`, `MOWO_SIGN_CERT`, `MOWO_STEAM_USER`) still wins, so a build machine keeps working as before.
 
 ### Keyboard Shortcuts
 

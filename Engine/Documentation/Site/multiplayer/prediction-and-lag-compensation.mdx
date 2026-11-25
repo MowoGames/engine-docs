@@ -9,12 +9,13 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Components/NetMovementStateComponent.h
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationPackets.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/HitManifest.h
   - Engine/Source/Runtime/Physics/Public/Physics/CustomMovementMode.h
   - Engine/Source/Runtime/Physics/Public/Physics/RootMotionSource.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterMovementComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MCharacterMovementComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/AbilitySystemStateComponent.h
-verifiedAt: 5922e6e5e
+verifiedAt: 588510704
 ---
 
 Two problems appear as soon as there is latency between a client and the host. Your own movement feels late if the client waits for the host to answer, and your shots miss if the host checks them against where targets are now rather than where you saw them. Mowo solves the first with **client prediction and reconciliation**, and the second with **server rewind**.
@@ -90,7 +91,7 @@ When a client fires, it aims at ghosts that are drawn about 100 ms in the past, 
 
 ### How the history works
 
-- The host captures one pose set per **server tick**, which runs at 30 Hz by default and is separate from the snapshot rate.
+- The host captures poses once per **server tick**, which runs at 30 Hz by default and is separate from the snapshot rate. Each object keeps a short track that gains a pose only when the object moved (or appeared, or vanished), so a still object adds nothing per tick <Source symbol="ReplicationManager::GetLagCompKeyCount" />.
 - It keeps **15 entries**, so the window is 500 ms at 30 Hz <Source symbol="ReplicationManager::RewindTo" />. `SetLagCompHistoryTicks` changes the count.
 - A frame hitch advances at most four ticks, so a stall cannot fill the history with copies of one pose.
 - A rewind older than the window clamps to the oldest entry rather than refusing the shot.
@@ -129,6 +130,18 @@ Rewinding is not thread-safe and only makes sense on the host, between physics s
 </Callout>
 
 The Combat plugin's weapons use exactly this path: the client sends its view tick with the fire request, and the host wraps each hitscan in a rewind.
+
+## Hit manifests
+
+A shooter can also send a **hit manifest**: the origin, the tick it was looking at and up to 16 claimed hits (target, region, ticks back, hit point). A claim is 10 bytes on the wire, the hit point a centimetre-quantised offset from the origin.
+
+`FHitManifestValidator` checks each claim against the rewound pose of the claimed region, without moving anything: `ReplicationManager::GetLagCompPose` reads the history ring and, unlike `RewindTo`, refuses a tick older than the window instead of clamping. A claim is accepted only when its hit point lies within the region radius plus a tolerance (0.35 m by default). It is refused as `TickTooOld`, `TickFuture`, `OriginFar`, `OutOfRange`, `UnknownTarget`, `SelfHit`, `PositionMismatch`, `Replayed` or `TooManyClaims`. Every refusal adds a strike to the shooter; strikes decay over time, and crossing the threshold flags the shooter once through a callback. The `net-hit-manifest-rewound-hit` row shows a claim accepted at the rewound tick and refused at the live one.
+
+Hitscan weapons build and send a manifest themselves. When a client fires, `FWeaponSystem` records each entity its local trace hit with a replicated id through `FHitManifestBuilder`, classifies the hit height into a region and submits the manifest with `FNetSession::SubmitHitManifest`. The host validates it on arrival and never relays it. The host still decides damage by tracing the rewound world; the manifest is the cheat signal.
+
+Regions are offsets above the target's replicated root, held in `FHitRegionTable` (body, head, torso and legs by default, each with an up offset and a radius). The lag-compensation history stores root transforms only, so the regions follow the root rather than individual skeleton bones. Replace the table with `FNetSession::SetHitRegionTable` for a character of another size.
+
+The limits are console variables: `net.HitManifest.MaxTicksBack`, `net.HitManifest.PositionTolerance`, `net.HitManifest.MaxRange`, `net.HitManifest.MaxOriginDistance`, `net.HitManifest.StrikeDecayPerSecond` and `net.HitManifest.FlagStrikes`. A flagged shooter is logged; `net.HitManifest.KickOnFlag 1` also kicks them.
 
 ## Related
 

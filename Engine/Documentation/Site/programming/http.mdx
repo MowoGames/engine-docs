@@ -4,9 +4,10 @@ description: Make HTTP requests and stream resumable downloads with the libcurl-
 order: 14
 sources:
   - Engine/Source/Runtime/Http/Public/Http/HttpClient.h
+  - Engine/Source/Runtime/Http/Public/Http/HttpRetry.h
   - Engine/Source/Runtime/Http/Public/Http/HttpWebSocketConnection.h
   - Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h
-verifiedAt: 78247d651
+verifiedAt: 7890cf887
 ---
 
 The **Http** module wraps a vendored, statically linked libcurl. Every HTTP request the engine makes goes through it, from crash uploads to the games launcher and GameNet's WebSockets. Add `"Http"` to your module's dependencies to use it. <Source symbol="HttpClient" />
@@ -43,7 +44,25 @@ const Mowo::HttpResponse page = Mowo::HttpClient::Request("GET", "https://exampl
 | `Fetch(url, options)` | A GET into memory that can be cancelled, throttled and observed |
 | `Download(url, filePath, options, resume)` | Stream a body to a file, resuming a partial file |
 
-`HttpResponse` carries the status code (0 for a transport failure), the body, a curl error message, and `nameNotResolved`, set when the host name did not resolve: usually a wrong URL rather than a network outage.
+`HttpResponse` carries the status code (0 for a transport failure), the body, a curl error message, and `nameNotResolved`, set when the host name did not resolve: usually a wrong URL rather than a network outage. `retryAfterMs` holds the server's `Retry-After` when it sent one as a number of seconds (0 otherwise; the HTTP-date form is ignored).
+
+## Retrying transient failures
+
+`HttpClient::Request` makes one attempt. `HttpRetry::Request(method, url, body, headers, timeoutSeconds, cancel)` takes the same arguments and retries a transient failure with exponential backoff before it gives up. <Source symbol="HttpRetry" /> It retries a transport error and the statuses 408, 425, 429, 500, 502, 503 and 504, and returns anything else (a 404, a 401, a 400) at once. The wait starts at `http.Retry.BaseDelayMs`, doubles each time up to `http.Retry.MaxDelayMs`, and is spread by `http.Retry.JitterPercent` so clients that failed together do not come back together. When the server sent `Retry-After`, the wait is at least that long, cut to `http.Retry.MaxRetryAfterMs`. A `cancel` flag you pass ends the wait early and returns the last answer.
+
+Only requests that are safe to repeat are retried: `GET`, `HEAD`, `PUT`, `DELETE` and `OPTIONS`. A `POST` or `PATCH` that failed after the server acted would act twice, so they get one attempt unless `http.Retry.UnsafeMethods` is 1. A host name that did not resolve is not retried either (`http.Retry.NameNotResolved`).
+
+| Console variable | Default | Meaning |
+| --- | --- | --- |
+| `http.Retry.MaxAttempts` | 3 | Attempts including the first; 1 turns retrying off |
+| `http.Retry.BaseDelayMs` | 500 | Wait before the first retry |
+| `http.Retry.MaxDelayMs` | 15000 | Longest wait between attempts |
+| `http.Retry.JitterPercent` | 25 | Random spread of each wait, either way |
+| `http.Retry.MaxRetryAfterMs` | 60000 | Longest `Retry-After` honoured |
+| `http.Retry.UnsafeMethods` | 0 | 1 retries `POST` and `PATCH` |
+| `http.Retry.NameNotResolved` | 0 | 1 retries an unresolved host |
+
+The wait blocks the calling thread, like the request itself. GameNet's REST client and the remote configuration fetch use it; the crash uploader keeps its own per-endpoint schedule.
 
 ## Streaming downloads
 

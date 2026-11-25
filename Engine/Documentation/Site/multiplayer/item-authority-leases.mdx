@@ -1,0 +1,143 @@
+---
+title: Item authority leases
+description: Let a client pick up and carry a networked physics item with no round-trip delay, while the host keeps the final say over where it is.
+order: 4
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/GrabLeaseBridge.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/AuthorityLeaseComponent.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/AuthorityLease.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/NetworkObjectComponent.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
+  - Engine/Source/Runtime/Game/Public/Game/MAuthorityLeaseSubsystem.h
+  - Engine/Source/Runtime/Physics/Public/Physics/PhysicsSystem.h
+verifiedAt: 588510704
+---
+
+In a listen-server game the host owns every physics item. If the host simulated an item a client was carrying, the client would feel a full round trip of delay every time it moved it. An **authority lease** fixes that: the client asks the host for temporary authority over one item, simulates it on its own physics world while it holds it, and the host checks everything the client reports. When the lease ends, the item goes back to host simulation without a jump.
+
+## Make an item leasable
+
+Add an `AuthorityLeaseComponent` <Source symbol="AuthorityLeaseComponent" /> to an entity that already has a `NetworkObjectComponent` and a `RigidBodyComponent`. The rigid body must be authored **Dynamic**: the lease turns the body kinematic on every machine that does not simulate it and back again, and a body created kinematic has no mass to come back with.
+
+<Screenshot id="multiplayer-authoritylease-details" alt="Mowo Editor Details panel with a crate actor selected that has NetworkObject, RigidBody (Dynamic) and AuthorityLease components; the AuthorityLease section is expanded showing Leasable, Lease Seconds, Max Speed, Teleport Distance and Return Blend Seconds" caption="The AuthorityLease component in the Details panel." />
+
+| Field | Default | Meaning |
+|---|---|---|
+| Leasable | on | Off refuses every claim on this item. |
+| Lease Seconds | `1.0` | The window a grant or renewal buys. The holder renews every third of it, so a lease survives two lost renewals. |
+| Max Speed | `15` | The fastest the host believes the item can move in a client's hands, in m/s. |
+| Teleport Distance | `1.5` | A reported pose this far beyond what Max Speed allows is refused outright. |
+| Return Blend Seconds | `0.25` | How long the former holder blends from its own pose onto the replicated one when the lease ends. |
+
+The component also carries three replicated fields the engine writes: who holds the lease (`holderPeerId`, 0 when the host simulates the item), a lease counter, and whether the host holds the item for itself (`hostHeld`: its own player's claim, or a carry the host simulates). Because they replicate like any other field, a player who joins mid-game sees the current holder as soon as the item spawns.
+
+## Carrying a leased item
+
+A Light or Medium object that a client carries goes on a lease on its own; you do not call anything. The carry system adds an `AuthorityLeaseComponent` with default fields the first time the object is picked up, so it is optional on a carryable. Add it yourself only to change the fields or to turn **Leasable** off. With Leasable off, the object is carried the way a Heavy object is.
+
+1. **Pick up.** The client predicts the pickup and starts simulating the object under the carry request's own id. The carry's hold motor runs on the client's physics world.
+2. **Decide.** The host accepts or refuses the pickup as it always did. Its answer to the carry is also the answer to the lease: an accepted pickup is granted under the same id, so the carry and the lease can never name different holders.
+3. **Carry.** The client sends its poses. The host's body is kinematic and follows the poses that pass its checks, so everyone else sees the object in the carrier's hands.
+4. **Drop or throw.** The client releases the lease with the final pose and velocity (a throw's impulse included) and then sends the drop. The host continues the object from there, and the client blends back onto the replicated pose.
+
+Whatever ends the lease also ends the carry: expiry, a disconnect, refused poses or a higher-priority claim. When the host ends the carry first (damage, the carrier's death, another player taking the object), it revokes the lease too. Heavy and two-person carries, and anything the host's own player carries, stay host-simulated and set **Host Held** for as long as the carry lasts.
+
+## Grabbing a leased prop
+
+A spring grab (`MGrabStatics::GrabActor`, `GrabActorAt`) on an item that carries an `AuthorityLease` asks for its lease first. The grabbing client simulates the prop at once; the host gives it to the first claim and refuses the rest, and a client whose claim is refused lets go of its spring. While it holds the lease its poses reach the host and every other machine, rotation and velocity included, so two players can each reach for the same crate and exactly one drags it. `ReleaseActor` hands the lease back with the prop's current velocity, so a throw carries on under the host. A lease the host takes away (expiry, a higher-priority claim, a disconnect) releases the spring on the machine that held it. An item without the component, or a grab outside a session, stays a plain local grab.
+
+## How a lease runs
+
+1. **Request.** A client calls `RequestLease`. It starts simulating the item at once, so a pickup feels instant. The request goes to the host.
+2. **Grant.** The host grants the lease, makes the client the item's network owner and turns its own copy of the body kinematic. If the host refuses, the client hands the item back through the same smooth return described below.
+3. **Hold.** While the client holds the item it sends its pose and velocity 30 times a second and renews the lease every third of the window. The host's kinematic body follows the accepted poses, so other clients see the item through ordinary replication and the host's own physics collides with it where the holder put it.
+4. **End.** The lease ends when the holder releases it, when no renewal reaches the host inside the window, when the holder disconnects, when a higher-priority claim takes it, when the host reclaims it, or when the holder keeps sending poses the host refuses.
+
+## What the host checks
+
+Every pose a holder sends is compared with the last pose the host accepted:
+
+- **Within the speed limit:** accepted. Reported velocity is still capped at Max Speed.
+- **Too fast, but not a jump:** pulled back onto the speed limit along the same direction, and the holder is sent a correction.
+- **A jump** (further than Max Speed allows plus Teleport Distance): refused. The host keeps its last pose and sends it back as a correction. Five refused poses in one lease end it with reason *Rejected*.
+
+The host gives a client at most half a second of travel credit for a gap between poses, so going silent does not earn a long jump. Only the holder can renew, release or move an item: the grant makes it the item's owner, and those messages are owner-only.
+
+## Who wins a contested item
+
+- **The host wins.** While the host's own player holds an item, every client claim is refused. A host claim on a leased item revokes the lease.
+- **First come, first served.** Claims that reach the host in the same tick are ruled on together. The highest priority wins; a tie goes to the claim that arrived first.
+- **A held item moves only up.** A claim with a strictly higher priority than the holder's revokes the current lease and grants the new one. An equal or lower claim is refused.
+
+Priority is decided on the host. By default every client claims at priority 0, which is plain first come, first served. To rank claims, for example to let a teammate rescue an item from a downed player, set a resolver on the host. The priority hint a client sends with its request is only an input to your resolver, never trusted as-is:
+
+```cpp
+#include "Networking/Replication/AuthorityLease.h"
+
+void SetUpLeaseRules(Mowo::World& world) {
+	auto* leases = world.GetSystem<Mowo::FAuthorityLeaseSystem>();
+	if (!leases) {
+		return;
+	}
+
+	leases->SetClaimPriorityResolver([](uint32_t peerId, Mowo::EntityID item, int32_t hint) {
+		(void)item;
+		return IsRescuer(peerId) ? 5 : 0;
+	});
+
+	// Refuse claims before priority is considered, for example out of reach.
+	leases->SetClaimValidator([](uint32_t peerId, Mowo::EntityID item) {
+		return IsWithinReach(peerId, item);
+	});
+}
+```
+
+`IsRescuer` and `IsWithinReach` stand for your own game rules.
+
+## Handing the item back without a snap
+
+When a lease ends, two things keep the item's motion continuous:
+
+- **On the host,** the body becomes dynamic again at the last pose the host accepted, moving with the holder's last reported velocity. A release sends the final pose and velocity with it, so dropping or throwing an item is simply a release.
+- **On the former holder,** the replicated pose is an interpolation delay plus a network trip behind the pose the client was showing. Switching straight to it would jump the item backwards. Instead the client measures the gap once and shows the replicated pose plus a share of the gap that fades out over Return Blend Seconds.
+
+While a client holds a lease, the item's `NetworkObjectComponent::netLocallySimulated` flag is set and [client interpolation](/docs/multiplayer/replication/#client-interpolation) leaves its transform alone. Samples keep arriving, so interpolation resumes from current data the moment the lease ends.
+
+## From C++
+
+`FAuthorityLeaseSystem` <Source symbol="FAuthorityLeaseSystem" /> is a scene system that every networked scene gets automatically.
+
+| Call | Where | What it does |
+|---|---|---|
+| `RequestLease(item, hint)` | client | Ask for the item and start simulating it. On the host, the host's own player takes it. |
+| `ReleaseLease(item)` | client or host | Give the item back with its current pose and velocity. |
+| `RevokeLease(item, reason)` | host | Take a client's lease back. |
+| `GrantLease(item, peerId, priority, requestSeq)` | host | Grant an item directly, under the same conflict rule. `requestSeq` answers a client's `PredictLease`; leave it 0 for an unasked grant. |
+| `PredictLease(item, requestSeq)` | client | Start simulating the item without sending a request, when a gameplay request of your own already asks for it. The host answers with `GrantLease` under the same `requestSeq`. This is how the carry system leases. |
+| `GetLeaseHolder(item)` | anywhere | 0 when the host simulates it, otherwise the holder's peer id. |
+| `IsLeasedLocally(item)` | client | True while this client holds the lease. |
+| `IsSimulatingLocally(item)` | client | True while this client simulates the item, including a lease it has predicted and not had confirmed yet. |
+| `GetLeaseRemaining(item)` | anywhere | Seconds left on the lease as this machine knows it. |
+| `AddListener(fn)` | anywhere | Receive `Granted`, `Renewed`, `Revoked` and `Denied` events. |
+
+Revocations carry an `ELeaseRevokeReason` <Source symbol="ELeaseRevokeReason" /> and refusals an `ELeaseDenyReason` <Source symbol="ELeaseDenyReason" />. The host and the holder hear every event about a lease; other clients hear a grant or a revoke when the replicated holder changes.
+
+## From Visual Scripting
+
+Get the world's **Authority Lease Subsystem** <Source symbol="MAuthorityLeaseSubsystem" /> and use its nodes: Request Lease, Release Lease, Revoke Lease, Grant Lease, Get Lease Holder, Is Leased Locally, Is Host Held and Get Lease Remaining. Each takes the item's actor and does nothing on an actor without an AuthorityLease component.
+
+Bind to its events to react to a lease changing hands:
+
+| Event | Pins |
+|---|---|
+| On Lease Granted | item, holder peer id |
+| On Lease Renewed | item, holder peer id |
+| On Lease Revoked | item, former holder peer id, reason (1 released, 2 expired, 3 disconnected, 4 preempted, 5 host reclaimed, 6 rejected, 0 when another client only saw the holder change) |
+| On Lease Denied | item, reason (1 held, 2 contested, 3 host held, 4 not leasable, 5 refused) |
+
+## Related
+
+- [Replication](/docs/multiplayer/replication/) for how the host's pose reaches other clients.
+- [RPCs and events](/docs/multiplayer/rpcs/) for owner-only messages.
+- [Prediction and lag compensation](/docs/multiplayer/prediction-and-lag-compensation/) for the player's own pawn.
+- API: [`FAuthorityLeaseSystem`](/docs/api/networking/fauthorityleasesystem/), [`AuthorityLeaseComponent`](/docs/api/networking/authorityleasecomponent/).

@@ -1,0 +1,64 @@
+---
+title: Landscape
+description: How a terrain is built, sculpted, painted and saved, what its collision and height file do, and how painted foliage and grass follow it.
+order: 7
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/Components/TerrainComponent.h
+  - Engine/Source/Runtime/Game/Public/Terrain/TerrainSystem.h
+  - Engine/Source/Runtime/SceneTypes/Public/Terrain/TerrainEdit.h
+verifiedAt: c6c835140
+---
+
+A landscape is one terrain component: a square height field with up to eight paintable layers, holes, collision and grass. This page covers what the Landscape panel does and how the pieces behave at run time. The [World building](/docs/editor/world-building/) page covers where the panel sits in the editor.
+
+## The grid
+
+A terrain is `chunksPerSide x chunkResolution` quads on a side. That grid is what is drawn, and it is what the collision uses: the height field the physics engine collides with has its samples on the same grid, so a character stands on the surface you see and a trace cannot miss a ridge that is drawn.
+
+Past 2048 quads a side the collision takes every second (then third, ...) vertex of the render grid, always a divisor of it, so collision vertices still land on render vertices. The collision has one extra row and column of padding on the far edges that collides with nothing; it is there because the physics height field needs an even sample count.
+
+## Tools
+
+| Tool | What it does |
+| --- | --- |
+| Sculpt, Smooth, Flatten, Noise | Brush tools. Hold <Kbd>Shift</Kbd> to invert |
+| Ramp | Click a start and an end in the viewport, then **Apply Ramp** for a constant-grade corridor |
+| Erosion, Hydro | Thermal erosion under the brush, and a hydraulic pass over the whole terrain |
+| Retop | Slides the render samples along steep ground. Heights are never rewritten |
+| Mirror | Copies one half of the height field onto the other, reflected. Pick the axis and the direction, then **Mirror Terrain**. The middle line stays put |
+| Region | Click two opposite corners in the viewport, or set the rectangle with the four sliders (fractions of the terrain). **Select Whole Terrain** resets it |
+| Copy | **Copy Region** takes the heights inside the Region. Click the terrain to place the paste anchor (the pasted block's top-left corner), pick a mode, then **Paste** |
+
+Paste has three modes: **Replace** writes the copied heights, **Add** lays the copied relief (relative to its lowest point) on top of what is there, and **Max** keeps the higher of the two. Mirror and Paste are single undo entries and refit the collision.
+
+Visibility (holes) is painted from the Paint tab; the Sculpt tab's Visibility tile is not available yet.
+
+## Heights below zero
+
+The height file is unsigned 16-bit. To keep valleys, the terrain component stores a **Height Offset** next to the **Height Scale**: the height of a 0 texel is the offset, and the height of a 65535 texel is offset plus scale.
+
+When you save or export, the panel fits both to the sculpt: the offset becomes the lowest height if it is below zero (otherwise it stays 0) and the scale spans valley to peak. A terrain that never dips below zero writes the same file as before. A file you import is read with the component's current offset, so set the offset before importing a heightmap that was exported with one.
+
+## Grass on the layer palette
+
+The **Grass Types** list on the terrain component scatters grass per layer. Each row has a density, a weight threshold, a scale range, a slope limit and an optional mesh. Rows with no mesh draw a blade clump as one GPU batch.
+
+On a terrain larger than twice the **Grass Generation Radius** (192 m by default) the clump rows are generated around the camera, one 32 m cell at a time, and dropped as the camera moves on. Each cell is generated from its own seed, so the same cell is identical every time it comes back. The grass keeps its density on a multi-kilometre landscape instead of spreading a fixed budget across all of it. Set the radius to 0 to scatter the whole terrain at any size.
+
+The scatter for a cell runs on a background thread. The result is uploaded on a later frame, at most two cells a frame, and at most eight cells are being scattered at once, so moving the camera quickly fills the grass in over a few frames instead of stalling one. A cell whose chunk does not paint a row's layer is skipped without running the scatter.
+
+Rows with a mesh, or with **Align To Slope** above 0, are scattered over the whole terrain.
+
+## Layers per chunk
+
+The weight maps are two full-resolution planes (layers 0-3 and 4-7) shared by the whole terrain. The terrain keeps a table of which layers each chunk actually paints, updated by every brush stroke from just the chunks the stroke touched. Anything that walks layers uses it to pay per chunk for the layers it needs: grass skips cells that do not paint its layer, and the second plane is written to disk only when some chunk paints one of layers 4-7. If you erase layers 4-7 entirely, the next save drops the second plane and the terrain stops referencing it.
+
+The render shader still samples the two shared planes. The table does not yet reduce GPU memory, and the limit is still eight layers.
+
+## Painted foliage follows the terrain
+
+Instances painted with the [Foliage tool](/docs/editor/procedural-foliage/) that stand on the terrain surface (within about a third of a metre of it) keep their height above it when you sculpt. After a stroke, an undo, an erosion pass or a mirror, they are re-projected onto the new surface and re-tilted to its normal. Instances placed on a mesh or in the air stay where they were put.
+
+## Saving
+
+Heights are written as `.r16` files and weights as PNG images in `Content/Terrain/` when you save the level; the terrain component points at them. A non-square height field refuses to save in the 16-bit raw format.

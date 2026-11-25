@@ -1,0 +1,182 @@
+---
+title: Matchmaking
+description: "Find a match for a player: tickets, skill and region rules, parties, the Mowo matchmaker, Steam lobbies, server allocation and Visual Scripting nodes."
+order: 14
+sources:
+  - Engine/Source/Runtime/Networking/Public/Networking/MatchmakingService.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Subsystems/MMatchmakingSubsystem.h
+  - Engine/Plugins/MowoMatchmaking/MowoMatchmaking.mplugin
+  - Engine/Plugins/SteamPlatform/SteamPlatform.mplugin
+verifiedAt: 231c2b42b
+---
+
+Matchmaking turns "this player wants a game of mode X" into "join this address". The engine owns one small interface, `IMatchmakingService`, and a facade, `FMatchmaking`, that every game uses the same way. What actually finds the match is a plugin behind that interface, in the way Steam and Discord sit behind `IOnlineService`:
+
+| Service | Plugin | Finds a match by |
+|---|---|---|
+| `Mowo` | Mowo Matchmaking | Asking a **MowoMatchmaker** server you host (queues, skill and region rules, game-server allocation) |
+| `Steam` | Steam Platform | Searching Steam lobbies and hosting one when none fits; players then connect over the Steam transport |
+
+Both are off until a project enables the plugin. A game that enables neither simply has no service, and a search answers `NotAvailable`.
+
+## Turn it on
+
+1. Enable the plugin you want for the project (Plugins list).
+2. Open **Project Settings › Engine › Matchmaking**. Pick the **Matchmaking Service** (Automatic uses the first available one), enter the **Matchmaker Address** and **Access Token** for the Mowo service, and set the search defaults: **Default Mode**, **Default Region**, **Search Timeout** and **Status Poll Interval**.
+3. Call the Visual Scripting nodes below, or `FMatchmaking::StartSearch` from C++.
+
+The settings are the console variables `net.mm.Service`, `net.mm.Url`, `net.mm.Token`, `net.mm.DefaultMode`, `net.mm.DefaultRegion`, `net.mm.TimeoutSeconds` and `net.mm.PollSeconds`.
+
+<Screenshot id="multiplayer-matchmaking-settings" alt="Mowo Editor Project Settings window on Engine › Matchmaking, showing the SERVICE section (Matchmaking Service, Matchmaker Address, Access Token) and the SEARCH DEFAULTS section" caption="Matchmaking settings in Project Settings." />
+
+## A search
+
+A search is a **ticket**. You describe what the player wants, the service answers with a ticket id at once, and the ticket moves through its states while the matchmaker works:
+
+| Status | Meaning |
+|---|---|
+| `queued` | Accepted, not matched yet |
+| `searching` | In the queue; progress shows players found and needed |
+| `matched` | Players are found and a server is being prepared |
+| `ready` | The connection says where to join |
+| `cancelled`, `timed_out`, `failed` | The search ended; the error says why |
+
+The criteria (`FMatchmakingCriteria`):
+
+| Field | Use |
+|---|---|
+| `Mode` | The game mode; only tickets of the same mode meet. Empty takes **Default Mode** |
+| `Region` | Preferred region. Empty takes **Default Region**; empty there accepts any |
+| `Skill` | The player's rating, zero or more |
+| `MinPlayers`, `MaxPlayers` | Match size; 0 takes the mode's size from the service |
+| `TimeoutSeconds` | Give up after this long; 0 takes **Search Timeout** |
+| `MaxLatencyMs`, `RegionLatencyMs` | Longest acceptable round trip, and the player's measured round trip per region; 0 takes **Max Latency** |
+| `Party` | Players searching together (see below) |
+| `Attributes` | Tags such as `map` or `difficulty`. A tag both tickets carry must agree |
+
+A player holds one ticket at a time. Errors (`EMatchmakingError`): `NotAvailable`, `InvalidCriteria` (no mode, negative skill, a party the service cannot carry), `AlreadySearching`, `UnknownTicket`, `ServiceUnreachable`, `Rejected`, `NoCapacity`, `TimedOut`, `Cancelled`, `Internal`.
+
+```cpp title="FindMatch.cpp"
+#include "Networking/MatchmakingService.h"
+
+void FindMatch() {
+	Mowo::FMatchmakingCriteria criteria;
+	criteria.PlayerId = "player-42";
+	criteria.Mode = "deathmatch";
+	criteria.Skill = 1180.0f;
+	criteria.Attributes["map"] = "arena";
+
+	const Mowo::FMatchmakingTicketResult result = Mowo::FMatchmaking::StartSearch(criteria, [](const Mowo::FMatchmakingTicket& ticket) {
+		if (ticket.Status == Mowo::EMatchmakingStatus::Ready) {
+			const std::string join = ticket.Connection.ConnectString();
+			(void)join;
+		}
+	});
+
+	if (!result.Ok()) {
+		(void)result.Message;
+	}
+}
+```
+
+Callbacks fire from the engine loop's online update, on the main thread. `FMatchmaking::Poll(ticketId, out)` reads the same state, and `FMatchmaking::Cancel(ticketId)` ends a search.
+
+## Visual Scripting
+
+`MMatchmakingSubsystem` is the node set. Searching is event-less by design: start it, then read the state on a timer, or wait on **Consume Matchmaking Update**, which is true once per change.
+
+| Node | Use |
+|---|---|
+| Start Matchmaking, Start Matchmaking With Attributes | Start a search and get the ticket id. Attributes are `key=value;key=value` |
+| Cancel Matchmaking | End the running search |
+| Is Matchmaking, Is Match Found | Searching now, and a match is ready |
+| Get Matchmaking Status / Status Code / Error / Message | The ticket's state; an empty ticket id from the start node means it failed, and Get Matchmaking Error says why |
+| Get Matchmaking Elapsed Seconds, Estimated Wait Seconds, Players Found, Players Needed | Progress for a waiting screen |
+| Consume Matchmaking Update | True once for each change since the last call |
+| Get Match Connect String, Address, Port, Join Key, Session Id, Map, Property | Where to play |
+| Set Matchmaking Max Latency, Set Matchmaking Region Latency, Clear Matchmaking Region Latencies | The latency limit and the per-region round trips the next search carries |
+| Add Matchmaking Party Member, Set Matchmaking Party Id, Clear Matchmaking Party, Get Matchmaking Party Size | The party the next search carries |
+| Is Matchmaking Available, Supports Matchmaking Parties | Whether to show the button |
+
+Pass **Get Match Connect String** (`address:port#key`) to the lobby screen's join address or to `--connect`; the session layer joins from it exactly as it does for a hosted game. A Steam match gives the host's SteamID64 as the address and the property `transport` = `steam`.
+
+## Parties
+
+A party is one ticket: the matchmaker adds the members' skills into an average, counts every member toward the match size and never splits them. Build the party with the nodes above, or install a provider once and every search without its own party uses it:
+
+```cpp title="PartyProvider.cpp"
+#include "Networking/MatchmakingService.h"
+
+void InstallLobbyParty() {
+	Mowo::FMatchmaking::SetPartyProvider([]() {
+		Mowo::FMatchmakingParty party;
+		party.PartyId = "lobby";
+
+		return party;
+	});
+}
+```
+
+The Mowo service carries parties. Steam lobbies do not: the provider is ignored for them and a party in the criteria is refused with `InvalidCriteria`.
+
+## The Mowo matchmaker
+
+`MowoMatchmaker` is a small program you host yourself: HTTP for tickets, a WebSocket that pushes ticket changes, in-memory queues and no database. The Mowo Matchmaking plugin follows each ticket over that WebSocket and falls back to polling the ticket whenever the socket is down or silent (turn the socket off with **Follow Tickets Over WebSocket**, `net.mm.UseWebSocket`). Run it somewhere your players reach and put its address in **Matchmaker Address**. It refuses to start without a player token and a different server token (`--insecure` for a local test), listens on `127.0.0.1` until you pass `--bind`, and speaks plain HTTP: put a TLS-terminating reverse proxy in front of any public deployment. The player token is the one the game carries; game servers register with the server token (`--allocator-token`), which only they hold.
+
+```bash title="Run the matchmaker"
+MowoMatchmaker --port 7780 --player-token PLAYER_SECRET --server-token SERVER_SECRET --config modes.json
+```
+
+```json title="modes.json"
+{
+  "restrictToConfiguredModes": true,
+  "skillBucketWidth": 100,
+  "modes": {
+    "deathmatch": { "playersPerMatch": 8, "minPlayers": 4, "startAfterSeconds": 20 },
+    "coop-4": { "playersPerMatch": 4 }
+  }
+}
+```
+
+How it matches:
+
+- **Mode**: only identical modes meet. A mode in the config sets the match size; `minPlayers` lets a match start short once the oldest ticket has waited `startAfterSeconds`.
+- **Skill**: skill divided by `skillBucketWidth` is the bucket. Tickets match in the same bucket, and the allowed gap grows by one bucket every `skillWidenSeconds` of waiting, so a long search finds someone a little further away instead of nobody.
+- **Region**: the same region (or an empty one) matches at once; different regions only after both tickets waited `regionWidenSeconds`.
+- **Attributes**: a key both tickets carry must agree. `map` is also sent to the game server as the map to load.
+- **Latency**: the game measures its own round trip to each region and sends it as `RegionLatencyMs` (Visual Scripting: Set Matchmaking Region Latency) with a limit (`MaxLatencyMs`, **Max Latency** in settings, Set Matchmaking Max Latency). The matchmaker never offers a match to a game server whose region is farther than any ticket in the match allows; a region with no reported latency is not held against a server. A match whose only servers are too far ends as `NoCapacity` with a latency message. The plugin applies the same limit to the connection it is handed.
+
+<Callout type="note">
+The matchmaker keeps everything in memory. Restarting it drops every queued ticket and every registered game server; clients see their ticket fail and servers register again on their own.
+</Callout>
+
+## Dedicated servers
+
+A match needs a game server. Start `MowoServer` with `--allocator <matchmaker url>` and the Mowo Matchmaking plugin enabled for the project, and the server registers itself:
+
+```bash title="A server that takes matches"
+MowoServer --project Game.mproject --port 7777 --maxclients 8 --allocator http://matchmaker.example.com:7780 --allocator-region eu --allocator-address game1.example.com --allocator-modes deathmatch,coop-4
+```
+
+| Flag | Use |
+|---|---|
+| `--allocator <url>` | The matchmaker to register with |
+| `--allocator-token`, `--allocator-id` | Bearer token; a stable server id (otherwise the matchmaker assigns one) |
+| `--allocator-address` | The address players connect to; empty uses the address the matchmaker sees |
+| `--allocator-region`, `--allocator-modes` | Where the server is and which modes it hosts (comma separated) |
+| `--allocator-heartbeat` | Seconds between state reports |
+| `--allocator-oneshot` | Exit when the allocated match ends, for containers started per match |
+
+Every heartbeat reports the server's state (`ready`, `allocated`, `full`, `draining`), players and capacity. The matchmaker offers a formed match to one free server of the right region and mode; the server accepts it (the session id and expected players are stored, and the map is loaded when the match names one) or declines, and the matchmaker tries the next. With no server within the allocation timeout the tickets end as `NoCapacity`. When every player has left, the server returns to `ready` for the next match.
+
+A server that cannot reach the matchmaker keeps running and keeps retrying; it is unlisted until it registers.
+
+## Steam lobbies
+
+With the Steam service, a search lists your game's lobbies for the mode (and region, then any region), ordered by closeness to the player's skill, and joins the best one with room. Lobbies of another build are left out. When the criteria carry `MaxLatencyMs`, a lobby whose estimated round trip is above it is skipped; the estimate comes from the Steam relay ping location each host publishes in its lobby, and a host that has not published one yet counts as unknown and stays eligible behind every measured lobby. When there is none, the player hosts a public lobby and waits; the host closes it once the match size is reached, and every member then reads the host's SteamID64 from the connection. Two players hosting at once merge: the one with the higher lobby id joins the other.
+
+Steam matchmaking does not need a server or an address. It needs a Steam App ID and the player online.
+
+## Testing without a service
+
+`FMatchmaking::Register` takes any `IMatchmakingService`, so a test or an offline build can register a fake that moves a ticket through the states by hand. The engine's own rows do exactly that.

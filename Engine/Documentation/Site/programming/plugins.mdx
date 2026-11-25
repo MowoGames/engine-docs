@@ -4,6 +4,10 @@ description: Write a plugin with a .mplugin manifest, runtime and editor C++ mod
 order: 7
 sources:
   - Engine/Source/Runtime/Project/Public/Project/PluginManager.h
+  - Engine/Source/Runtime/Project/Public/Project/PluginManifestSchema.h
+  - Engine/Source/Runtime/Core/Public/Core/ConfigIni.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/ImportTranslator.h
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorPluginExtensions.h
   - Engine/Source/Runtime/Core/Public/Core/FModuleManager.h
   - Engine/Source/Runtime/Game/Public/Game/EngineModularRegistry.h
   - Engine/Source/Runtime/ECS/Public/ECS/SceneSystemRegistry.h
@@ -14,10 +18,10 @@ sources:
   - Engine/Source/Runtime/Project/Public/Project/FeatureModules.h
   - Engine/Source/Runtime/Core/Public/Core/EngineCapabilities.h
   - Engine/Source/Runtime/Core/Public/Core/EngineFeatureRequirements.h
-verifiedAt: 8f1cfbd42
+verifiedAt: c6c835140
 ---
 
-A plugin is a folder with a `.mplugin` manifest and, usually, C++ modules and a `Content/` folder. When a project enables it, its content mounts into the virtual filesystem, its modules load and register their types, and its editor module (if it has one) extends the editor. The engine ships <Fact id="plugins.length" /> plugins in `Engine/Plugins/`, all off by default, and lists its feature modules beside them.
+A plugin is a folder with a `.mplugin` manifest and, usually, C++ modules and a `Content/` folder. When a project enables it, its content mounts into the virtual filesystem, its modules load and register their types, and its editor module (if it has one) extends the editor. The engine ships <Fact id="plugins.length" /> plugins in `Engine/Plugins/`, opt-in except Editor Utility Scripting, which is editor-only and on by default, and lists its feature modules beside them.
 
 ## Layout
 
@@ -28,7 +32,9 @@ MyPlugin/
   Public/MyPlugin/            reflected headers
   Private/                    sources
   Content/                    assets, mounted at Plugins/MyPlugin
+  Config/                     INI layers merged into the project's config, optional
   Shaders/                    HLSL, optional
+  Source/ThirdParty/<Lib>/    a vendored library the plugin carries, optional
 ```
 
 A plugin lives either in `Engine/Plugins/<Name>/` (shared by every project on the machine, loaded at engine start-up, read-only in the editor) or in `<Project>/Plugins/<Name>/` (committed with the project, loaded when the project opens).
@@ -37,6 +43,7 @@ A plugin lives either in `Engine/Plugins/<Name>/` (shared by every project on th
 
 ```json title="MyPlugin.mplugin"
 {
+  "fileVersion": 1,
   "name": "MyPlugin",
   "friendlyName": "My Plugin",
   "version": "1.0.0",
@@ -50,22 +57,59 @@ A plugin lives either in `Engine/Plugins/<Name>/` (shared by every project on th
   "dependencies": [],
   "modules": [
     { "name": "MyPlugin", "type": "Runtime", "loadingPhase": "Default" },
-    { "name": "MyPluginEditor", "type": "Editor" }
+    { "name": "MyPluginEditor", "type": "Editor", "loadingPhase": "Default" }
   ]
 }
 ```
 
 | Key | Meaning |
 | --- | --- |
+| `fileVersion` | The manifest schema version, currently 1 |
 | `name` | The plugin's identity; one plugin per name |
 | `content` | `true` mounts the plugin's `Content/` folder |
-| `enabledByDefault` | Used when the project's `Config/Plugins.ini` says nothing |
+| `enabledByDefault` | Used when the project's `Config/Plugins.ini` says nothing; `false` when the key is absent |
 | `engineVersion` | The engine major.minor the plugin targets; another version blocks the plugin |
-| `dependencies` | Names of plugins that must be enabled and loadable first |
-| `modules` | The C++ modules to load: a name, or an object with `name`, `type` and `loadingPhase` |
-| `requiresOnline`, `server`, `dlc`, `beta`, `marketplaceUrl` | Flags the Plugins window and packaging read |
+| `dependencies` | Plugins that must be enabled and loadable first: a name, or an object with `name`, `optional` and `version` |
+| `modules` | The C++ modules to load: a name, or an object with `name`, `type`, `loadingPhase`, `platforms` and `targets` |
+| `supportedPlatforms`, `supportedTargets` | Where the plugin may be live; see [Platforms and targets](#platforms-and-targets) |
+| `category` | One of the fixed categories below |
+| `requiresOnline`, `server`, `dlc`, `beta`, `marketplaceUrl`, `docsUrl`, `supportUrl` | Flags and links the Plugins window and packaging read |
 
-A module's `type` decides which hosts load it. `"Runtime"` (the default) loads everywhere; `"Editor"` loads only in the editor, and the game, the server and packaging skip it.
+The manifest is read against a schema, by the engine and by `mbt` alike. A key the schema does not know is a warning in the log; a value of the wrong type, or an unknown module `type` or `loadingPhase`, makes the plugin unreadable and it is skipped with the message. The categories are Gameplay, Animation, Audio, Rendering, World Building, Foliage, Networking, Online, Physics, UI, 2D, Content, Editor, Scripting, Developer Tools and Other.
+
+### Module types
+
+A module's `type` decides which hosts load it:
+
+| Type | Loaded by | Shipped in a package |
+| --- | --- | --- |
+| `Runtime` (the default) | every host | yes |
+| `Editor` | the editor only | no |
+| `Uncooked` | the editor and the cook (`mbt cook`, `mbt package`) | no |
+| `ClientOnly` | everything except a dedicated server | yes |
+| `ServerOnly` | a dedicated server only | yes |
+
+`Uncooked` is the type for an importer: the editor loads it for the import dialog, and the cook host loads it to transcode source files such as `.usd` into the cooked asset, while no player or server ever carries it.
+
+### Loading phases
+
+A module's `loadingPhase` says when in start-up it loads. `Default` is where engine plugins have always loaded.
+
+| Phase | Point in start-up |
+| --- | --- |
+| `PostConfigInit` | After command-line variables and memory, before the window, the RHI and the virtual filesystem |
+| `PreDefault` | After the renderer and shaders are up, before the engine content mounts |
+| `Default` | Engine plugins load, content mounts |
+| `PostDefault` | After the engine's subsystems are up |
+| `PostEngineInit` | After the engine finished initialising |
+
+A dependency never loads in a later phase than the plugin that needs it: such a plugin is blocked, with the phases named in the reason. A plugin enabled after start-up loads the phases the engine already passed at once. `FPluginManager::AddLoadingPhaseListener` registers a plain function that runs after a phase completes.
+
+### Platforms and targets
+
+`supportedPlatforms` (`win-x64`, `linux-x64`, `osx-arm64`, `android-arm64`, `ios-arm64`) and `supportedTargets` (`Game`, `Server`, `Editor`) limit where the plugin may be live; an empty list means everywhere. A plugin outside its lists is blocked with the platform or target named, and packaging leaves it out. A module takes its own `platforms` and `targets` lists on top.
+
+A project can also switch a plugin per platform: `Config/<Platform>/<Platform>Plugins.ini` has the same `[enabled]` section as `Plugins.ini` and wins over it when running or packaging for that platform.
 
 ## Enabling a plugin
 
@@ -90,6 +134,28 @@ Plugin 'Survival' does not load: it requires plugin 'Combat', which is disabled
 ```
 
 Modules load in dependency order: a plugin's modules load only after those of every plugin it depends on.
+
+A dependency is a plugin name, or an object that adds a version range and an `optional` flag:
+
+```json
+"dependencies": [
+  "Combat",
+  { "name": "AINavigation", "version": ">=1.2 <2" },
+  { "name": "SteamPlatform", "optional": true, "version": "^1" }
+]
+```
+
+A range is space- or comma-separated terms that must all hold: `>=`, `>`, `<=`, `<`, `=` (or none), `^` (same major) and `~` (same major.minor), each followed by a dotted version; a pre-release suffix is ignored. A required dependency whose installed version is outside the range blocks the plugin, and the reason names both versions. An optional dependency never blocks by being absent or disabled: when it is present and enabled it loads first, and only a version outside the range blocks. Mod manifests use the same dependency form.
+
+## Plugin config
+
+A plugin's `Config/` folder holds INI files in the same dialect as the project's. For each config name (`Engine`, `Game`, `Input`, `Scalability`, or the plugin's own), the plugin may ship `Base<Name>.ini`, `Default<Name>.ini` and `<Platform>/<Platform><Name>.ini`. They are merged while the plugin is live, after the engine's layers and before the project's, so a plugin ships defaults for its console variables and for the `[/Script/...]` sections of its config classes, and the project's own `Default<Name>.ini` overrides them:
+
+```text
+Engine/Config/Base<Name>.ini  ->  <Plugin>/Config/*<Name>.ini  ->  <Project>/Config/Default<Name>.ini  ->  Saved/Config/...
+```
+
+A plugin switched on after the project opened rebuilds the layers before its modules load, so its classes see their own defaults. Packages stage the layers of the plugins they ship; editor-only files (names containing `Editor`) stay out.
 
 ## Runtime modules
 
@@ -151,7 +217,7 @@ public class MyPluginEditor : ModuleRules
 Two registries are available:
 
 - **`FEditorDockPanelRegistry`** registers dock panels. A panel appears under **Window > Plugins** and restores with the layout like a built-in one. <Source symbol="FEditorDockPanelRegistry" />
-- **`FEditorExtensionRegistry`** adds menu entries (File, Edit, Tools, Window, Build, Help), toolbar buttons beside the play controls, Details customizations keyed by component type, and viewport modes. <Source symbol="FEditorExtensionRegistry" />
+- **`FEditorExtensionRegistry`** adds menu entries (File, Edit, Tools, Window, Build, Help; entries that name the same `Group` share a submenu), toolbar buttons beside the play controls, Content Browser asset actions (rows in an asset's context menu), Details customizations keyed by component type, and viewport modes. <Source symbol="FEditorExtensionRegistry" />
 
 ```cpp title="MyPluginEditor.cpp"
 #include <Arc/Framework/ArcDeclarativeSyntax.h>
@@ -195,6 +261,18 @@ extern "C" MOWO_MODULE_EXPORT void ShutdownModule() {
 Remove in `ShutdownModule` everything you added in `InitializeModule`. A panel factory, a menu callback and every widget they built are code inside your DLL; an entry left behind is called or destroyed after that code is gone.
 </Callout>
 
+### Settings pages, asset actions and new assets
+
+A plugin with its own asset type or settings registers them with **`FEditorPluginExtensions`**. Everything is plain data and plain function pointers, and the registry remembers which module added an entry and drops it when that module unloads. <Source symbol="FEditorPluginExtensions" />
+
+| Call | What it adds |
+| --- | --- |
+| `AddSettingsPage` | A page in Project Settings or Editor Preferences, under **Plugins**. Name an `MCLASS` with `ConfigClass` and the page lists its `MPROPERTY(Config)` fields and writes the project's `Config/DefaultGame.ini`, or give a `Build` function for a page of your own |
+| `AddAssetAction` | An entry in the Content Browser's right-click menu for the asset extensions you list |
+| `AddNewAssetEntry` | An entry in the Content Browser's **New asset** menu; the browser picks a unique name and calls your `Create` to write the file |
+
+An importer needs none of this: register the translator with `FImportTranslatorRegistry::Get().Register(...)` and it is removed when the module unloads.
+
 ## The module ABI check
 
 Every module binary exports its ABI version with `MOWO_IMPLEMENT_MODULE_API_VERSION()` from `Core/FModuleManager.h`. Right after loading a library, `FModuleManager` compares it with the engine's `MOWO_MODULE_API_VERSION` and the C++ runtime the module was built against. A binary that exports another number, or none, is refused: the log names the module and says to rebuild it against this engine, its static registrations are removed, and the library is freed. <Source symbol="FModuleManager::LoadModule" />
@@ -233,7 +311,6 @@ Engine systems such as AI and navigation, the Sequencer and destruction are feat
 | `Narrative` | on | AINavigation |
 | `VoiceChat` | off | |
 | `Destruction`, `GeometryTools`, `PointCloud`, `Sequencer`, `LevelGen`, `PCG`, `GpuEcs` | off | |
-| `Scripting` (Wolang Scripting) | off | |
 | `Accessibility` (Automatic Subtitles, ONNX Runtime) | off | VoiceChat, Narrative |
 
 AI and Navigation and Narrative are on because the templates place navigation agents, schedules, quests and music, and Combat depends on both. A plugin may name a feature module in `dependencies` (Combat does), and turning that module off blocks the plugin. What stays a plugin is what a game opts into on top: platform SDKs (SteamPlatform, DiscordPlatform, MowoOnlinePlatform), gameplay kits (Combat, Survival), SmartProps and ScanHierarchy. No engine module depends on a plugin. See [Architecture](/docs/getting-started/core-concepts/#feature-modules).

@@ -1,30 +1,30 @@
 ---
 title: Settings and accessibility
 sidebarTitle: Settings and accessibility
-description: The player settings and rebinding screens that ship with ArcUI, the model behind them, and every Accessibility option with its console variable.
+description: The player settings and rebinding screens that ship with AIGG, the model behind them, and every Accessibility option with its console variable.
 order: 5
 sources:
-  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Settings/FGameUserSettings.h
-  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUISettingsScreen.h
-  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUIRebindScreen.h
-  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Settings/FArcRebindModel.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Settings/FGameUserSettings.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Widgets/AAIGGSettingsScreen.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Widgets/AAIGGRebindScreen.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Settings/FAIGGRebindModel.h
   - Engine/Source/Runtime/Arc/Public/Arc/Accessibility/CArcAccessibility.h
-  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Statics/MRebindStatics.h
-  - Engine/Source/Runtime/ArcUI/Public/ArcUI/Widgets/AArcUILobbyScreen.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Statics/MRebindStatics.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Widgets/AAIGGLobbyScreen.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-verifiedAt: 47c78cd0a
+verifiedAt: dace13986
 ---
 
-ArcUI ships a complete player settings screen and a key-rebinding screen. You do not build these from scratch: drop them into a `.ui` or create them in C++, and they read and write the same console variables the editor's Project Settings pages use. This page explains how the screens work and lists every Accessibility option.
+AIGG (Arc In-Game Graphics) ships a complete player settings screen and a key-rebinding screen. You do not build these from scratch: drop them into a `.ui` or create them in C++, and they read and write the same console variables the editor's Project Settings pages use. This page explains how the screens work and lists every Accessibility option.
 
 <Screenshot id="ui-settings-accessibility" alt="A running game with the SettingsScreen open on the Accessibility category: the category rail on the left with Accessibility highlighted, rows for Colour Vision (set to Deuteranopia), Colour Vision Strength, Gamma, Field Of View, Camera Shake, Controller Vibration, Hold To Toggle, High Contrast UI and Reduced Motion, and the Apply / Revert / Reset buttons along the bottom" caption="The shipped settings screen, Accessibility category." />
 
 ## How the settings system is built
 
-<Flow steps={["FGameUserSettings (model)", "AArcUISettingsScreen (view)", "Apply", "Cvars / GlobalConfig / Host", "GameUserSettings.ini"]} highlight={0} caption="The model holds all behavior. The screen is layout over it." />
+<Flow steps={["FGameUserSettings (model)", "AAIGGSettingsScreen (view)", "Apply", "Cvars / GlobalConfig / Host", "GameUserSettings.ini"]} highlight={0} caption="The model holds all behavior. The screen is layout over it." />
 
 - **`FGameUserSettings`** is the model, the counterpart of Unreal's GameUserSettings. It owns every row, pending edits, Apply/Revert/Reset, the display confirmation countdown and the save file <Source symbol="FGameUserSettings" />. A game with its own UI can use the model alone.
-- **`AArcUISettingsScreen`** is the screen: a category rail, the rows of the selected category, and Apply / Revert / Reset. Rows the device cannot use are greyed with the reason shown, not hidden <Source symbol="AArcUISettingsScreen" />.
+- **`AAIGGSettingsScreen`** is the screen: a category rail, the rows of the selected category, and Apply / Revert / Reset. Rows the device cannot use are greyed with the reason shown, not hidden <Source symbol="AAIGGSettingsScreen" />.
 
 Each row has a backend <Source symbol="FGameUserSettings" />:
 
@@ -41,24 +41,24 @@ Each row has a backend <Source symbol="FGameUserSettings" />:
 Add a node with `class: "SettingsScreen"`. It fires `closed` when the player closes it and `rebind` when they ask for key bindings. A `category` prop (`Display`, `Graphics`, `Audio`, `Controls`, `Gameplay` or `Accessibility`) opens it on that page, for a menu button that leads straight to one category. A `RebindScreen` node fires `closed`.
 </Step>
 <Step title="Wire the events">
-Handle `closed` and `rebind` like any other ArcUI event: a `PlayAnim:` verb, a `VisualScript:Class.Event` action, or a C++ action handler. See [ArcUI screens](/docs/ui/arcui-screens/#events).
+Handle `closed` and `rebind` like any other AIGG event: a `PlayAnim:` verb, a `VisualScript:Class.Event` action, or a C++ action handler. See [AIGG screens](/docs/ui/aigg-screens/#events).
 </Step>
 <Step title="Push it">
 Push the asset as a modal screen so gameplay stops receiving input while it is open.
 </Step>
 </Steps>
 
-In C++, build them with `ArcNew(Arcf::AArcUISettingsScreen)` and `ArcNew(Arcf::AArcUIRebindScreen)`.
+In C++, build them with `ArcNew(Arcf::AAIGGSettingsScreen)` and `ArcNew(Arcf::AAIGGRebindScreen)`.
 
 The packaged runtime prepares the model at startup: it builds the rows against the probed device, loads the save file, and pushes the stored values to their backends. You can also drive the model directly:
 
 ```cpp title="QuickAccessibility.cpp" wrap
-#include <ArcUI/Settings/FGameUserSettings.h>
+#include <AIGG/Settings/FGameUserSettings.h>
 
 Mowo::FGameUserSettings& settings = Mowo::FGameUserSettings::Get();
 
 if (!settings.IsBuilt()) {
-	settings.BuildModel(Mowo::FArcDeviceProfile::Probe());
+	settings.BuildModel(Mowo::FAIGGDeviceProfile::Probe());
 	settings.Load();
 }
 
@@ -78,7 +78,7 @@ settings.Apply();
 
 ### Device gating
 
-`FArcDeviceProfile::Probe()` reads what the graphics API and GPU support. A control the API can never do is greyed with the backend's name; one the GPU lacks is greyed with "unavailable on this RHI/GPU". A third axis is the game itself: the Global Illumination, ray-tracing, MegaLights, volumetric fog and frame-generation rows are greyed with "this game does not use it" when the project left that feature off in Project Settings > Rendering > Features. The four ray-traced rows (reflections, ambient occlusion, sun shadows and the Global Illumination gather) are decided one by one by the [ray-tracing capability query](/docs/rendering/ray-tracing/#can-this-machine-run-it). A saved value for a greyed row is dropped on load, because the save file can outlive the GPU it was written on.
+`FAIGGDeviceProfile::Probe()` reads what the graphics API and GPU support. A control the API can never do is greyed with the backend's name; one the GPU lacks is greyed with "unavailable on this RHI/GPU". A third axis is the game itself: the Global Illumination, ray-tracing, MegaLights, volumetric fog and frame-generation rows are greyed with "this game does not use it" when the project left that feature off in Project Settings > Rendering > Features. The four ray-traced rows (reflections, ambient occlusion, sun shadows and the Global Illumination gather) are decided one by one by the [ray-tracing capability query](/docs/rendering/ray-tracing/#can-this-machine-run-it). A saved value for a greyed row is dropped on load, because the save file can outlive the GPU it was written on.
 
 ### Where settings are saved
 
@@ -99,17 +99,17 @@ There are six built-in categories: Display, Graphics, Audio, Controls, Gameplay 
 
 ## Add your own settings
 
-A game adds rows (and pages) to the same screen with `FGameUserSettings::RegisterRow`. Registration keeps the definition, so a model rebuild (the GPU probe finishing, for example) never drops it, and it may run before or after the model is built <Source symbol="FArcGameSettingDef" />.
+A game adds rows (and pages) to the same screen with `FGameUserSettings::RegisterRow`. Registration keeps the definition, so a model rebuild (the GPU probe finishing, for example) never drops it, and it may run before or after the model is built <Source symbol="FAIGGGameSettingDef" />.
 
 ```cpp
-#include <ArcUI/Settings/FGameUserSettings.h>
+#include <AIGG/Settings/FGameUserSettings.h>
 
-FArcGameSettingDef leaves;
+FAIGGGameSettingDef leaves;
 leaves.Id = "mygame.fancyLeaves";               // the key saved in GameUserSettings.ini
 leaves.Label = "Fancy Leaves";
 leaves.Description = "Draw leaves with transparency.";
-leaves.Category = EArcSettingCategory::Graphics; // or leaves.Page = "My Game" for a page of its own
-leaves.Control = EArcSettingControl::Toggle;     // Toggle, Slider or Choice
+leaves.Category = EAIGGSettingCategory::Graphics; // or leaves.Page = "My Game" for a page of its own
+leaves.Control = EAIGGSettingControl::Toggle;     // Toggle, Slider or Choice
 leaves.DefaultValue = "1";
 leaves.TierValues = { "0", "0", "1" };           // follows the Quality Preset until the player moves it
 leaves.OnApply = [](const std::string& value, bool persist) {
@@ -130,7 +130,9 @@ FGameUserSettings::Get().RegisterRow(leaves);
 | `Page` | A page of your own, listed in the rail after the six built-in categories. |
 | `NeedsRestart`, `NeedsConfirmation` | The same behaviours as the engine rows, including the 15 second revert countdown. |
 
-`RegisterRow` returns false, and logs why, for an empty or taken id, a binding to a console variable nobody registered, a choice row with no choices or two choices with one value, and a slider whose maximum is not above its minimum. `UnregisterRow` removes a row. The screen shows your page with `AArcUISettingsScreen::SetPage`.
+`RegisterRow` returns false, and logs why, for an empty or taken id, a binding to a console variable nobody registered, a choice row with no choices or two choices with one value, and a slider whose maximum is not above its minimum. `UnregisterRow` removes a row. The screen shows your page with `AAIGGSettingsScreen::SetPage`.
+
+A row belongs to the module that built its definition: `FAIGGGameSettingDef::Owner` defaults to the image the definition is created in, and the row leaves with that module when it unloads (a hot reload, a plugin unloading). Without that the settings screen would call the `OnApply` and `Requirement` callbacks into code that is no longer mapped. Register again from the module's `InitializeModule`, as for any other registry a game module adds to. To register on behalf of another module, set `Owner` to that module's handle.
 
 ## Accessibility options
 
@@ -172,7 +174,7 @@ These rows are defined in the settings table.
 
 ## Rebinding keys
 
-`FArcRebindModel` lists every action of every registered input context, with one column per device family. `AArcUIRebindScreen::Model()` returns it <Source symbol="AArcUIRebindScreen" />.
+`FAIGGRebindModel` lists every action of every registered input context, with one column per device family. `AAIGGRebindScreen::Model()` returns it <Source symbol="AAIGGRebindScreen" />.
 
 | Call | Does |
 | --- | --- |
@@ -181,19 +183,19 @@ These rows are defined in the settings table.
 | `ResetAction`, `ResetContext`, `ResetAll` | Drop overrides |
 | `Save()` | Write the player's bindings |
 
-While `IsCapturing()` is true, the host routes raw input to the model instead of the game <Source symbol="FArcRebindModel" />. Rebinding the keyboard column keeps the gamepad binding and the other way round. Actions and contexts are the project's `.inputaction` and `.inputcontext` assets. Conflicts are reported on the row (`KeyboardConflicts`, `GamepadConflicts`) but not refused, since some overlaps are intentional.
+While `IsCapturing()` is true, the host routes raw input to the model instead of the game <Source symbol="FAIGGRebindModel" />. Rebinding the keyboard column keeps the gamepad binding and the other way round. Actions and contexts are the project's `.inputaction` and `.inputcontext` assets. Conflicts are reported on the row (`KeyboardConflicts`, `GamepadConflicts`) but not refused, since some overlaps are intentional.
 
 <Screenshot id="ui-rebind-capture" alt="The RebindScreen in a running game with one keyboard cell in the capturing state (KeyCap showing its listening style) and another row flagged with a conflict marker" caption="Capturing a new key on the rebind screen." />
 
 ### A custom controls screen
 
-A game that builds its own controls screen in a graph or an ArcUI layout, instead of using `RebindScreen`, uses the **Rebind Library** (`MRebindStatics`): list the actions with their bindings, start a capture, poll it, read conflicts, reset and save <Source symbol="MRebindStatics" />.
+A game that builds its own controls screen in a graph or an AIGG layout, instead of using `RebindScreen`, uses the **Rebind Library** (`MRebindStatics`): list the actions with their bindings, start a capture, poll it, read conflicts, reset and save <Source symbol="MRebindStatics" />.
 
 ## Lobby screen
 
-A `LobbyScreen` node shows a multiplayer lobby and fires `closed` when the player leaves it. Its data comes from a lobby source the host installs <Source symbol="AArcUILobbyScreen" />.
+A `LobbyScreen` node shows a multiplayer lobby and fires `closed` when the player leaves it. Its data comes from a lobby source the host installs <Source symbol="AAIGGLobbyScreen" />.
 
 ## Related
 
-- [ArcUI screens](/docs/ui/arcui-screens/) for events and modal screens.
-- API: [ArcUI reference](/docs/api/arcui/), including `FGameUserSettings`, `AArcUISettingsScreen`, `AArcUIRebindScreen`, `FArcRebindModel`, [CArcAccessibilityManager](/docs/api/arc/carcaccessibilitymanager/).
+- [AIGG screens](/docs/ui/aigg-screens/) for events and modal screens.
+- API: [AIGG reference](/docs/api/aigg/), including `FGameUserSettings`, `AAIGGSettingsScreen`, `AAIGGRebindScreen`, `FAIGGRebindModel`, [CArcAccessibilityManager](/docs/api/arc/carcaccessibilitymanager/).

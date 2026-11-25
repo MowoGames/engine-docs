@@ -1,0 +1,80 @@
+---
+title: Importing USD scenes
+sidebarTitle: USD import
+description: Import Universal Scene Description files with the USD Importer plugin, what carries over, the options you can switch, and what needs the OpenUSD library.
+order: 7
+status: in-development
+sources:
+  - Engine/Plugins/UsdImporter/UsdImporter.mplugin
+  - Engine/Plugins/UsdImporter/Public/UsdImporter/UsdImportOptions.h
+  - Engine/Plugins/UsdImporter/Public/UsdImporter/UsdSceneBuilder.h
+  - Engine/Plugins/UsdImporter/Public/UsdImporter/UsdStageReader.h
+verifiedAt: c6c835140
+---
+
+The **USD Importer** plugin reads `.usd`, `.usda`, `.usdc` and `.usdz` files as source models. It plugs into the same import path as FBX and glTF, so [importing](/docs/content-pipeline/importing/) works the same way: drop the file into the Content Browser, choose the model options, and the editor builds mesh, skeleton, animation, texture and material packages. Reimport replays your options when the source changes.
+
+The plugin is an editor plugin. Enable **USD Importer** in the Plugins window; games ship the cooked packages and never load it.
+
+<Callout type="warning">
+USD is read through the OpenUSD library (version 25.08), which the Windows editor ships beside its binaries. Builds for other platforms do not include it yet: there the importer still reads ASCII `.usda` files with its own reader and refuses the binary formats (`.usd`, `.usdc`, `.usdz`) with a message that says the library is missing. ASCII files without library support do not follow references to other files, payloads, sublayers or variant sets; each such skip is logged as a warning.
+</Callout>
+
+## What carries over
+
+| USD | Imported as |
+|---|---|
+| `Mesh` with `normals`, `primvars:st` UV sets, `primvars:displayColor` | Mesh sections, welded and triangulated; missing normals are generated |
+| `GeomSubset` (face subsets) | One mesh section per subset, each with its own material |
+| `Xform` hierarchy and xform ops (translate, rotate, scale, orient, transform, inverted ops) | Nodes under the scene root |
+| Native instances and internal references | Separate nodes that share one mesh |
+| `PointInstancer` | One node per instance, all sharing the prototype's mesh |
+| `UsdPreviewSurface` materials | Material with base color, metallic, roughness, emissive, normal, occlusion, opacity, clear coat and sampler wrap, textures resolved through `UsdUVTexture` |
+| `Camera` | Camera with the field of view from focal length and film back, clipping range, orthographic projection |
+| `DistantLight`, `SphereLight`, `DiskLight`, `RectLight`, `CylinderLight` | Directional, point, spot (a shaping cone angle below 90 degrees) and rect lights |
+| `Skeleton`, skin weights, `SkelAnimation` | Joint nodes, bone bindings, an animation clip |
+| Animated xform ops | A clip named after the stage with one transform track per animated node |
+| `BlendShape` with `skel:blendShapes` / `skel:blendShapeTargets` (dense or sparse offsets) | Morph targets on the mesh; `blendShapeWeights` of the skeleton's `SkelAnimation` become weight tracks in its clip |
+| A mesh with time-sampled `points` and a fixed topology | A Geometry Cache asset beside the model when the cache is long (more than the morph-target limit); otherwise baked vertex animation: a morph target per sample and a clip named `PointCache` with one crossfading weight track per target. A mesh with blend shapes or skin weights always uses the morph bake |
+
+The stage's `upAxis` and `metersPerUnit` are folded into the scene root, so a Z-up centimetre stage arrives Y-up in metres. A stage with no `metersPerUnit` is read as centimetres, the USD default.
+
+Prims with the `proxy` or `guide` purpose, invisible prims, inactive prims and `class` prims are skipped. Dome lights and procedural shapes (`Cube`, `Sphere`, ...) are not imported; the importer warns for each so you can bake them to meshes first. `usd.PointCacheAs` chooses the route: `0` automatic, `1` always a Geometry Cache, `2` always morph targets. A morph-baked point cache keeps at most `usd.MaxBakedFrames` samples (default 120, dropped evenly); a Geometry Cache keeps every sample. A point cache whose point count changes imports its first sample with a warning.
+
+Every warning is part of the import report of the imported model (the **Message Log** and the warning count on the asset), not only the log file.
+
+Light intensities are used as authored, with exposure applied; there is no photometric conversion, so tune lights in the level after import.
+
+## Options
+
+The model import dialog's scale, up axis, material and skeleton choices apply to USD like any model. The options that only USD has live in the **Tools** menu while the plugin is enabled, and each is a console variable:
+
+| Menu entry | Console variable | Default |
+|---|---|---|
+| USD Import: Materials | `usd.ImportMaterials` | on |
+| USD Import: Skeletons and Skinning | `usd.ImportSkeleton` | on |
+| USD Import: Animation | `usd.ImportAnimation` | on |
+| USD Import: Cameras | `usd.ImportCameras` | on |
+| USD Import: Lights | `usd.ImportLights` | on |
+| USD Import: Expand Point Instances | `usd.ExpandInstances` | on |
+| USD Import: Include Proxy Purpose | `usd.IncludeProxyPurpose` | off |
+| USD Import: Include Guide Purpose | `usd.IncludeGuidePurpose` | off |
+| (console only) | `usd.MaxPointInstances` | 100000 |
+| (console only) | `usd.MaxBakedFrames` | 120 |
+| (console only) | `usd.PointCacheAs` | 0 |
+
+The console variables and menu entries only seed the first import of a file. The options it used are stored with the imported model, so a **reimport** repeats them even if the toggles have changed since.
+
+With **Expand Point Instances** off, a point instancer imports its prototypes once instead of one node per instance. A point instancer larger than `usd.MaxPointInstances` is cut off at that count with a warning.
+
+## Texture paths
+
+With the OpenUSD library, a `UsdUVTexture` file path is resolved against the layer that wrote it, so a texture named by a referenced or sublayered file is found beside that file, and then made relative to the imported file when it lies inside its folder. Without the library the path is kept as the file wrote it; keep the textures beside the `.usd` file at the same relative layout, as with [glTF and OBJ](/docs/content-pipeline/importing/). Textures inside a `.usdz` package are read from the package.
+
+A source that only exists inside the project's packed content is copied to a temporary folder of its own for the import, together with the files beside it (so references, payloads and textures still resolve), and the folder is removed afterwards; two imports at once never share it.
+
+## Plug-in resources and other USD installs
+
+The OpenUSD plug-in tree (`Engine/Binaries/ThirdParty/OpenUSD/usd`) ships with the installed editor and is what the importer registers. If the environment variable `PXR_PLUGINPATH_NAME` points at another USD install (Houdini, Maya and Omniverse set it), those plug-ins are registered too and may be built for a different USD version. The importer warns, naming each one, in the import report; clear the variable before starting the editor.
+
+Instances of one prototype share a single copy of their geometry while the file is read, so a layout stage with thousands of instances costs the geometry once.

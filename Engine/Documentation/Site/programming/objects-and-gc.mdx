@@ -13,7 +13,7 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/FCoreDelegates.h
   - Engine/Source/Runtime/Core/Public/Core/MClassRegistry.h
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
-verifiedAt: 5922e6e5e
+verifiedAt: 55f27937c
 ---
 
 `MObject` is the garbage-collected base class, the equivalent of Unreal's `UObject`. Actors, components, worlds, subsystems and the engine itself are `MObject`s. The engine keeps every live object in one registry and frees the ones nothing reachable refers to. <Source symbol="MObject" />
@@ -47,7 +47,7 @@ Roots are the objects added with `FMObjectArray::AddRoot` (counted: each `AddRoo
 
 <Flow steps={["Roots", "Outer chain", "MPROPERTY references", "Mark reachable", "Sweep the rest"]} highlight={2} caption="A pointer member without MPROPERTY is invisible to the collector." />
 
-A property can hold an object reference as `T*` or `TObjectPtr<T>`, or inside `std::vector`, `std::array`, `std::set`, `std::unordered_set`, `std::map` or `std::unordered_map`, nested to any depth. A set element or map key must be the reference itself. Any other template that holds an object reference (`std::optional`, `std::pair`, `std::list`) is a compile error rather than an untraced field. <Source path="Engine/Source/Runtime/Core/Public/Core/FReferenceCollector.h" />
+A property holds an object reference as `TObjectPtr<T>` (a plain `T*` is rejected at build time, see below), or inside `std::vector`, `std::array`, `std::set`, `std::unordered_set`, `std::map` or `std::unordered_map`, nested to any depth. A set element or map key must be the reference itself. Any other template that holds an object reference (`std::optional`, `std::pair`, `std::list`) is a compile error rather than an untraced field. <Source path="Engine/Source/Runtime/Core/Public/Core/FReferenceCollector.h" />
 
 ## The TObjectPtr rule
 
@@ -56,7 +56,7 @@ The collector is **incremental**: it marks in slices of a frame and sweeps a bou
 `TObjectPtr<T>` prevents that: every store through it runs a write barrier that tells the collector about the new target. When no collection is marking, the barrier costs one atomic load.
 
 <Callout type="danger">
-**Every object `MPROPERTY` must be a `TObjectPtr<T>`**, including elements of containers. A raw `T*` property written while the collector marks can hide its target, and nothing in the header tool or the build catches it.
+**Every object `MPROPERTY` must be a `TObjectPtr<T>`**, including elements of containers. A raw `T*` property written while the collector marks can hide its target. The header tool rejects a property declared as a plain pointer to an `MCLASS` type (`MCoverPointComponent* m_cover;`) with a build error that names the `TObjectPtr` to use; a property marked `MOWO_RUNTIME_ONLY` is exempt. Raw pointers inside containers are not checked, so that half of the rule is yours to keep.
 </Callout>
 
 ```cpp nocompile

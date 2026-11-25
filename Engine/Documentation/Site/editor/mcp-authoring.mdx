@@ -1,0 +1,150 @@
+---
+title: Authoring through MCP
+sidebarTitle: MCP authoring
+description: Create and edit assets, material graphs, Visual Scripting graphs, project settings, input, data tables, animation controllers and prefabs over MCP.
+order: 25
+sources:
+  - Engine/Source/Editor/EditorFramework/Public/EditorFramework/McpServer.h
+verifiedAt: 44fa313b4
+---
+
+The [MCP server](/docs/editor/mcp-server/) lets an AI agent drive the editor. These tools are the authoring half: with them an agent can make the assets of a game, not only place actors. Every tool changes the same files and registry the Content Browser does, so the sidecar that carries an asset's id, redirectors, delete safety and hot reload all behave as they do for a person.
+
+## Rules every tool follows
+
+- **Paths are project-relative and stay under `Content`.** `Content/Materials/Rock.mat` is accepted; `../Config/Engine.ini`, a path through a link that leaves the project, and anything that is not an asset file are refused.
+- **A write is all or nothing.** Tools that take a list of operations apply them to a copy and write only when every operation applied and the result is valid. The error names the failing operation.
+- **Extensions are the asset type's own.** `asset_create` appends the right one when the path has none or another one.
+- **Access follows the [access level](/docs/editor/mcp-server/#tools-and-access).** Reading tools are Read, creating and editing tools are Edit, and tools that remove things or that could break references are Full.
+
+## Content Browser operations
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `asset_types` | Read | The asset types `asset_create` accepts, with their extensions |
+| `asset_list` | Read | Registered assets, filtered by `path`, `type`, `recursive`, `limit` |
+| `asset_info` | Read | Type, size, id, what the asset references and what references it (soft or hard) |
+| `asset_create` | Edit | Creates an asset or a `folder` and registers it |
+| `asset_rename` | Edit | New file name, same folder; keeps id, sidecar and generated shader, leaves a redirector |
+| `asset_move` | Edit | Moves an asset or folder to another Content folder |
+| `asset_duplicate` | Edit | Copies an asset; the copy gets its own id |
+| `asset_delete` | Full | Moves to `Saved/Trash` (undoable), refuses while other assets reference it |
+
+`asset_rename` and `asset_move` take `fix_references` to rewrite every path that named the old location; without it the redirector keeps those paths working. `asset_delete` lists the assets that reference the target and refuses; pass `force` to delete anyway, and the result reports what broke.
+
+`asset_create` builds these types itself:
+
+| Type | Options |
+| --- | --- |
+| `material` | `base_color` `[r,g,b,a]`, `metallic`, `roughness` |
+| `material_instance` | `parent` (a material) |
+| `visual_script` | `parent_class` (any native or Visual Script class), `event` |
+| `animation_controller`, `ui_document`, `curve` | none |
+| `data_table` | `row_type`, a reflected struct (`datatable_row_types`) |
+| `data_asset` | `data_type`, a reflected struct |
+| `input_action` | `value_type`: Button, Axis1D, Axis2D, Axis3D |
+| `input_mapping_context` | `priority` |
+
+Any other text asset type takes `mdf`, the document text. A prefab is made with `prefab_create_from_actors`; levels with `new_level` (`template` outdoor, blank or empty) and `save_level`.
+
+## Materials
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `material_create` | Edit | A graph material with an Output node fed by a base-color constant |
+| `material_node_types` | Read | The node palette and each node's input pin names |
+| `material_graph_read` | Read | Nodes, links, shader cost, whether it compiles, bound texture slots, named parameters |
+| `material_graph_edit` | Edit | A batch of graph operations, saved and compiled atomically |
+| `material_set_param` | Edit | A parameter: an instance override, or the default of a root material's parameter node |
+| `material_assign` | Edit | Puts a material on an actor's MeshRenderer slot (undoable) |
+
+### Material parameter collections
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `collection_create` | Edit | A `.mpc` Material Parameter Collection, with optional starting parameters |
+| `collection_read` | Read | Every parameter with its kind and authored default |
+| `collection_edit` | Edit | Add, remove, rename and set the default of parameters, saved and reloaded atomically |
+| `collection_set_value` | Edit | The runtime value of a parameter in the active scene, or a reset of the whole collection |
+| `collection_get_value` | Read | The runtime values of a collection in the active scene |
+
+See [Material parameter collections](/docs/rendering/material-parameter-collections/). `material_graph_edit` adds a Collection Parameter node with `type: "collectionparameter"`, `collection` and `param_name`.
+
+
+
+`material_graph_edit` takes `ops`, applied in order. Nodes are numeric ids, or the `ref` of an earlier `add_node` in the same batch; pins are addressed by name (`Roughness`) or index.
+
+```json
+{
+  "path": "Content/Materials/Brick.mat",
+  "ops": [
+    { "op": "add_node", "type": "scalarparameter", "ref": "wet", "param_name": "Wetness", "scalar": 0.25 },
+    { "op": "connect", "from": "wet", "to": 1, "slot": "Roughness" },
+    { "op": "bind_texture", "slot": "base_color", "texture": "Content/Textures/brick_albedo.png" },
+    { "op": "set_output", "metallic": 0.1 }
+  ]
+}
+```
+
+The other operations are `remove_node`, `disconnect` (by `link`, or `to` and `slot`) and `set_node`. `bind_texture` adds a sampler wired to the channel (`base_color`, `metallic`, `roughness`, `normal`, `emissive`, `ao`, `opacity`; a normal map goes through a Normal Map node) and removes the sampler it replaces. A graph that does not compile, for example one that needs more than eight textures, is refused with the compiler's message and the node it came from. A successful save writes the generated shader beside the material and hot-reloads the asset.
+
+## Visual Scripting
+
+`visual_script_read` and `visual_script_write` work on whole files. These tools work on one node at a time and save the class after each call, so the editor hot-reloads it.
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `vs_create_graph` | Edit | A class over any native or Visual Script parent with one event graph |
+| `vs_graph` | Read | Graphs, variables and the nodes of a graph with their indices, inputs and exec outputs |
+| `vs_node_kinds` | Read | The node kinds and pure operations |
+| `vs_add_graph` | Edit | An event graph or a custom function |
+| `vs_add_node` | Edit | A node of any kind; `after` wires it into the exec chain |
+| `vs_remove_node` | Edit | Removes a node, clears the links to it and shifts later indices down |
+| `vs_connect`, `vs_disconnect` | Edit | Exec wires (`next`, `else`, list index) and data wires (`input`) |
+| `vs_set_pin_default` | Edit | The constant on an input pin |
+| `vs_compile` | Read | The load-time checks: dangling links, unresolved function calls; an empty list means the class loads |
+
+Graphs are addressed as `event:BeginPlay`, `function:Double` or `macro:Name`. Node kinds are the names `vs_node_kinds` lists, and a call node names a reflected function (`visual_script_nodes` lists them).
+
+## Project settings
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `settings_list_pages` | Read | Every Project Settings page, its rows, and whether it can be written |
+| `settings_get` | Read | The rows of a page, or one row by key, with the live value |
+| `settings_set` | Edit | Writes one setting to the project and reports whether it applied live |
+
+`settings_set` writes through the same config tiers as the Project Settings window. The result says `applied: "live"`, or `applied: "saved"` with `restart_required: true` and a `restart_reason` for a row the engine reads once at startup; `apply` gives the mode from the same table Project Settings uses (`live`, `next_use`, `restart` or `conditional`). Keys are cvar names (`p.MaxSubsteps`), the properties of a Game settings class, or `project.name`, `project.version`, `project.product_name`, `project.company_name`, `project.copyright`, `project.description`, `project.start_scene`, `project.editor_start_scene`, `project.game_mode_class` and `project.game_instance_class` for the project manifest. Security settings (`editor.mcp.`, `meaf.`, `mods.`, `liveops.`, `net.encrypt`, `net.psk`, `crash.`) cannot be changed through MCP. Pages the window builds by hand, such as Platform and Protection, are listed as read-only; `settings_list_pages` shows which.
+
+## Data-driven assets
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `datatable_row_types`, `datatable_info` | Read | The structs a table can use; a table's rows and CSV |
+| `datatable_set_row`, `datatable_remove_row` | Edit | Adds or edits a row by field name; the table must still load |
+| `input_mapping_list` | Read | A mapping context's mappings |
+| `input_mapping_add`, `input_mapping_remove` | Edit | Bind a `key`, `mouse`, `gamepad_button` or `gamepad_axis` to an action |
+| `input_action_set` | Edit | Value type, consume input, accumulation |
+| `anim_controller_read`, `anim_controller_edit` | Read, Edit | States, transitions with conditions, parameters and the default state |
+| `prefab_create_from_actors` | Edit | Saves named actors of the open level as a prefab |
+| `data_registry_list`, `data_registry_items`, `data_registry_find` | Read | The [Data Registries](/docs/gameplay/data-registry/), their items and where an item comes from |
+| `level_instance_list` | Read | The Level Instances of a level with their overrides and removed actors |
+| `level_instance_set_override`, `level_instance_clear_override`, `level_instance_set_removed` | Edit | Make one placed Level Instance differ from its other copies; a loaded level shows it after a reload |
+| `prefab_instantiate` | Edit | Places a prefab, Visual Script class or model in the level, selected, as one undo step |
+
+### Any other text asset
+
+UI documents, sequences, animation graphs, particle systems and every other text asset are MDF trees, and these tools edit them directly. They keep the package header and id and hot-reload the asset.
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `asset_get_property` | Read | The root nodes; one node's properties and children; one property |
+| `asset_set_property` | Edit | One property; `null` removes it |
+| `asset_add_node` | Edit | A child node (or a root) with initial properties |
+| `asset_remove_node` | Edit | A node and its children |
+
+A node is addressed by a path of segments joined with `/`: `Type`, `Type:Name`, `Type#N` (the Nth of that type) or `#N`. For a UI document, `Widget:Root/Button:Play` is the Play button under Root. Values are booleans, numbers, strings, vectors as arrays, and `{"asset": "..."}`, `{"enum": "..."}`, `{"uuid": "..."}`. A value takes the type the property already has, so a string stays an enum and an integer stays an integer or a float as it was.
+
+<Callout type="note">
+Sequencer tracks, UI designer widgets and the other graph-shaped assets have no dedicated verbs yet. The generic tools above cover them, and the editor validates the document when it reloads. Levels are not text assets here: use the level tools.
+</Callout>

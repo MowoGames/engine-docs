@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetEventCodec.h
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h
-verifiedAt: 5f421cb37
+verifiedAt: 588510704
 ---
 
 Replication keeps state in sync. RPCs and events carry the other kind of traffic: "this happened". A client asks the host to fire, the host checks the request, and the host tells every peer. RPCs and gameplay events ride the same packet type, so they share one authority gate and one set of rate limits.
@@ -64,6 +64,9 @@ This is the shape of the engine's own sandbox example. Arguments must be marshal
 
 - **It installs the authority policy.** `InstallAnnotatedRpcPolicies` walks every reflected component and allows each `Server` method for its owner only. `Client` and `Multicast` methods stay denied from clients <Source symbol="ReplicationManager::InstallAnnotatedRpcPolicies" />. It runs when the manager initializes; call it again after a game module that adds RPC components has loaded.
 - **It rejects the wrong direction.** Sending a `Multicast` method to the server, or a `Server` method to clients, is refused on both the sending and receiving side.
+- **Server to client is an allow-list.** A reflected function runs on a client only when it carries `Client` or `Multicast`. A function with no direction keyword, or a `Server` one, that the host names is refused on the client and counted in `rejectedNotClientCallable`, so a compromised host cannot reach arbitrary reflected functions. Add the keyword to every method the host should be able to call.
+
+An argument that names another object must be its `NetworkId`, not its `EntityID`: the server resolves it with `FindEntityByNetworkId`. A client's entity ID for an object spawned at runtime means nothing on the server.
 
 ## Send an RPC
 
@@ -116,10 +119,6 @@ The host uses `SendRpcToAllClients` or `SendRpcToClient` for the other direction
 While a session is running, `FNetSession` owns the RPC receiver. For component RPCs it looks up the entity and calls `DispatchComponentRpcByIndex` itself, then runs any fallback you installed with `SetRpcFallback`. You do not need to install a receiver of your own; the sandbox uses the fallback to turn a received `ServerFire` into a `MulticastFire`.
 </Callout>
 
-## Script actor RPCs
-
-A Wolang actor declares RPCs with `@Server`, `@Client` and `@Multicast` (`(unreliable)` for a droppable one) and the engine sends them over the script actor lane, a reserved method id that sits beside the named actor lane. The session grants a client that lane for an actor it owns only; the script layer then requires the named method to be declared `@Server`, the right number and kind of arguments, no more than `wolang.RpcMaxBytes` bytes and no more than `wolang.RpcRate` calls a second per method. A `@Client` or `@Multicast` method named by a client is refused. An inbound call runs under `wolang.CallBudget`. A script makes the call with `CallRpc`; see [Wolang scripting](/docs/gameplay/wolang-scripting/#replication).
-
 ## The authority gate
 
 Client-to-server RPCs are **denied by default**. Each one clears these checks in order before it reaches your code:
@@ -155,6 +154,8 @@ The default bucket suits actions a player triggers by hand. A continuously swept
 | `net.rpc_rate_limit_high` | `200` | The same, for `HighRate` methods |
 | `net.input_rate_limit` | `120` | Client input packets accepted per peer per second |
 
+The `net.*` limits in this guide are security policy: they cannot be changed from the console or the command line in a build where cheats are off. A game still sets them from code or its shipped project config.
+
 ## Large RPCs
 
 An RPC whose arguments reach 64 KiB does not fit the normal RPC packet. It goes through the **blob lane** instead: the packet is compressed with zstd when that shrinks it, cut into chunks (1 KiB by default) and sent on the reliable unordered channel, the receiver acknowledges them, and the sender keeps at most a window of unacknowledged chunks in flight at a set byte rate per peer <Source symbol="FNetBlobChannel" />. The receiver decompresses and follows whatever chunk size the sender used. A large payload therefore neither stalls the ordered reliable channel nor floods the link. When the last chunk arrives, the receiver handles the RPC exactly as if it had come in one packet, so a client RPC still passes the [authority gate](#the-authority-gate).
@@ -175,7 +176,7 @@ A blob is not ordered against the rest of the reliable stream. That is why small
 
 ## Gameplay events
 
-Events are a lighter layer on the same packet for actions that are not tied to a component method. You pick a 16-bit id at or above `0x8000`; ids from `0xFF00` up are reserved for the join protocol <Source symbol="FNetSessionEventIds" />. Payloads use `FNetEventWriter` and `FNetEventReader`, which bounds-check every read and latch a failure flag.
+Events are a lighter layer on the same packet for actions that are not tied to a component method. You pick a 16-bit id at or above `0x8000`; ids from `0xFF00` up are reserved for the join protocol <Source symbol="FNetSessionEventIds" />, and the engine's own systems use `0xFE00`–`0xFE2C` (scan shots, animation montages and [item authority leases](/docs/multiplayer/item-authority-leases/)), so keep game events out of that block. The host never relays an animation or lease event to other clients; their systems handle them. Payloads use `FNetEventWriter` and `FNetEventReader`, which bounds-check every read and latch a failure flag.
 
 ```cpp title="DoorEvents.cpp"
 #include "Networking/Session/FNetSession.h"

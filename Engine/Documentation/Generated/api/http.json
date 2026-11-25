@@ -7,6 +7,60 @@
 	"publicDir": "Engine/Source/Runtime/Http/Public",
 	"headers": [
 		{
+			"path": "Engine/Source/Runtime/Http/Public/Http/CacheMac.h",
+			"include": "Http/CacheMac.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FCacheMac",
+					"namespace": "Mowo",
+					"doc": "Tamper evidence for a shared derived-data tier. The tier keys values by input fingerprint alone, so\nwhoever can write to the server (or sits on a plain-http path to it) could plant a cooked asset that\nevery machine then ships. With MOWO_CACHE_HMAC_KEY set, a writer stores `<key>.mac` next to each value\nand a reader treats a value whose sidecar is missing or wrong as a miss.",
+					"line": 15,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kSecretEnvironmentVariable",
+							"signature": "static constexpr const char* kSecretEnvironmentVariable = \"\"",
+							"static": true,
+							"line": 17
+						},
+						{
+							"kind": "method",
+							"name": "HmacSha256Hex",
+							"signature": "static std::string HmacSha256Hex(const std::string& secret, const void* data, size_t size)",
+							"static": true,
+							"doc": "HMAC-SHA256 (RFC 2104), lowercase hex.",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "ForEntry",
+							"signature": "static std::string ForEntry(const std::string& secret, const std::string& key, const void* data, size_t size)",
+							"static": true,
+							"doc": "HMAC over the key, a NUL and the value, so a valid sidecar is not reusable under another key.",
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "SecretFromEnvironment",
+							"signature": "static std::string SecretFromEnvironment()",
+							"static": true,
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "Equal",
+							"signature": "static bool Equal(const std::string& a, const std::string& b)",
+							"static": true,
+							"line": 27
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Http/Public/Http/HttpClient.h",
 			"include": "Http/HttpClient.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -15,40 +69,46 @@
 					"kind": "struct",
 					"name": "HttpResponse",
 					"namespace": "Mowo",
-					"line": 18,
+					"line": 19,
 					"members": [
 						{
 							"kind": "field",
 							"name": "statusCode",
 							"signature": "long statusCode = 0",
 							"doc": "HTTP status; 0 = transport-level failure",
-							"line": 19
+							"line": 20
 						},
 						{
 							"kind": "field",
 							"name": "body",
 							"signature": "std::string body",
-							"line": 20
+							"line": 21
 						},
 						{
 							"kind": "field",
 							"name": "error",
 							"signature": "std::string error",
 							"doc": "non-empty on transport error (curl message)",
-							"line": 21
+							"line": 22
 						},
 						{
 							"kind": "field",
 							"name": "nameNotResolved",
 							"signature": "bool nameNotResolved = false",
 							"doc": "The host (or proxy) name did not resolve. Separated from the other\ntransport failures because it is the one that usually means the URL is\nwrong rather than the network being down, and a caller that retries on\na schedule wants to treat the two differently.",
-							"line": 27
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "retryAfterMs",
+							"signature": "int32_t retryAfterMs = 0",
+							"line": 30
 						},
 						{
 							"kind": "method",
 							"name": "Ok",
 							"signature": "bool Ok() const",
-							"line": 29
+							"line": 32
 						}
 					]
 				},
@@ -56,26 +116,26 @@
 					"kind": "struct",
 					"name": "HttpMultipartFile",
 					"namespace": "Mowo",
-					"line": 34,
+					"line": 37,
 					"members": [
 						{
 							"kind": "field",
 							"name": "fieldName",
 							"signature": "std::string fieldName",
-							"line": 35
+							"line": 38
 						},
 						{
 							"kind": "field",
 							"name": "filePath",
 							"signature": "std::string filePath",
 							"doc": "absolute path on disk",
-							"line": 36
+							"line": 39
 						},
 						{
 							"kind": "field",
 							"name": "contentType",
 							"signature": "std::string contentType = \"application/octet-stream\"",
-							"line": 37
+							"line": 40
 						}
 					]
 				},
@@ -83,43 +143,50 @@
 					"kind": "struct",
 					"name": "HttpTransferOptions",
 					"namespace": "Mowo",
-					"line": 40,
+					"line": 43,
 					"members": [
 						{
 							"kind": "field",
 							"name": "headers",
 							"signature": "std::vector<std::string> headers",
-							"line": 41
+							"line": 44
 						},
 						{
 							"kind": "field",
 							"name": "connectTimeoutSeconds",
 							"signature": "int32_t connectTimeoutSeconds = 10",
-							"line": 42
+							"line": 45
 						},
 						{
 							"kind": "field",
 							"name": "stallTimeoutSeconds",
 							"signature": "int32_t stallTimeoutSeconds = 30",
-							"line": 43
+							"line": 46
 						},
 						{
 							"kind": "field",
 							"name": "maxBytesPerSecond",
 							"signature": "int64_t maxBytesPerSecond = 0",
-							"line": 44
+							"line": 47
 						},
 						{
 							"kind": "field",
 							"name": "cancel",
 							"signature": "const std::atomic<bool>* cancel = nullptr",
-							"line": 45
+							"line": 48
 						},
 						{
 							"kind": "field",
 							"name": "onProgress",
 							"signature": "std::function<void(uint64_t received, uint64_t total)> onProgress",
-							"line": 46
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "httpsOnly",
+							"signature": "bool httpsOnly = false",
+							"doc": "Update and manifest traffic: the first URL must be https (http only to\nloopback) and a redirect may never downgrade, so a network attacker cannot\nswap the payload the signature check then has to catch.",
+							"line": 54
 						}
 					]
 				},
@@ -127,61 +194,61 @@
 					"kind": "struct",
 					"name": "HttpDownloadResult",
 					"namespace": "Mowo",
-					"line": 49,
+					"line": 57,
 					"members": [
 						{
 							"kind": "field",
 							"name": "statusCode",
 							"signature": "int32_t statusCode = 0",
-							"line": 50
+							"line": 58
 						},
 						{
 							"kind": "field",
 							"name": "bytesWritten",
 							"signature": "uint64_t bytesWritten = 0",
-							"line": 51
+							"line": 59
 						},
 						{
 							"kind": "field",
 							"name": "fileSize",
 							"signature": "uint64_t fileSize = 0",
-							"line": 52
+							"line": 60
 						},
 						{
 							"kind": "field",
 							"name": "resumed",
 							"signature": "bool resumed = false",
-							"line": 53
+							"line": 61
 						},
 						{
 							"kind": "field",
 							"name": "cancelled",
 							"signature": "bool cancelled = false",
-							"line": 54
+							"line": 62
 						},
 						{
 							"kind": "field",
 							"name": "nameNotResolved",
 							"signature": "bool nameNotResolved = false",
-							"line": 55
+							"line": 63
 						},
 						{
 							"kind": "field",
 							"name": "error",
 							"signature": "std::string error",
-							"line": 56
+							"line": 64
 						},
 						{
 							"kind": "field",
 							"name": "errorBody",
 							"signature": "std::string errorBody",
-							"line": 57
+							"line": 65
 						},
 						{
 							"kind": "method",
 							"name": "Ok",
 							"signature": "bool Ok() const",
-							"line": 59
+							"line": 67
 						}
 					]
 				},
@@ -190,7 +257,7 @@
 					"name": "HttpClient",
 					"namespace": "Mowo",
 					"doc": "Minimal libcurl-backed client. Each call owns its own easy handle, so the\nstatic methods are safe to call from multiple threads concurrently.",
-					"line": 66,
+					"line": 74,
 					"members": [
 						{
 							"kind": "method",
@@ -198,14 +265,22 @@
 							"signature": "static void GlobalInit()",
 							"static": true,
 							"doc": "Process-wide curl init/teardown. Idempotent; the request methods call\nGlobalInit() lazily, so explicit use is optional.",
-							"line": 70
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "GlobalShutdown",
 							"signature": "static void GlobalShutdown()",
 							"static": true,
-							"line": 71
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "IsSecureOrLoopbackUrl",
+							"signature": "static bool IsSecureOrLoopbackUrl(const std::string& url)",
+							"static": true,
+							"doc": "True for https, and for http to localhost / 127.0.0.1 / [::1].",
+							"line": 82
 						},
 						{
 							"kind": "method",
@@ -213,7 +288,7 @@
 							"signature": "static HttpResponse Post(const std::string& url, const std::string& body, const std::vector<std::string>& headers = {}, long timeoutSeconds = 15)",
 							"static": true,
 							"doc": "POST a raw string body.",
-							"line": 74
+							"line": 85
 						},
 						{
 							"kind": "method",
@@ -221,7 +296,7 @@
 							"signature": "static HttpResponse Request(const std::string& method, const std::string& url, const std::string& body = \"\", const std::vector<std::string>& headers = {}, long timeoutSeconds = 15)",
 							"static": true,
 							"doc": "Any HTTP verb (\"GET\", \"POST\", \"PUT\", \"PATCH\", \"DELETE\", ...). An empty\nbody sends no payload; GET with a body is refused by construction (a\nbody on GET is undefined per RFC 9110 and proxies drop it silently).",
-							"line": 82
+							"line": 93
 						},
 						{
 							"kind": "method",
@@ -229,21 +304,229 @@
 							"signature": "static HttpResponse PostMultipart(const std::string& url, const std::map<std::string, std::string>& fields, const std::vector<HttpMultipartFile>& files, const std::vector<std::string>& headers = {}, long timeoutSeconds = 30)",
 							"static": true,
 							"doc": "multipart/form-data POST: form fields + file attachments. Used by the\nSentry minidump upload.",
-							"line": 90
+							"line": 101
 						},
 						{
 							"kind": "method",
 							"name": "Fetch",
 							"signature": "static HttpResponse Fetch(const std::string& url, const HttpTransferOptions& options)",
 							"static": true,
-							"line": 96
+							"line": 107
+						},
+						{
+							"kind": "method",
+							"name": "RequestWithRetry",
+							"signature": "static HttpResponse RequestWithRetry(const std::string& method, const std::string& url, const std::string& body, const std::vector<std::string>& headers, long timeoutSeconds, const FHttpRetryPolicy& policy, const std::atomic<bool>* cancel = nullptr)",
+							"static": true,
+							"line": 109
 						},
 						{
 							"kind": "method",
 							"name": "Download",
 							"signature": "static HttpDownloadResult Download(const std::string& url, const std::string& filePath, const HttpTransferOptions& options, bool resume = true)",
 							"static": true,
-							"line": 98
+							"line": 111
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Http/Public/Http/HttpRetry.h",
+			"include": "Http/HttpRetry.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "HttpRetryPolicy",
+					"namespace": "Mowo",
+					"line": 15,
+					"members": [
+						{
+							"kind": "field",
+							"name": "MaxAttempts",
+							"signature": "int32_t MaxAttempts = 3",
+							"line": 16
+						},
+						{
+							"kind": "field",
+							"name": "BaseDelayMs",
+							"signature": "int32_t BaseDelayMs = 500",
+							"line": 17
+						},
+						{
+							"kind": "field",
+							"name": "MaxDelayMs",
+							"signature": "int32_t MaxDelayMs = 15000",
+							"line": 18
+						},
+						{
+							"kind": "field",
+							"name": "JitterPercent",
+							"signature": "int32_t JitterPercent = 25",
+							"line": 19
+						},
+						{
+							"kind": "field",
+							"name": "MaxRetryAfterMs",
+							"signature": "int32_t MaxRetryAfterMs = 60000",
+							"line": 20
+						},
+						{
+							"kind": "field",
+							"name": "RetryUnsafeMethods",
+							"signature": "bool RetryUnsafeMethods = false",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "RetryNameNotResolved",
+							"signature": "bool RetryNameNotResolved = false",
+							"line": 22
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "HttpRetry",
+					"namespace": "Mowo",
+					"line": 25,
+					"members": [
+						{
+							"kind": "method",
+							"name": "PolicyFromCvars",
+							"signature": "static HttpRetryPolicy PolicyFromCvars()",
+							"static": true,
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "IsRetryableStatus",
+							"signature": "static bool IsRetryableStatus(int32_t status)",
+							"static": true,
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "IsIdempotentMethod",
+							"signature": "static bool IsIdempotentMethod(const std::string& method)",
+							"static": true,
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "ShouldRetry",
+							"signature": "static bool ShouldRetry(const HttpRetryPolicy& policy, const std::string& method, const HttpResponse& response)",
+							"static": true,
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "DelayMs",
+							"signature": "static int32_t DelayMs(const HttpRetryPolicy& policy, int32_t retryNumber, int32_t retryAfterMs, double randomUnit)",
+							"static": true,
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "ParseRetryAfterMs",
+							"signature": "static int32_t ParseRetryAfterMs(const std::string& headerValue)",
+							"static": true,
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "Execute",
+							"signature": "static HttpResponse Execute(const HttpRetryPolicy& policy, const std::string& method, const std::function<HttpResponse()>& attempt, const std::function<bool(int32_t)>& sleep, const std::function<double()>& random)",
+							"static": true,
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "Request",
+							"signature": "static HttpResponse Request(const std::string& method, const std::string& url, const std::string& body = \"\", const std::vector<std::string>& headers = {}, long timeoutSeconds = 15, const std::atomic<bool>* cancel = nullptr)",
+							"static": true,
+							"line": 38
+						},
+						{
+							"kind": "method",
+							"name": "Request",
+							"signature": "static HttpResponse Request(const HttpRetryPolicy& policy, const std::string& method, const std::string& url, const std::string& body, const std::vector<std::string>& headers, long timeoutSeconds, const std::atomic<bool>* cancel = nullptr)",
+							"static": true,
+							"line": 39
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Http/Public/Http/HttpRetryPolicy.h",
+			"include": "Http/HttpRetryPolicy.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FHttpRetryPolicy",
+					"namespace": "Mowo",
+					"line": 10,
+					"members": [
+						{
+							"kind": "field",
+							"name": "MaxAttempts",
+							"signature": "int32_t MaxAttempts = 3",
+							"line": 11
+						},
+						{
+							"kind": "field",
+							"name": "BaseDelayMs",
+							"signature": "int32_t BaseDelayMs = 250",
+							"line": 12
+						},
+						{
+							"kind": "field",
+							"name": "MaxDelayMs",
+							"signature": "int32_t MaxDelayMs = 8000",
+							"line": 13
+						},
+						{
+							"kind": "field",
+							"name": "Jitter",
+							"signature": "float Jitter = 0.25f",
+							"line": 14
+						},
+						{
+							"kind": "field",
+							"name": "RetryNonIdempotent",
+							"signature": "bool RetryNonIdempotent = false",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "IsIdempotent",
+							"signature": "static bool IsIdempotent(const std::string& method)",
+							"static": true,
+							"line": 17
+						},
+						{
+							"kind": "method",
+							"name": "IsTransientStatus",
+							"signature": "static bool IsTransientStatus(int32_t statusCode)",
+							"static": true,
+							"line": 21
+						},
+						{
+							"kind": "method",
+							"name": "ShouldRetry",
+							"signature": "bool ShouldRetry(const std::string& method, int32_t statusCode, bool nameNotResolved, int32_t attemptsMade) const",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "DelayMs",
+							"signature": "int32_t DelayMs(int32_t attemptsMade, float unitRandom) const",
+							"line": 41
 						}
 					]
 				}

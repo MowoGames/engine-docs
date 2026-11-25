@@ -10,11 +10,20 @@ sources:
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/FormatContract.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MmodelFormat.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MmodelLoader.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MeshletPageBuild.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MtexFormat.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MtexLoader.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MaudioFormat.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MaudioLoader.h
-verifiedAt: fe1a64ec2
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/LightmapFormat.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/GeometryCacheFormat.h
+  - Engine/Source/Runtime/AssetSystem/Public/Scene/ExternalActorFiles.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/AssetResave.h
+  - Engine/Source/Runtime/Core/Public/Core/AssetFormatVersions.h
+  - Engine/Source/Runtime/Core/Public/Core/AssetVerify.h
+  - Engine/Source/Runtime/Project/Public/Project/GitDriverConfig.h
+  - Engine/Plugins/Replay/Public/ReplayPlugin/ReplayFormat.h
+verifiedAt: c6c835140
 ---
 
 Every asset in `Content/` is an **asset package**: one data model with two encodings. Text packages (materials, prefabs, levels, actor files, data assets) are [MDF](/docs/content-pipeline/mdf/) you can read and merge. Binary packages (meshes, textures, sounds, animation) add aligned bulk data that loads on demand. The encoding belongs to the asset type, not to you: a type with bulk data is binary. This page describes the package format and the cooked formats the runtime decodes.
@@ -33,7 +42,16 @@ A package has three parts:
 
 A binary package starts with the magic `MPKG` and a 56-byte header with the offset and size of each part. Because the summary sits at the front, the registry and the Content Browser read a thumbnail or an asset's references without pulling its geometry off disk.
 
-References between packages are by **id**, with the path kept beside it. A rename leaves a [redirect](/docs/content-pipeline/redirectors/) for the path; the id keeps resolving either way.
+How a package refers to another asset depends on who wrote the package:
+
+- **Text packages** (materials, prefabs, levels, actor files, data assets) refer to other assets by **path**: an `@"Content/..."` reference or a `Content/...` string in the payload. The import table lists those paths. Nothing in the file knows the target's id, so a rename is rescued by the [redirect](/docs/content-pipeline/redirectors/) it leaves and the fix-up pass that rewrites the referencing files.
+- **Binary packages written by an import** (a mesh to its skeleton and materials) also record the target's **id** in the import, so the reference resolves after a rename even before a fix-up runs.
+
+### Versions
+
+Every package carries its versions in two places that agree. A binary package lists per-subsystem versions in its summary (`mesh`, `anim`, ...). A text package keeps its `schema_version` in the payload root, and the writer mirrors it into the summary under `schema`, so the registry and `mbt asset verify` can tell an out-of-date asset without parsing its payload. The engine keeps one list of the version each text type is written at (`Core/AssetFormatVersions.h`), and a test fails when a loader and the list disagree.
+
+A binary package stores a CRC32 of every bulk chunk in its summary. Reading the whole package checks it, so a damaged chunk fails the load with a message instead of reaching the renderer. A package written before the checksum existed has none and is not checked.
 
 ### What each binary type holds
 
@@ -55,9 +73,24 @@ Binary packages are not readable in a text editor, so the build tool renders the
 |---|---|
 | `mbt asset dump <file>` | Prints a package as text: summary, payload, and each bulk chunk by tag and size. The `.gitattributes` block uses it as the diff text converter. |
 | `mbt asset diff <before> <after>` | Property-level diff of two MDF documents or packages. |
-| `mbt asset merge <base> <ours> <theirs>` | Three-way property merge. `--visual-script` merges Visual Scripting graphs by node id. |
+| `mbt asset merge <base> <ours> <theirs>` | Three-way property merge. `--visual-script` merges Visual Scripting graphs by node id. Without MdfTool it falls back to Git's line merge. |
+| `mbt asset verify <project>` | Parses every asset and reports a file that does not parse, a failed checksum, an import that does not exist, a schema newer than this engine reads, and an actor file whose level is gone. `--strict` also fails on warnings and out-of-date assets. |
+| `mbt asset resave <project>` | Resaves every text asset and level in the current formats and writes nothing that is already current. `--report-only` lists what would change; run it on a clean working tree and review the diff. |
+| `mbt vcs setup` | Registers the merge and diff drivers below in the repository's local Git config. |
+
+Git runs `merge=mdf`, `merge=vscript` and `diff=mowoasset` from the `.gitattributes` block only when the repository's own config defines them. The editor registers them in `.git/config` the first time it opens a project that carries the block, and `mbt vcs setup` does the same from a shell. It only writes the repository's local config, only when a key differs, and leaves a registration alone while the `mbt` it names still exists. Pass `--no-vcs-setup` to the editor to skip it.
 
 See the [mbt CLI reference](/docs/reference/mbt-cli/).
+
+## Levels: one file per actor
+
+A level is a `.mmap` World package that holds the world's own settings, plus one `.actor` package per actor under `__ExternalActors__/<Level>/`. The layout is built so two people can add actors to one level and Git has nothing to merge:
+
+- Each actor file carries its place in the level as a `sort` key. The key is fractional text: a new actor gets a key between its neighbours', an actor you delete frees its key, and every other actor file keeps its bytes. Adding an actor in the middle of a level touches one file.
+- The `.mmap` lists no actor count and none of the actors' references. Each actor package lists the references of its own entity, and the asset registry derives the level's dependencies from the actor files whenever it indexes, so nothing committed has to be kept in step.
+- An actor's summary also holds a small descriptor: its name, its class, its origin, its data layers and its references. Data layers and registry queries read the summaries instead of parsing every entity.
+
+A level saved by an older engine still opens: its decimal sort keys, actor count and reference list are read as they were, and the first save or `mbt asset resave` rewrites them.
 
 ## What the cook does to a package
 
@@ -69,7 +102,7 @@ See the [mbt CLI reference](/docs/reference/mbt-cli/).
 - an Animation Sequence's keys are compressed;
 - every package loses its editor-only bulk.
 
-The result keeps its id, class and imports, so every reference still resolves. A cooked package is tagged `cooked`, and cooking it again changes nothing. Text packages are written as binary MDF. See [Cooking](/docs/content-pipeline/cooking/).
+The result keeps its id, class and imports, so every reference still resolves. A cooked package is tagged `cooked`, and cooking it again changes nothing. Text packages are written as binary MDF, and that includes levels, actor files and the streaming manifest: the loaders accept either encoding, and binary MDF parses several times faster than text. See [Cooking](/docs/content-pipeline/cooking/).
 
 ## Cooked binary formats
 
@@ -77,9 +110,18 @@ Three formats carry what the renderer and audio engine decode at runtime without
 
 | Format | Magic | Current version | Carries |
 |---|---|---|---|
-| `.mmodel` | `MMDL` | 17 | Meshes, materials, skeleton, animation, node tree, lights, cameras, LODs, meshlets, distance fields, GI cards, morph targets |
+| `.mmodel` | `MMDL` | 20 | Meshes, materials, skeleton, animation, node tree, lights, cameras, LODs, meshlets, virtual geometry pages with their cluster hierarchy, distance fields, GI cards, morph targets |
 | `.mtex` | `MTEX` | 4 | Block-compressed or raw pixels with a mip chain, cubemaps, arrays and volumes |
 | `.maudio` | `MAUD` | 3 | PCM or Opus samples, loop points, streaming flags, loudness, pitch |
+
+### Other formats
+
+| Format | Where | Notes |
+|---|---|---|
+| `.data` object data asset | `Content/` | A text package of class `DataAsset` with an id and an import table. Only what differs from the class defaults is written, so raising a default reaches every asset that never overrode it, and an instanced sub-object is named after itself (`Effects:Flash`), not its index. A bare document without the package still loads and becomes a package the next time it is saved. See [Data assets as objects](/docs/programming/data-assets/). |
+| `.gcache` | `Content/`, beside the source model | Geometry cache: a chunked, streamed vertex animation (16 frames a chunk, positions as 16-bit fixed point or float32). Written by the Alembic and USD importers for long point caches; see [Geometry caches](/docs/content-pipeline/geometry-caches/). |
+| `.lightmap` | next to the baked atlases | Built data of one level: derived, regenerated by the bake, never locked and never edited by hand. It keys each entry on the actor's id, which is the entity id the level loads with, so it survives a reload. |
+| `.mreplay` | the recorder's output path | Versions are additive: a build opens every replay format version from 1 up to its own and refuses a newer one with a message naming both versions. Version 2 added the platform the match was recorded on. |
 
 ### Rules every format follows
 
@@ -110,6 +152,10 @@ A `.mmodel` is a pre-processed model that loads straight to the GPU. The format 
 | 16 | Optional 16-bit indices for meshes up to 65,536 vertices |
 | 17 | Morph tracks name the target they drive |
 | 18 | Material slots record glTF alpha blending and the texture wrap (repeat, mirror, clamp) |
+| 19 | Extra UV channels and a second set of bone influences |
+| 20 | Virtualized-geometry pages: each mesh's clusters laid out in streaming pages with their quantized vertex data, plus a bounding-volume hierarchy over the cluster groups |
+
+A version 20 file lets the renderer read one page of a dense mesh from disk at a time instead of holding the whole mesh in memory. A file cooked before version 20 still loads; the renderer lays its clusters out into pages when the mesh is first drawn, as before. Recooking adds the pages.
 
 ### .mtex
 

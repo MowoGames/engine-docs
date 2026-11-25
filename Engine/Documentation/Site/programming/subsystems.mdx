@@ -1,25 +1,84 @@
 ---
 title: Subsystems
-description: Engine- and world-scoped singletons that the engine creates on first use, initializes, and tears down in order.
+description: Engine, world, game instance and local player singletons the engine finds by reflection, creates, ticks and tears down in order.
 order: 8
 sources:
   - Engine/Source/Runtime/Core/Public/Core/MSubsystem.h
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
-verifiedAt: 5922e6e5e
+  - Engine/Source/Runtime/Game/Public/Game/MGameInstance.h
+  - Engine/Source/Runtime/Game/Public/Game/APlayerController.h
+  - Engine/Source/Runtime/Game/Public/Game/FLocalPlayerSubsystems.h
+  - Engine/Source/Runtime/Game/Public/Game/MSubsystemStatics.h
+verifiedAt: 55f27937c
 ---
 
-A subsystem is a managed singleton tied to the engine or to one world. Instead of a hand-written global with fragile teardown, you declare a class; the engine creates it the first time someone asks for it, roots it so the garbage collector never frees it, initializes it, and destroys it with its scope. This is Unreal's subsystem model.
+A subsystem is a managed singleton tied to a scope: the engine, one world, the game instance or one local player. Instead of a hand-written global with fragile teardown, you declare a class. The scope finds it by reflection when it starts, creates it, roots it so the garbage collector never frees it, initializes it, ticks it if it asks to be ticked, and destroys it with the scope. This is Unreal's subsystem model.
 
 | Base class | Scope | Reached through | Lives |
 | --- | --- | --- | --- |
 | `MEngineSubsystem` | The engine | `GEngine->GetSubsystem<T>()` | From first use until engine shutdown |
-| `MWorldSubsystem` | One world | `world->GetSubsystem<T>()` | From first use until the world is destroyed |
+| `MWorldSubsystem` | One world | `world->GetSubsystem<T>()` | From the world's first tick or `BeginPlay` until it is destroyed |
+| `MGameInstanceSubsystem` | The game instance | `MGameInstance::Get().GetSubsystem<T>()` | From game instance creation, across world loads and travel |
+| `MLocalPlayerSubsystem` | One local player | `playerController->GetLocalPlayerSubsystem<T>()` | From the controller's first tick until its `EndPlay` |
 
-<Source symbol="MEngineSubsystem" /> <Source symbol="MWorldSubsystem" />
+<Source symbol="MEngineSubsystem" /> <Source symbol="MWorldSubsystem" /> <Source symbol="MGameInstanceSubsystem" /> <Source symbol="MLocalPlayerSubsystem" />
+
+All four derive from `MSubsystem`, which carries the three hooks every scope shares: `ShouldCreateSubsystem`, `IsTickable` and `Tick`.
+
+## Declare it, and it exists
+
+Mark the class `MCLASS()` and derive from a scope base. Nothing registers it. At scope start the engine creates one instance of every concrete `MCLASS` that derives from the scope's base and whose `ShouldCreateSubsystem` answers true, in class-name order so every run and every machine builds them the same way.
+
+```cpp title="SpawnDirector.h"
+#include "Core/MSubsystem.h"
+#include "Reflection/Reflect.h"
+
+#include "SpawnDirector.generated.h"
+
+MCLASS(Tickable)
+class MSpawnDirector : public Mowo::MWorldSubsystem {
+public:
+	MGENERATED_BODY()
+
+	void Initialize(Mowo::MWorld* world) override {
+		m_World = world;
+	}
+
+	void Deinitialize() override {
+		m_World = nullptr;
+	}
+
+	bool ShouldCreateSubsystem(Mowo::MObject* outer) const override {
+		return true;
+	}
+
+	bool IsTickable() const override {
+		return true;
+	}
+
+	void Tick(float deltaSeconds) override {
+		m_Budget += deltaSeconds;
+	}
+
+private:
+	Mowo::MWorld* m_World = nullptr;
+	float m_Budget = 0.0f;
+};
+```
+
+```cpp nocompile
+MSpawnDirector* director = world->GetSubsystem<MSpawnDirector>();
+```
+
+`ShouldCreateSubsystem` is asked of the class default object before an instance exists, so a server-only service can stay out of a client and an editor-only one out of a game. World subsystems tick with the world's pre-physics group, before any actor. Game instance subsystems tick once per frame however many worlds are alive. Local player subsystems tick before their controller.
+
+A class that is not reflected still works: `GetSubsystem<T>()` creates it on first use. Reflection is what gives you automatic creation, the Visual Scripting node and the hot-reload bookkeeping.
+
+<Source symbol="MWorld::GetSubsystem" />
 
 ## An engine subsystem
 
-Derive from `MEngineSubsystem` and override `Initialize` and `Deinitialize`:
+Engine subsystems live in the engine loop, above the gameplay module, so they are created on first use rather than discovered at a scope start:
 
 ```cpp title="ScoreSubsystem.h"
 #include "Core/MSubsystem.h"
@@ -28,9 +87,6 @@ class MScoreSubsystem : public Mowo::MEngineSubsystem {
 public:
 	void Initialize() override {
 		m_HighScore = 0;
-	}
-
-	void Deinitialize() override {
 	}
 
 	void Record(int32_t score) {
@@ -48,8 +104,6 @@ private:
 };
 ```
 
-Reach it from anywhere the engine is alive:
-
 ```cpp nocompile
 MScoreSubsystem* scores = GEngine->GetSubsystem<MScoreSubsystem>();
 scores->Record(4200);
@@ -58,37 +112,17 @@ scores->Record(4200);
 `GEngine` is null before `Engine::Initialize` and after `Engine::Shutdown`; guard code that can run outside a session. At shutdown every engine subsystem's `Deinitialize` runs in reverse order of creation.
 
 <Callout type="warning">
-The order in which subsystems initialize is not guaranteed. If one needs another, call `GEngine->GetSubsystem<X>()` from its `Initialize`; that creates `X` if it does not exist yet.
+The order in which subsystems initialize is not guaranteed. If one needs another, call `GetSubsystem<X>()` from its `Initialize`; that creates `X` if it does not exist yet.
 </Callout>
 
-## A world subsystem
+## From Visual Scripting
 
-Derive from `MWorldSubsystem`. `Initialize` receives the owning world:
-
-```cpp title="SpawnDirector.h"
-#include "Core/MSubsystem.h"
-
-class MSpawnDirector : public Mowo::MWorldSubsystem {
-public:
-	void Initialize(Mowo::MWorld* world) override {
-		m_World = world;
-	}
-
-	void Deinitialize() override {
-		m_World = nullptr;
-	}
-
-private:
-	Mowo::MWorld* m_World = nullptr;
-};
-```
-
-```cpp nocompile
-MSpawnDirector* director = world->GetSubsystem<MSpawnDirector>();
-```
-
-<Source symbol="MWorld::GetSubsystem" /> A world subsystem is the right home for per-level state: spawn budgets, level-scoped managers, streaming bookkeeping. An engine subsystem holds state that outlives any one world.
+The **Get World Subsystem**, **Get Game Instance Subsystem** and **Get Local Player Subsystem** nodes take a class and return the instance of that scope, or nothing. Call the subsystem's `MFUNCTION`s on the result like any other object. <Source symbol="MSubsystemStatics" />
 
 ## When to use one
 
-Use a subsystem for shared, long-lived state with a clear setup and teardown that many systems need. Keep per-actor state on the actor and per-frame work in ticks. Prefer a subsystem over a raw singleton (the engine owns the lifetime and the teardown order) and over passing a manager pointer through every call.
+Use a subsystem for shared, long-lived state with a clear setup and teardown that many systems need: a spawn budget (world), an inventory or profile service (game instance), a per-player UI model (local player). Keep per-actor state on the actor and per-frame work in ticks. Prefer a subsystem over a raw singleton (the engine owns the lifetime and the teardown order) and over passing a manager pointer through every call.
+
+<Callout type="note">
+After a hot reload of the module that holds a subsystem, the scope drops and recreates the game instance (and its subsystems) the way it already did for a game instance subclass; world and local player subsystems of a running world keep the old instance until the world is rebuilt.
+</Callout>

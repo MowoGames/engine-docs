@@ -1,0 +1,50 @@
+---
+title: Gameplay Debugger
+description: "Inspect the selected actor while the game runs: class chain, tags, components, every property value and the state your actor reports."
+order: 40
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/FGameplayDebugger.h
+verifiedAt: c6c835140
+---
+
+Open **Window > Debug & Profiling > Gameplay Debugger** and select an actor. The panel lists, refreshed a few times a second:
+
+- **Identity**: the actor's name and its class chain, most derived first.
+- **Tags** and **Components** (name and class).
+- **Properties**, one block per class in the chain: every field a graph may read, with its current value. Fields marked `ScriptHidden` or `Hidden` are left out.
+- Any section the actor adds itself.
+
+It works in Play In Editor, so you watch values change as the game runs.
+
+## Add your own sections
+
+An actor that has state worth watching (an ability system, a state machine, a movement mode) implements `IGameplayDebugSource`:
+
+```cpp title="AEnemy.h" nocompile
+class AEnemy : public Mowo::AActor, public Mowo::IGameplayDebugSource {
+public:
+	void CollectGameplayDebug(std::vector<Mowo::FGameplayDebugSection>& out) const override {
+		Mowo::FGameplayDebugSection section;
+		section.Title = "AI";
+		section.Lines.push_back({ "State", m_State });
+		section.Lines.push_back({ "Target", m_Target ? m_Target->GetActorName() : "none" });
+		out.push_back(section);
+	}
+};
+```
+
+## On screen in the game
+
+`gameplay.Debug` turns an overlay on or off. It writes the same report as screen messages every frame, so it shows in the editor viewport and in a development build's debug HUD (top left, with the other on-screen messages; `DisableAllScreenMessages` or `ui.DebugOverlays.Hide 1` removes it). Pick what it shows:
+
+| Command | Shows |
+| --- | --- |
+| `gameplay.Debug` | Toggles the overlay on the actor nearest the player pawn within 8 m |
+| `gameplay.Debug pawn` | The player pawn |
+| `gameplay.Debug selected` | The actor selected in the editor |
+| `gameplay.Debug <actor name>` | That actor, and also prints the report to the log |
+| `gameplay.Debug off` | Nothing |
+
+At most 40 lines are shown. Nothing is drawn in a release build.
+
+<Source path="Engine/Source/Runtime/Game/Public/Game/FGameplayDebugger.h" />

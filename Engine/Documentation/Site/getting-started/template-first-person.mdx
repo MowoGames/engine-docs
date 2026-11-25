@@ -1,0 +1,92 @@
+---
+title: First Person template
+sidebarTitle: First Person
+description: "A first-person starter in a sci-fi apartment and lab with a visible animated body, footsteps, a sliding door and a Walking sim or Shooter variant."
+order: 11
+sources:
+  - Templates/TP_FirstPerson/README.md
+  - Templates/TP_FirstPerson/ASSET_LICENSES.md
+  - Templates/TP_FirstPerson/Config/TemplateDefs.ini
+  - Templates/TP_FirstPerson/Config/Plugins.ini
+  - Templates/TP_FirstPerson/TP_FirstPerson.mproject
+  - Templates/TP_FirstPerson/Source/TP_FirstPerson/Public/TP_FirstPerson/AFirstPersonPlayer.h
+  - Templates/TP_FirstPerson/Content/Characters/Mannequins/ABP_Locomotion.animgraph
+  - Templates/TP_FirstPerson/Content/Blueprints/BP_FirstPersonPlayer.vscript
+  - Templates/TP_FirstPerson/Content/ArenaShooter/Blueprints/BP_ArenaPlayer.vscript
+  - Templates/TP_FirstPerson/Config/DefaultGame.ini
+  - Templates/TP_FirstPerson/Content/Blueprints/BP_FirstPersonGameMode.vscript
+  - Templates/TP_FirstPerson/Content/Blueprints/BP_LabDoor.vscript
+  - Templates/TP_FirstPerson/Content/Shooter/Weapons/Pistol.weapon
+  - Engine/Source/Runtime/Game/Public/Game/AFirstPersonCharacter.h
+verifiedAt: 270fb363b
+---
+
+The First Person template puts you in a sci-fi apartment that opens onto a corridor and a lab. The walls, floors, doors and props are CC0 Quaternius kit pieces, lit by coloured point lights: warm in the apartment, cyan in the corridor with red emergency lights over the lab door, teal and violet in the lab. You walk, sprint, crouch and jump with a visible, animated body, and every step plays a footstep sound.
+
+## Pick a variant
+
+The new-project wizard offers three variants. The ones you do not choose are left out of your project.
+
+| Variant | Start map | What it adds |
+|---|---|---|
+| Walking sim | `Content/WalkingSim/Scenes/Main.mmap` | No weapon. Explore, carry crates, take the supply case and open the lab door |
+| Shooter | `Content/Shooter/Scenes/Range.mmap` | A service pistol on a stand near the start, an ammo case and four target barrels in the lab |
+| Arena Shooter | `Content/ArenaShooter/Scenes/Arena.mmap` | Team deathmatch in a walled arena on the ArenaKit plugin: two teams, bots, scoreboard, results |
+
+## Controls
+
+| Input | Action |
+|---|---|
+| **W** **A** **S** **D** | Move |
+| Mouse | Look |
+| **Space** | Jump |
+| **Left Shift** | Sprint |
+| **Left Ctrl** | Crouch |
+| **E** | Interact: open the lab door, pick up a crate, take the supply case or the pistol |
+| **Q** | Throw what you carry |
+| Left mouse button, **R** | Shooter variant: fire and reload |
+
+Rebind them in `Content/Input/IMC_Default.inputcontext`.
+
+<Screenshot id="getting-started-first-person-apartment" alt="Play in Editor view of the First Person template at the start: the apartment with shelves on the left, crates and a desk on the right and the corridor ahead, crosshair in the centre" caption="The apartment at the start of the Walking sim variant." />
+
+## Arena Shooter variant
+
+The Arena Shooter variant opens `Content/ArenaShooter/Scenes/Arena.mmap`: a walled 44 x 44 m yard of prototype tiles with shipping containers, barriers, barrels and pallets as cover. Two teams of three spawn at opposite ends; empty seats fill with bots, and a round runs from warmup through a timed live phase to a results screen. It uses the Combat and ArenaKit plugins, both enabled for you. The bots build their navigation when the map loads, so there is nothing to bake by hand. Fire with the left mouse button and reload with <Kbd>R</Kbd>. The match rules are console variables in `Config/DefaultGame.ini` (`arena.ScoreLimit`, `arena.TimeLimit`, `arena.TeamSize`, `arena.Bots`).
+
+## How it is built
+
+The player is `BP_FirstPersonPlayer`, a Visual Script class on the engine's first-person character, and the project's game mode is `BP_FirstPersonGameMode`, so everything below works the moment the project opens, with nothing compiled. The class defaults name the body, its graph, the footstep folder and a bone to hide; the engine character does the rest (see [Character presentation](/docs/gameplay/character-movement/)).
+
+- The body is `Content/Characters/Mannequins/Hero_Male.glb`, the Quaternius mannequin with its clips. The `Head` bone is collapsed out of the draw, so the camera inside the body sees no neck while the torso, arms and legs show when you look down.
+- The graph, `Content/Characters/Mannequins/ABP_Locomotion.animgraph`, gets `Speed`, `Airborne`, `Crouched` and `Sprinting` every tick.
+- The footsteps are `Content/Audio/Core/Footsteps`: one cue per surface (`Default`, `Concrete`, `Stone`, `Grass`, `Dirt`, `Wood`, `Metal`), chosen by the surface under the feet.
+- The characters, the input actions and the audio are copies of shared packs (`Mannequins`, `Input`, `CoreAudio`).
+
+The game module `TP_FirstPerson` is the C++ extension point: `AFirstPersonPlayer` subclasses the engine character, picks the same body and lowers the eye from `standEyeHeight` to `crouchEyeHeight` while crouched. Build it with **Build > Compile Game Module**; the launcher then switches the project to its game mode, `AFirstPersonPlayerGameMode`.
+
+### The level
+
+| Part | What it is |
+|---|---|
+| Rooms | A four-metre grid of wall, top-trim and floor pieces from `Content/Level/Meshes`, with mesh colliders. The walls carry a metal surface type |
+| Materials | Each kit piece is a `.glb` with its textures embedded, so it carries its own materials; `Content/Level/Materials` holds five plain-colour materials (black, glass, ceiling and two light colours). A material that names textures by UUID rendered flat in a fresh copy of a template, so the template avoids them |
+| Lights | Six point lights and a sky light, with the level's ambient light turned down so the rooms read as lit by their fixtures |
+| `LabDoor` | A `BP_LabDoor` Visual Script actor with an Interactable. Its `OnInteract` graph slides the door up out of its frame and back down |
+| `CarryCrate`, `SupplyPickup` | Dynamic bodies. The crate is carried, thrown and placed; the supply case adds `Content/Items/Crate.item` to the inventory bar |
+| HUD | `HUD.ui` (crosshair, interaction prompt) and `InventoryHUD.ui` |
+
+The Shooter map adds `PistolCase`, an `AWeaponActor` whose `weaponPath` is `Content/Shooter/Weapons/Pistol.weapon`, `AmmoCase`, an `AAmmoPickupActor`, and four `ATargetDummyActor` barrels. The pistol is a hitscan weapon of the Combat plugin; see [Weapons and melee](/docs/gameplay/weapons-and-melee/). `Config/Plugins.ini` enables the Combat plugin in both variants because the interaction system lives there.
+
+## Make it yours
+
+- Open the map, select the `LabDoor` actor and move it; then edit the two `SetActorLocation` positions in `BP_LabDoor` to match its closed and open places.
+- Dress more rooms from the pieces in `Content/Level/Meshes`. The walls sit on the west edge of a four-metre cell, so rotate them about the cell centre to close the other three sides.
+- Change the body: set `meshAsset` and `animGraph` on `BP_FirstPersonPlayer`, and `hiddenBone` to the bone the camera should not see.
+- Every asset is CC0. `ASSET_LICENSES.md` in the template lists the authors and sources.
+
+## Related
+
+- [Templates](/docs/getting-started/templates/)
+- [Weapons and melee](/docs/gameplay/weapons-and-melee/)
+- [Animation](/docs/gameplay/animation/)

@@ -16,7 +16,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/ACharacter.h
   - Engine/Source/Runtime/Game/Public/Game/FeetAnchoredBody.h
   - Engine/Source/Runtime/Game/Public/Water/CharacterWaterSystem.h
-verifiedAt: f8a3a28e3
+verifiedAt: 5557d921c
 ---
 
 Characters do not use rigid bodies. A character controller moves a capsule with its own collision checks, and a movement component turns input into velocity through a set of movement modes. `ACharacter` wires both up for you; this page explains what they do and how to tune them.
@@ -90,6 +90,20 @@ On an actor, `MCharacterMovementComponent` is the interface to all of this. `ACh
 | `IsGrounded()`, `GetVelocity()`, `GetMovementModeName()` | Read state |
 
 The same functions are Visual Scripting nodes.
+
+## Character presentation
+
+An `ACharacter` can show itself with no game module. Set **Mesh Asset** (a skinned model) and the character builds its body when play begins; set **Anim Graph** (an `.animgraph`) and the body is driven by it; set **Footstep Cue Folder** and the pawn plays a footstep cue per surface (see [Footsteps](/docs/gameplay/audio/)). Left empty, a character stays the invisible capsule it always was, so existing characters are unchanged. <Source symbol="ACharacter::meshAsset" />
+
+| Property | Meaning |
+| --- | --- |
+| `meshAsset` | The skinned model for the body |
+| `animGraph` | The graph that animates it |
+| `meshOffset`, `meshYawDegrees` | Where the body sits against the capsule root and how it is turned (180 degrees by default: imported characters face +Z, the pawn faces -Z) |
+| `footstepCueFolder` | A folder of `.cuegraph` files, one per surface, `Default.cuegraph` as the fallback |
+| `driveLocomotion` | Turn the automatic parameters off to feed the graph yourself |
+
+While `driveLocomotion` is on, the character writes these parameters into the graph every frame: `Speed` (horizontal metres per second), `Airborne`, `Crouched`, `Sprinting` and `AimPitch` (degrees; the Third Person and First Person pawns write their camera pitch). The triggers `Jump`, `Interact`, `Fire` and `Reload` fire when the actions of those names start, and `TriggerAnimation` fires any trigger from code or Visual Scripting. A parameter your graph does not define is ignored.
 
 ## Root motion
 

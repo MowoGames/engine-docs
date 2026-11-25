@@ -10,7 +10,7 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/TSubclassOf.h
   - Engine/Source/Runtime/Core/Public/Core/ClassRefUtils.h
   - Engine/Source/Runtime/Game/Public/Gameplay/GameplayDelegates.h
-verifiedAt: 38224a3a8
+verifiedAt: 55f27937c
 ---
 
 Reflection is what lets a C++ field save into a level, show in the Details panel, keep its target alive in the garbage collector and replicate, and what lets a function be called by name from Visual Scripting. You opt in with macros in your headers. At build time **MowoHeaderTool** (MHT) reads them and generates the descriptor tables and glue code.
@@ -101,13 +101,13 @@ An unknown specifier is a build error that lists the known ones.
 | `AssetRef`, `AssetType=` | A `std::string` that holds an asset path, saved as a typed asset reference |
 | `Key=`, `DisplayName=`, `Tooltip=`, `Range=`, `ClampMin=`, `ClampMax=`, `Step=`, `Units=`, `Color`, `LayerMask`, `EditCondition=`, `Hidden`, `ReadOnly`, `RuntimeOnly`, `Custom=`, `Nested=` | The same meanings as the field markers below |
 | `MetaClass=Name` | On an `MClass*` field: the class a picked value must derive from. A `TSubclassOf<Name>` field already says so in its type |
-| `meta=(...)` | Anything else, carried into the module's JSON export |
+| `meta=(...)` | Anything else, carried into the module's JSON export and, in an editor build, into the property's descriptor (`FMPropertyInfo::FindMeta`) |
 
 
 
 ### Function specifiers
 
-`MFUNCTION` reflects a public method's name, return type and parameters. `MFUNCTION(Server)`, `(Client)` and `(Multicast)` make it an RPC; `Reliable` or `Unreliable` picks the channel. Naming two directions is a build error, and so is an `MFUNCTION` that is not public. `Category=`, `DisplayName=`, `Tooltip=` and `Description=` describe the node Visual Scripting shows.
+`MFUNCTION` reflects a public method's name, return type and parameters. `MFUNCTION(Server)`, `(Client)` and `(Multicast)` make it an RPC; `Reliable` or `Unreliable` picks the channel. Naming two directions is a build error, and so is an `MFUNCTION` that is not public. `Category=`, `DisplayName=`, `Tooltip=` and `Description=` describe the node Visual Scripting shows. `meta=(Key=Value)` on a function (and on an `MENUM`) is readable at run time in an editor build with `FMFunctionInfo::FindMeta` (and `EnumDescriptor::FindMeta`); a player build carries none of it.
 
 Write `MOWO_TOOLTIP("...")` before `MFUNCTION` (or `MFUNCTION(Tooltip="...")`) to describe what a call does; the Visual Scripting node shows it on hover. Every `MFUNCTION` is exposed to [Visual Scripting](/docs/visual-scripting/) automatically.
 
@@ -230,6 +230,8 @@ MHT runs inside the build tool, between reading the rules and compiling, for eve
 | `<Module>.reflection.json` | The module's markup: types, properties, functions, enums, delegates, metadata |
 
 The output folder, `Reflection/` under the module's generated directory, is a public include path of the module. Generated sources include `stdafx.h`, so every scanned module needs one in its `Private/` folder or on its forced includes (the game-module scaffold handles this). A pass with an error writes nothing, and an unchanged output keeps its timestamp.
+
+Errors print as a compiler would: `Door.h(12,5): error: MHT0001: reflected header must #include "Door.generated.h" as its last #include`, path first, with the column when the error sits on a token. Warnings read `warning: MHT0002: ...`. An IDE or the editor's Message Log opens the file at that line from this text.
 
 <Callout type="warning">
 A reflected component in a module without `bUseHeaderTool = true` gets no descriptor: it does not appear in the editor and does not save. New modules that declare reflected types must opt in.

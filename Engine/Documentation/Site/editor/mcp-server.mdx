@@ -5,7 +5,7 @@ description: Let an AI agent such as Claude Code drive the editor over the Model
 order: 24
 sources:
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/McpServer.h
-verifiedAt: c1d08db53
+verifiedAt: 44fa313b4
 ---
 
 The editor serves its own tools over the **Model Context Protocol** (MCP), so an AI agent such as Claude Code, or any MCP client, can work in the editor the way a person does: open and save levels, place and edit actors, read and write Visual Scripting graphs, start and stop Play, take screenshots and run tests. Every tool goes through an operation the editor already has, so an agent's edit is undoable and validated like a click.
@@ -16,14 +16,21 @@ The editor serves its own tools over the **Model Context Protocol** (MCP), so an
 | --- | --- | --- |
 | HTTP | **Editor Preferences ▸ AI agents ▸ Enable MCP server** (port 52801 by default; 0 picks a free port), or `--mcp-port=<n>` on the command line | Attaching to an editor that is already open |
 | stdio | `MowoEditor.exe --mcp-stdio --project <Project>.mproject` | A client that launches the editor itself |
+| Headless | `MowoEditor.exe --headless --mcp-stdio --project <Project>.mproject` | CI and machines with nobody at the screen; see [Agent surface](/docs/editor/mcp-agent-surface/#headless-editor) |
 
 With stdio, the editor reads one JSON-RPC message per line on standard input, answers on standard output, logs to standard error, and closes when the client closes its input.
 
-Each HTTP session gets a new bearer token. The editor writes the port, token and access level to `Saved/Config/Editor/McpServer.json` (per user, never committed; `--mcp-endpoint-file=<path>` picks another file). The status bar's **AI agents** popover shows the endpoint and token and copies the command that attaches Claude Code:
+When the transports are up the editor prints one stable line to standard error, `MOWO-MCP-READY transport=<stdio|http> pid=<n>` (HTTP adds `port=<n> endpoint=<file>`); a launcher that spawns the editor waits for it before sending `initialize`. With HTTP, `--mcp-print-endpoint` also prints the endpoint JSON (URL, port, token, pid) to standard output on one line, so a script needs no file. Several editors can run side by side, each on its own project copy: if the requested port is busy the editor takes a free one instead, logs the port it chose and writes it to the endpoint file, and a file left by an editor that crashed (its `pid` is no longer running) is removed when the next one starts. Give each editor its own `--mcp-endpoint-file=<path>`, or use stdio, which opens no port at all.
+
+Two tokens guard the HTTP transport. The **endpoint token** is new on every enable or rotate and is written, with the port and access level, to `Saved/Config/Editor/McpServer.json` (per user, never committed; `--mcp-endpoint-file=<path>` picks another file). The file is created readable by the current user only (owner permissions on POSIX, an `icacls` rewrite to the current user on Windows). It authorises `initialize` and nothing else. The `initialize` reply carries a **session token** in the `Mcp-Session-Id` header; every later request must send it back next to the bearer header, which the MCP client libraries do by themselves. The session token is never written to disk or the log; a session ends on an HTTP `DELETE` with its header, after an idle hour, when you rotate the token or stop the listener, and the oldest of more than 16 sessions is dropped. A request with no session id answers 400 and an unknown or ended one 404, so a client initializes again. The endpoint token is still a long-lived secret for as long as the listener runs: anything that can read the file as you can open its own session, so keep the file private. The status bar's **AI agents** popover shows the endpoint and token and copies the command that attaches Claude Code:
 
 ```bash
 claude mcp add --transport http mowo-editor http://127.0.0.1:52801/mcp --header "Authorization: Bearer <token>"
 ```
+
+### A client that cannot send the session header
+
+Sessions are required by default and that is the safe setting. If your MCP client cannot send `Mcp-Session-Id` back, set the console variable `editor.mcp.RequireSession` to 0 (`Saved/Config/Editor` or the editor console; the `set_cvar` tool refuses it, so an agent cannot change it itself). The bearer token still applies to every request. A request without a session header is then accepted, but it runs as a **read-only** request: `tools/list` offers the Read tools and a call to an Edit or Full tool returns the `session_required` error, whatever access level Editor Preferences allows. A client that does send its session header keeps the full allowed level, a header naming an unknown or ended session is still a 404, and turning the variable back on makes the header mandatory again.
 
 <Screenshot id="editor-mcp-popover" alt="The AI agents popover opened from the status bar: state Connected, the endpoint http://127.0.0.1:52801/mcp and the masked token with copy buttons, one client row naming the client with its transport, tool call count and last-heard time, and the Stop button." />
 
@@ -45,11 +52,76 @@ Each tool has an access level. A tool above the allowed level is left out of the
 
 | Access | Tools |
 | --- | --- |
-| Read | `editor_status`, `list_actors`, `get_property`, `select_actor`, `camera_set`, `screenshot`, `open_asset`, `visual_script_read`, `visual_script_nodes`, `multiuser_status` |
-| Edit | `open_level`, `new_level`, `save_level`, `spawn_actor`, `set_property`, `set_cvar`, `import_asset`, `pie_start`, `pie_stop` |
-| Full | `delete_actor`, `console`, `run_script`, `run_tests`, `visual_script_write`, `editor_quit` |
+| Read | `editor_status`, `list_actors`, `find_actors`, `get_property`, `list_properties`, `list_component_types`, `read_log`, `undo_history`, `get_selection`, `select_actor`, `camera_set`, `screenshot`, `open_asset`, `visual_script_read`, `visual_script_nodes`, `multiuser_status`, `compile_status` |
+| Edit | `open_level`, `new_level`, `save_level`, `spawn_actor`, `set_property`, `undo`, `redo`, `set_cvar`, `import_asset`, `pie_start`, `pie_stop` |
+| Full | `delete_actor`, `console`, `run_script`, `run_tests`, `compile_game_module`, `visual_script_write`, `editor_quit` |
 
-`run_script` runs an [editor script](/docs/editor/automation/). `visual_script_write` needs Full access because a Visual Scripting graph calls reflected functions and runs at the next Play: writing one is writing code.
+`run_script` runs an [editor script](/docs/editor/automation/): `script` is one string (lines split on newline, CRLF or a lone CR; when a client cannot send real newlines the two characters backslash and `n` are accepted instead) or an array of lines, and `lines` is the same array under another name. A `#` starts a comment only outside quotes. `visual_script_write` needs Full access because a Visual Scripting graph calls reflected functions and runs at the next Play: writing one is writing code. `compile_game_module` needs it for the same reason: it builds the project's C++ and loads the result into the editor.
+
+### Properties by path
+
+`get_property` and `set_property` take one path grammar for everything the editor can inspect:
+
+| Path | Reaches |
+| --- | --- |
+| `Light.intensity`, `Transform.position`, `Transform.position.x` | A field of a component on `actor` (display or C++ type name, any case; `.x .y .z .w` or `.r .g .b .a` pick a vector part) |
+| `MeshRenderer.material_path`, `MeshRenderer.material_slots[1]` | Array elements and nested struct fields by `[index]` and `.field`; setting past the end grows an array (up to 4096) |
+| `Environment.sky_background`, `Environment.fog_density` | The level's Environment block, by its serialized key; no `actor` needed |
+| `Environment.PostProcess.auto_exposure_min_ev100`, `PostProcess.bloom_intensity` | The level's post-process block |
+| `Environment.Navigation.cell_size` | The level's navigation bake settings |
+
+Vectors take `"x,y,z"` or `[x,y,z]`, enums a name or a number, and a struct or array a JSON value. Every set is one undo step. A component the actor lacks is an error that lists the components it has; pass `"add_component": true` to add it first. A path that does not exist answers with the closest valid paths. `list_properties` answers every settable path with its type, range, enum values, units and current value (for `target` `environment`, `postprocess`, `navigation`, a component type, or all components of `actor`), and `list_component_types` lists the component types, marking those `actor` carries.
+
+### New levels and placing meshes
+
+`new_level` opens an unsaved level. Its `template` says what the level starts with: `outdoor` (the default and what File > New builds: a sun, sky light, sky atmosphere, clouds, height fog, a post process volume, a floor and a player start), `blank` (a floor and a player start, no sky or lights, for an interior a sun and a sky light would flood) or `empty` (no actors at all).
+
+A static mesh actor draws nothing until `MeshRenderer.mesh_type` (a primitive such as `cube`) or `MeshRenderer.model_path` is set. A mesh placed this way gets the collider its shape asks for. `spawn_actor` with `collide` false, or `MeshRenderer.auto_collider` set to false, keeps a decorative mesh (a door frame, trim) from getting one and removes a collider the editor fitted; a collider you shaped yourself is never touched.
+
+### Errors
+
+A failed tool call has `isError: true` and, for the tools that know why, a JSON body `{"error": {"code", "message", "hint"}}`: branch on `code` (`access_denied`, `session_required`, `missing_argument`, `no_actor`, `unknown_property`, `component_missing`, `bad_value`, `index_out_of_range`, `path_refused`, `import_failed`, `script_parse`, and so on) and act on `hint`.
+
+### Importing assets
+
+`import_asset` copies `source` into the project folder `folder` (project-relative, created when missing, `Content` by default) and imports it there. `source` may be a path inside the project, or an absolute path under the project, the user's Downloads folder or the temp folder, at Edit access; any other absolute path needs Full access, and executables, scripts and project files are refused. It answers `{"path", "id", "folder"}`: the final project-relative path and the asset id of the imported file.
+
+### Log, selection and history
+
+`read_log` tails the editor log (`level`, `category`, `pattern` filters; the `cursor` it returns goes back as `since` for only the new lines), `get_selection` lists the selected actors and assets, `undo_history` lists the open level's transactions, and `undo` / `redo` step through them like Ctrl+Z.
+
+### Reading the level
+
+`list_actors` returns one object per actor. Every version carries `id` and `name`; `filter` keeps names containing the text. Version 2, the default, adds what a tool needs to find its way around a level without a screenshot:
+
+| Field | Value |
+| --- | --- |
+| `class` | The actor's class name, empty for an entity that has no actor |
+| `bases` | Its base classes, nearest first |
+| `position` | World position `[x, y, z]`, as of the last frame |
+| `localPosition` | Position relative to the parent |
+| `parent`, `parentId` | The parent actor's name and id, `null` for a root |
+| `tag` | The actor's tag |
+| `transient` | `true` for an actor the level does not save (generated content) |
+| `visible` | `false` when the actor is hidden in the editor |
+| `active` | `false` when the actor is switched off |
+
+Pass `"version": 1` to get exactly `id` and `name`.
+
+`find_actors` filters in the same shape and keeps an actor only if it matches every filter given: `class` (the actor's class or any base class, such as `AActor`), `name` (a substring), `tag`, `parent` (the parent's name), `transient` and `visible`.
+
+### Compiling and hot reloading
+
+`compile_game_module` is the **Compile Game Module** menu command for a tool. It builds every game module of the project and hot-swaps the result into the editor, and answers when every build has ended:
+
+```json
+{ "serial": 3, "finished": true, "cancelled": false, "swapPending": false,
+  "modules": [ { "module": "Mowocraft", "built": true, "swapped": true, "detail": "" } ] }
+```
+
+A module that failed to build has `built: false` and the compiler's first error in `detail`. A module that built but could not be swapped has `built: true`, `swapped: false` and the load failure in `detail`. While Play in Editor runs, the swap waits for Play to stop (the running actors are using the old code): the call returns with `swapPending: true` and `swapped: false`, and that is a success. The reply is an error when a module did not build or did not swap, when the compile was cancelled, and when it could not start: no project open, no module under `Source/`, or another compile running.
+
+Pass `"wait": false` to return at once with `{ "started": true, "serial": n }`. `compile_status` (Read) then reports the compile in flight, `busy`, the module building now, `compiledFiles` of `totalFiles` and `elapsedSeconds`, plus the result of the last compile in the same shape.
 
 Tools run on the editor's main thread between frames. A tool that needs frames, such as starting Play or taking a screenshot after a change, answers later on the same connection without blocking the editor.
 
@@ -57,20 +129,20 @@ Tools run on the editor's main thread between frames. A tool that needs frames, 
 
 A tool that saves files and runs builds can execute code, so the server is locked down:
 
-- Every HTTP request must carry the session's bearer token. A request from a browser page (a foreign `Origin`) is refused even with the token.
+- Every HTTP request must carry the endpoint token, and every request after `initialize` the session token too (unless `editor.mcp.RequireSession` is 0, which leaves a sessionless request with Read tools only). The endpoint file is readable by the current user only. A request from a browser page (a foreign `Origin`) is refused even with the tokens.
 - Every path a tool takes must resolve inside the project, after following links. Network share paths are refused.
 - Each tool writes only its own file type: `screenshot` a `.png`, `save_level` a `.mmap`, `visual_script_write` a `.vscript`.
-- `import_asset` from outside the project needs Full access.
+- `import_asset` reads only from the project, Downloads and the temp folder below Full access, and never an executable or script.
 - `set_cvar` refuses security settings (such as `editor.mcp.*`, `net.encrypt`, `net.psk`) and anything the console itself may not set.
 - `run_tests` and the script `run` command start `mbt` without a shell, and the test filter accepts a test name only.
 
 ## Protocol
 
-MCP 2025-06-18 over JSON-RPC 2.0: `initialize`, `ping`, `tools/list` and `tools/call`. The HTTP transport answers `POST /mcp` with `application/json`; batches are refused.
+MCP 2025-06-18 over JSON-RPC 2.0: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `resources/templates/list`, `prompts/list` and `prompts/get`. Tools that declare an `outputSchema` also return `structuredContent`. The tools that create and edit assets, materials, graphs, settings and data are on [Authoring through MCP](/docs/editor/mcp-authoring/); the tools that teach the surface, drive the UI and play the game, and the headless mode, are on [Agent surface](/docs/editor/mcp-agent-surface/). The HTTP transport answers `POST /mcp` with `application/json` and `DELETE /mcp` ends a session; batches are refused.
 
 ## Adding your own tools
 
-An editor plugin can register tools in <Source symbol="FMcpToolRegistry" />. A tool has a name, a description, an input schema, an access level (Full when not set) and a handler that returns an <Source symbol="FMcpToolResult" />. Arguments, schemas and results are <Source symbol="FMcpJson" /> values: `Value(key, fallback)` reads an argument and falls back when it is missing or of another type, `Get(key)` reaches a nested object, and `Parse` / `Dump` convert to and from JSON text, so a plugin needs no JSON library of its own. Return `FMcpToolResult::Wait()` to be called again next frame. Unregister the tool when your module shuts down. See [Plugins and extensions](/docs/editor/plugins/).
+An editor plugin can register tools in <Source symbol="FMcpToolRegistry" />. A tool has a name, a description, an input schema, an access level (Full when not set) and a handler that returns an <Source symbol="FMcpToolResult" />. Arguments, schemas and results are <Source symbol="FMcpJson" /> values: `Value(key, fallback)` reads an argument and falls back when it is missing or of another type, `Get(key)` reaches a nested object, and `Parse` / `Dump` convert to and from JSON text, so a plugin needs no JSON library of its own. Return `FMcpToolResult::Wait()` to be called again next frame. Unregister the tool when your module shuts down. `FMcpToolResult::Failure(code, message, hint)` returns the structured error described above. See [Plugins and extensions](/docs/editor/plugins/).
 
 ```cpp title="MyPluginMcpTools.cpp"
 #include <EditorFramework/McpServer.h>

@@ -1,0 +1,72 @@
+---
+title: Resident AI
+description: A creature that finds players by what it hears, with a decaying belief, four behavior stages, a room-aware search and a scan reaction, all tuned in one asset.
+order: 36
+sources:
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/ResidentComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/ResidentProfile.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/ResidentSystem.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/MResidentStatics.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AResidentEventRelay.h
+verifiedAt: 2e15740a6
+---
+
+A Resident is an enemy that never needs to see you. It hears footsteps, voices, gunshots and LiDAR scan pulses, works out where they probably came from, and walks there. It suits horror games where players scan a dark level and the thing in the dark answers the scanning.
+
+Add a `Resident` component to any entity that also has a `NavAgent`. A skeletal mesh and its animator follow the agent's movement exactly as for any other character; the component only decides where the agent goes and how fast. <Source symbol="ResidentComponent" />
+
+| Field | Effect |
+| --- | --- |
+| `profile` | The Resident Profile asset (`.resident`); empty uses the defaults |
+| `seed` | 0 derives the random stream from the session seed and the entity, so equal sessions replay the same search |
+| `debug_draw` | Draws the stage, belief and search points in the editor viewport under the Perception debug layer |
+
+## How it perceives
+
+Hearing needs no line of sight. A noise, voice or scan pulse reaches a Resident when it lies within its reach after the level's room and portal graph has taken its share: a closed door or a wall muffles a sound the same way it muffles the player's own audio. Reach is the profile's `HearingRadius` scaled by the stimulus strength, or the radius the emitter names (a scanner's range).
+
+How well a stimulus was heard, from 0 to 1, does two things. It raises the Resident's alertness by that amount times a gain per kind (sound, scan, damage). It also sets the **belief**: where the Resident now thinks the crew is. A barely heard noise gives a belief that may be several metres off; a close one is exact. A louder, more certain stimulus replaces a weaker belief; a weaker one only raises alertness.
+
+A Resident also runs every sense registered with `FAISenseRegistry`, so it follows a **scent trail**: a crew member whose `Perceivable` has a `scentStrength` leaves trail points that fade, and a Resident within the profile's `SmellRadius` (0 uses the sense's own 8 m) takes the freshest one as its belief, raises its alertness by `SmellAlertGain` per second times how strong it is, and so follows the trail toward where the crew went. Scent needs no line of sight and is not muffled by walls.
+
+The belief loses confidence with a half-life (`ConfidenceHalfLife`) and its uncertainty radius grows while nothing is heard. Below `LostConfidence` the Resident gives the target up.
+
+## Stages
+
+| Stage | Behavior |
+| --- | --- |
+| 0 Dormant | Stands still |
+| 1 Curious | Walks to the belief, then waits |
+| 2 Searching | Walks to the belief, then visits search points around it |
+| 3 Hunting | As Searching, but faster |
+
+The stage follows alertness, which decays over time. Each stage has a threshold, and a stage is left only when alertness falls `StageHysteresis` below it, so the Resident does not flicker at an edge. The Attention meter raises a floor: `AttentionFloor` gives the lowest Resident stage for each Attention stage 0 to 4, so a Substrate that has noticed the scanning wakes a Resident that heard nothing itself.
+
+Search points are sampled around the belief within its uncertainty radius, and a point is kept only when sound could still travel to it from the belief through the room graph. A Resident therefore searches the room the crew vanished in and the rooms open to it, not the one behind a sealed wall. When a navigation mesh is baked, points are projected onto it. Each point is visited with a `SearchDwellSeconds` pause.
+
+## Decision history
+
+Each stage change and each stimulus the Resident acts on, with where and how strongly, is published to the AI decision history, so `ai.DumpDecisions` shows why a Resident went from Curious to Hunting. See [AI](/docs/gameplay/ai/#decision-history).
+
+## Scan reaction
+
+A scan pulse that strikes a Resident uses the response row the profile names: `Return`, `Absorb`, `Displace`, `Delay`, `Jitter`, `Penetrate` or `Reflect` (the pulse bounces off the creature and the point comes back as the ghost of whatever the bounce met), with its displacement, jitter radius and delay. A creature can eat a scan, smear it or throw a false wall. A real scan reaches it: the scan service reports each applied shot's hit points, and every Resident standing where a ray landed reacts once, with the alarm scaled by how close it stood against the shot's range (a hit at the edge of the beam is faint, one at the scanner's feet is a scream). `ReactToScan` alarms the Resident toward the scanner and returns that response, and `InstallScanResponse` files it as an instance rule in the scan response table, so the scan service resolves it with every other rule. <Source symbol="ResidentComponent" />
+
+## The profile asset
+
+Create a Resident Profile (`.resident`) in the Content Browser, or write one in MDF. Every number above is in it: stage thresholds and speeds, hysteresis, hearing radius and gains, hearing error, smell radius and gain, belief half-life, uncertainty growth, search point count, radius, dwell and room gain floor, the Attention floor per stage, and the scan reaction. A file written by a newer engine is refused rather than half read.
+
+## Networking and determinism
+
+Only the host (or an offline game) simulates Residents. It steps them at a fixed 10 Hz so the result does not depend on the frame rate, and it sends each Resident's stage, alertness and belief to clients at 4 Hz; clients only show what they receive. A Resident with a network id is matched on the client by that id, so a creature never lands on a different local entity; clients also fire the stage, heard and lost events as the state arrives. Every random choice, the error in a heard position and the search points, comes from a stream seeded from the session seed, never from global state, so equal seeds and equal stimuli give equal behavior.
+
+## Visual Scripting
+
+`MResidentStatics` exposes the state: `GetResidentStage`, `GetResidentAlertness`, `HasResidentBelief`, `GetResidentBeliefPosition`, `GetResidentBeliefConfidence` and `RaiseResidentAlertness`. A graph reacts to events by polling `GetResidentEventSerial` each tick. When it changes, `GetResidentLastEventKind` tells what happened (1 stage changed, 2 heard something, 3 lost the target) and `GetResidentLastEventResident` which Resident. To bind instead of poll, place a `ResidentEventRelay` actor in the level: its `OnStageChanged`, `OnStimulusHeard` and `OnTargetLost` delegates can be bound or assigned from any graph, and carry the Resident, the stages or stimulus type, the position and how well it was heard. C++ code binds the system's delegates of the same names. <Source symbol="MResidentStatics" />
+
+## Related
+
+- [AI](/docs/gameplay/ai/)
+- [Navigation](/docs/gameplay/navigation/)
+- [Acoustics](/docs/gameplay/acoustics/)
+- [LiDAR scanning and point clouds](/docs/gameplay/lidar-and-point-clouds/) for the attention meter

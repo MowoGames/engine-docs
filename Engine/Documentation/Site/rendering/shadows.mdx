@@ -8,7 +8,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ShadowTileCache.h
   - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/LightComponent.h
   - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/MeshRendererComponent.h
-verifiedAt: 02a961ac2
+verifiedAt: 2a856b11f
 ---
 
 Mowo layers several shadow techniques. Every tier has cascaded shadow maps for the sun and an atlas for local lights. Higher tiers add soft penumbrae, virtual shadow maps, stochastic shadows for many lights and ray-traced sun shadows. Each layer falls back to the one below it where it cannot answer.
@@ -17,7 +17,7 @@ Mowo layers several shadow techniques. Every tier has cascaded shadow maps for t
 
 | Technique | Lights | Low | Medium | High | Epic | Cinematic |
 |---|---|---|---|---|---|---|
-| Cascaded shadow maps | Sun | 2 cascades, 1024 | 3 cascades, 2048 | 4 cascades, 2048 | 4 cascades, 4096 | 4 cascades, 4096 |
+| Cascaded shadow maps | Sun | 2 cascades, 1024 | 3 cascades, 2048 | 4 cascades, 2048 | 4 cascades, 2048 | 4 cascades, 2048 |
 | Local shadows | Spot, point, rect | Atlas, 16 views | Atlas, 32 views | Atlas, 48 views | Virtual pages, 128 views | Virtual pages, 128 views |
 | Soft shadows (PCSS) | All shadowed lights | — | — | on | on | on |
 | SDF far sun shadows | Sun, past the cascade range | — | on | on | on | on |
@@ -33,7 +33,7 @@ The main settings are on **Project Settings > Engine > Shadows**, and the player
 
 ## Sun: cascaded shadow maps
 
-The sun renders into a 2×2 atlas of cascades, one tile per cascade. The cascade range is `r.Shadow.MaxDistance` (default 150 world units); a scene's World Settings shadow distance overrides it when set. The shadow fades out over the last 15% of the range instead of cutting off.
+The sun (more exactly, the brightest directional light above the horizon; see [Lights](/docs/rendering/lights/#several-directional-lights)) renders into a 2×2 atlas of cascades, one tile per cascade. At Epic and Cinematic the virtual shadow map serves the meshes and the cascades are its fallback and the terrain and foliage authority, so their tiles are 2048 like High's (an 8192 square atlas of 256 MiB became 4096 square and 64 MiB; raise `r.Shadow.Resolution` if terrain shadows need more). The cascade range is `r.Shadow.MaxDistance` (default 150 world units); a scene's World Settings shadow distance overrides it when set. The shadow fades out over the last 15% of the range instead of cutting off.
 
 Each cascade is fitted to a bounding sphere and snapped to whole texels, so shadow edges do not crawl as the camera moves (`r.Shadow.StableFit`, default 1). Static casters are cached per cascade and redrawn only when the cascade moves or a static caster in it changes (`r.Shadow.CsmStaticCache`, default 1); each frame then draws only skinned and moving casters on top.
 
@@ -43,16 +43,27 @@ Each cascade is fitted to a bounding sphere and snapped to whole texels, so shad
 | `r.Shadow.Cascades` | tier | Cascades rendered, 1 to 4 |
 | `r.Shadow.MaxDistance` | 150 | Sun shadow range in world units |
 | `r.Shadow.CsmStaticCache` | 1 | Cache static casters per cascade |
+| `r.Shadow.CascadeDither` | 1 | With a temporal resolve (TAA or an upscaler), the 15% transition band picks one of the two cascades per pixel by noise instead of evaluating both and blending: half the filter taps for the same averaged result. 0 always blends |
+
+The soft penumbra is clamped to the same width in world space in every cascade, so it no longer steps at a cascade seam.
 
 ## Local lights
 
-Spot, point and rect lights that cast shadows compete for a shared budget each frame. Every light is scored by its projected size and brightness, and the most important light gets the most resolution. A point light uses six views, one per cube face. The tier caps how many views a frame may render (`r.Shadow.MaxLocalViews`). A light that misses the budget is handed to MegaLights where it is on, gets a cheap screen-space shadow below Epic (`r.MegaLights.CheapMode`), or otherwise shades unshadowed.
+Spot, point and rect lights that cast shadows compete for a shared budget each frame. Every light is scored by its projected size and brightness; the score decides who wins when the budget is short. A point light uses six views, one per cube face, and so does a Rect light: it lights a full hemisphere (both sides when two-sided), so one frustum along its axis would leave everything past a wide angle unshadowed. Every extended material lobe (clear coat, anisotropy, substrate, hair, subsurface, cloth, foliage transmission, eye) takes the same shadow, IES and cookie as the base lobe; on Direct3D 11 those lobes are still unshadowed from local lights, because the shader compiler there cannot build the shadowed path in a reasonable time. The tier caps how many views a frame may render (`r.Shadow.MaxLocalViews`). A light that misses the budget is handed to MegaLights where it is on, gets a cheap screen-space shadow below Epic (`r.MegaLights.CheapMode`), or otherwise shades unshadowed.
 
 Hand-overs between lights fade over a few frames, and a light that lost its slot waits before competing again, so lights at the budget boundary do not flicker.
 
 ### Up to High: the atlas
 
-Below Epic, local shadows render into tiles of one atlas, between `r.Shadow.LocalMinTile` and `r.Shadow.LocalTileSize` pixels. Tiles whose light and casters did not change are not redrawn (`r.Shadow.LocalCache`, default 1), so a static scene redraws no tiles after the first frame.
+Below Epic, local shadows render into tiles of one atlas, between `r.Shadow.LocalMinTile` and `r.Shadow.LocalTileSize` pixels. A tile's size follows its light's size on screen: `r.Shadow.LocalTexelsPerPixel` (default 1) shadow texels per pixel of the lit sphere, rounded to a power of two inside the tier's limits. Only when the atlas overflows do the least important tiles halve first. Set it to 0 for the older sizing relative to the top-ranked light.
+
+A light keeps its tiles from frame to frame: another light entering, leaving or changing size no longer moves them, and the allocator repacks only when a tile cannot be placed around the ones that stay. Tiles whose light and casters did not change are not redrawn (`r.Shadow.LocalCache`, default 1), so a static scene redraws no tiles after the first frame. The cache is keyed by the light (its entity, so adding or removing another light never renumbers it) and cube face, and a skinned character only dirties the tiles its posed bounds reach, so an animated character on the other side of the level costs the atlas nothing.
+
+When a skinned or dynamic-body caster is in the scene, the atlas also gets a second layer (`r.Shadow.LocalAtlas.TwoLayer`, default 1): a static-depth atlas of the same size, allocated only then. A tile under a moving character restores its kept static depth and redraws just the moving casters instead of every caster in the tile. The layer stays for `r.Shadow.LocalAtlas.TwoLayerHoldFrames` (180) frames after the last dynamic caster leaves, so a character stepping in and out does not rebuild the atlas each time.
+
+### Bias
+
+Local lights bias like the sun. The receiver is pushed off its surface along the normal by the shadow texel size at its depth, more on grazing surfaces, and every filter tap is biased by the receiver plane's rise over its offset, in linear depth. **Shadow Bias Scale** scales that model (1 is the default); it is no longer an offset in projected depth, so values tuned for the old behaviour may want a second look.
 
 ### Epic and up: virtual pages
 
@@ -106,6 +117,10 @@ GPU foliage and terrain are not drawn into virtual pages, so their shadows come 
 
 `r.VSM` forces the layer on (`1`) or off (`0`) at any tier; `-1` follows the tier.
 
+Static meshes with an import-built cluster hierarchy can render into the virtual map through the mesh-shading caster (`r.Meshlet.VsmCasters`, off by default). Each clipmap level cuts the hierarchy at its own texel density and culls clusters against the page it draws, so a distant level carries coarser casters than the near one. Masked, double-sided, skinned and instanced casters keep the classic draw. The switch is off until frame-time measurements show it paying for itself; the shadow it casts matches the classic caster's.
+
+The clipmap adds `r.VSM.Clipmap.ExtraLevels` (default 1) levels past the one that covers `r.Shadow.MaxDistance`, so meshes keep casting shadows beyond the cascades. The coarsest `r.VSM.CoarseLevels` levels (default 2) keep a block of `r.VSM.CoarseBlockPages` pages (default 12) around the camera mapped even where no opaque pixel needs them, so volumetric fog and translucent surfaces in the open air get the virtual map's shadows instead of the mesh-less cascades. Beyond that block the cascades still answer.
+
 ## SDF far shadows
 
 Past the cascade range, the sun does not fall back to fully lit from Medium up. It cone-traces the distance field toward the sun, using the light's Source Angle as the cone (`r.Shadow.SdfFar`, `r.Shadow.SdfFarSteps`). The distance field is centred on the camera and covers a limited range, so this helps most in dense interiors and scenes with a short shadow distance.
@@ -151,6 +166,28 @@ Raymarched clouds (Epic and up; lower tiers draw a 2.5D cloud plane) build a sun
 The mesh's **Cast Shadows** toggle decides whether it casts in every shadow system. Alpha-masked cutouts cast through their mask. Alpha-blended meshes with Cast Shadows on cast a partial, dithered shadow in proportion to their opacity (`r.Shadow.Translucent`, default 1). A mesh with **Receive Shadows** off skips every shadow term on its pixels.
 
 Translucent surfaces and water receive the same shadows as opaque ones: the sun's cascades with soft shadows, the virtual shadow map where it covers them, SDF far shadows, cloud shadows, and the local shadow of every point, spot and Rect light. MegaLights shades opaque pixels only, so a light it manages shadows a translucent surface with a short screen-space ray (up to 4 m) instead.
+
+### Skinned casters and the skin cache
+
+By default a skinned caster blends the bone palette in the vertex shader of every pass that draws it: once per cascade, once per local-light cube face. `r.SkinCache 1` skins each animated mesh once into a per-pose vertex buffer with a compute pre-skin instead. The cascades and the local-light atlas then draw that buffer through the same pipelines static meshes use, and the skinned meshlet path reads the same buffer, so one creature costs one skinning pass however many shadow views it appears in. A pose that did not change is not skinned again. The cache is off by default (the previous behaviour) until frame-time measurements say it pays for itself on your target.
+
+Casters whose material has its own shadow graph (an alpha-masked or displaced graph), the virtual shadow map, velocity, selection and decal passes keep skinning for themselves.
+
+## Contact shadows
+
+The sun's contact shadow (a light's **Contact Shadow Length**, see [Lights](/docs/rendering/lights/#contact-shadows)) is marched once per pixel in a compute pass into a mask the lighting reads (`r.ContactShadows.Compute`, default 1), and pixels facing away from the sun skip the march. Other lights, and the sun when the pass is off or on a secondary view, march inline in the lighting shader. Both use the same soft march.
+
+## Debug views
+
+The viewport's **View Mode** menu (and the Render Debug panel) has three shadow views next to Shadow Cascades:
+
+| View | Shows |
+|---|---|
+| Virtual Shadow Map | The sun's clipmap per pixel: one hue per level, dark gray for an unmapped page, red for a stale page the cascades are serving, purple for an excluded-caster page, a dimmed hue when the coarse parent level answered. Magenta when the virtual map is off |
+| Local Shadow Tiles | The nearest shadowed local light's owner hue, dimmed by its residency fade and desaturated for small tiles. Red marks a light that lost its tile |
+| Shadow Light Complexity | How many shadow-casting lights reach the pixel's cluster, from black (none) through green, yellow and red to white (8 or more) |
+
+The viewport **Stats** overlay also lists the shadow draw calls, the sun's virtual pages (mapped and redrawn), and the local shadows (lights, tiles or pages, how many redrew, and how many lights have no tile).
 
 ## Limits
 

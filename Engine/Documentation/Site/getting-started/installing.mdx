@@ -5,7 +5,7 @@ description: Download and run the Mowo Engine installer, add the C++ toolchain a
 order: 2
 sources:
   - Engine/Config/Toolchains.ini
-verifiedAt: babcdb42e
+verifiedAt: cc46ee4b6
 ---
 
 Mowo ships as an installed engine: Mowo Editor, the Mowo Project Launcher, the build tool `mbt`, the prebuilt engine libraries your game is packaged with, and the headers and libraries a game's C++ module compiles against. You do not build the engine. You install it, sign in, and create projects.
@@ -38,11 +38,13 @@ Open **Mowo Project Launcher** from the Start menu, sign in on its **Account** p
 
 <Screenshot id="getting-started-launcher-first-run" alt="Mowo Project Launcher on first start after installing: the sidebar with the Sign in row at the bottom, and the template wizard in the main area." />
 
-Keep the install in your user profile. Building a game module and packaging a game write into the install folder, which a read-only Program Files location would refuse.
+Keep the install in your user profile, where the installer puts it. Your game's modules are built into your project (`<Project>/Binaries` and `<Project>/Intermediate`), never into the install, so two projects with a module of the same name do not overwrite each other and the install is not written to while you work.
 
 ### Versions side by side
 
-Each minor version installs into its own folder, so Mowo Engine 1.0 and 1.1 live side by side and the Project Launcher lists both. Installing a patch of the same minor version, 1.0.1 over 1.0.0 for example, replaces it in place. A project opens in the version its `.mproject` names; **Switch engine version...** in a project file's right-click menu points it at another.
+Each minor version installs into its own folder, so Mowo Engine 1.0 and 1.1 live side by side and the Project Launcher lists both. Installing a patch of the same minor version, 1.0.1 over 1.0.0 for example, replaces it in place. Updates the Project Launcher downloads never replace anything: each lands in a folder of its own next to your other versions, see [Update the engine](/docs/getting-started/updating-the-engine/). A project opens in the version its `.mproject` names; **Switch engine version...** in a project file's right-click menu points it at another. Every version shares one `.mproject` handler (a small copy of the version selector in `%LOCALAPPDATA%\Programs\Mowo Games\Common`), so uninstalling one version never leaves double-clicking a project pointing at a deleted program; it goes with the last version.
+
+Each minor version also keeps its own settings, caches and logs in `%LOCALAPPDATA%\MowoEngine\<major.minor>`, so an older version never reads settings a newer one wrote. The list of installed versions and your Mowo ID license are shared by all versions in `%LOCALAPPDATA%\MowoEngine\Common`. The first time a version starts it copies the settings of the old unversioned `%LOCALAPPDATA%\MowoEngine\Config` folder; that folder is left as it was.
 
 ### Silent install
 
@@ -66,7 +68,9 @@ The minimum and preferred versions are read from `Engine/Config/Toolchains.ini` 
 
 ## Check your machine
 
-Run `mbt doctor` from the install folder. It reports each toolchain component it found, its version against the pinned range, and what is missing:
+The Project Launcher and the editor run this check for you: choosing a template with C++ code in the New Project wizard checks the computer and, when LLVM or the Visual Studio C++ tools are missing, says which and offers **Get ...** (the download) and **Check again**. The editor does the same before **Compile** and before packaging a project that has C++ code, so a missing compiler is a message with a fix, not a build log.
+
+Run `mbt doctor` from the install folder. In an installed build it checks only what a game module needs (a C++ compiler and the platform libraries; it does not ask for .NET, Git or Git LFS), and `mbt doctor --json` prints the same result as JSON for tools. It reports each toolchain component it found, its version against the pinned range, and what is missing:
 
 ```powershell
 cd "$env:LOCALAPPDATA\Programs\Mowo Games\Mowo Engine 1.0"
@@ -106,7 +110,7 @@ The engine ships built, not as source: the editor and game libraries, the engine
 
 ## Uninstalling
 
-Uninstalling removes one version. Your projects are never touched; keep them outside the install folder, because the whole install folder goes, including game modules and packages that were built into it.
+Uninstalling removes one version. Your projects are never touched, and neither are the game modules built in them. The install folder goes with everything left in it, so keep your projects outside it. Installing a patch of the same minor version (1.0.1 over 1.0.0) is not an uninstall: the install folder is replaced file by file and nothing else in it is deleted.
 
 Choose one of:
 
@@ -115,9 +119,17 @@ Choose one of:
 - **Settings > Apps > Installed apps:** **Mowo Engine 1.0.0**, then **Uninstall**. Running the setup file again offers **Repair** and **Uninstall** too.
 - **Scripts:** `MowoEngineSetup-1.0.0-win-x64.exe /uninstall /quiet`, or `msiexec /x <ProductCode> /qn` for an MSI install.
 
-The uninstaller removes the files, the Start menu folder, the desktop shortcut, the `.mproject` association and the version's entry in the Project Launcher's list.
+The uninstaller removes the files, the Start menu folder, the desktop shortcut and the version's entry in the Project Launcher's list. The `.mproject` association goes with the last installed version.
 
-Your caches and settings in `%LOCALAPPDATA%\MowoEngine` (derived data, logs, crash reports, user settings and the license lease) stay, so a reinstall finds you signed in and activated. To remove them as well, choose **Uninstall and remove caches and settings** in the Project Launcher, or add `REMOVEUSERDATA=1` (`RemoveUserData=1` for the setup file); that also signs this computer out of Mowo ID.
+The caches and settings of the version in `%LOCALAPPDATA%\MowoEngine\<major.minor>` (derived data, logs, crash reports, user settings) stay, so a reinstall finds them. To remove them as well, choose **Uninstall and remove caches and settings** in the Project Launcher, or add `REMOVEUSERDATA=1` (`RemoveUserData=1` for the setup file). That removes only this version's folder; when it is the last installed version it also removes the shared `Common` folder and signs this computer out of Mowo ID.
+
+### Long paths
+
+Mowo's programs are long-path aware, but Windows only honors that when long paths are enabled for the machine. A deep project folder (OneDrive\Documents\...) plus the generated paths under it can pass 260 characters. `mbt doctor` reports the setting. To enable it, run in an administrator PowerShell and restart:
+
+```powershell
+reg add HKLM\SYSTEM\CurrentControlSet\Control\FileSystem /v LongPathsEnabled /t REG_DWORD /d 1 /f
+```
 
 ## Troubleshooting
 

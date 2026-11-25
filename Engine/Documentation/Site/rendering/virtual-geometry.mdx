@@ -1,0 +1,40 @@
+---
+title: Virtualized geometry
+description: Stream very dense meshes (photogrammetry, scans) page by page from disk, so video memory follows what is on screen instead of the size of the mesh.
+order: 21
+sources:
+  - Engine/Source/Runtime/Renderer/Public/Renderer/MeshletVirtual.h
+  - Engine/Source/Runtime/Renderer/Public/Renderer/MeshletPageStreamer.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/MeshletPageBuild.h
+verifiedAt: c6c835140
+---
+
+A scanned rock or a photogrammetry building can have millions of triangles. Normally the renderer keeps every one of them in video memory even when the object is a few pixels wide. Virtualized geometry keeps only the detail the current view needs: the mesh is cooked into pages, the renderer asks for the finer pages of a mesh as the camera approaches it, and gives them back when the pool needs the room.
+
+It builds on the meshlet renderer, so it needs a device that runs it: mesh shaders on Direct3D 12 or Vulkan, or the compute fallback. Everywhere else the setting is ignored and nothing changes.
+
+## Turn it on
+
+Recook the mesh (a model cooked before format version 20 carries no pages and keeps the old behaviour), then set the console variable.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `r.Meshlet.Virtual` | 0 | 1 streams cooked pages from disk and drops the full-detail classic buffers of those meshes. 0 is the previous behaviour, kept for comparing. |
+| `r.Meshlet.Virtual.PoolMB` | 0 | Video memory for the pool. It is fixed at this size and never grows. Read when the renderer starts. 0 keeps the default pool size. |
+| `r.Meshlet.Virtual.MaxClusters` | 262144 | Cluster records the pool reserves. Read when the renderer starts. |
+| `r.Meshlet.Virtual.MaxPageLoadsPerFrame` | 16 | How many page reads start per frame. Raise it to fill in detail faster. |
+| `r.Meshlet.Virtual.FeedbackDelayFrames` | 1 | Frames a request waits before it is acted on. |
+| `r.Meshlet.Virtual.EvictionAgeFrames` | 4 | Frames a page must go unused before it can be released. |
+| `r.Meshlet.Virtual.DropClassic` | 1 | Evict the full-detail classic buffers of virtual meshes. |
+| `r.Meshlet.Virtual.FallbackLevel` | -1 | The cooked level those meshes keep for the passes below. -1 is the coarsest. |
+| `r.Meshlet.Virtual.DebugView` | 0 | 1 logs how many pages are resident, loaded and released once a second. |
+
+## What you will see
+
+- A mesh appears at its coarsest level and sharpens over a few frames as pages arrive. A page is never a hole: until it arrives, the next coarser level stands in.
+- Pages are released when another mesh needs the room, least recently used first, never faster than the pool budget demands. Memory for a mesh no longer follows its triangle count: it follows the pool budget.
+- Ray tracing, motion vectors, custom depth, reflection and GI captures, virtual shadow maps and devices without the meshlet path use the coarse level the mesh keeps, not the streamed detail. Shadows and reflections of a scanned object are therefore simpler than the object itself.
+
+## Limits
+
+The pool reserves one cluster record per cluster of every virtual mesh for as long as the mesh is loaded, so `r.Meshlet.Virtual.MaxClusters` bounds the unique geometry it can hold: about 120 triangles per record, so the default of 262,144 is roughly 25 million triangles in total. Pages stream; the record table does not. Only the main view streams pages, and shadows, software rasterization and instanced groups of a virtual mesh draw the resident part of the mesh through the older path.

@@ -5,7 +5,7 @@ description: Import, create, find and organize your project's assets, keep refer
 order: 4
 sources:
   - Engine/Source/Runtime/AssetSystem/Public/Scene/ExternalActorFiles.h
-verifiedAt: 7996072c5
+verifiedAt: 6161d8105
 ---
 
 The Content Browser is your project's asset library. The left side is the **Sources** rail with the folder tree and your collections; the right side is a grid or list of the assets in the current folder. Double-click an asset to open it in its editor, drag it into the viewport to place it, or right-click for everything else.
@@ -16,22 +16,10 @@ The Content Browser is your project's asset library. The left side is the **Sour
 
 The Sources rail has two sections:
 
-- **Paths**: your project's `Content` folder, a read-only **C++ Classes** root that mirrors `Source/`, a **Wolang Scripts** root that mirrors `Scripts/` when the project enables Wolang, and the content of every mounted plugin under **Plugins**.
+- **Paths**: your project's `Content` folder, a read-only **C++ Classes** root that mirrors `Source/` and the content of every mounted plugin under **Plugins**.
 - **Collections**: named sets of assets that cut across folders. See [Collections](#collections).
 
 Asset files live in `Content/` and are committed with the project. Next to each asset sits a sidecar file with the same name plus `.mdfmeta`, for example `rock.png.mdfmeta`. The sidecar holds the asset's UUID and its import settings. The browser hides sidecars, and you should never delete one by hand: the UUID is how every other asset refers to this one.
-
-## Wolang Scripts
-
-When the project enables [Wolang](/docs/gameplay/wolang-scripting/) (Project Settings ▸ Scripting), the **Wolang Scripts** root shows the project's `Scripts/` folder: each script package is a folder holding its `.wo` files, and every engine class a file declares (`class Enemy : AActor`, `class Health : MActorComponent`) is listed beside it as a class item.
-
-- **Double-click** a file to open it in your code editor, or a class item to open its file at the class.
-- **Drag** an actor class into the viewport or the Outliner to place it; drag a component class onto the level with an actor selected to add the component to that actor.
-- **Right-click** the root for **New Wolang Package** (a folder with its `wolang.toml` and a first class); inside a package, **New Wolang Actor Class**, **New Wolang Component** and **New Wolang Script** write a file from a template and open it.
-- **Rename** a class item to rename the class in every script of the project; a `ClassRedirects` line in `Config/Redirects.ini` keeps the instances levels already placed.
-- **Find References** on a class item lists the levels, actors, prefabs and scripts that name it on the Message Log's Scripts page.
-- A file or package whose scripts do not compile carries a red **!** badge; its tooltip gives the first error.
-- Search filters the files and class items of the folder like any other.
 
 ## Importing assets
 
@@ -78,7 +66,7 @@ Right-click an imported asset for three reimport actions:
 
 ## Creating assets
 
-Click **+ Add** in the toolbar, or right-click empty space in a folder. The menu creates new, valid assets of the types that have an editor, including Material, Visual Script Class, Animation Controller, Anim Montage, Pose Asset, Control Rig, Physics Asset, Particle System, VFX Graph, Sound Cue, MetaSound, Level Sequence, Arc Widget, Data Table, Data Asset, Curve, Input Action, Input Mapping Context, Behavior Tree and Smart Prop. It also creates some data-only types such as Quest, Dialogue, Item Definition and Environment Profile.
+Click **+ Add** in the toolbar, or right-click empty space in a folder. The menu creates new, valid assets of the types that have an editor, including Material, Visual Script Class, Animation Controller, Anim Montage, Pose Asset, Control Rig, Physics Asset, Particle System, VFX Graph, Sound Cue, MetaSound, Level Sequence, AIGG (Arc In-Game Graphics) Widget, Data Table, Data Asset, Curve, Input Action, Input Mapping Context, Behavior Tree and Smart Prop. It also creates some data-only types such as Quest, Dialogue, Item Definition and Environment Profile.
 
 See [Asset editors](/docs/editor/asset-editors/) for what each editor does.
 
@@ -127,6 +115,8 @@ A redirect is only retired once every file that could name it was checked. Anyth
 </Steps>
 
 <Callout type="tip">
+Select two or more assets of one kind and choose **Consolidate Into <first asset>** to merge duplicates: every file that names one of the others is rewritten to name the first, a file that cannot be rewritten is named in the notification and nothing is deleted; otherwise the others are then offered for deletion with the usual referencer check. A mesh cannot stand in for a texture, so mixed selections are not offered.
+
 Run **Fix Up Redirectors** after a large reorganization and before you commit, so the project does not carry indirections forever.
 </Callout>
 
@@ -145,6 +135,7 @@ The search box takes plain words and prefixes:
 | `path:props` or `p:props` | The full path |
 | `collection:"hero props"` or `c:…` | Everything in a collection |
 | `-old` | Excludes names containing *old* |
+| `~stmsh` | Names, or type labels, that contain the letters in order |
 
 A search also looks beyond the current folder and lists matches from the whole tree with their folder shown. The filter chips narrow the grid by asset category.
 
@@ -178,30 +169,29 @@ Drag one collection onto another. Shared and local collections cannot nest under
 
 ## Thumbnails
 
-Tiles show live thumbnails for textures, audio waveforms, meshes (skeletal meshes in bind pose), materials, prefabs, levels, particle systems, physics assets, animation graphs, Arc widgets and sound cues. Every thumbnail is a square 256-pixel image, drawn at its own aspect ratio inside the tile, so it stays sharp at the largest tile size and at 150 % display scaling.
+Tiles show live thumbnails for textures, audio waveforms, meshes (skeletal meshes in bind pose), materials, prefabs, levels, particle systems, physics assets, animation graphs, Arc widgets and sound cues. Every thumbnail is drawn at twice the largest tile size at your display scale, in steps of 64 pixels (320 pixels at 100 %), on its longer edge, drawn at its own aspect ratio inside the tile (a 16:9 screen or level stays 16:9, with bars above and below), so it stays sharp at the largest tile size and at 150 % display scaling.
 
 - **Meshes, prefabs, physics assets and animation graphs** are rendered in a preview scene of their own, lit by a fixed studio light rig. The camera looks from the same three-quarter angle every time and is placed so the asset fills the same share of the tile, whether it is a pebble, a tall pole or a whole building.
 - **Materials** are drawn on a sphere. Decal, post-process and light-function materials are drawn on a flat card facing the camera instead.
 - **Textures** are drawn at their own proportions, averaged down to the tile. Transparent areas show a checkerboard.
-- **Levels** show a capture of the level viewport, described below.
+- **Arc widgets and screens** (`.ui`) are drawn at their own design size, 1920 x 1080 for a full-screen HUD, and scaled down to fit, so a tile shows the screen as a player sees it and not a squeezed layout. A screen whose images are still loading is drawn once they have. A screen that is empty by design (subtitles, a hit flash) keeps its type icon.
+- **Levels** are drawn from their actors by the same studio rig, framed to the level's contents. A large ground plane under the level does not decide the framing.
 
 The open level never affects a thumbnail: its lights, sky, fog, exposure, post-process volumes and Global Illumination stay out of the preview scene, so an asset looks the same in every level and every project.
 
-Thumbnails are drawn a few at a time, so browsing does not stall the editor, and the tiles you can see are drawn before the ones you scrolled past. A tile is redrawn when its source file or one of its dependencies changes, for example a texture used by a material.
+Thumbnails are drawn a few at a time, so browsing does not stall the editor, and the tiles you can see are drawn before the ones you scrolled past. A tile is redrawn when its source file or one of its dependencies changes, for example a texture used by a material or an actor saved in a level. An asset that never finishes importing is retried for a couple of minutes and then shown as failed.
 
 A tile is in one of four states: a finished thumbnail, a pending bar over the type icon, a red failed state, or the plain type icon when no thumbnail applies. To draw an asset's thumbnail again, right-click it and choose **Refresh Thumbnail**.
 
 ### Level thumbnails
 
-When you save a level, the editor captures the level viewport and stores the middle square of that picture beside the level as `<Level>.mmap.mthumb`. The level's tile shows that capture. Rename, move, duplicate and delete take the capture along with its level; commit it with the level so everyone on your team sees the same thumbnail.
+A level's tile is drawn from its actors: the editor places the camera from the bounds of the meshes in the level and lights it with the studio rig, plus the level's own sun (its directional light, capped so a sunlit exterior does not wash out) and its ambient colour as the backdrop. The picture is stored beside the level as `<Level>.mmap.mthumb` and committed through Git LFS, so a fresh clone shows its levels without drawing them. The file records which version of the level's text and actor files it was drawn from; when any actor is saved the tile is drawn again and the file replaced. A level the editor has nothing to draw for (terrain alone, for example) shows the viewport capture taken when you save it, kept whole at its own aspect.
 
-To take a new capture without saving, open the level, frame the view you want and choose **Update Thumbnail** from the level's right-click menu.
-
-A level that has no capture yet, such as one saved by an older version of the editor, gets one the first time you open it, once its assets have finished loading. Until then its tile shows the plain level icon.
+To take a new capture without saving, open the level, frame the view you want and choose **Update Thumbnail** from the level's right-click menu. A capture only fills in for a level that has no drawn picture.
 
 ### The thumbnail cache
 
-Drawn thumbnails are kept in memory for the tiles you have looked at recently and on disk in `Intermediate/ThumbCache`, so reopening a folder or the project does not draw them again. You can delete that folder at any time; the editor draws the thumbnails again as you browse.
+Drawn thumbnails are kept in memory for the tiles you have looked at recently and on disk in `Intermediate/ThumbCache`, keyed by the asset's path, its modification time and the identity of what it draws, so reopening a folder or the project does not draw them again. You can delete that folder at any time; the editor draws the thumbnails again as you browse.
 
 ## Migrating assets to another project
 
@@ -223,7 +213,13 @@ Each file travels with its `.mdfmeta` sidecar, so UUID references keep working. 
 
 When the project is in a git repository, tiles carry a letter for their state: **M** modified, **A** added, **D** deleted, **!** conflicted, **R** renamed, **?** untracked. Clean files show nothing. A file locked by someone else shows a lock with the owner in the tooltip. List view adds an **SC** column. See [Source control](/docs/editor/source-control/).
 
+## Files changed outside the editor
+
+The editor reloads what another tool rewrites on disk. Textures, models and materials whose source changed are re-imported in place, so meshes and materials already in the viewport update without reopening. The open level (`.mmap`) and any asset open in an asset editor reload on their own when they have no unsaved edits, and a level keeps its selection for the entities that still exist. A level also reloads when one of its actor files under `__ExternalActors__`, a prefab it uses or a sub-level it places changes on disk. When you have unsaved edits, a notice offers **Reload** (discard your edits and take the file) or **Keep mine** (leave the file until you save over it); the notice comes back every few minutes while the conflict stands, so its **Reload** button does not vanish with the first toast. Nothing reloads during Play; the change is applied when you stop. The editor's own saves are not reported as outside changes. Set `editor.ReloadLevelOnDiskChange` or `editor.ReloadAssetOnDiskChange` to `0` to turn this off. Console variables in config files follow the same rule, see [Config files](/docs/content-pipeline/config-files/).
+
 ## Other asset actions
+
+On a multi-selection, **Rename** takes a prefix, suffix, find and replace, numbering and an optional regular expression, and **Resave** rewrites text assets in the current format; both are described in [Productivity tools](/docs/editor/productivity-tools/).
 
 The asset context menu also has **Reference Viewer…** (what uses this and what it uses), **Size Map…** (disk cost, also on folders), **Validate** (runs the asset validators and reports to the Message Log), **Migrate…**, **Copy Path** and **Show in Explorer**. These tools are described in [Asset tools](/docs/editor/asset-tools/).
 

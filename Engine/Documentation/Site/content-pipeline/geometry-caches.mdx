@@ -1,0 +1,47 @@
+---
+title: Geometry caches
+sidebarTitle: Geometry caches
+description: Baked vertex animation as a streamed .gcache asset, how animated Alembic caches become one, and how to inspect and place it in the editor.
+order: 9
+status: in-development
+sources:
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/GeometryCacheFormat.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/GeometryCacheBuilder.h
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/Assets/GeometryCacheAsset.h
+  - Engine/Plugins/AlembicImporter/Public/AlembicImporter/AbcImportOptions.h
+verifiedAt: c6c835140
+---
+
+A geometry cache is a baked animation of a mesh's vertices: a cloth bake, a fluid, an Alembic point cache. It is a `.gcache` asset that plays in a built game without any importer.
+
+## What is stored
+
+- Frame rate, frame count, and the bounds of every frame.
+- Material sections, UVs and indices once, when the topology never changes (constant topology).
+- Per frame: positions, and optionally normals, tangents and vertex colours.
+- A cache whose vertex count changes from frame to frame (a fluid) is stored as variable topology: every frame carries its own vertices, indices and UVs.
+
+Positions are stored as 16-bit fixed point relative to the bounds of their chunk, so the largest error is the chunk size divided by 131070 on each axis (about 0.08 mm for a 10 m object). Choose float32 precision when you need them exact. Frames are grouped in chunks of 16 by default; each chunk is compressed on its own so the game decodes only what the playhead needs.
+
+## Importing
+
+Alembic caches with more than 32 frames import as a geometry cache; shorter ones keep baking to morph targets. Set `abc.PointCacheAs` to `1` to always get a geometry cache or `2` to always get morph targets. The imported mesh is frame 0, and the `.gcache` is written next to the `.abc`. Importing again rewrites it; the geometry cache panel's reload button picks the new file up.
+
+USD meshes with time-sampled `points` take the same route through `usd.PointCacheAs`. A cache with a fixed point count becomes a `.gcache` beside the USD file; a point count that changes falls back to morph targets, which import only the first sample. See [Importing USD scenes](/docs/content-pipeline/importing-usd/).
+
+## In the editor
+
+The Content Browser tile of a `.gcache` shows frame 0 as a wireframe. Double-click it to open the geometry cache panel: a rotating wireframe preview of the current frame, a play button and scrubber, a reload button, the frame, duration, vertex count, topology, precision and file size, how many chunks are resident and how long decoding took, and the material sections. Drag a `.gcache` into the level to place an actor that plays it; the Details panel lists playback options. Dragging a source model whose import wrote a cache beside it (an Alembic file over 32 frames) places the cache instead of the static first frame. The Content Browser tags are `frames`, `duration`, `fps`, `vertices`, `topology`, `sections` and `size`, so `tag:frames>100` finds long caches.
+
+<Screenshot id="content-pipeline-geometry-cache-panel" alt="Geometry cache panel open on a cloth bake, scrubber at frame 40 of 120, stats and chunk residency visible" caption="The geometry cache panel" />
+
+## Limits
+
+- Interpolation between frames is linear for constant topology. Variable topology shows the nearer frame.
+- Culling, shadows and the ray tracing instance use the bounds of the current frame.
+- Motion vectors carry per-vertex velocity: the velocity pass reads the previous frame's positions, so a deforming cache does not smear under temporal anti-aliasing or motion blur. Turn **Motion Blur** off on the component to fall back to the object transform only.
+- With ray tracing on, the acceleration structure of a cache is refitted every frame. A cache whose vertex count changes is rebuilt.
+- Interpolation runs on the CPU. The GPU draws the blended frame.
+- Materials come from the component's material slots; an unassigned slot draws a plain grey material.
+
+Playback is covered in [playing geometry caches](/docs/rendering/geometry-caches/).

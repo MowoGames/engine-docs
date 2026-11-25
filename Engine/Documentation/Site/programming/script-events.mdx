@@ -1,0 +1,106 @@
+---
+title: Script events, access and containers
+sidebarTitle: Script events
+description: Let a Visual Scripting class override a C++ event, control what graphs may read and write, and pass vectors, maps and sets across the boundary.
+order: 5
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Core/Public/Core/MScriptEvent.h
+  - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
+  - Engine/Source/Runtime/Game/Public/Game/AScriptEventProbe.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptMarshal.h
+verifiedAt: 55f27937c
+---
+
+C++ is the framework, Visual Scripting is the content. A C++ class declares the moments a designer may customise (a door that opened, a weapon that fired, a pickup that asks whether it can be taken), and a Visual Scripting class parented to it fills them in. This page covers the three pieces that make that split work: script events, access control, and containers.
+
+## Script events
+
+Mark a member function `ScriptEvent` or `ScriptNativeEvent` and do not write its body. The header tool writes it.
+
+```cpp title="ADoor.h" nocompile
+MCLASS()
+class ADoor : public AActor {
+public:
+	MGENERATED_BODY()
+
+	MFUNCTION(ScriptEvent)
+	void OnOpened(AActor* Opener);
+
+	MFUNCTION(ScriptNativeEvent)
+	bool CanOpen(AActor* Opener);
+	bool CanOpen_Implementation(AActor* Opener) {
+		return !m_Locked;
+	}
+
+	MFUNCTION()
+	void TryOpen(AActor* Opener) {
+		if (CanOpen(Opener)) {
+			OnOpened(Opener);
+		}
+	}
+
+private:
+	bool m_Locked = false;
+};
+```
+
+| Specifier | Written by you | When no script answers |
+| --- | --- | --- |
+| `ScriptEvent` (also `ImplementableEvent`) | Nothing | The call does nothing and returns the type's default |
+| `ScriptNativeEvent` (also `NativeEvent`) | `Name_Implementation` | The call runs `Name_Implementation` |
+
+A designer makes a Visual Scripting class whose parent is `ADoor` and adds a function named `OnOpened` with an `Opener` parameter. That function is the override: calling `OnOpened` from C++ (or from another graph) runs it, and `CanOpen` returns whatever the graph's **Return** node says. The function name and signature must match the event; a mismatch is a load error on that function, and the log names the event.
+
+Rules the header tool enforces:
+
+- The event is a non-static, public member function of an `MCLASS`, not an RPC and not `ScriptHidden`.
+- `ScriptNativeEvent` needs `Name_Implementation` on the same class.
+- Parameters and the return value are scalars, vectors, strings, enums, `FName`, `FGameplayTag`, object pointers, reflected structs, or a vector, map or set of those.
+- Do not define the event yourself. The generated definition and yours would clash at link time.
+
+A graph that calls the event's own native function on self from inside the override runs the override again; the engine stops the chain at 32 levels and logs it. To reuse the native body from a graph, mark `Name_Implementation` with `MFUNCTION()` and call that.
+
+### Lifecycle events
+
+On-construct, Begin Play, Tick, End Play, Destroyed, Any Damage and On Hit are script events of every actor. A Visual Scripting class overrides one by declaring a **function** with that name and parameters: `Tick(DeltaSeconds)`, `AnyDamage(Amount, Instigator)`, `OnHit(Other, Location, Normal, Impulse)`, and no parameters for the rest. Classes that still use the older event graphs keep working; when a class has both a function and an event graph for the same event, the function runs.
+
+<Source path="Engine/Source/Runtime/Core/Public/Core/MScriptEvent.h" />
+
+## What a graph may touch
+
+Every `MFUNCTION` is a node unless you say otherwise, and every `MPROPERTY` is readable and writable from a graph unless its flags freeze it.
+
+| Specifier | On | Effect |
+| --- | --- | --- |
+| `ScriptHidden` | function | No node is generated; a saved graph that calls it fails to load |
+| `ScriptProtected` | function | Callable on self only, never on another object |
+| `AuthorityOnly` | function | Skipped on a remote instance |
+| `Cosmetic` | function | Skipped where nothing is presented (a dedicated server) |
+| `ScriptPure` / `ScriptImpure` | function | Force a node without or with exec pins (const is pure by default) |
+| `ScriptReadOnly` | property | A graph may read it, never write it |
+| `ScriptReadWrite` | property | A graph may read and write it, even when it is `VisibleAnywhere` |
+| `ScriptHidden` | property | A graph can neither read nor write it |
+| `Getter=` / `Setter=` | property | Reads and writes go through the named functions |
+
+Without an explicit script flag, a field that is only `VisibleAnywhere` (or `ReadOnly`) is read-only for graphs, and every other field stays writable as before. A graph that writes a frozen field is refused when the class loads, and the log names the node. A write to a field with `ReplicatedUsing` calls its notify function on the writer, as a Blueprint set does on the server. Graph property access now covers vectors, quaternions, enums, object pointers and registered structs; these used to be silently ignored.
+
+<Callout type="warning">
+Graphs from older projects that wrote a `VisibleAnywhere` or `ReadOnly` field now fail to load. Make the field editable, mark it `ScriptReadWrite`, or write it through a setter.
+</Callout>
+
+## Containers
+
+`std::vector`, `std::map` and `std::set` (and the unordered variants) cross the call boundary as parameters, out-parameters and return values. The graph sees an array, a map or a set pin.
+
+```cpp title="AInventory.h" nocompile
+MFUNCTION()
+std::vector<AActor*> FindNearby(float Radius) const;
+
+MFUNCTION()
+void Tally(const std::map<std::string, int32_t>& Counts);
+```
+
+The call copies the container in each direction, so keep per-frame loops in C++ and pass a graph the finished list. Elements can be scalars, strings, object pointers, enums, small integers and reflected value structs. Nested containers are not supported; such a function still builds but the node refuses the call with an error naming the argument.
+
+<Source path="Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptMarshal.h" />

@@ -5,7 +5,7 @@ order: 6
 sources:
   - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/DlcManager.h
   - Engine/Source/Runtime/Filesystem/Public/Filesystem/PackagePaks.h
-verifiedAt: 7f8f31f8d
+verifiedAt: d9fe08503
 ---
 
 A released game changes after launch. Mowo gives you three tools for that: **binary patches** that turn one installed package into the next, **content chunks** that split the base game into separately deliverable archives, and **DLC** packs that mount over the base game when the player owns them.
@@ -42,7 +42,7 @@ The bundle is a zip with a `patch.json` manifest and one payload per changed fil
 | File removed | A removal entry |
 | File changed | A binary delta against the old file, or the whole new file when that is smaller |
 
-The delta is rsync-style: the old file is split into 2 KiB blocks indexed by a rolling hash, and the delta copies matching blocks and inserts the rest. Because pak names are stable and archive output is deterministic, an unchanged pak rebuilds byte-identical and never appears in the patch.
+The delta is rsync-style: the old file is split into 2 KiB blocks indexed by a checksum, the new file is scanned with a rolling hash, and the delta copies matching blocks and inserts the rest. Both files are streamed, never held in memory, so a pak of any size patches in a few megabytes of RAM; a bundle that touches a file of 2 GiB or more is marked format 2, which older `mbt` versions refuse by name. Because pak names are stable and archive output is deterministic, an unchanged pak rebuilds byte-identical and never appears in the patch.
 
 ### What applying checks
 
@@ -50,6 +50,8 @@ The delta is rsync-style: the old file is split into 2 KiB blocks indexed by a r
 
 - Every changed file must match the hash of the version the patch was built from, so a patch applied to the wrong build, or to a file the player modified, is refused.
 - An entry path must stay inside the install folder; `../` and absolute paths are refused, because a bundle is data from wherever it was downloaded.
+
+To keep an update small, record each version with `mbt package --release` and pack the next one with `--based-on`, which keeps every pak's entry order; see [Releases, updates and uploads](/docs/shipping/releases/). The same flags can write the patch pak for you with `--patch-out`.
 
 ## Patch paks
 
@@ -138,7 +140,8 @@ After the base archives mount, the game scans `Content/Paks/DLC/*/dlc.json` with
 2. An entitlement policy decides ownership. The default, `FLocalDlcEntitlement`, treats a present archive as owned, which suits DRM-free releases and stores that install only owned DLC. `FSteamDlcEntitlement` asks Steam by `storeIds.steamAppId` and falls back to the file check without Steam; install it, or a policy of your own, with `FDlcManager::Get().SetEntitlement(...)` before content mounts.
 3. An unsigned DLC archive is hashed and must match the content hash in `dlc.json`, so a truncated download mounts nothing. A signed archive already proves its bytes when it loads.
 4. Granted DLC mounts at priority 210.
-5. `FDlcManager::Get().OnDlcMounted()` broadcasts each mounted DLC's name, so you can refresh menus or unlock content.
+5. The DLC's own entries in the asset registry (the archive carries `Plugins/<Name>/AssetRegistry.mdfb`, staged by `mbt package --dlc`) are added to the live registry, so UUID- and path-routed loads find DLC-only assets. Unmounting removes them and restores any base entry a DLC entry replaced.
+6. `FDlcManager::Get().OnDlcMounted()` broadcasts each mounted DLC's name, so you can refresh menus or unlock content.
 
 ```cpp wrap title="MyGameModule.cpp"
 #include "AssetSystem/DlcManager.h"
@@ -152,6 +155,14 @@ In multiplayer, the join handshake carries the client's `buildId` and a hash of 
 ### Steam depots for chunks and DLC
 
 Map chunk 0 and the binaries to the base depot, each optional chunk's pak to its own depot, and each `Content/Paks/DLC/<Name>/` folder to the depot of its DLC app. Everything installs into the same root, and the game mounts whatever the store installed. Use the same app id in the plugin's `storeIds.steamAppId` so the Steam entitlement check matches the depot.
+
+## Beta, private channels and rollbacks in the Mowo Games Launcher
+
+A game distributed through the Mowo Games Launcher installs and updates from the chunk store `mbt publish-mowo` writes, so a player downloads only the chunks that changed between two builds, and a rollback to the previous build is a delta too.
+
+Each build is published to a channel. `live` is what everyone gets. Any other channel name is offered to every owner as a beta they can switch to from the game's **Manage** menu, and a private channel appears only for players who enter its access key. A player picks, per game and channel, whether updates install automatically, only notify, or wait for them; a required build still installs itself unless the player chose to wait. **Roll back to the previous build** installs the build before the installed one and keeps it until the player switches channel or updates by hand. Each build's patch notes show on the game's **Patch notes** tab.
+
+The launcher passes the player's privacy choice to the game it starts in the `MOS_CRASH_REPORTING` and `MOS_TELEMETRY` environment variables (`1` agreed, `0` declined). A packaged game applies them at startup: declined keeps crash reports on disk and turns analytics off; agreed counts as the player's consent to upload crash reports.
 
 ## Related
 

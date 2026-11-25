@@ -3,7 +3,7 @@ title: Installers and code signing
 sidebarTitle: Installers and signing
 description: Version stamp and icon, the zip, MSI, self-extracting installer and disk image, Authenticode signing, and the Steam DRM wrap.
 order: 4
-verifiedAt: 7f8f31f8d
+verifiedAt: 6416350a4
 ---
 
 The last step of `mbt package` turns the staged folder into what you hand out: signed executables, a zip, an installer. Each of these rewrites or hashes shipped files, so they run in a fixed order. Each one is skipped, with a log line, when its tool is missing, so a plain `mbt package` still produces a runnable folder.
@@ -61,13 +61,13 @@ It needs no admin rights. Ship the `.ps1` and the zip together.
 
 ### The macOS disk image
 
-<Callout type="warning" title="In development">
-The `.dmg` holds an `.app` signed ad hoc only (`codesign --sign -`). There is no Developer ID signing, no hardened runtime, no notarization and no stapling for game packages. Gatekeeper on a buyer's Mac will not open it. The ROADMAP tracks notarization as an open blocker.
-</Callout>
+The `.dmg` holds a self-contained `.app` whose binaries `mbt package` already signed inside out. The packager seals the bundle, and with a Developer ID it signs the `.dmg` and, given a notarization profile, notarizes and staples it. A Developer ID signature carries the hardened runtime, a secure timestamp and the `com.apple.security.device.audio-input` entitlement voice chat needs for the microphone; the `Info.plist` carries the `NSMicrophoneUsageDescription` the permission prompt shows. Without an identity everything is signed ad hoc, with no hardened runtime and no entitlements, which Gatekeeper on a buyer's Mac will not open. The identity, the profile, the entitlements and the one-time setup are in [macOS signing and notarization](/docs/shipping/macos-signing-and-notarization/).
 
 Building the `.dmg` needs a macOS host, because it runs `codesign` and `hdiutil`. Linux has no native installer format yet.
 
 ## Code signing
+
+This section covers Windows. On macOS `--sign` names a codesign identity instead; see [macOS signing and notarization](/docs/shipping/macos-signing-and-notarization/).
 
 Sign a Windows package with `--sign`, or set the `MOWO_SIGN_CERT` environment variable so every package is signed:
 
@@ -126,6 +126,7 @@ Every game package writes `<Product>-Manifest.txt` beside the package folder: on
 
 ## Related
 
+- [macOS signing and notarization](/docs/shipping/macos-signing-and-notarization/)
 - [Uploading to Steam](/docs/shipping/steam/)
 - [Crash reporting](/docs/shipping/crash-reporting/), which covers the symbol upload step
 - [mbt command reference](/docs/reference/mbt-cli/)

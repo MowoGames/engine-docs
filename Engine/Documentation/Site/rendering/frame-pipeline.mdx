@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/RenderPassExtension.h
   - Engine/Source/Runtime/RHI/Public/RHI/RenderGraph.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
-verifiedAt: aee5cfcae
+verifiedAt: 6b36ef087
 ---
 
 `SceneRenderer` is a deferred renderer. Opaque geometry writes a G-Buffer, lighting runs once per pixel over it, translucent surfaces are drawn forward afterward, and post-processing finishes the frame. It records a whole frame in `SceneRenderer::RenderFrame`, after the host has called `BeginScene`, submitted its draws and called `EndScene`. This page walks through that function in the order the passes run. Use it to find where an effect happens, what it depends on, and what replaces it on another tier.
@@ -91,7 +91,7 @@ The six [render-pass extension](/docs/rendering/extending-the-renderer/) points 
 | Volumetric fog | Froxel fog, after SSR so reflections see unfogged surfaces. Epic and up. |
 | VDB volumes | Sparse volumes such as smoke and clouds from VDB files. |
 | **`BeforeTranslucency`** | Extension point. |
-| Transparent | Forward-shaded translucent surfaces, sorted back to front, plus water. |
+| Transparent | Forward-shaded translucent surfaces, plus water. Sorted by lower sort priority first, then back to front by the distance to the mesh's bounds centre (plus its distance offset), with a stable order for ties. Set **Translucency Sort Priority** and **Translucency Sort Distance Offset** on the mesh. When depth of field runs, the draws are deferred to land on its result (`r.Translucency.AfterDoF`). |
 | Particles | CPU and GPU particles and ribbons. |
 | World widgets | World-space UI quads, depth-tested against opaque geometry. |
 | Selection mask | Editor only: the selected and hovered meshes into a mask for the outline. |
@@ -100,7 +100,7 @@ The six [render-pass extension](/docs/rendering/extending-the-renderer/) points 
 
 <Flow steps={["DoF", "Motion blur", "Auto-exposure", "Bloom", "Temporal upscale", "Tonemap + grading", "Post-process material", "TAA", "Lens flare", "Spatial upscale", "FXAA / CAS / Final", "Point clouds", "Grid + debug draw", "Selection outline"]} highlight={[4, 5]} caption="The post chain. A temporal upscaler (TSR, FSR, DLSS, XeSS, MetalFX) resolves before the tonemap; built-in TAA runs after it." />
 
-- **Depth of field, motion blur, auto-exposure and bloom** run on the HDR image. Auto-exposure runs before bloom, because the bloom threshold works on exposed luminance.
+- **Depth of field, translucency, motion blur, auto-exposure and bloom** run on the HDR image. When depth of field is on, translucent surfaces composite onto its result, so in-focus glass stays sharp over a blurred background. Auto-exposure runs before bloom, because the bloom threshold works on exposed luminance.
 - **Temporal upscale** consumes the linear HDR scene after depth of field and motion blur. After it, the rest of the chain runs at output resolution.
 - **Tonemap** applies the operator and the grading chain.
 - **`AfterTonemap`** extension point.

@@ -1325,7 +1325,7 @@
 				},
 				{
 					"kind": "struct",
-					"name": "CArcUICommand",
+					"name": "CArcCommand",
 					"namespace": "Arcf",
 					"doc": "A named command with default keybind",
 					"line": 37,
@@ -1375,14 +1375,14 @@
 						},
 						{
 							"kind": "method",
-							"name": "CArcUICommand",
-							"signature": "CArcUICommand() = default",
+							"name": "CArcCommand",
+							"signature": "CArcCommand() = default",
 							"line": 46
 						},
 						{
 							"kind": "method",
-							"name": "CArcUICommand",
-							"signature": "CArcUICommand(const CName& id, const CText& label, const CInputChord& chord = {}, const CInputChord& secondaryChord = {}) : Id(id), Label(label), DefaultChord(chord), ActiveChord(chord), DefaultSecondaryChord(secondaryChord), SecondaryChord(secondaryChord)",
+							"name": "CArcCommand",
+							"signature": "CArcCommand(const CName& id, const CText& label, const CInputChord& chord = {}, const CInputChord& secondaryChord = {}) : Id(id), Label(label), DefaultChord(chord), ActiveChord(chord), DefaultSecondaryChord(secondaryChord), SecondaryChord(secondaryChord)",
 							"line": 47
 						}
 					]
@@ -1470,7 +1470,7 @@
 						{
 							"kind": "method",
 							"name": "RegisterCommand",
-							"signature": "void RegisterCommand(const CArcUICommand& command)",
+							"signature": "void RegisterCommand(const CArcCommand& command)",
 							"doc": "Register a command (action bound separately via command lists)",
 							"line": 88
 						},
@@ -1484,20 +1484,20 @@
 						{
 							"kind": "method",
 							"name": "FindCommand",
-							"signature": "const CArcUICommand* FindCommand(const CName& id) const",
+							"signature": "const CArcCommand* FindCommand(const CName& id) const",
 							"line": 95
 						},
 						{
 							"kind": "method",
 							"name": "FindCommandByChord",
-							"signature": "const CArcUICommand* FindCommandByChord(const CInputChord& chord) const",
+							"signature": "const CArcCommand* FindCommandByChord(const CInputChord& chord) const",
 							"doc": "The first of FindCommandsByChord, by command id.",
 							"line": 98
 						},
 						{
 							"kind": "method",
 							"name": "FindCommandsByChord",
-							"signature": "std::vector<const CArcUICommand*> FindCommandsByChord(const CInputChord& chord) const",
+							"signature": "std::vector<const CArcCommand*> FindCommandsByChord(const CInputChord& chord) const",
 							"doc": "Every command bound to the chord (primary or secondary), sorted by\nid so resolution never depends on hash order.",
 							"line": 102
 						},
@@ -1569,7 +1569,7 @@
 						{
 							"kind": "method",
 							"name": "GetAllCommands",
-							"signature": "std::vector<const CArcUICommand*> GetAllCommands() const",
+							"signature": "std::vector<const CArcCommand*> GetAllCommands() const",
 							"line": 137
 						}
 					]
@@ -3517,6 +3517,109 @@
 			]
 		},
 		{
+			"path": "Engine/Source/Runtime/Arc/Public/Arc/Core/CArcHitTestGrid.h",
+			"include": "Arc/Core/CArcHitTestGrid.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "CArcHitTestStats",
+					"namespace": "Arcf",
+					"doc": "Counts the work a pointer hit test does, so the grid below can be judged\nwith numbers instead of hope. Enabled through arc.HitTest.Stats; the counters\nare plain relaxed atomics and cost nothing while the flag is off.",
+					"line": 17,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Tests",
+							"signature": "static std::atomic<uint64_t>& Tests()",
+							"static": true,
+							"line": 18
+						},
+						{
+							"kind": "method",
+							"name": "Queries",
+							"signature": "static std::atomic<uint64_t>& Queries()",
+							"static": true,
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Enabled",
+							"signature": "static std::atomic<bool>& Enabled()",
+							"static": true,
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "Mismatches",
+							"signature": "static std::atomic<uint64_t>& Mismatches()",
+							"static": true,
+							"line": 36
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "static void Reset()",
+							"static": true,
+							"line": 42
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "CArcHitTestGrid",
+					"namespace": "Arcf",
+					"doc": "A uniform grid over a window: each cell lists the entries whose rectangle\ntouches it, in insertion (paint) order. A point query returns only the\nentries of its cell, so the caller runs the exact test on a handful of\ncandidates instead of walking the tree. Entries are opaque ids; the caller\nkeeps the meaning (a widget pointer, a slot index).",
+					"line": 54,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset(const ArcVec2& size, float cellSize)",
+							"line": 56
+						},
+						{
+							"kind": "method",
+							"name": "Insert",
+							"signature": "void Insert(uint32_t id, const ArcRect& rect)",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "Query",
+							"signature": "const std::vector<uint32_t>& Query(const ArcVec2& point) const",
+							"line": 79
+						},
+						{
+							"kind": "method",
+							"name": "Contains",
+							"signature": "bool Contains(const ArcVec2& point) const",
+							"line": 94
+						},
+						{
+							"kind": "method",
+							"name": "EntryCount",
+							"signature": "size_t EntryCount() const",
+							"line": 98
+						},
+						{
+							"kind": "method",
+							"name": "Columns",
+							"signature": "int32_t Columns() const",
+							"line": 102
+						},
+						{
+							"kind": "method",
+							"name": "Rows",
+							"signature": "int32_t Rows() const",
+							"line": 106
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Arc/Public/Arc/Core/CArcLog.h",
 			"include": "Arc/Core/CArcLog.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.\nArc UI Framework",
@@ -5031,7 +5134,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 249
 						},
 						{
@@ -6164,7 +6267,7 @@
 						{
 							"kind": "method",
 							"name": "PaintDecorator",
-							"signature": "bool PaintDecorator(class CArcUIRenderer& renderer, const CGeometry& windowRoot, float deltaTime)",
+							"signature": "bool PaintDecorator(class CArcRenderer& renderer, const CGeometry& windowRoot, float deltaTime)",
 							"doc": "Paints the active operation's DecoratorWidget beside the cursor, on\ntop of everything the window drew. Returns false when there is no\ndrag or no decorator. The field existed and nothing ever read it, so\nevery source painted its own ghost or showed none.",
 							"line": 128
 						},
@@ -6334,7 +6437,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 77
 						},
 						{
@@ -6583,7 +6686,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "virtual int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& allottedGeometry, CArcUIRenderer& renderer, int32_t layerId) const = 0",
+							"signature": "virtual int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& allottedGeometry, CArcRenderer& renderer, int32_t layerId) const = 0",
 							"line": 171
 						},
 						{
@@ -6817,7 +6920,7 @@
 						{
 							"kind": "method",
 							"name": "NoteObservedPaint",
-							"signature": "void NoteObservedPaint(CArcUIRenderer& renderer) const",
+							"signature": "void NoteObservedPaint(CArcRenderer& renderer) const",
 							"doc": "An observed widget's OnPaint calls this before anything else: it\nmarks the widget on screen for the next poll and, when a slice is\nbeing recorded around it, writes it into that slice so the replay\ncan keep marking it. Before every return, or an empty text block\nwould drop off the poll and its slice would never learn it filled.",
 							"line": 349
 						},
@@ -6861,340 +6964,347 @@
 						},
 						{
 							"kind": "method",
+							"name": "OnPreviewKeyDown",
+							"signature": "virtual CReply OnPreviewKeyDown(const CGeometry& geo, const CKeyEvent& event)",
+							"doc": "The tunnel phase: before OnKeyDown bubbles from the focused widget, every\nancestor sees the key root-first and may claim it (a modal that eats Escape,\na tool that owns a chord) without special-casing ProcessKeyDown.",
+							"line": 439
+						},
+						{
+							"kind": "method",
 							"name": "OnKeyDown",
 							"signature": "virtual CReply OnKeyDown(const CGeometry& geo, const CKeyEvent& event)",
 							"doc": "Key events start at the focused widget and, while unhandled, are\noffered to each ancestor in turn until one returns Handled — the\nsame leaf-to-root walk pointer events already take. A handler that\nwants a declined key to die where it is returns\nCReply::Unhandled().StopBubbling().",
-							"line": 441
+							"line": 448
 						},
 						{
 							"kind": "method",
 							"name": "OnKeyUp",
 							"signature": "virtual CReply OnKeyUp(const CGeometry& geo, const CKeyEvent& event)",
-							"line": 445
+							"line": 452
 						},
 						{
 							"kind": "method",
 							"name": "OnKeyChar",
 							"signature": "virtual CReply OnKeyChar(const CGeometry& geo, const CCharacterEvent& event)",
-							"line": 449
+							"line": 456
 						},
 						{
 							"kind": "method",
 							"name": "OnTextComposition",
 							"signature": "virtual CReply OnTextComposition(const CGeometry& geo, const CCompositionEvent& event)",
-							"line": 453
+							"line": 460
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseEnter",
 							"signature": "virtual void OnMouseEnter(const CGeometry& geo, const CPointerEvent& event)",
-							"line": 457
+							"line": 464
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseLeave",
 							"signature": "virtual void OnMouseLeave(const CPointerEvent& event)",
-							"line": 459
+							"line": 466
 						},
 						{
 							"kind": "method",
 							"name": "OnDragEnter",
 							"signature": "virtual bool OnDragEnter(const CGeometry& geo, const CDragDropEvent& event)",
 							"doc": "Drop-target contract. While a drag operation is live the drag-drop\nmanager resolves the widget under the cursor on every move — the\nwidget holding mouse capture (the drag source) and its subtree are\nskipped — and walks that path leaf to root offering the drag.\n\nOnDragEnter is the offer: return true to become the target, false to\npass it up the path. A widget that declines must leave no state\nbehind, because it never receives OnDragLeave. The target then gets\nOnDragOver on every move (return false to show the rejected cursor\nwithout giving the target up) and exactly one OnDragLeave when the\ncursor moves off it or the drag ends. OnDrop lands before that final\nleave; returning true reports the drop as consumed.",
-							"line": 476
+							"line": 483
 						},
 						{
 							"kind": "method",
 							"name": "OnDragOver",
 							"signature": "virtual bool OnDragOver(const CGeometry& geo, const CDragDropEvent& event)",
-							"line": 479
+							"line": 486
 						},
 						{
 							"kind": "method",
 							"name": "OnDragLeave",
 							"signature": "virtual void OnDragLeave(const CDragDropEvent& event)",
-							"line": 482
+							"line": 489
 						},
 						{
 							"kind": "method",
 							"name": "OnDrop",
 							"signature": "virtual bool OnDrop(const CGeometry& geo, const CDragDropEvent& event)",
-							"line": 484
+							"line": 491
 						},
 						{
 							"kind": "method",
 							"name": "WantsTextInput",
 							"signature": "virtual bool WantsTextInput(bool& outPassword) const",
 							"doc": "A widget that edits text says so here (and whether it hides it), so\na host can raise a platform on-screen keyboard over it.\nThe default follows IsTextInput(), so a custom widget that types\n(a console line, a palette query) gets the IME without opting in.",
-							"line": 492
+							"line": 499
 						},
 						{
 							"kind": "method",
 							"name": "OnFocusReceived",
 							"signature": "virtual void OnFocusReceived(const CFocusEvent& event)",
-							"line": 497
+							"line": 504
 						},
 						{
 							"kind": "method",
 							"name": "OnFocusLost",
 							"signature": "virtual void OnFocusLost(const CFocusEvent& event)",
-							"line": 502
+							"line": 509
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseCaptureLost",
 							"signature": "virtual void OnMouseCaptureLost()",
-							"line": 508
+							"line": 515
 						},
 						{
 							"kind": "method",
 							"name": "OnCursorQuery",
 							"signature": "virtual EArcCursorType OnCursorQuery(const CGeometry& geo, const CPointerEvent& event) const",
-							"line": 511
+							"line": 518
 						},
 						{
 							"kind": "method",
 							"name": "OnHitTest",
 							"signature": "virtual EHitTestResult OnHitTest(const CGeometry& geo, const ArcVec2& absolutePosition) const",
-							"line": 521
+							"line": 528
 						},
 						{
 							"kind": "method",
 							"name": "ClaimsPointerExclusively",
 							"signature": "virtual bool ClaimsPointerExclusively(const CGeometry& geo, const ArcVec2& absolutePosition) const",
-							"line": 534
+							"line": 541
 						},
 						{
 							"kind": "method",
 							"name": "GetNumChildren",
 							"signature": "virtual int32_t GetNumChildren() const",
-							"line": 538
+							"line": 545
 						},
 						{
 							"kind": "method",
 							"name": "GetChildAt",
 							"signature": "virtual TSharedPtr<AWidget> GetChildAt(int32_t index) const",
-							"line": 541
+							"line": 548
 						},
 						{
 							"kind": "method",
 							"name": "SetCachedGeometry",
 							"signature": "void SetCachedGeometry(const CGeometry& geo)",
-							"line": 545
+							"line": 552
 						},
 						{
 							"kind": "method",
 							"name": "GetCachedGeometry",
 							"signature": "const CGeometry& GetCachedGeometry() const",
-							"line": 548
+							"line": 555
 						},
 						{
 							"kind": "method",
 							"name": "SetVisibility",
 							"signature": "void SetVisibility(EVisibility vis)",
-							"line": 552
+							"line": 559
 						},
 						{
 							"kind": "method",
 							"name": "GetVisibility",
 							"signature": "EVisibility GetVisibility() const",
-							"line": 560
+							"line": 567
 						},
 						{
 							"kind": "method",
 							"name": "IsVisible",
 							"signature": "bool IsVisible() const",
-							"line": 563
+							"line": 570
 						},
 						{
 							"kind": "method",
 							"name": "SetEnabled",
 							"signature": "void SetEnabled(bool enabled)",
 							"doc": "Enabled, hovered and focused are painted, not measured: they must drop\nthe paint cache without throwing away a measure and an arrange that\nare still correct.",
-							"line": 572
+							"line": 579
 						},
 						{
 							"kind": "method",
 							"name": "IsEnabled",
 							"signature": "bool IsEnabled() const",
-							"line": 580
+							"line": 587
 						},
 						{
 							"kind": "method",
 							"name": "IsHovered",
 							"signature": "bool IsHovered() const",
-							"line": 584
+							"line": 591
 						},
 						{
 							"kind": "method",
 							"name": "SetHovered",
 							"signature": "void SetHovered(bool hovered)",
-							"line": 587
+							"line": 594
 						},
 						{
 							"kind": "method",
 							"name": "HasKeyboardFocus",
 							"signature": "bool HasKeyboardFocus() const",
-							"line": 596
+							"line": 603
 						},
 						{
 							"kind": "method",
 							"name": "IsFocusVisible",
 							"signature": "bool IsFocusVisible() const",
 							"doc": "Focus that arrived from the keyboard (Tab, arrows) rather than a\nclick — the :focus-visible rule. A ring on every clicked button is\nnoise; no ring on a tabbed-to button leaves a keyboard user lost.",
-							"line": 603
+							"line": 610
 						},
 						{
 							"kind": "method",
 							"name": "SetPreviewState",
 							"signature": "void SetPreviewState(EArcPreviewState state)",
 							"doc": "Pins a pointer or keyboard state for display. Hover and Focused\nset the flags the widget already reads; Pressed is reported by\nIsPreviewPressed, which the spec-driven widgets OR into their own\npress. The pin holds until the widget is hovered, focused or left\nfor real, so a gallery shows it on a hit-test-invisible row.",
-							"line": 612
+							"line": 619
 						},
 						{
 							"kind": "method",
 							"name": "GetPreviewState",
 							"signature": "EArcPreviewState GetPreviewState() const",
-							"line": 620
+							"line": 627
 						},
 						{
 							"kind": "method",
 							"name": "IsPreviewPressed",
 							"signature": "bool IsPreviewPressed() const",
-							"line": 623
+							"line": 630
 						},
 						{
 							"kind": "method",
 							"name": "SetCursor",
 							"signature": "inline void SetCursor(EArcCursorType cursor)",
 							"doc": "Also applies to system cursor",
-							"line": 627
+							"line": 634
 						},
 						{
 							"kind": "method",
 							"name": "GetCursor",
 							"signature": "EArcCursorType GetCursor() const",
-							"line": 628
+							"line": 635
 						},
 						{
 							"kind": "method",
 							"name": "SetTag",
 							"signature": "void SetTag(const CName& tag)",
-							"line": 632
+							"line": 639
 						},
 						{
 							"kind": "method",
 							"name": "GetTag",
 							"signature": "const CName& GetTag() const",
-							"line": 635
+							"line": 642
 						},
 						{
 							"kind": "method",
 							"name": "SetToolTipText",
 							"signature": "void SetToolTipText(const CText& text)",
-							"line": 639
+							"line": 646
 						},
 						{
 							"kind": "method",
 							"name": "SetToolTip",
 							"signature": "void SetToolTip(TSharedPtr<AWidget> widget)",
 							"doc": "Rich tooltip (U1): an arbitrary widget hosted in the tooltip popup\nwindow instead of plain text lines — icons, keycap chips, asset\nthumbnails. Takes precedence over SetToolTipText when set.",
-							"line": 646
+							"line": 653
 						},
 						{
 							"kind": "method",
 							"name": "GetToolTip",
 							"signature": "const TSharedPtr<AWidget>& GetToolTip() const",
-							"line": 649
+							"line": 656
 						},
 						{
 							"kind": "method",
 							"name": "GetToolTipText",
 							"signature": "const CText& GetToolTipText() const",
-							"line": 652
+							"line": 659
 						},
 						{
 							"kind": "method",
 							"name": "SetAccessibleLabel",
 							"signature": "void SetAccessibleLabel(const CText& label)",
-							"line": 656
+							"line": 663
 						},
 						{
 							"kind": "method",
 							"name": "GetAccessibleLabel",
 							"signature": "const CText& GetAccessibleLabel() const",
-							"line": 659
+							"line": 666
 						},
 						{
 							"kind": "method",
 							"name": "GetAccessibleRole",
 							"signature": "virtual EAccessibleRole GetAccessibleRole() const",
 							"doc": "What a screen reader calls this control. Widgets override the role\nand value; deriving them from the type name broke for every\nsubclass and left numeric, radio and multi-line fields unnamed.",
-							"line": 666
+							"line": 673
 						},
 						{
 							"kind": "method",
 							"name": "GetAccessibleValue",
 							"signature": "virtual std::string GetAccessibleValue() const",
-							"line": 669
+							"line": 676
 						},
 						{
 							"kind": "method",
 							"name": "GetAccessibleName",
 							"signature": "virtual std::string GetAccessibleName() const",
 							"doc": "The accessible label when one was set; otherwise the first text\nfound under the widget (an icon glyph is not text); otherwise the\ntooltip — which is what names an icon-only toolbar button.",
-							"line": 676
+							"line": 683
 						},
 						{
 							"kind": "method",
 							"name": "SetParentWidget",
 							"signature": "void SetParentWidget(TSharedPtr<AWidget> parent)",
 							"doc": "Parent tracking (weak reference to avoid cycles)",
-							"line": 679
+							"line": 686
 						},
 						{
 							"kind": "method",
 							"name": "GetParentWidget",
 							"signature": "TSharedPtr<AWidget> GetParentWidget() const",
-							"line": 682
+							"line": 689
 						},
 						{
 							"kind": "method",
 							"name": "SetRenderTransform",
 							"signature": "void SetRenderTransform(const CArcRenderTransform& transform)",
 							"doc": "A transform on how this widget paints and is hit, not on its\nlayout, applied about the pivot (a fraction of its size, the centre\nby default). Its parent applies it — containers arrange and paint\ntheir children through ArrangeChildWidget / PaintChildWidget — so\nthe whole subtree turns with it and hit testing follows. A layout\ninvalidation, because the transform lives in the arranged geometry\nthe hit test reads.",
-							"line": 693
+							"line": 700
 						},
 						{
 							"kind": "method",
 							"name": "GetRenderTransform",
 							"signature": "const CArcRenderTransform& GetRenderTransform() const",
-							"line": 697
+							"line": 704
 						},
 						{
 							"kind": "method",
 							"name": "SetRenderTransformPivot",
 							"signature": "void SetRenderTransformPivot(const ArcVec2& pivot)",
-							"line": 701
+							"line": 708
 						},
 						{
 							"kind": "method",
 							"name": "GetRenderTransformPivot",
 							"signature": "const ArcVec2& GetRenderTransformPivot() const",
-							"line": 705
+							"line": 712
 						},
 						{
 							"kind": "method",
 							"name": "HasRenderTransform",
 							"signature": "bool HasRenderTransform() const",
-							"line": 709
+							"line": 716
 						},
 						{
 							"kind": "method",
 							"name": "ComputeRenderTransform",
 							"signature": "ArcMat3 ComputeRenderTransform(const CGeometry& geo) const",
 							"doc": "The render transform in absolute space for the given layout\ngeometry: about the pivot point of its rect.",
-							"line": 715
+							"line": 722
 						},
 						{
 							"kind": "method",
@@ -7202,123 +7312,123 @@
 							"signature": "static void ArrangeChildWidget(AWidget& child, const CGeometry& childGeometry)",
 							"static": true,
 							"doc": "Arranges a child into childGeometry with the child's own render\ntransform folded into the geometry it caches, so the transform\nreaches its hit test and every geometry built below it.",
-							"line": 725
+							"line": 732
 						},
 						{
 							"kind": "method",
 							"name": "PaintChildWidget",
-							"signature": "static int32_t PaintChildWidget(const AWidget& child, const CArcPaintArgs& args, CArcUIRenderer& renderer, int32_t layerId)",
+							"signature": "static int32_t PaintChildWidget(const AWidget& child, const CArcPaintArgs& args, CArcRenderer& renderer, int32_t layerId)",
 							"static": true,
 							"doc": "Paints a child from its cached geometry under its render transform.",
-							"line": 728
+							"line": 735
 						},
 						{
 							"kind": "method",
 							"name": "SetRenderOpacity",
 							"signature": "void SetRenderOpacity(float opacity)",
 							"doc": "The opacity multiplies into every vertex colour the widget emits, so\na slice recorded at one value paints the wrong alpha at another.",
-							"line": 732
+							"line": 739
 						},
 						{
 							"kind": "method",
 							"name": "GetRenderOpacity",
 							"signature": "float GetRenderOpacity() const",
-							"line": 740
+							"line": 747
 						},
 						{
 							"kind": "method",
 							"name": "GetTypeName",
 							"signature": "virtual const char* GetTypeName() const",
-							"line": 744
+							"line": 751
 						},
 						{
 							"kind": "method",
 							"name": "IsTextInput",
 							"signature": "virtual bool IsTextInput() const",
 							"doc": "True for widgets that consume plain keystrokes as text while focused\n(editable text boxes and their kin). The input processor suppresses\nmodifier-less command chords when such a widget has focus.",
-							"line": 751
+							"line": 758
 						},
 						{
 							"kind": "method",
 							"name": "ConsumesTab",
 							"signature": "virtual bool ConsumesTab() const",
 							"doc": "True only for a widget that types Tab as a character (the multi-line\nbox). Every other text input lets Tab move focus, which is the only\nway out of a single-line field from the keyboard.",
-							"line": 758
+							"line": 765
 						},
 						{
 							"kind": "method",
 							"name": "GetFocusVisual",
 							"signature": "virtual EFocusVisual GetFocusVisual() const",
 							"doc": "How this widget's keyboard focus is drawn by CArcFocusRing. Text\ninputs answer None (their focused border says it); a row-like\nwidget answers InsetBorder.",
-							"line": 765
+							"line": 772
 						},
 						{
 							"kind": "method",
 							"name": "PaintsOwnFocus",
 							"signature": "virtual bool PaintsOwnFocus() const",
 							"doc": "True for a widget whose own paint shows keyboard focus where the\nframework's ring would be wrong (the ring round a slider's thumb,\na tree's or list's keyboard row): it answers None above and still\nshows focus, which the keyboard audit has to know.",
-							"line": 773
+							"line": 780
 						},
 						{
 							"kind": "method",
 							"name": "OwnsKeyboard",
 							"signature": "virtual bool OwnsKeyboard() const",
 							"doc": "True while a self-drawn overlay (a command palette) holds the\nkeyboard the way a modal does: Tab is its own key there, so the\nkeyboard audit closes it with Escape before tabbing the window.",
-							"line": 780
+							"line": 787
 						},
 						{
 							"kind": "method",
 							"name": "GetFocusRadius",
 							"signature": "virtual float GetFocusRadius() const",
 							"doc": "The corner radius of the control's own outline. The focus ring is\ndrawn concentric with it (this plus the gap and stroke), so a pill\ntoggle gets a pill ring and a 2 px checkbox a near-square one; one\nfixed radius made every ring a 4 px rounded box whatever it circled.",
-							"line": 788
+							"line": 795
 						},
 						{
 							"kind": "method",
 							"name": "AllowsKeyBubbling",
 							"signature": "virtual bool AllowsKeyBubbling() const",
 							"doc": "Whether a key this widget declined may be offered to its ancestors.\nOverriding to false restores the pre-bubbling behaviour for this\nwidget and everything under it — the opt-out for a widget tree\n(a game HUD arbitrating its own input, say) that must not have its\nleftover keys reinterpreted by whatever it happens to be parented\nto. The framework fallbacks still run; only the walk stops.",
-							"line": 798
+							"line": 805
 						},
 						{
 							"kind": "method",
 							"name": "IsFocusable",
 							"signature": "virtual bool IsFocusable() const",
 							"doc": "Focusability predicate for directional (gamepad/keyboard)\nnavigation — the FNavigationConfig seam. Interactive widgets\noverride to true; navigation additionally requires the widget to\nbe visible and enabled.",
-							"line": 806
+							"line": 813
 						},
 						{
 							"kind": "method",
 							"name": "OnActivate",
 							"signature": "virtual bool OnActivate()",
 							"doc": "A gamepad/keyboard accept aimed at this widget. Widgets translate\nthe activation internally (fire the click delegate, toggle, open)\ninstead of receiving a synthesized mouse click. Returns true when\nthe activation was consumed.",
-							"line": 814
+							"line": 821
 						},
 						{
 							"kind": "method",
 							"name": "Invalidate",
 							"signature": "void Invalidate()",
 							"doc": "Marks this widget's desired size dirty, then walks up the parent chain\nflagging ancestors. The walk stops at the first ancestor already\nflagged — everything above it was flagged when it was.",
-							"line": 821
+							"line": 828
 						},
 						{
 							"kind": "method",
 							"name": "NeedsLayout",
 							"signature": "bool NeedsLayout() const",
-							"line": 823
+							"line": 830
 						},
 						{
 							"kind": "method",
 							"name": "ClearLayoutFlag",
 							"signature": "void ClearLayoutFlag()",
-							"line": 826
+							"line": 833
 						},
 						{
 							"kind": "method",
 							"name": "NeedsSubtreeLayout",
 							"signature": "bool NeedsSubtreeLayout() const",
 							"doc": "True when this widget or anything below it needs a fresh measure.",
-							"line": 831
+							"line": 838
 						},
 						{
 							"kind": "method",
@@ -7326,26 +7436,26 @@
 							"signature": "static void InvalidateAllWidgets()",
 							"static": true,
 							"doc": "Drops every cached desired size in the process, without walking any\ntree. This is the hammer for changes no widget can observe locally:\nactive style set swapped, fonts reloaded, application scale changed.",
-							"line": 838
+							"line": 845
 						},
 						{
 							"kind": "method",
 							"name": "SetFocusScopeId",
 							"signature": "void SetFocusScopeId(const CName& id)",
 							"doc": "The focus scope this widget roots, None on everything else. The\ncommand system walks from the focused widget to the root, collects\nthe scopes named along the way and offers a chord to them innermost\nfirst, before the pushed lists and the global keymap. That is what\nmakes a shortcut follow the panel the user is in; the editor used to\nscope by pointer hover, which retargeted the chord the moment the\nmouse drifted off the panel mid-edit. Focus itself is unchanged —\nOnFocusReceived/OnFocusLost and CReply::SetUserFocus still own it,\nand a scope is only read off the path they produce.",
-							"line": 849
+							"line": 856
 						},
 						{
 							"kind": "method",
 							"name": "GetFocusScopeId",
 							"signature": "const CName& GetFocusScopeId() const",
-							"line": 852
+							"line": 859
 						},
 						{
 							"kind": "method",
 							"name": "IsFocusScopeRoot",
 							"signature": "bool IsFocusScopeRoot() const",
-							"line": 855
+							"line": 862
 						}
 					]
 				},
@@ -7437,7 +7547,7 @@
 						{
 							"kind": "method",
 							"name": "FPaintScope",
-							"signature": "FPaintScope(const AWidget& widget, const CGeometry& allottedGeometry, CArcUIRenderer& renderer, int32_t layerId)",
+							"signature": "FPaintScope(const AWidget& widget, const CGeometry& allottedGeometry, CArcRenderer& renderer, int32_t layerId)",
 							"line": 364
 						},
 						{
@@ -7485,26 +7595,26 @@
 					"name": "AWidget::EHitTestResult",
 					"namespace": "Arcf",
 					"bases": "uint8_t",
-					"line": 515,
+					"line": 522,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Hit",
 							"signature": "Hit",
-							"line": 516
+							"line": 523
 						},
 						{
 							"kind": "enumerator",
 							"name": "NotHit",
 							"signature": "NotHit",
-							"line": 517
+							"line": 524
 						},
 						{
 							"kind": "enumerator",
 							"name": "HitTestInvisible",
 							"signature": "HitTestInvisible",
 							"doc": "Widget is visible but passes through hits",
-							"line": 518
+							"line": 525
 						}
 					]
 				}
@@ -7514,7 +7624,7 @@
 					"kind": "function",
 					"name": "SetCursor",
 					"signature": "inline void Arcf::AWidget::SetCursor(EArcCursorType cursor)",
-					"line": 1028
+					"line": 1035
 				}
 			]
 		},
@@ -7638,51 +7748,63 @@
 						},
 						{
 							"kind": "method",
+							"name": "SetMinimum",
+							"signature": "void SetMinimum(float minimum)",
+							"line": 55
+						},
+						{
+							"kind": "method",
+							"name": "GetMinimum",
+							"signature": "float GetMinimum() const",
+							"line": 56
+						},
+						{
+							"kind": "method",
 							"name": "RegisterWindow",
 							"signature": "void RegisterWindow(uint32_t platformWindowId, float scale, bool isMain)",
-							"line": 56
+							"line": 66
 						},
 						{
 							"kind": "method",
 							"name": "UpdateWindowScale",
 							"signature": "void UpdateWindowScale(uint32_t platformWindowId, float scale)",
-							"line": 57
+							"line": 67
 						},
 						{
 							"kind": "method",
 							"name": "UnregisterWindow",
 							"signature": "void UnregisterWindow(uint32_t platformWindowId)",
-							"line": 58
+							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "GetScaleForWindow",
 							"signature": "float GetScaleForWindow(uint32_t platformWindowId) const",
-							"line": 59
+							"line": 69
 						},
 						{
 							"kind": "method",
 							"name": "GetMainWindowId",
 							"signature": "uint32_t GetMainWindowId() const",
-							"line": 60
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "LogicalToPhysical",
 							"signature": "float LogicalToPhysical(float logical) const",
-							"line": 65
+							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "PhysicalToLogical",
 							"signature": "float PhysicalToLogical(float physical) const",
-							"line": 68
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "IsHighDPI",
 							"signature": "bool IsHighDPI() const",
-							"line": 71
+							"line": 81
 						}
 					]
 				}
@@ -7811,7 +7933,7 @@
 						{
 							"kind": "method",
 							"name": "Paint",
-							"signature": "static bool Paint(CArcUIRenderer& renderer, const TSharedPtr<AWidget>& focused)",
+							"signature": "static bool Paint(CArcRenderer& renderer, const TSharedPtr<AWidget>& focused)",
 							"static": true,
 							"doc": "Paints the focus visual when the widget's focus came from the\nkeyboard. Returns true when anything was drawn.",
 							"line": 29
@@ -9612,131 +9734,131 @@
 					"kind": "class",
 					"name": "CArcWindow",
 					"namespace": "Arcf",
-					"line": 40,
+					"line": 41,
 					"members": [
 						{
 							"kind": "method",
 							"name": "GetID",
 							"signature": "uint32_t GetID() const",
-							"line": 42
+							"line": 43
 						},
 						{
 							"kind": "method",
 							"name": "GetPlatformWindow",
 							"signature": "IArcPlatformWindow* GetPlatformWindow() const",
-							"line": 45
+							"line": 46
 						},
 						{
 							"kind": "method",
 							"name": "GetSwapChain",
 							"signature": "IArcRHISwapChain* GetSwapChain() const",
-							"line": 48
+							"line": 49
 						},
 						{
 							"kind": "method",
 							"name": "GetRenderer",
-							"signature": "CArcUIRenderer* GetRenderer()",
-							"line": 51
+							"signature": "CArcRenderer* GetRenderer()",
+							"line": 52
 						},
 						{
 							"kind": "method",
 							"name": "GetRenderer",
-							"signature": "const CArcUIRenderer* GetRenderer() const",
-							"line": 54
+							"signature": "const CArcRenderer* GetRenderer() const",
+							"line": 55
 						},
 						{
 							"kind": "method",
 							"name": "SetRootWidget",
 							"signature": "void SetRootWidget(TSharedPtr<AWidget> widget)",
-							"line": 58
+							"line": 59
 						},
 						{
 							"kind": "method",
 							"name": "GetRootWidget",
 							"signature": "TSharedPtr<AWidget> GetRootWidget() const",
-							"line": 59
+							"line": 60
 						},
 						{
 							"kind": "method",
 							"name": "GetInputProcessor",
 							"signature": "CArcInputProcessor& GetInputProcessor()",
-							"line": 63
+							"line": 64
 						},
 						{
 							"kind": "method",
 							"name": "GetWidth",
 							"signature": "uint32_t GetWidth() const",
-							"line": 67
+							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "GetHeight",
 							"signature": "uint32_t GetHeight() const",
-							"line": 70
+							"line": 71
 						},
 						{
 							"kind": "method",
 							"name": "IsFocused",
 							"signature": "bool IsFocused() const",
-							"line": 73
+							"line": 74
 						},
 						{
 							"kind": "method",
 							"name": "IsMinimized",
 							"signature": "bool IsMinimized() const",
-							"line": 76
+							"line": 77
 						},
 						{
 							"kind": "method",
 							"name": "SetTitle",
 							"signature": "void SetTitle(const std::string& title)",
-							"line": 80
+							"line": 81
 						},
 						{
 							"kind": "method",
 							"name": "Close",
 							"signature": "void Close()",
-							"line": 85
+							"line": 86
 						},
 						{
 							"kind": "method",
 							"name": "ShouldClose",
 							"signature": "bool ShouldClose() const",
-							"line": 88
+							"line": 89
 						},
 						{
 							"kind": "method",
 							"name": "SetCloseOnEscape",
 							"signature": "void SetCloseOnEscape(bool close)",
 							"doc": "Dialog keyboard contract for secondary windows: when the focused\nwidget leaves the key unhandled, Escape closes (same path as the\nOS titlebar X — owners already poll ShouldClose) and Enter fires\nthe default action. Both opt-in so tool windows (tear-off floats)\nkeep their keys.",
-							"line": 97
+							"line": 98
 						},
 						{
 							"kind": "method",
 							"name": "SetDefaultAction",
 							"signature": "void SetDefaultAction(std::function<void()> action)",
-							"line": 100
+							"line": 101
 						},
 						{
 							"kind": "method",
 							"name": "SetHitTestCallback",
 							"signature": "void SetHitTestCallback(ArcHitTestCallback callback)",
 							"doc": "Hit test for custom window frames (borderless)",
-							"line": 105
+							"line": 106
 						},
 						{
 							"kind": "method",
 							"name": "IsPopup",
 							"signature": "bool IsPopup() const",
 							"doc": "True for the borderless topmost popup windows hosting menus and\ntooltips — they paint only their root widget, never the per-window\nchrome (tooltips, toasts, modals, menu overlays).",
-							"line": 114
+							"line": 115
 						},
 						{
 							"kind": "method",
 							"name": "GetPresentCount",
 							"signature": "uint64_t GetPresentCount() const",
 							"doc": "Frames this window has handed to its swapchain's present. Counted on\nwhichever thread presents, so a reader compares two samples, not a\nsingle value against the frame number.",
-							"line": 121
+							"line": 122
 						}
 					]
 				},
@@ -9744,37 +9866,37 @@
 					"kind": "struct",
 					"name": "FArcOwnedWindowFrame",
 					"namespace": "Arcf",
-					"line": 182,
+					"line": 183,
 					"members": [
 						{
 							"kind": "field",
 							"name": "Window",
 							"signature": "CArcWindow* Window = nullptr",
-							"line": 183
+							"line": 184
 						},
 						{
 							"kind": "field",
 							"name": "Width",
 							"signature": "uint32_t Width = 0",
-							"line": 184
+							"line": 185
 						},
 						{
 							"kind": "field",
 							"name": "Height",
 							"signature": "uint32_t Height = 0",
-							"line": 185
+							"line": 186
 						},
 						{
 							"kind": "field",
 							"name": "Serial",
 							"signature": "uint64_t Serial = 0",
-							"line": 186
+							"line": 187
 						},
 						{
 							"kind": "field",
 							"name": "Recorded",
 							"signature": "bool Recorded = false",
-							"line": 187
+							"line": 188
 						}
 					]
 				},
@@ -9782,335 +9904,335 @@
 					"kind": "class",
 					"name": "CArcWindowManager",
 					"namespace": "Arcf",
-					"line": 195,
+					"line": 196,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Get",
 							"signature": "static CArcWindowManager& Get()",
 							"static": true,
-							"line": 197
+							"line": 198
 						},
 						{
 							"kind": "method",
 							"name": "Initialize",
 							"signature": "bool Initialize(IArcRHIDevice* device, IArcPlatformBackend* platformBackend = nullptr)",
 							"doc": "Initialize with an RHI device.\nIf platformBackend is null, creates a default one (SDL3).",
-							"line": 201
+							"line": 202
 						},
 						{
 							"kind": "method",
 							"name": "Shutdown",
 							"signature": "void Shutdown()",
-							"line": 202
+							"line": 203
 						},
 						{
 							"kind": "method",
 							"name": "GetPlatformBackend",
 							"signature": "IArcPlatformBackend* GetPlatformBackend() const",
-							"line": 204
+							"line": 205
 						},
 						{
 							"kind": "method",
 							"name": "SetModalLoopTickCallback",
 							"signature": "void SetModalLoopTickCallback(std::function<void()> callback)",
 							"doc": "Replaces the default modal-loop repaint (all Arc-owned windows)\nwith the host's own pump — see IArcPlatformBackend.",
-							"line": 210
+							"line": 211
 						},
 						{
 							"kind": "method",
 							"name": "IsAnyWindowInModalSizeMove",
 							"signature": "bool IsAnyWindowInModalSizeMove() const",
-							"line": 211
+							"line": 212
 						},
 						{
 							"kind": "method",
 							"name": "SetShaderLoader",
-							"signature": "void SetShaderLoader(CArcUIRenderer::CShaderReadFunc loader)",
+							"signature": "void SetShaderLoader(CArcRenderer::CShaderReadFunc loader)",
 							"doc": "Shader loading (must be called before CreateWindow).",
-							"line": 214
+							"line": 215
 						},
 						{
 							"kind": "method",
 							"name": "SetShaderFallbackDirectory",
 							"signature": "void SetShaderFallbackDirectory(const std::string& spvDirectory)",
-							"line": 215
+							"line": 216
 						},
 						{
 							"kind": "method",
 							"name": "CreateWindow",
 							"signature": "CArcWindow* CreateWindow(const CArcWindowDesc& desc)",
 							"doc": "Create a new window from descriptor. Arc creates and owns the OS window.",
-							"line": 218
+							"line": 219
 						},
 						{
 							"kind": "method",
 							"name": "CreateFromExisting",
 							"signature": "CArcWindow* CreateFromExisting(std::unique_ptr<IArcPlatformWindow> platformWindow, bool createSwapchain = true, EArcPixelFormat externalColorFormat = EArcPixelFormat::BGRA8)",
 							"doc": "Create from an existing platform window. Arc renders into it but doesn't own it.\nSet createSwapchain=false when the host engine owns the swapchain (UE5-style);\nexternalColorFormat must then match the host's render-target format.",
-							"line": 223
+							"line": 224
 						},
 						{
 							"kind": "method",
 							"name": "PaintMainWindow",
 							"signature": "void PaintMainWindow(IArcRHICommandBuffer* cmd, uint32_t width, uint32_t height, float deltaTime)",
 							"doc": "Paint the main window's UI into an external command buffer (host owns\nswapchain + render pass). The caller must have already begun a render\npass on cmd — HDR staging/encode is handled by the host's overlay pass.",
-							"line": 230
+							"line": 231
 						},
 						{
 							"kind": "method",
 							"name": "PaintMainWindowProduce",
 							"signature": "void PaintMainWindowProduce(uint32_t width, uint32_t height, float deltaTime)",
-							"line": 232
+							"line": 233
 						},
 						{
 							"kind": "method",
 							"name": "PaintMainWindowRecord",
 							"signature": "void PaintMainWindowRecord(IArcRHICommandBuffer* cmd, uint64_t maxSerial = UINT64_MAX)",
-							"line": 233
+							"line": 234
 						},
 						{
 							"kind": "method",
 							"name": "DestroyWindow",
 							"signature": "void DestroyWindow(uint32_t windowId)",
-							"line": 235
+							"line": 236
 						},
 						{
 							"kind": "method",
 							"name": "DestroyWindow",
 							"signature": "void DestroyWindow(CArcWindow* window)",
-							"line": 236
+							"line": 237
 						},
 						{
 							"kind": "method",
 							"name": "GetMainWindow",
 							"signature": "CArcWindow* GetMainWindow() const",
-							"line": 238
+							"line": 239
 						},
 						{
 							"kind": "method",
 							"name": "GetWindow",
 							"signature": "CArcWindow* GetWindow(uint32_t id) const",
-							"line": 239
+							"line": 240
 						},
 						{
 							"kind": "method",
 							"name": "FindWindowByPlatformID",
 							"signature": "CArcWindow* FindWindowByPlatformID(uint32_t platformWindowId) const",
-							"line": 240
+							"line": 241
 						},
 						{
 							"kind": "method",
 							"name": "GetAllWindows",
 							"signature": "const std::vector<std::unique_ptr<CArcWindow>>& GetAllWindows() const",
-							"line": 241
+							"line": 242
 						},
 						{
 							"kind": "method",
 							"name": "GetLiveWindowCount",
 							"signature": "size_t GetLiveWindowCount() const",
 							"doc": "Windows a frame actually has to paint: parked popups (closed\ntooltips kept hidden for reuse) and windows already closing are\nstill in GetAllWindows but cost nothing. A host deciding whether\nthe frame has more than one window must ask this, or the first\ntooltip of the session leaves a parked window that never goes away.",
-							"line": 250
+							"line": 251
 						},
 						{
 							"kind": "method",
 							"name": "IsLiveWindowState",
 							"signature": "static bool IsLiveWindowState(bool hasPlatformWindow, bool shouldClose, bool parked)",
 							"static": true,
-							"line": 251
+							"line": 252
 						},
 						{
 							"kind": "method",
 							"name": "GetRetiringWindowCount",
 							"signature": "size_t GetRetiringWindowCount() const",
 							"doc": "Closed popup windows hidden and waiting for the GPU to retire their\nlast frames before their swapchain is freed (see RetirePopupWindow).",
-							"line": 255
+							"line": 256
 						},
 						{
 							"kind": "method",
 							"name": "GetRetiredPopupReleaseCount",
 							"signature": "uint64_t GetRetiredPopupReleaseCount() const",
 							"doc": "Popup hosts torn down so far by each path: after the GPU retired\nthem (no wait) or immediately with a device-wide idle wait.",
-							"line": 261
+							"line": 262
 						},
 						{
 							"kind": "method",
 							"name": "GetBlockingPopupReleaseCount",
 							"signature": "uint64_t GetBlockingPopupReleaseCount() const",
-							"line": 264
+							"line": 265
 						},
 						{
 							"kind": "method",
 							"name": "GetPopupReleaseMs",
 							"signature": "double GetPopupReleaseMs() const",
 							"doc": "Milliseconds the game thread spent tearing popup hosts down, summed\nover every release — what a menu close costs the frame it lands on.",
-							"line": 270
+							"line": 271
 						},
 						{
 							"kind": "method",
 							"name": "SetDeferredPopupRelease",
 							"signature": "void SetDeferredPopupRelease(bool deferred)",
-							"line": 274
+							"line": 275
 						},
 						{
 							"kind": "alias",
 							"name": "CContextMenuCallback",
 							"signature": "using CContextMenuCallback = std::function<void(const char*, float, float, uint32_t)>",
-							"line": 278
+							"line": 279
 						},
 						{
 							"kind": "method",
 							"name": "SetContextMenuCallback",
 							"signature": "void SetContextMenuCallback(CContextMenuCallback cb)",
-							"line": 279
+							"line": 280
 						},
 						{
 							"kind": "alias",
 							"name": "CShortcutCallback",
 							"signature": "using CShortcutCallback = std::function<bool(int key, bool ctrl, bool shift, bool alt)>",
-							"line": 283
+							"line": 284
 						},
 						{
 							"kind": "method",
 							"name": "SetShortcutCallback",
 							"signature": "void SetShortcutCallback(CShortcutCallback cb)",
-							"line": 284
+							"line": 285
 						},
 						{
 							"kind": "alias",
 							"name": "CDoubleShiftCallback",
 							"signature": "using CDoubleShiftCallback = std::function<void()>",
 							"doc": "Shift tapped twice with no other key between, within\nkDoubleShiftWindowMs: the design's second way into the command\npalette.",
-							"line": 291
+							"line": 292
 						},
 						{
 							"kind": "method",
 							"name": "SetDoubleShiftCallback",
 							"signature": "void SetDoubleShiftCallback(CDoubleShiftCallback cb)",
-							"line": 292
+							"line": 293
 						},
 						{
 							"kind": "field",
 							"name": "kDoubleShiftWindowMs",
 							"signature": "static constexpr int32_t kDoubleShiftWindowMs = 400",
 							"static": true,
-							"line": 295
+							"line": 296
 						},
 						{
 							"kind": "method",
 							"name": "TrackDoubleShift",
 							"signature": "bool TrackDoubleShift(EKey key)",
 							"doc": "Feeds one key press to the double-Shift detector; true when it\ncompleted a double tap (and the callback ran).",
-							"line": 299
+							"line": 300
 						},
 						{
 							"kind": "alias",
 							"name": "COverlayCallback",
-							"signature": "using COverlayCallback = std::function<void(CArcUIRenderer& renderer, float width, float height)>",
-							"line": 301
+							"signature": "using COverlayCallback = std::function<void(CArcRenderer& renderer, float width, float height)>",
+							"line": 302
 						},
 						{
 							"kind": "method",
 							"name": "SetOverlayCallback",
 							"signature": "void SetOverlayCallback(COverlayCallback cb)",
-							"line": 302
+							"line": 303
 						},
 						{
 							"kind": "method",
 							"name": "ProcessEvents",
 							"signature": "void ProcessEvents()",
-							"line": 306
+							"line": 307
 						},
 						{
 							"kind": "method",
 							"name": "RenderAll",
 							"signature": "void RenderAll(float deltaTime)",
-							"line": 307
+							"line": 308
 						},
 						{
 							"kind": "method",
 							"name": "RenderOwnedWindows",
 							"signature": "void RenderOwnedWindows(float deltaTime)",
 							"doc": "Renders and presents only the Arc-owned swapchain windows, skipping\nwrapped/external ones, all on the calling thread. Host engines call\nit once per frame after PaintMainWindow. Does not tick the animation\nmanager — PaintMainWindow already did.",
-							"line": 313
+							"line": 314
 						},
 						{
 							"kind": "method",
 							"name": "ProduceOwnedWindows",
 							"signature": "std::vector<FArcOwnedWindowFrame> ProduceOwnedWindows(float deltaTime)",
 							"doc": "RenderOwnedWindows in three parts for a host that records on its\nown rendering thread. Produce runs on the game thread (layout,\npaint, batch snapshot) and pins each window's batch; Record opens\neach window's frame, records the pinned batch and closes it; Present\nhands each recorded window to its swapchain's deferred present.\nRecord and Present touch no widget and no platform window, so they\nmay run on another thread while the game thread produces the next\nframe. The windows stay alive until the record fence (below) ran.",
-							"line": 323
+							"line": 324
 						},
 						{
 							"kind": "method",
 							"name": "RecordOwnedWindows",
 							"signature": "void RecordOwnedWindows(std::vector<FArcOwnedWindowFrame>& frames)",
-							"line": 324
+							"line": 325
 						},
 						{
 							"kind": "method",
 							"name": "PresentOwnedWindows",
 							"signature": "void PresentOwnedWindows(const std::vector<FArcOwnedWindowFrame>& frames)",
-							"line": 325
+							"line": 326
 						},
 						{
 							"kind": "method",
 							"name": "SetRecordFence",
 							"signature": "void SetRecordFence(std::function<void()> fence)",
 							"doc": "Waits until no produced window frame is still being recorded. Run\nbefore any window's GPU side is torn down; a host recording owned\nwindows on another thread must install it.",
-							"line": 330
+							"line": 331
 						},
 						{
 							"kind": "method",
 							"name": "HasOwnedWindowsToRender",
 							"signature": "bool HasOwnedWindowsToRender() const",
 							"doc": "True when RenderOwnedWindows would record at least one window. A\nhost that must fence its render thread before that recording asks\nfirst, so a frame with no floating panel or popup keeps its overlap.",
-							"line": 337
+							"line": 338
 						},
 						{
 							"kind": "method",
 							"name": "ShouldQuit",
 							"signature": "bool ShouldQuit() const",
-							"line": 339
+							"line": 340
 						},
 						{
 							"kind": "method",
 							"name": "ResetInputState",
 							"signature": "void ResetInputState()",
-							"line": 343
+							"line": 344
 						},
 						{
 							"kind": "method",
 							"name": "DismissTooltip",
 							"signature": "void DismissTooltip()",
 							"doc": "Hides the hover tooltip immediately and keeps it hidden until the\npointer moves again. Every mouse press routes through here, as does\nevery popup that opens and every loss of window focus.",
-							"line": 348
+							"line": 349
 						},
 						{
 							"kind": "method",
 							"name": "SetOSPopupsEnabled",
 							"signature": "void SetOSPopupsEnabled(bool enabled)",
 							"doc": "Menus and tooltips as real OS windows (borderless, non-activating,\ntopmost) so they can overhang the owning window like every native\napp. On by default; when off — or when popup creation fails — the\nlegacy in-window overlay painting takes over.",
-							"line": 354
+							"line": 355
 						},
 						{
 							"kind": "method",
 							"name": "AreOSPopupsEnabled",
 							"signature": "bool AreOSPopupsEnabled() const",
-							"line": 357
+							"line": 358
 						},
 						{
 							"kind": "method",
 							"name": "SetPopupsInWindowWhenTheyFit",
 							"signature": "void SetPopupsInWindowWhenTheyFit(bool enabled)",
 							"doc": "A menu or tooltip that fits inside its owning window paints there,\nas Slate does, and only one that must overhang the window gets an\nOS window of its own. Each OS popup costs a swapchain, a command\nbuffer and a renderer, and every one of those once drained the GPU\non the game thread: the owner's 1-19 s stalls sat next to popup\ncreation and resizes. On by default.",
-							"line": 367
+							"line": 368
 						},
 						{
 							"kind": "method",
 							"name": "ArePopupsInWindowWhenTheyFit",
 							"signature": "bool ArePopupsInWindowWhenTheyFit() const",
-							"line": 370
+							"line": 371
 						},
 						{
 							"kind": "method",
@@ -10118,101 +10240,108 @@
 							"signature": "static bool PopupFitsInWindow(const CArcWindow* owner, const ArcRect& rect)",
 							"static": true,
 							"doc": "Whether a popup rect in the owner's logical space lies wholly\ninside the owner window, and so needs no OS window.",
-							"line": 376
+							"line": 377
 						},
 						{
 							"kind": "method",
 							"name": "GetPopupWindowsCreated",
 							"signature": "uint64_t GetPopupWindowsCreated() const",
 							"doc": "OS popup windows created since startup (a test reads how many\nan interaction cost).",
-							"line": 380
+							"line": 381
 						},
 						{
 							"kind": "method",
 							"name": "GetReentrantPaintsRefused",
 							"signature": "uint64_t GetReentrantPaintsRefused() const",
 							"doc": "Window paints refused because another paint was still on the game\nthread's stack (a window message arriving mid-frame).",
-							"line": 386
+							"line": 387
 						},
 						{
 							"kind": "method",
 							"name": "GetSharedPipelineWindows",
 							"signature": "uint64_t GetSharedPipelineWindows() const",
 							"doc": "Windows that took an existing window's pipelines and white texture\ninstead of building their own. The first window to build a set\nleaves it held here, so every later popup shares it even after\nthat window closed.",
-							"line": 394
+							"line": 395
 						},
 						{
 							"kind": "method",
 							"name": "HasMenuPopup",
 							"signature": "bool HasMenuPopup(const AMenu* menu) const",
 							"doc": "True when the menu is currently hosted by a popup OS window (the\nowning window must then skip its in-window overlay paint).",
-							"line": 400
+							"line": 401
 						},
 						{
 							"kind": "method",
 							"name": "WindowScale",
 							"signature": "float WindowScale(const CArcWindow* win) const",
 							"doc": "The window's effective UI scale: the global (main) scale for the\nmain window, the per-window registration for everything else.",
-							"line": 404
+							"line": 405
 						},
 						{
 							"kind": "method",
 							"name": "HandlePlatformEvent",
 							"signature": "bool HandlePlatformEvent(const CArcPlatformEvent& event)",
 							"doc": "Inject a platform event directly (for host engines that own the SDL event loop).\nCall this instead of ProcessEvents() when the host polls SDL events itself.\nReturns true when the UI consumed the event — a widget handled it,\na modal or menu owned it, or the focused widget swallowed it. A\nwidget that merely has focus or is merely hovered consumes nothing.",
-							"line": 411
+							"line": 412
 						},
 						{
 							"kind": "method",
 							"name": "InjectEvent",
 							"signature": "bool InjectEvent(const void* nativeEvent, bool* outConsumed = nullptr)",
 							"doc": "Inject a raw native platform event (SDL_Event*, MSG*, etc.).\nDelegates to the active platform backend's TranslateNativeEvent(), then dispatches.\nReturns true if the event was RECOGNIZED (translated); pass\noutConsumed to also learn whether the UI actually consumed it.\nThe two answers differ for every event Arc routed and nobody took.",
-							"line": 418
+							"line": 419
 						},
 						{
 							"kind": "method",
 							"name": "WantCaptureMouse",
 							"signature": "bool WantCaptureMouse() const",
 							"doc": "Capture-want flags across all windows (incl. open menus/modals) —\nfor host engines arbitrating input between coexisting UI stacks.",
-							"line": 422
+							"line": 423
 						},
 						{
 							"kind": "method",
 							"name": "WantCaptureKeyboard",
 							"signature": "bool WantCaptureKeyboard() const",
-							"line": 423
+							"line": 424
 						},
 						{
 							"kind": "method",
 							"name": "GetRouteCounters",
 							"signature": "const FRouteCounters& GetRouteCounters() const",
-							"line": 448
+							"line": 449
 						},
 						{
 							"kind": "method",
 							"name": "SetSkipUnchangedWindows",
 							"signature": "void SetSkipUnchangedWindows(int32_t mode, uint32_t verifyFrames)",
 							"doc": "Skips a window's layout, paint and batch snapshot — and the upload of\na batch every frame slot already holds — on frames where nothing in\nit changed: 0 off (every window paints every frame), 1 skip the paint\nand the upload but still record and present, 2 also leave an owned\nwindow that samples nothing live without a record and a present.\nverifyFrames: a skipping window paints anyway after this many skipped\nframes and compares the result with what it was replaying.",
-							"line": 459
+							"line": 460
+						},
+						{
+							"kind": "method",
+							"name": "SetPointerOptions",
+							"signature": "void SetPointerOptions(bool coalesceMouseMove, int32_t hitTestGridMode)",
+							"doc": "arc.CoalesceMouseMove: of consecutive pointer-motion events in one drain only\nthe last is routed. arc.HitTest.Grid: see CArcInputProcessor::SetHitTestGridMode.",
+							"line": 464
 						},
 						{
 							"kind": "method",
 							"name": "GetSkipUnchangedWindows",
 							"signature": "int32_t GetSkipUnchangedWindows() const",
-							"line": 460
+							"line": 468
 						},
 						{
 							"kind": "method",
 							"name": "GetPaintSkipStats",
 							"signature": "const FPaintSkipStats& GetPaintSkipStats() const",
-							"line": 481
+							"line": 489
 						},
 						{
 							"kind": "method",
 							"name": "SetTextInputArea",
 							"signature": "void SetTextInputArea(const AWidget* focusedWidget, const ArcRect& logicalRect, float cursorOffsetX)",
 							"doc": "Called by focused text widgets to dock the IME candidate window at\ntheir caret. rect in logical UI units; routed to the window whose\ninput processor currently focuses the widget.",
-							"line": 488
+							"line": 496
 						}
 					]
 				},
@@ -10221,74 +10350,74 @@
 					"name": "CArcWindowManager::FRouteCounters",
 					"namespace": "Arcf",
 					"doc": "Where pointer and key events went, counted at every place routing\ncan end. \"The UI does not react\" is otherwise indistinguishable\nbetween an event that never arrived, one dropped for want of a\nwindow, and one delivered to a widget that ignored it.",
-					"line": 429,
+					"line": 430,
 					"members": [
 						{
 							"kind": "field",
 							"name": "PointerSeen",
 							"signature": "uint64_t PointerSeen = 0",
-							"line": 430
+							"line": 431
 						},
 						{
 							"kind": "field",
 							"name": "PointerNoWindow",
 							"signature": "uint64_t PointerNoWindow = 0",
-							"line": 431
+							"line": 432
 						},
 						{
 							"kind": "field",
 							"name": "PointerNoRoot",
 							"signature": "uint64_t PointerNoRoot = 0",
-							"line": 432
+							"line": 433
 						},
 						{
 							"kind": "field",
 							"name": "PointerToModal",
 							"signature": "uint64_t PointerToModal = 0",
-							"line": 433
+							"line": 434
 						},
 						{
 							"kind": "field",
 							"name": "PointerToMenu",
 							"signature": "uint64_t PointerToMenu = 0",
-							"line": 434
+							"line": 435
 						},
 						{
 							"kind": "field",
 							"name": "PointerDelivered",
 							"signature": "uint64_t PointerDelivered = 0",
-							"line": 435
+							"line": 436
 						},
 						{
 							"kind": "field",
 							"name": "KeySeen",
 							"signature": "uint64_t KeySeen = 0",
-							"line": 437
+							"line": 438
 						},
 						{
 							"kind": "field",
 							"name": "KeyFellBackToMain",
 							"signature": "uint64_t KeyFellBackToMain = 0",
-							"line": 438
+							"line": 439
 						},
 						{
 							"kind": "field",
 							"name": "KeyDelivered",
 							"signature": "uint64_t KeyDelivered = 0",
-							"line": 439
+							"line": 440
 						},
 						{
 							"kind": "field",
 							"name": "LastUnroutedPointerWindowID",
 							"signature": "uint32_t LastUnroutedPointerWindowID = 0",
 							"doc": "The platform id of the last pointer event that matched no\nwindow, and the one that did. A mismatch against the registered\nids is the whole diagnosis.",
-							"line": 444
+							"line": 445
 						},
 						{
 							"kind": "field",
 							"name": "LastRoutedPointerWindowID",
 							"signature": "uint32_t LastRoutedPointerWindowID = 0",
-							"line": 445
+							"line": 446
 						}
 					]
 				},
@@ -10296,68 +10425,68 @@
 					"kind": "struct",
 					"name": "CArcWindowManager::FPaintSkipStats",
 					"namespace": "Arcf",
-					"line": 464,
+					"line": 472,
 					"members": [
 						{
 							"kind": "field",
 							"name": "Paints",
 							"signature": "uint64_t Paints = 0",
-							"line": 465
+							"line": 473
 						},
 						{
 							"kind": "field",
 							"name": "PaintsSkipped",
 							"signature": "uint64_t PaintsSkipped = 0",
-							"line": 466
+							"line": 474
 						},
 						{
 							"kind": "field",
 							"name": "PresentsSkipped",
 							"signature": "uint64_t PresentsSkipped = 0",
-							"line": 467
+							"line": 475
 						},
 						{
 							"kind": "field",
 							"name": "VerifyMismatches",
 							"signature": "uint64_t VerifyMismatches = 0",
-							"line": 468
+							"line": 476
 						},
 						{
 							"kind": "field",
 							"name": "PaintedLive",
 							"signature": "uint64_t PaintedLive = 0",
 							"doc": "Why a window painted, first reason only: a clock-driven paint, an\nevent, a widget or global change (the key), window-manager chrome,\na paint that differed from the one before, the volatile hold-off.",
-							"line": 473
+							"line": 481
 						},
 						{
 							"kind": "field",
 							"name": "PaintedEvent",
 							"signature": "uint64_t PaintedEvent = 0",
-							"line": 474
+							"line": 482
 						},
 						{
 							"kind": "field",
 							"name": "PaintedChanged",
 							"signature": "uint64_t PaintedChanged = 0",
-							"line": 475
+							"line": 483
 						},
 						{
 							"kind": "field",
 							"name": "PaintedChrome",
 							"signature": "uint64_t PaintedChrome = 0",
-							"line": 476
+							"line": 484
 						},
 						{
 							"kind": "field",
 							"name": "PaintedUnstable",
 							"signature": "uint64_t PaintedUnstable = 0",
-							"line": 477
+							"line": 485
 						},
 						{
 							"kind": "field",
 							"name": "PaintedVolatile",
 							"signature": "uint64_t PaintedVolatile = 0",
-							"line": 478
+							"line": 486
 						}
 					]
 				}
@@ -12013,25 +12142,25 @@
 					"kind": "struct",
 					"name": "CWidgetPath",
 					"namespace": "Arcf",
-					"line": 27,
+					"line": 29,
 					"members": [
 						{
 							"kind": "field",
 							"name": "Widgets",
 							"signature": "std::vector<TSharedPtr<AWidget>> Widgets",
-							"line": 28
+							"line": 30
 						},
 						{
 							"kind": "method",
 							"name": "IsValid",
 							"signature": "bool IsValid() const",
-							"line": 30
+							"line": 32
 						},
 						{
 							"kind": "method",
 							"name": "GetLeaf",
 							"signature": "TSharedPtr<AWidget> GetLeaf() const",
-							"line": 33
+							"line": 35
 						}
 					]
 				},
@@ -12039,132 +12168,132 @@
 					"kind": "class",
 					"name": "CArcInputProcessor",
 					"namespace": "Arcf",
-					"line": 42,
+					"line": 44,
 					"members": [
 						{
 							"kind": "method",
 							"name": "CArcInputProcessor",
 							"signature": "CArcInputProcessor() = default",
-							"line": 44
+							"line": 46
 						},
 						{
 							"kind": "method",
 							"name": "SetRootWidget",
 							"signature": "void SetRootWidget(TSharedPtr<AWidget> root, const CGeometry& rootGeometry)",
-							"line": 46
+							"line": 48
 						},
 						{
 							"kind": "method",
 							"name": "SetPlatformWindow",
 							"signature": "void SetPlatformWindow(IArcPlatformWindow* window)",
 							"doc": "The OS window this processor belongs to — needed so StartTextInput\ntargets the right window (keyboard-focus lookup fails for wrapped windows)",
-							"line": 53
+							"line": 55
 						},
 						{
 							"kind": "method",
 							"name": "ProcessMouseMove",
 							"signature": "CReply ProcessMouseMove(const ArcVec2& screenPos, EModifierKey modifiers)",
-							"line": 57
+							"line": 59
 						},
 						{
 							"kind": "method",
 							"name": "ProcessMouseButtonDown",
 							"signature": "CReply ProcessMouseButtonDown(EMouseButton button, const ArcVec2& screenPos, EModifierKey modifiers)",
-							"line": 58
+							"line": 60
 						},
 						{
 							"kind": "method",
 							"name": "ProcessMouseButtonUp",
 							"signature": "CReply ProcessMouseButtonUp(EMouseButton button, const ArcVec2& screenPos, EModifierKey modifiers)",
-							"line": 59
+							"line": 61
 						},
 						{
 							"kind": "method",
 							"name": "ProcessMouseWheel",
 							"signature": "CReply ProcessMouseWheel(float delta, const ArcVec2& screenPos, EModifierKey modifiers)",
-							"line": 60
+							"line": 62
 						},
 						{
 							"kind": "method",
 							"name": "ProcessMouseWheel",
 							"signature": "CReply ProcessMouseWheel(float delta, float deltaX, const ArcVec2& screenPos, EModifierKey modifiers)",
 							"doc": "Both wheel axes. The walk is leaf to root and stops at the first\nwidget that handles the event, so a scroller at its limit that\ndeclines hands the wheel to the one around it.",
-							"line": 65
+							"line": 67
 						},
 						{
 							"kind": "method",
 							"name": "ProcessKeyDown",
 							"signature": "CReply ProcessKeyDown(EKey key, EModifierKey modifiers, bool isRepeat)",
-							"line": 66
+							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "ProcessKeyUp",
 							"signature": "CReply ProcessKeyUp(EKey key, EModifierKey modifiers)",
-							"line": 67
+							"line": 69
 						},
 						{
 							"kind": "method",
 							"name": "ProcessKeyChar",
 							"signature": "CReply ProcessKeyChar(uint32_t character, EModifierKey modifiers)",
-							"line": 68
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "ProcessTextComposition",
 							"signature": "CReply ProcessTextComposition(const std::string& text, int32_t cursorStart, int32_t selectionLength)",
-							"line": 69
+							"line": 71
 						},
 						{
 							"kind": "method",
 							"name": "SetTextInputArea",
 							"signature": "void SetTextInputArea(const ArcRect& logicalRect, float cursorOffsetX)",
 							"doc": "Reports the focused widget's caret rect (logical UI units) to the OS\nso the IME candidate window docks at the caret",
-							"line": 73
-						},
-						{
-							"kind": "method",
-							"name": "SetFocus",
-							"signature": "void SetFocus(TSharedPtr<AWidget> widget)",
 							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "SetFocus",
+							"signature": "void SetFocus(TSharedPtr<AWidget> widget)",
+							"line": 77
+						},
+						{
+							"kind": "method",
+							"name": "SetFocus",
 							"signature": "void SetFocus(TSharedPtr<AWidget> widget, EFocusCause cause)",
-							"line": 76
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "ClearFocus",
 							"signature": "void ClearFocus()",
-							"line": 77
+							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "FocusAdjacentWidget",
 							"signature": "bool FocusAdjacentWidget(bool reverse)",
 							"doc": "Tab traversal (U1): focus the next/previous focusable widget in\npaint order. Returns false when the window has none.",
-							"line": 81
+							"line": 83
 						},
 						{
 							"kind": "method",
 							"name": "GetFocusedWidget",
 							"signature": "TSharedPtr<AWidget> GetFocusedWidget() const",
-							"line": 82
+							"line": 84
 						},
 						{
 							"kind": "method",
 							"name": "SetWindowFocused",
 							"signature": "void SetWindowFocused(bool focused)",
 							"doc": "OS-level activation. Losing it drops keyboard focus (so an editable\nwidget commits its edit), releases capture and ends hovering.",
-							"line": 88
+							"line": 90
 						},
 						{
 							"kind": "method",
 							"name": "IsWindowFocused",
 							"signature": "bool IsWindowFocused() const",
-							"line": 89
+							"line": 91
 						},
 						{
 							"kind": "method",
@@ -12172,14 +12301,14 @@
 							"signature": "static bool IsTextProducingKey(EKey key)",
 							"static": true,
 							"doc": "True for keys whose press produces a character. A focused text widget\nowns those without a command modifier; everything else (function keys,\nEscape, navigation) still reaches the command system once the widget\ndeclines it.",
-							"line": 97
+							"line": 99
 						},
 						{
 							"kind": "method",
 							"name": "GetDesiredTextInputType",
 							"signature": "EArcTextInputType GetDesiredTextInputType() const",
 							"doc": "The OS text-input session the focused widget gets: Text or\nPassword for a text field, NoComposition (characters, no IME) for\nanything else.",
-							"line": 102
+							"line": 104
 						},
 						{
 							"kind": "method",
@@ -12187,97 +12316,111 @@
 							"signature": "static bool IsFieldUndoChord(EKey key, EModifierKey modifiers)",
 							"static": true,
 							"doc": "Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z: the chords a focused text input\nowns outright, so they never reach the scene undo.",
-							"line": 106
+							"line": 108
 						},
 						{
 							"kind": "alias",
 							"name": "FTextFieldFocusHook",
 							"signature": "using FTextFieldFocusHook = std::function<void(const ArcRect& fieldRect, bool password, EFocusCause cause)>",
 							"doc": "Called when a text-editing widget gains focus, with its window-space\nrect: the game host raises the platform keyboard (Steam Deck) there.\nArc stays platform-free; an empty hook is the default.",
-							"line": 111
+							"line": 113
 						},
 						{
 							"kind": "method",
 							"name": "SetTextFieldFocusHook",
 							"signature": "static void SetTextFieldFocusHook(FTextFieldFocusHook hook)",
 							"static": true,
-							"line": 112
+							"line": 114
 						},
 						{
 							"kind": "method",
 							"name": "SetMouseCapture",
 							"signature": "void SetMouseCapture(TSharedPtr<AWidget> widget)",
-							"line": 114
+							"line": 116
 						},
 						{
 							"kind": "method",
 							"name": "ReleaseMouseCapture",
 							"signature": "void ReleaseMouseCapture()",
-							"line": 117
+							"line": 119
 						},
 						{
 							"kind": "method",
 							"name": "ResetAll",
 							"signature": "void ResetAll()",
-							"line": 120
+							"line": 122
 						},
 						{
 							"kind": "method",
 							"name": "GetMouseCaptureWidget",
 							"signature": "TSharedPtr<AWidget> GetMouseCaptureWidget() const",
-							"line": 131
+							"line": 133
 						},
 						{
 							"kind": "method",
 							"name": "GetKeyboardModifiers",
 							"signature": "EModifierKey GetKeyboardModifiers() const",
 							"doc": "The modifiers held as of the last key event — for a click handler\nthat has no event of its own (Shift-click a section header).",
-							"line": 137
+							"line": 139
 						},
 						{
 							"kind": "method",
 							"name": "GetRootGeometry",
 							"signature": "const CGeometry& GetRootGeometry() const",
 							"doc": "The geometry hit tests start from. It is refreshed as each event is\nrouted, so a zero size means no pointer event has arrived yet rather\nthan a broken layout - a diagnostic has to tell those apart.",
-							"line": 144
+							"line": 146
 						},
 						{
 							"kind": "method",
 							"name": "GetHoveredWidget",
 							"signature": "TSharedPtr<AWidget> GetHoveredWidget() const",
-							"line": 148
+							"line": 150
 						},
 						{
 							"kind": "method",
 							"name": "GetHoveredPath",
 							"signature": "const std::vector<TSharedPtr<AWidget>>& GetHoveredPath() const",
-							"line": 151
+							"line": 153
 						},
 						{
 							"kind": "method",
 							"name": "WantCaptureMouse",
 							"signature": "bool WantCaptureMouse() const",
 							"doc": "Capture-want flags for host engines that arbitrate input between UI stacks",
-							"line": 156
+							"line": 158
 						},
 						{
 							"kind": "method",
 							"name": "WantCaptureKeyboard",
 							"signature": "bool WantCaptureKeyboard() const",
-							"line": 159
+							"line": 161
+						},
+						{
+							"kind": "method",
+							"name": "SetHitTestGridMode",
+							"signature": "void SetHitTestGridMode(int32_t mode)",
+							"doc": "0 = walk the tree (default), 1 = prune subtrees through a grid built once\nper frame, 2 = prune AND walk unpruned, count any difference in\nCArcHitTestStats::Mismatches and return the unpruned answer.",
+							"line": 168
+						},
+						{
+							"kind": "method",
+							"name": "SetPointerFrame",
+							"signature": "void SetPointerFrame(uint64_t frame)",
+							"doc": "The grid is rebuilt when this changes; the window manager bumps it once a frame.",
+							"line": 173
 						},
 						{
 							"kind": "method",
 							"name": "HitTestPoint",
 							"signature": "CWidgetPath HitTestPoint(const ArcVec2& absolutePos) const",
-							"line": 163
+							"line": 177
 						},
 						{
 							"kind": "method",
 							"name": "HitTestPointIgnoringCapture",
 							"signature": "CWidgetPath HitTestPointIgnoringCapture(const ArcVec2& absolutePos) const",
 							"doc": "The path a drop target is resolved from. Identical to HitTestPoint\nexcept that the widget holding mouse capture — the drag source, which\nowns every move event for the length of the gesture — and everything\nbelow it are cut away, so a drag can never resolve onto itself.",
-							"line": 169
+							"line": 183
 						}
 					]
 				}
@@ -12456,6 +12599,46 @@
 							"name": "IsGestureActive",
 							"signature": "bool IsGestureActive() const",
 							"line": 46
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Arc/Public/Arc/Input/IArcMultiTouchTarget.h",
+			"include": "Arc/Input/IArcMultiTouchTarget.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.\nArc UI Framework",
+			"types": [
+				{
+					"kind": "class",
+					"name": "IArcMultiTouchTarget",
+					"namespace": "Arcf",
+					"line": 11,
+					"members": [
+						{
+							"kind": "method",
+							"name": "~IArcMultiTouchTarget",
+							"signature": "virtual ~IArcMultiTouchTarget() = default",
+							"line": 13
+						},
+						{
+							"kind": "method",
+							"name": "OnTouchDown",
+							"signature": "virtual bool OnTouchDown(uint32_t pointerIndex, const ArcVec2& screenPos) = 0",
+							"line": 15
+						},
+						{
+							"kind": "method",
+							"name": "OnTouchMove",
+							"signature": "virtual void OnTouchMove(uint32_t pointerIndex, const ArcVec2& screenPos) = 0",
+							"line": 16
+						},
+						{
+							"kind": "method",
+							"name": "OnTouchUp",
+							"signature": "virtual void OnTouchUp(uint32_t pointerIndex, const ArcVec2& screenPos, bool canceled) = 0",
+							"line": 17
 						}
 					]
 				}
@@ -12893,14 +13076,14 @@
 						{
 							"kind": "method",
 							"name": "Draw",
-							"signature": "void Draw(CArcUIRenderer& renderer, const ArcRect& rect, float opacity = 1.0f) const",
+							"signature": "void Draw(CArcRenderer& renderer, const ArcRect& rect, float opacity = 1.0f) const",
 							"doc": "Paints the brush into rect, honoring DrawMode. Image-less brushes\ndegrade to a solid (rounded) rect so every style stays paintable.",
 							"line": 66
 						},
 						{
 							"kind": "method",
 							"name": "Draw",
-							"signature": "void Draw(CArcUIRenderer& renderer, const ArcRect& rect, const ArcColor& tintOverride, float opacity) const",
+							"signature": "void Draw(CArcRenderer& renderer, const ArcRect& rect, const ArcColor& tintOverride, float opacity) const",
 							"line": 67
 						}
 					]
@@ -14603,7 +14786,7 @@
 							"name": "FLOATING_COVERAGE_UV_SHIFT",
 							"signature": "static constexpr float FLOATING_COVERAGE_UV_SHIFT = -64.0f",
 							"static": true,
-							"doc": "Added to either band for a text glyph inside a floating surface\n(CArcUIRenderer::PushFloatingText): -80 and -96. Icons keep plain\ncoverage there, so the two shifts never combine.",
+							"doc": "Added to either band for a text glyph inside a floating surface\n(CArcRenderer::PushFloatingText): -80 and -96. Icons keep plain\ncoverage there, so the two shifts never combine.",
 							"line": 666
 						},
 						{
@@ -16125,7 +16308,7 @@
 						{
 							"kind": "method",
 							"name": "PaintIcon",
-							"signature": "static void PaintIcon(CArcUIRenderer& renderer, const ArcRect& box, const std::string& glyph, float size, const ArcColor& color, const std::string& family = \"Icons\")",
+							"signature": "static void PaintIcon(CArcRenderer& renderer, const ArcRect& box, const std::string& glyph, float size, const ArcColor& color, const std::string& family = \"Icons\")",
 							"static": true,
 							"doc": "Paints an icon glyph with its ink centred in box: the one call every\nhand-painted icon goes through. A DrawString at the box's centre less\nhalf the size centres the em, and a Lucide outline stands on the\nbaseline at the em's left, so such an icon sat low and to the left.",
 							"line": 238
@@ -16133,7 +16316,7 @@
 						{
 							"kind": "method",
 							"name": "Paint",
-							"signature": "static void Paint(CArcUIRenderer& renderer, const ArcVec2& origin, const CArcTextLayout& layout, const ArcColor& color, int32_t justify = 0, float justifyWidth = 0.0f)",
+							"signature": "static void Paint(CArcRenderer& renderer, const ArcVec2& origin, const CArcTextLayout& layout, const ArcColor& color, int32_t justify = 0, float justifyWidth = 0.0f)",
 							"static": true,
 							"doc": "Paints a layout through the batched renderer (bitmap atlas). Tofu\nglyphs draw as an outlined box. justifyWidth applies per-line\ncenter/right alignment (0 = left).",
 							"line": 243
@@ -16141,7 +16324,7 @@
 						{
 							"kind": "method",
 							"name": "Paint",
-							"signature": "static void Paint(CArcUIRenderer& renderer, const ArcVec2& origin, const CArcTextLayout& layout, const CArcFontInfo& font, const ArcColor& color, int32_t justify = 0, float justifyWidth = 0.0f)",
+							"signature": "static void Paint(CArcRenderer& renderer, const ArcVec2& origin, const CArcTextLayout& layout, const CArcFontInfo& font, const ArcColor& color, int32_t justify = 0, float justifyWidth = 0.0f)",
 							"static": true,
 							"doc": "The font-carrying form, kept for callers that already hold one. The\npaint itself reads nothing from it — the layout carries the shaped\nresult and the atlas is global — so building a CArcFontInfo just to\ncall this cost a std::string copy per text run per frame. Prefer the\noverload above.",
 							"line": 250
@@ -16149,7 +16332,7 @@
 						{
 							"kind": "method",
 							"name": "PaintRotatedCW",
-							"signature": "static void PaintRotatedCW(CArcUIRenderer& renderer, const ArcVec2& origin, const CArcTextLayout& layout, const CArcFontInfo& font, const ArcColor& color)",
+							"signature": "static void PaintRotatedCW(CArcRenderer& renderer, const ArcVec2& origin, const CArcTextLayout& layout, const CArcFontInfo& font, const ArcColor& color)",
 							"static": true,
 							"doc": "Paints a single-line layout rotated 90 degrees clockwise (reads\ntop-to-bottom); origin is the vertical column's top-left, the column\nwidth is the layout's line height. Vertical sidebar tabs.",
 							"line": 257
@@ -16447,7 +16630,7 @@
 						{
 							"kind": "method",
 							"name": "PaintAt",
-							"signature": "int32_t PaintAt(const CArcPaintArgs& args, const ArcRect& rect, CArcUIRenderer& renderer, int32_t layerId)",
+							"signature": "int32_t PaintAt(const CArcPaintArgs& args, const ArcRect& rect, CArcRenderer& renderer, int32_t layerId)",
 							"doc": "Lays the bar out at `rect` and paints it, for hosts that draw it\nfrom an overlay paint rather than from a widget slot.",
 							"line": 64
 						},
@@ -16487,7 +16670,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 78
 						},
 						{
@@ -16694,7 +16877,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 108
 						},
 						{
@@ -16861,7 +17044,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 46
 						},
 						{
@@ -17041,7 +17224,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 65
 						},
 						{
@@ -17178,7 +17361,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 61
 						},
 						{
@@ -17534,7 +17717,7 @@
 						{
 							"kind": "method",
 							"name": "PaintCursor",
-							"signature": "static void PaintCursor(CArcUIRenderer& renderer, const ArcVec2& c, float opacity)",
+							"signature": "static void PaintCursor(CArcRenderer& renderer, const ArcVec2& c, float opacity)",
 							"static": true,
 							"doc": "The design's blend cursor, centred on c.",
 							"line": 128
@@ -17548,7 +17731,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 131
 						},
 						{
@@ -17599,7 +17782,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 159
 						},
 						{
@@ -17737,7 +17920,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 67
 						},
 						{
@@ -17864,7 +18047,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 51
 						},
 						{
@@ -17918,7 +18101,7 @@
 							"kind": "method",
 							"name": "ARC_ARG",
 							"signature": "ARC_ARG(bool, FloatingText) ARC_CONTENT(ABox, Content) ARC_WIDGET_ARGS_END() void Construct(const CArguments& args)",
-							"doc": "Text under this box is shaped as on a floating surface\n(CArcUIRenderer::PushFloatingText): what a browser composites on\na layer of its own, such as everything over a viewport.",
+							"doc": "Text under this box is shaped as on a floating surface\n(CArcRenderer::PushFloatingText): what a browser composites on\na layer of its own, such as everything over a viewport.",
 							"line": 30
 						},
 						{
@@ -17955,7 +18138,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 54
 						},
 						{
@@ -18142,7 +18325,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 148
 						},
 						{
@@ -18194,7 +18377,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 180
 						},
 						{
@@ -18311,7 +18494,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 56
 						},
 						{
@@ -18422,7 +18605,7 @@
 						{
 							"kind": "method",
 							"name": "Paint",
-							"signature": "static float Paint(CArcUIRenderer& renderer, const ArcRect& rect, float value, float budget, const std::string& unit, int32_t decimals, float opacity)",
+							"signature": "static float Paint(CArcRenderer& renderer, const ArcRect& rect, float value, float budget, const std::string& unit, int32_t decimals, float opacity)",
 							"static": true,
 							"doc": "The meter at rect (bar on top, caption under it) for hosts that\npaint their own card; returns the height it used.",
 							"line": 42
@@ -18436,7 +18619,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 45
 						},
 						{
@@ -18555,7 +18738,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 77
 						},
 						{
@@ -18814,7 +18997,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 50
 						},
 						{
@@ -18932,7 +19115,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 49
 						},
 						{
@@ -19160,14 +19343,14 @@
 						{
 							"kind": "method",
 							"name": "PaintBackdrop",
-							"signature": "static void PaintBackdrop(CArcUIRenderer& renderer, const ArcRect& rect, float opacity)",
+							"signature": "static void PaintBackdrop(CArcRenderer& renderer, const ArcRect& rect, float opacity)",
 							"static": true,
 							"line": 55
 						},
 						{
 							"kind": "method",
 							"name": "PaintSquare",
-							"signature": "static void PaintSquare(CArcUIRenderer& renderer, const ArcRect& square, bool checker, float opacity)",
+							"signature": "static void PaintSquare(CArcRenderer& renderer, const ArcRect& square, bool checker, float opacity)",
 							"static": true,
 							"doc": "The 0-1 square: fill, the checker when asked, and its frame.",
 							"line": 58
@@ -19175,21 +19358,21 @@
 						{
 							"kind": "method",
 							"name": "PaintSquareFrame",
-							"signature": "static void PaintSquareFrame(CArcUIRenderer& renderer, const ArcRect& square, float opacity)",
+							"signature": "static void PaintSquareFrame(CArcRenderer& renderer, const ArcRect& square, float opacity)",
 							"static": true,
 							"line": 59
 						},
 						{
 							"kind": "method",
 							"name": "PaintAxisLabels",
-							"signature": "static void PaintAxisLabels(CArcUIRenderer& renderer, const ArcRect& square, float opacity)",
+							"signature": "static void PaintAxisLabels(CArcRenderer& renderer, const ArcRect& square, float opacity)",
 							"static": true,
 							"line": 60
 						},
 						{
 							"kind": "method",
 							"name": "PaintIsland",
-							"signature": "static void PaintIsland(CArcUIRenderer& renderer, const ArcVec2* points, size_t count, EArcUvIslandState state, float opacity, const ArcColor* edge = nullptr, bool fill = true)",
+							"signature": "static void PaintIsland(CArcRenderer& renderer, const ArcVec2* points, size_t count, EArcUvIslandState state, float opacity, const ArcColor* edge = nullptr, bool fill = true)",
 							"static": true,
 							"doc": "An island polygon in screen space. edge overrides the state's\nborder colour (island tinting); fill draws the state's fill.",
 							"line": 64
@@ -19197,7 +19380,7 @@
 						{
 							"kind": "method",
 							"name": "PaintFill",
-							"signature": "static void PaintFill(CArcUIRenderer& renderer, const ArcVec2* points, size_t count, const ArcColor& color)",
+							"signature": "static void PaintFill(CArcRenderer& renderer, const ArcVec2* points, size_t count, const ArcColor& color)",
 							"static": true,
 							"doc": "A convex polygon filled in one colour, row by row (the island fill\nwithout its border): a stretch or density overlay over an island.",
 							"line": 67
@@ -19205,14 +19388,14 @@
 						{
 							"kind": "method",
 							"name": "PaintSeam",
-							"signature": "static void PaintSeam(CArcUIRenderer& renderer, const ArcVec2& a, const ArcVec2& b, float opacity)",
+							"signature": "static void PaintSeam(CArcRenderer& renderer, const ArcVec2& a, const ArcVec2& b, float opacity)",
 							"static": true,
 							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "PaintVertex",
-							"signature": "static void PaintVertex(CArcUIRenderer& renderer, const ArcVec2& p, float opacity)",
+							"signature": "static void PaintVertex(CArcRenderer& renderer, const ArcVec2& p, float opacity)",
 							"static": true,
 							"line": 69
 						},
@@ -19273,7 +19456,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 87
 						},
 						{
@@ -19474,7 +19657,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 102
 						},
 						{
@@ -19601,7 +19784,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 53
 						},
 						{
@@ -19706,7 +19889,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 40
 						},
 						{
@@ -20017,7 +20200,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 99
 						},
 						{
@@ -20344,7 +20527,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 78
 						},
 						{
@@ -20393,7 +20576,7 @@
 						{
 							"kind": "method",
 							"name": "PaintKey",
-							"signature": "static void PaintKey(CArcUIRenderer& renderer, const ArcVec2& center, Mowo::EArcSpecState state, float opacity = 1.0f)",
+							"signature": "static void PaintKey(CArcRenderer& renderer, const ArcVec2& center, Mowo::EArcSpecState state, float opacity = 1.0f)",
 							"static": true,
 							"doc": "The design's curve-key: a 9 px square turned 45 degrees, filled by\nstate (TextBright, AccentHover hovered, AccentColor pressed or\nselected, TextDisabled, Error), with the FocusRing around it when\nfocused. Every curve canvas paints its keys with this.",
 							"line": 99
@@ -20401,7 +20584,7 @@
 						{
 							"kind": "method",
 							"name": "PaintTangent",
-							"signature": "static void PaintTangent(CArcUIRenderer& renderer, const ArcVec2& key, const ArcVec2& handle, float opacity = 1.0f)",
+							"signature": "static void PaintTangent(CArcRenderer& renderer, const ArcVec2& key, const ArcVec2& handle, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A selected key's tangent: the 1 px line and the 6 px round handle.",
 							"line": 102
@@ -20409,7 +20592,7 @@
 						{
 							"kind": "method",
 							"name": "PaintCanvas",
-							"signature": "static void PaintCanvas(CArcUIRenderer& renderer, const ArcRect& rect, bool focused, float opacity = 1.0f)",
+							"signature": "static void PaintCanvas(CArcRenderer& renderer, const ArcRect& rect, bool focused, float opacity = 1.0f)",
 							"static": true,
 							"doc": "The canvas: TimelineBg, PanelBorder (BorderNormal while focused).",
 							"line": 105
@@ -20664,7 +20847,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 72
 						},
 						{
@@ -20736,7 +20919,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 34
 						},
 						{
@@ -20925,7 +21108,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 60
 						},
 						{
@@ -21153,7 +21336,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 84
 						},
 						{
@@ -21244,7 +21427,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 49
 						},
 						{
@@ -21744,7 +21927,7 @@
 						{
 							"kind": "method",
 							"name": "PaintInRect",
-							"signature": "void PaintInRect(CArcUIRenderer& renderer, const ArcRect& rect)",
+							"signature": "void PaintInRect(CArcRenderer& renderer, const ArcRect& rect)",
 							"doc": "Paints the state into rect for a host that draws its rows itself\n(a palette or dropdown painted in an overlay) instead of parenting\nwidgets. The rect becomes the cached geometry hit tests read.",
 							"line": 132
 						},
@@ -21763,7 +21946,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 136
 						},
 						{
@@ -21828,7 +22011,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 40
 						},
 						{
@@ -22098,7 +22281,7 @@
 						{
 							"kind": "method",
 							"name": "PaintBackground",
-							"signature": "static void PaintBackground(CArcUIRenderer& renderer, const ArcRect& chart, float opacity)",
+							"signature": "static void PaintBackground(CArcRenderer& renderer, const ArcRect& chart, float opacity)",
 							"static": true,
 							"doc": "The chart's TimelineBg body in its 1 px PanelBorder outline.",
 							"line": 73
@@ -22106,7 +22289,7 @@
 						{
 							"kind": "method",
 							"name": "PaintBar",
-							"signature": "static void PaintBar(CArcUIRenderer& renderer, const FArcFrameChartGeometry& geometry, size_t index, float value, float budget, float opacity)",
+							"signature": "static void PaintBar(CArcRenderer& renderer, const FArcFrameChartGeometry& geometry, size_t index, float value, float budget, float opacity)",
 							"static": true,
 							"doc": "One frame's bar in its column (gap 1 between columns); over the\nbudget it turns Warning.",
 							"line": 77
@@ -22114,14 +22297,14 @@
 						{
 							"kind": "method",
 							"name": "PaintBudget",
-							"signature": "static void PaintBudget(CArcUIRenderer& renderer, const FArcFrameChartGeometry& geometry, float budget, float opacity)",
+							"signature": "static void PaintBudget(CArcRenderer& renderer, const FArcFrameChartGeometry& geometry, float budget, float opacity)",
 							"static": true,
 							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "PaintSelection",
-							"signature": "static void PaintSelection(CArcUIRenderer& renderer, const FArcFrameChartGeometry& geometry, int32_t first, int32_t last, float opacity)",
+							"signature": "static void PaintSelection(CArcRenderer& renderer, const FArcFrameChartGeometry& geometry, int32_t first, int32_t last, float opacity)",
 							"static": true,
 							"doc": "A 1 px TextBright outline around columns first..last.",
 							"line": 82
@@ -22143,7 +22326,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 88
 						},
 						{
@@ -22233,7 +22416,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 42
 						},
 						{
@@ -23028,7 +23211,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 228
 						},
 						{
@@ -23283,240 +23466,247 @@
 						},
 						{
 							"kind": "field",
+							"name": "ConnectionRefusalReason",
+							"signature": "std::function<std::string(const CGraphConnection&)> ConnectionRefusalReason",
+							"doc": "Why ValidateConnection refused, shown beside the cursor while a wire is dragged over the pin; empty shows nothing.",
+							"line": 314
+						},
+						{
+							"kind": "field",
 							"name": "CollectActions",
 							"signature": "std::function<std::vector<CGraphActionItem>(const CGraphActionContext&)> CollectActions",
-							"line": 313
+							"line": 315
 						},
 						{
 							"kind": "field",
 							"name": "AcceptsAssetDrop",
 							"signature": "std::function<bool(const std::string& )> AcceptsAssetDrop",
 							"doc": "Content-browser drops. Unset means the canvas rejects every drag, so\nthe drop falls through to whatever is behind it exactly as before.",
-							"line": 317
+							"line": 319
 						},
 						{
 							"kind": "field",
 							"name": "OnAssetDropped",
 							"signature": "ArcDelegate<void(const std::string& , ArcVec2 )> OnAssetDropped",
-							"line": 318
+							"line": 320
 						},
 						{
 							"kind": "field",
 							"name": "BodyFontFamily",
 							"signature": "std::string BodyFontFamily = \"Default\"",
-							"line": 320
+							"line": 322
 						},
 						{
 							"kind": "field",
 							"name": "BoldFontFamily",
 							"signature": "std::string BoldFontFamily = \"Default\"",
-							"line": 321
+							"line": 323
 						},
 						{
 							"kind": "field",
 							"name": "DisplayFontFamily",
 							"signature": "std::string DisplayFontFamily = \"Default\"",
-							"line": 322
+							"line": 324
 						},
 						{
 							"kind": "field",
 							"name": "MonoFontFamily",
 							"signature": "std::string MonoFontFamily = \"Default\"",
-							"line": 323
+							"line": 325
 						},
 						{
 							"kind": "field",
 							"name": "IconFontFamily",
 							"signature": "std::string IconFontFamily = \"Icons\"",
-							"line": 324
+							"line": 326
 						},
 						{
 							"kind": "field",
 							"name": "WireColorOverride",
 							"signature": "ArcColor WireColorOverride = ArcColor(0.0f, 0.0f, 0.0f, 0.0f)",
-							"line": 326
+							"line": 328
 						},
 						{
 							"kind": "field",
 							"name": "ShowMinimap",
 							"signature": "bool ShowMinimap = true",
-							"line": 327
+							"line": 329
 						},
 						{
 							"kind": "field",
 							"name": "ShowWireArrows",
 							"signature": "bool ShowWireArrows = false",
-							"line": 328
+							"line": 330
 						},
 						{
 							"kind": "field",
 							"name": "AnimatePulse",
 							"signature": "bool AnimatePulse = false",
-							"line": 329
+							"line": 331
 						},
 						{
 							"kind": "field",
 							"name": "OnNodeSelected",
 							"signature": "ArcDelegate<void(const std::string& )> OnNodeSelected",
-							"line": 331
+							"line": 333
 						},
 						{
 							"kind": "field",
 							"name": "OnConnectionMade",
 							"signature": "ArcDelegate<void(const CGraphConnection&)> OnConnectionMade",
-							"line": 332
+							"line": 334
 						},
 						{
 							"kind": "field",
 							"name": "OnConnectionRemoved",
 							"signature": "ArcDelegate<void(const CGraphConnection&)> OnConnectionRemoved",
-							"line": 333
+							"line": 335
 						},
 						{
 							"kind": "field",
 							"name": "OnSelectionChanged",
 							"signature": "ArcDelegate<void()> OnSelectionChanged",
-							"line": 334
+							"line": 336
 						},
 						{
 							"kind": "field",
 							"name": "OnNodesMoved",
 							"signature": "ArcDelegate<void(const std::vector<std::string>&, const std::vector<ArcVec2>&)> OnNodesMoved",
-							"line": 335
+							"line": 337
 						},
 						{
 							"kind": "field",
 							"name": "OnDeleteRequested",
 							"signature": "ArcDelegate<void(const CGraphSelection&)> OnDeleteRequested",
-							"line": 336
+							"line": 338
 						},
 						{
 							"kind": "field",
 							"name": "OnContextMenuRequested",
 							"signature": "ArcDelegate<void(const std::string& , ArcVec2 , ArcVec2 )> OnContextMenuRequested",
-							"line": 337
+							"line": 339
 						},
 						{
 							"kind": "field",
 							"name": "OnUndoRequested",
 							"signature": "ArcDelegate<void()> OnUndoRequested",
-							"line": 338
+							"line": 340
 						},
 						{
 							"kind": "field",
 							"name": "OnRedoRequested",
 							"signature": "ArcDelegate<void()> OnRedoRequested",
-							"line": 339
+							"line": 341
 						},
 						{
 							"kind": "field",
 							"name": "OnActionChosen",
 							"signature": "ArcDelegate<void(const CGraphActionItem&, const CGraphActionContext&)> OnActionChosen",
-							"line": 340
+							"line": 342
 						},
 						{
 							"kind": "field",
 							"name": "OnCommentResized",
 							"signature": "ArcDelegate<void(const std::string& , ArcVec2 )> OnCommentResized",
-							"line": 341
+							"line": 343
 						},
 						{
 							"kind": "field",
 							"name": "OnViewChanged",
 							"signature": "ArcDelegate<void()> OnViewChanged",
-							"line": 342
+							"line": 344
 						},
 						{
 							"kind": "field",
 							"name": "OnConnectionDoubleClicked",
 							"signature": "ArcDelegate<void(const CGraphConnection&, ArcVec2 )> OnConnectionDoubleClicked",
-							"line": 343
+							"line": 345
 						},
 						{
 							"kind": "field",
 							"name": "OnNodeDoubleClicked",
 							"signature": "ArcDelegate<void(const std::string& )> OnNodeDoubleClicked",
-							"line": 344
+							"line": 346
 						},
 						{
 							"kind": "field",
 							"name": "OnNodeRenamed",
 							"signature": "ArcDelegate<void(const std::string& , const std::string& )> OnNodeRenamed",
-							"line": 345
+							"line": 347
 						},
 						{
 							"kind": "field",
 							"name": "OnPinValueCommitted",
 							"signature": "ArcDelegate<void(const std::string& , const std::string& , const std::string& )> OnPinValueCommitted",
-							"line": 346
+							"line": 348
 						},
 						{
 							"kind": "field",
 							"name": "OnDuplicateRequested",
 							"signature": "ArcDelegate<void(const CGraphSelection&)> OnDuplicateRequested",
-							"line": 347
+							"line": 349
 						},
 						{
 							"kind": "field",
 							"name": "OnCopyRequested",
 							"signature": "ArcDelegate<void(const CGraphSelection&)> OnCopyRequested",
-							"line": 348
+							"line": 350
 						},
 						{
 							"kind": "field",
 							"name": "OnCutRequested",
 							"signature": "ArcDelegate<void(const CGraphSelection&)> OnCutRequested",
-							"line": 349
+							"line": 351
 						},
 						{
 							"kind": "field",
 							"name": "OnPasteRequested",
 							"signature": "ArcDelegate<void(ArcVec2 )> OnPasteRequested",
-							"line": 350
+							"line": 352
 						},
 						{
 							"kind": "field",
 							"name": "OnToggleBreakpoint",
 							"signature": "ArcDelegate<void(const std::string& )> OnToggleBreakpoint",
-							"line": 351
+							"line": 353
 						},
 						{
 							"kind": "field",
 							"name": "OnFindRequested",
 							"signature": "ArcDelegate<void()> OnFindRequested",
 							"doc": "Ctrl+F and Ctrl+B. They live here rather than on each host because a\ngraph canvas takes focus the moment it is clicked, so a host-level\nbinding only fired while the canvas happened not to have focus —\ni.e. never, once you were actually working in the graph.",
-							"line": 357
+							"line": 359
 						},
 						{
 							"kind": "field",
 							"name": "OnToggleBookmark",
 							"signature": "ArcDelegate<void(const std::string& )> OnToggleBookmark",
-							"line": 358
+							"line": 360
 						},
 						{
 							"kind": "field",
 							"name": "OnCommentRequested",
 							"signature": "ArcDelegate<void(const CGraphSelection&, ArcRect )> OnCommentRequested",
 							"doc": "Bare `C` with a selection (UE's comment-from-selection): the host\nwraps the selection in a comment node. Bounds are in graph space,\nalready padded around the selected nodes.",
-							"line": 363
+							"line": 365
 						},
 						{
 							"kind": "method",
 							"name": "OnCursorQuery",
 							"signature": "EArcCursorType OnCursorQuery(const CGeometry& geo, const CPointerEvent& event) const override",
-							"line": 365
+							"line": 367
 						},
 						{
 							"kind": "method",
 							"name": "IsTextInput",
 							"signature": "bool IsTextInput() const override",
-							"line": 378
+							"line": 380
 						},
 						{
 							"kind": "method",
 							"name": "GetTypeName",
 							"signature": "const char* GetTypeName() const override",
-							"line": 382
+							"line": 384
 						}
 					]
 				}
@@ -23789,7 +23979,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 126
 						},
 						{
@@ -23879,7 +24069,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 50
 						},
 						{
@@ -24005,7 +24195,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 54
 						},
 						{
@@ -24144,7 +24334,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 60
 						},
 						{
@@ -24224,7 +24414,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 34
 						},
 						{
@@ -24362,7 +24552,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 45
 						},
 						{
@@ -24558,7 +24748,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 102
 						},
 						{
@@ -24733,7 +24923,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 75
 						},
 						{
@@ -24910,7 +25100,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 68
 						},
 						{
@@ -25132,178 +25322,184 @@
 						},
 						{
 							"kind": "method",
+							"name": "GetItemCount",
+							"signature": "int32_t GetItemCount() const",
+							"line": 247
+						},
+						{
+							"kind": "method",
 							"name": "GetSelectedIndex",
 							"signature": "int32_t GetSelectedIndex() const",
-							"line": 247
+							"line": 250
 						},
 						{
 							"kind": "method",
 							"name": "GetSelectedItem",
 							"signature": "const ItemType* GetSelectedItem() const",
-							"line": 250
+							"line": 253
 						},
 						{
 							"kind": "method",
 							"name": "SetSelectedIndex",
 							"signature": "void SetSelectedIndex(int32_t idx)",
 							"doc": "The painted set follows the anchor: setting only the anchor left the\nold highlight on screen.",
-							"line": 258
+							"line": 261
 						},
 						{
 							"kind": "method",
 							"name": "ClearSelection",
 							"signature": "void ClearSelection()",
-							"line": 265
+							"line": 268
 						},
 						{
 							"kind": "method",
 							"name": "ScrollToEnd",
 							"signature": "void ScrollToEnd()",
-							"line": 270
+							"line": 273
 						},
 						{
 							"kind": "method",
 							"name": "EnsureIndexVisible",
 							"signature": "void EnsureIndexVisible(const CGeometry& geo, int32_t index)",
-							"line": 275
+							"line": 278
 						},
 						{
 							"kind": "field",
 							"name": "OnSelectionChanged",
 							"signature": "COnSelectionChanged OnSelectionChanged",
-							"line": 287
+							"line": 290
 						},
 						{
 							"kind": "field",
 							"name": "OnItemActivated",
 							"signature": "COnSelectionChanged OnItemActivated",
 							"doc": "Enter / double-click on a row (U1) — \"open\" semantics.",
-							"line": 289
+							"line": 292
 						},
 						{
 							"kind": "method",
 							"name": "ComputeDesiredSize",
 							"signature": "ArcVec2 ComputeDesiredSize(float ) const override",
-							"line": 291
+							"line": 294
 						},
 						{
 							"kind": "method",
 							"name": "CanCacheDesiredSize",
 							"signature": "bool CanCacheDesiredSize() const override",
 							"doc": "A constant. Rows are generated during arrange and never enter this\nwidget's own measure, so scrolling and regeneration cannot move it.",
-							"line": 297
+							"line": 300
 						},
 						{
 							"kind": "method",
 							"name": "DesiredSizeDependsOnChildren",
 							"signature": "bool DesiredSizeDependsOnChildren() const override",
-							"line": 300
+							"line": 303
 						},
 						{
 							"kind": "method",
 							"name": "CanSkipArrange",
 							"signature": "bool CanSkipArrange() const override",
 							"doc": "Refused: rows are recycled here. The visible window, the row\nwidgets bound to it and the scrollbar state are all produced by\nthe arrange body, so a skipped pass shows the previous window.",
-							"line": 307
+							"line": 310
 						},
 						{
 							"kind": "method",
 							"name": "CanRetainPaint",
 							"signature": "bool CanRetainPaint() const override",
 							"doc": "Refused for the same reason: the rows a replay would reproduce are\nthe ones the previous window recycled, and the selection highlight\nmoves without a write anyone can see.",
-							"line": 314
+							"line": 317
 						},
 						{
 							"kind": "method",
 							"name": "ArrangeChildren",
 							"signature": "void ArrangeChildren(const CGeometry& allottedGeo) override",
-							"line": 318
+							"line": 321
 						},
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
-							"line": 389
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
+							"line": 392
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseWheel",
 							"signature": "CReply OnMouseWheel(const CGeometry& geo, const CPointerEvent& event) override",
-							"line": 456
+							"line": 459
 						},
 						{
 							"kind": "method",
 							"name": "IsFocusable",
 							"signature": "bool IsFocusable() const override",
-							"line": 479
+							"line": 482
 						},
 						{
 							"kind": "method",
 							"name": "OnKeyDown",
 							"signature": "CReply OnKeyDown(const CGeometry& geo, const CKeyEvent& event) override",
 							"doc": "Keyboard model (U1): arrows move the anchor, Home/End jump,\nPageUp/Down step a viewport, Enter activates. Shift extends the\nrange the same way a shift-click does.",
-							"line": 486
+							"line": 489
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseButtonDoubleClick",
 							"signature": "CReply OnMouseButtonDoubleClick(const CGeometry& geo, const CPointerEvent& event) override",
-							"line": 547
+							"line": 550
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseButtonDown",
 							"signature": "CReply OnMouseButtonDown(const CGeometry& geo, const CPointerEvent& event) override",
-							"line": 558
+							"line": 561
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseMove",
 							"signature": "CReply OnMouseMove(const CGeometry& geo, const CPointerEvent& event) override",
-							"line": 605
+							"line": 608
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseButtonUp",
 							"signature": "CReply OnMouseButtonUp(const CGeometry& , const CPointerEvent& ) override",
-							"line": 617
+							"line": 620
 						},
 						{
 							"kind": "method",
 							"name": "OnMouseLeave",
 							"signature": "void OnMouseLeave(const CPointerEvent& event) override",
-							"line": 626
+							"line": 629
 						},
 						{
 							"kind": "method",
 							"name": "GetFocusVisual",
 							"signature": "EFocusVisual GetFocusVisual() const override",
 							"doc": "The keyboard row carries list-row.json's inset ring, not the list.",
-							"line": 633
+							"line": 636
 						},
 						{
 							"kind": "method",
 							"name": "PaintsOwnFocus",
 							"signature": "bool PaintsOwnFocus() const override",
-							"line": 636
+							"line": 639
 						},
 						{
 							"kind": "method",
 							"name": "GetNumChildren",
 							"signature": "int32_t GetNumChildren() const override",
-							"line": 640
+							"line": 643
 						},
 						{
 							"kind": "method",
 							"name": "GetChildAt",
 							"signature": "TSharedPtr<AWidget> GetChildAt(int32_t index) const override",
-							"line": 644
+							"line": 647
 						},
 						{
 							"kind": "method",
 							"name": "GetTypeName",
 							"signature": "const char* GetTypeName() const override",
-							"line": 658
+							"line": 661
 						}
 					]
 				}
@@ -25647,7 +25843,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 207
 						},
 						{
@@ -25887,7 +26083,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 41
 						},
 						{
@@ -26005,7 +26201,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 61
 						},
 						{
@@ -26248,7 +26444,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 43
 						},
 						{
@@ -26351,7 +26547,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 33
 						},
 						{
@@ -26625,7 +26821,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 170
 						},
 						{
@@ -26857,7 +27053,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 48
 						},
 						{
@@ -27019,7 +27215,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 71
 						},
 						{
@@ -27189,7 +27385,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 43
 						},
 						{
@@ -27331,7 +27527,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 56
 						},
 						{
@@ -27438,7 +27634,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 68
 						},
 						{
@@ -27559,7 +27755,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 38
 						},
 						{
@@ -27921,7 +28117,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 168
 						},
 						{
@@ -28050,7 +28246,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 252
 						},
 						{
@@ -28219,7 +28415,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 86
 						},
 						{
@@ -28360,7 +28556,7 @@
 							"kind": "method",
 							"name": "ShouldRenderThisFrame",
 							"signature": "bool ShouldRenderThisFrame(int64_t frameIndex) const",
-							"doc": "Whether this frame index (CArcUIRenderer::GetFrameNumber) owns a\nredraw under the phase throttle.",
+							"doc": "Whether this frame index (CArcRenderer::GetFrameNumber) owns a\nredraw under the phase throttle.",
 							"line": 44
 						},
 						{
@@ -28398,7 +28594,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 66
 						},
 						{
@@ -28491,7 +28687,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 67
 						},
 						{
@@ -28719,7 +28915,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 71
 						},
 						{
@@ -28827,7 +29023,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 48
 						},
 						{
@@ -29092,7 +29288,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 238
 						},
 						{
@@ -29284,7 +29480,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 77
 						},
 						{
@@ -29760,7 +29956,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 134
 						},
 						{
@@ -29925,7 +30121,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 62
 						},
 						{
@@ -30059,7 +30255,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 78
 						},
 						{
@@ -30175,7 +30371,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 24
 						},
 						{
@@ -30298,7 +30494,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 58
 						},
 						{
@@ -30412,7 +30608,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 119
 						},
 						{
@@ -30472,7 +30668,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 34
 						},
 						{
@@ -30519,7 +30715,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 30
 						},
 						{
@@ -30687,7 +30883,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 39
 						},
 						{
@@ -30754,7 +30950,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 43
 						},
 						{
@@ -30893,7 +31089,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 62
 						},
 						{
@@ -31126,7 +31322,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 107
 						},
 						{
@@ -31430,7 +31626,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 124
 						},
 						{
@@ -31665,7 +31861,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 52
 						},
 						{
@@ -31992,7 +32188,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 87
 						},
 						{
@@ -32114,7 +32310,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 205
 						},
 						{
@@ -32494,7 +32690,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 189
 						},
 						{
@@ -32654,7 +32850,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 53
 						},
 						{
@@ -32933,7 +33129,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 212
 						},
 						{
@@ -33190,7 +33386,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 89
 						},
 						{
@@ -33279,7 +33475,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 40
 						},
 						{
@@ -33481,7 +33677,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 65
 						},
 						{
@@ -33709,7 +33905,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 163
 						},
 						{
@@ -33867,7 +34063,7 @@
 						{
 							"kind": "method",
 							"name": "PaintFrame",
-							"signature": "static FArcToolbarButtonPaint PaintFrame(CArcUIRenderer& renderer, const ArcRect& rect, bool enabled, bool hovered, bool pressed, bool selected, float opacity)",
+							"signature": "static FArcToolbarButtonPaint PaintFrame(CArcRenderer& renderer, const ArcRect& rect, bool enabled, bool hovered, bool pressed, bool selected, float opacity)",
 							"static": true,
 							"doc": "Frames rect as a toolbar button in the given state and answers the\ncolours its content takes — the paint the editor's own custom\ntoolbar shares, so both look the same.",
 							"line": 76
@@ -33881,7 +34077,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 79
 						},
 						{
@@ -34012,7 +34208,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 150
 						},
 						{
@@ -34421,7 +34617,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"doc": "tree-row.json: rows are 4 px-radius pills across the tree, hover\nSurfaceHover, pressed Surface4, selected Selection, the keyboard row\na 1 px FocusRing inset, the 12 px Lucide chevron in a 12 px slot at\n4 px + 16 px per level, and a hidden or disabled row in TextDisabled.",
 							"line": 469
 						},
@@ -34792,7 +34988,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 110
 						},
 						{
@@ -35051,7 +35247,7 @@
 						{
 							"kind": "method",
 							"name": "PaintRoot",
-							"signature": "static void PaintRoot(CArcUIRenderer& renderer, const ArcRect& rect, float opacity)",
+							"signature": "static void PaintRoot(CArcRenderer& renderer, const ArcRect& rect, float opacity)",
 							"static": true,
 							"doc": "The root card (Surface1, BorderSubtle, radius 6).",
 							"line": 75
@@ -35059,7 +35255,7 @@
 						{
 							"kind": "method",
 							"name": "PaintPlot",
-							"signature": "static void PaintPlot(CArcUIRenderer& renderer, const FArcTrendChartLayout& layout, const FArcTrendChartData& data, float opacity)",
+							"signature": "static void PaintPlot(CArcRenderer& renderer, const FArcTrendChartLayout& layout, const FArcTrendChartData& data, float opacity)",
 							"static": true,
 							"doc": "Grid, axis labels, baseline, threshold, series and points.",
 							"line": 78
@@ -35067,7 +35263,7 @@
 						{
 							"kind": "method",
 							"name": "PaintSeriesRow",
-							"signature": "static void PaintSeriesRow(CArcUIRenderer& renderer, const ArcRect& row, const std::string& title, const std::string& value, const std::vector<double>& sparkline, EArcTrendStatus status, float opacity)",
+							"signature": "static void PaintSeriesRow(CArcRenderer& renderer, const ArcRect& row, const std::string& title, const std::string& value, const std::vector<double>& sparkline, EArcTrendStatus status, float opacity)",
 							"static": true,
 							"line": 80
 						},
@@ -35099,7 +35295,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 88
 						},
 						{
@@ -35246,7 +35442,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 62
 						},
 						{
@@ -35410,7 +35606,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 72
 						},
 						{
@@ -35541,7 +35737,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 46
 						},
 						{
@@ -35669,7 +35865,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 60
 						},
 						{
@@ -35875,7 +36071,7 @@
 						{
 							"kind": "method",
 							"name": "OnPaint",
-							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcUIRenderer& renderer, int32_t layerId) const override",
+							"signature": "int32_t OnPaint(const CArcPaintArgs& args, const CGeometry& geo, CArcRenderer& renderer, int32_t layerId) const override",
 							"line": 63
 						},
 						{
@@ -36632,7 +36828,7 @@
 						{
 							"kind": "method",
 							"name": "Ruler",
-							"signature": "static void Ruler(CArcUIRenderer& renderer, const ArcRect& ruler, const std::vector<FArcRulerTick>& ticks, float opacity = 1.0f)",
+							"signature": "static void Ruler(CArcRenderer& renderer, const ArcRect& ruler, const std::vector<FArcRulerTick>& ticks, float opacity = 1.0f)",
 							"static": true,
 							"doc": "The ruler band: ticks rising from its bottom edge, labels in\nCodeSmall beside each major, the bottom border.",
 							"line": 92
@@ -36640,7 +36836,7 @@
 						{
 							"kind": "method",
 							"name": "TickGrid",
-							"signature": "static void TickGrid(CArcUIRenderer& renderer, const ArcRect& tracks, const std::vector<FArcRulerTick>& ticks, float opacity = 1.0f)",
+							"signature": "static void TickGrid(CArcRenderer& renderer, const ArcRect& tracks, const std::vector<FArcRulerTick>& ticks, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A 1 px vertical line under each major tick across the track area.",
 							"line": 95
@@ -36648,7 +36844,7 @@
 						{
 							"kind": "method",
 							"name": "Playhead",
-							"signature": "static void Playhead(CArcUIRenderer& renderer, const ArcRect& area, float rulerHeight, float x, const std::string& label, float opacity = 1.0f)",
+							"signature": "static void Playhead(CArcRenderer& renderer, const ArcRect& area, float rulerHeight, float x, const std::string& label, float opacity = 1.0f)",
 							"static": true,
 							"doc": "The playhead: a 2 px AccentColor line over the whole area and its\nframe label centred on it inside the ruler band.",
 							"line": 99
@@ -36656,7 +36852,7 @@
 						{
 							"kind": "method",
 							"name": "Diamond",
-							"signature": "static void Diamond(CArcUIRenderer& renderer, const ArcVec2& c, float extent, const ArcColor& color)",
+							"signature": "static void Diamond(CArcRenderer& renderer, const ArcVec2& c, float extent, const ArcColor& color)",
 							"static": true,
 							"doc": "A filled diamond of bounding width `extent` centred on c.",
 							"line": 102
@@ -36664,7 +36860,7 @@
 						{
 							"kind": "method",
 							"name": "RowSeparator",
-							"signature": "static void RowSeparator(CArcUIRenderer& renderer, const ArcRect& row, float opacity = 1.0f)",
+							"signature": "static void RowSeparator(CArcRenderer& renderer, const ArcRect& row, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A track row's bottom separator.",
 							"line": 105
@@ -36672,7 +36868,7 @@
 						{
 							"kind": "method",
 							"name": "Notify",
-							"signature": "static void Notify(CArcUIRenderer& renderer, const ArcRect& row, float x, const std::string& label, bool selected, float opacity = 1.0f)",
+							"signature": "static void Notify(CArcRenderer& renderer, const ArcRect& row, float x, const std::string& label, bool selected, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A notify mark: the diamond on the row's centre line, its label\nbeside it in Caption.",
 							"line": 109
@@ -36680,7 +36876,7 @@
 						{
 							"kind": "method",
 							"name": "StateBar",
-							"signature": "static void StateBar(CArcUIRenderer& renderer, const ArcRect& row, float x0, float x1, const std::string& label, bool selected, float opacity = 1.0f)",
+							"signature": "static void StateBar(CArcRenderer& renderer, const ArcRect& row, float x0, float x1, const std::string& label, bool selected, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A notify state window: an 18 px Selection bar with its name.",
 							"line": 112
@@ -36688,7 +36884,7 @@
 						{
 							"kind": "method",
 							"name": "SyncMarker",
-							"signature": "static void SyncMarker(CArcUIRenderer& renderer, const ArcRect& row, float x, float opacity = 1.0f)",
+							"signature": "static void SyncMarker(CArcRenderer& renderer, const ArcRect& row, float x, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A sync marker diamond in Success.",
 							"line": 115
@@ -36696,7 +36892,7 @@
 						{
 							"kind": "method",
 							"name": "WaveformBars",
-							"signature": "static void WaveformBars(CArcUIRenderer& renderer, const ArcRect& lane, const float* peaks, size_t count, const ArcColor& color)",
+							"signature": "static void WaveformBars(CArcRenderer& renderer, const ArcRect& lane, const float* peaks, size_t count, const ArcColor& color)",
 							"static": true,
 							"doc": "Waveform bars (2 px wide, 1 px apart) from peaks in [0, 1], centred\non the lane's centre line; peaks are resampled to the lane width.",
 							"line": 119
@@ -36768,7 +36964,7 @@
 						{
 							"kind": "method",
 							"name": "OverlayPlate",
-							"signature": "static void OverlayPlate(CArcUIRenderer& renderer, const ArcRect& rect, float opacity = 1.0f)",
+							"signature": "static void OverlayPlate(CArcRenderer& renderer, const ArcRect& rect, float opacity = 1.0f)",
 							"static": true,
 							"doc": "The viewport-overlay plate: Surface1, PanelBorder, radius 6.",
 							"line": 39
@@ -36776,7 +36972,7 @@
 						{
 							"kind": "method",
 							"name": "PaneFrame",
-							"signature": "static void PaneFrame(CArcUIRenderer& renderer, const ArcRect& rect, Mowo::EArcSpecState state, float opacity = 1.0f)",
+							"signature": "static void PaneFrame(CArcRenderer& renderer, const ArcRect& rect, Mowo::EArcSpecState state, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A viewport-pane frame: radius 4, PanelBorder, BorderStrong hovered,\nAccentColor on the active pane (Selected).",
 							"line": 43
@@ -36784,7 +36980,7 @@
 						{
 							"kind": "method",
 							"name": "PaneLabel",
-							"signature": "static void PaneLabel(CArcUIRenderer& renderer, const ArcRect& pane, const std::string& label, float opacity = 1.0f)",
+							"signature": "static void PaneLabel(CArcRenderer& renderer, const ArcRect& pane, const std::string& label, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A pane's camera / view-mode label on its overlay plate, inset 6 at\nthe top-left, 26 tall.",
 							"line": 47
@@ -36792,7 +36988,7 @@
 						{
 							"kind": "method",
 							"name": "MeasureStats",
-							"signature": "static ArcVec2 MeasureStats(CArcUIRenderer& renderer, const std::vector<FArcViewportStat>& stats)",
+							"signature": "static ArcVec2 MeasureStats(CArcRenderer& renderer, const std::vector<FArcViewportStat>& stats)",
 							"static": true,
 							"doc": "The stats overlay: label / value rows in Numeric, columns 16 apart,\nlabels TextSecondary, values TextBright and right-aligned.",
 							"line": 51
@@ -36800,14 +36996,14 @@
 						{
 							"kind": "method",
 							"name": "Stats",
-							"signature": "static void Stats(CArcUIRenderer& renderer, const ArcVec2& topLeft, const std::vector<FArcViewportStat>& stats, float opacity = 1.0f)",
+							"signature": "static void Stats(CArcRenderer& renderer, const ArcVec2& topLeft, const std::vector<FArcViewportStat>& stats, float opacity = 1.0f)",
 							"static": true,
 							"line": 52
 						},
 						{
 							"kind": "method",
 							"name": "SelectionOutline",
-							"signature": "static void SelectionOutline(CArcUIRenderer& renderer, const ArcRect& bounds, const std::string& label, bool capsule = false, float opacity = 1.0f)",
+							"signature": "static void SelectionOutline(CArcRenderer& renderer, const ArcRect& bounds, const std::string& label, bool capsule = false, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A 1 px AccentColor frame round the selection and its name chip\nabove it; capsule rounds it fully (physics bodies).",
 							"line": 56
@@ -36815,7 +37011,7 @@
 						{
 							"kind": "method",
 							"name": "BrushCursor",
-							"signature": "static void BrushCursor(CArcUIRenderer& renderer, const ArcVec2& centre, float radius, float falloff, const std::string& label, Mowo::EArcSpecState state, float opacity = 1.0f)",
+							"signature": "static void BrushCursor(CArcRenderer& renderer, const ArcVec2& centre, float radius, float falloff, const std::string& label, Mowo::EArcSpecState state, float opacity = 1.0f)",
 							"static": true,
 							"doc": "The brush cursor projected to the screen: the 2 px inner ring at\nradius × (1 − falloff), the dashed 1 px outer ring at the full\nradius, the 8 px centre and the Numeric readout under it. The state\nis Default, Pressed (painting), Disabled (no target) or Error\n(target locked).",
 							"line": 63
@@ -36823,7 +37019,7 @@
 						{
 							"kind": "method",
 							"name": "ControlGizmo",
-							"signature": "static void ControlGizmo(CArcUIRenderer& renderer, const ArcVec2& centre, EArcControlShape shape, float size, Mowo::EArcSpecState state, float opacity = 1.0f)",
+							"signature": "static void ControlGizmo(CArcRenderer& renderer, const ArcVec2& centre, EArcControlShape shape, float size, Mowo::EArcSpecState state, float opacity = 1.0f)",
 							"static": true,
 							"doc": "A Control Rig control in the viewport, sized from the spec (30, 36\nor 48 for circles; 30 or 60 for boxes) and coloured by state.",
 							"line": 67
@@ -36831,7 +37027,7 @@
 						{
 							"kind": "method",
 							"name": "QualityCardFrame",
-							"signature": "static void QualityCardFrame(CArcUIRenderer& renderer, const ArcRect& rect, float opacity = 1.0f)",
+							"signature": "static void QualityCardFrame(CArcRenderer& renderer, const ArcRect& rect, float opacity = 1.0f)",
 							"static": true,
 							"doc": "The quality-card frame: SurfaceFlyout, BorderNormal, radius 6 and\nthe popup shadow (none in High Contrast).",
 							"line": 71

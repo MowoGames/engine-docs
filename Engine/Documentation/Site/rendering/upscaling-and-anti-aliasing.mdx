@@ -4,11 +4,12 @@ description: Choose between TAA, TSR, FSR, DLSS, XeSS and MetalFX, let Auto pick
 order: 12
 sources:
   - Engine/Source/Runtime/RHI/Public/RHI/IUpscaler.h
+  - Engine/Source/Runtime/RHI/Public/RHI/ApplicationIdentity.h
   - Engine/Source/Runtime/RHI/Public/RHI/FrameGeneration.h
   - Engine/Source/Runtime/RHI/Public/RHI/VendorCapabilityProbe.h
   - Engine/Source/Runtime/RHI/Public/RHI/RendererAPI.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/RenderFrameData.h
-verifiedAt: 280634744
+verifiedAt: c6c835140
 ---
 
 Mowo can render at a lower internal resolution and reconstruct the output with a temporal upscaler, or render at native resolution and resolve aliasing with TAA or FXAA. One cvar, `r.Upscaler`, picks the method; `r.UpscalerQuality` picks the render resolution, or Auto upscaling (`r.Upscaler.AutoQuality`) picks it from the output resolution.
@@ -76,6 +77,8 @@ Spatial is FSR1: render smaller, upsample with edge-adaptive EASU, then sharpen 
 Only scaling methods act on it. TAA and None always render at full resolution. While Auto upscaling is on, it picks this value itself (next section) and writes the live mode back here for readers. An explicit `r.RenderScale` (0.25 to 1.0) wins over the preset; the **Custom Percentage** setting writes it. With [dynamic resolution](/docs/rendering/quality-tiers/#dynamic-resolution) on, the render scale moves between its bounds below the preset's base scale.
 
 While a temporal upscaler reconstructs the output, material textures are sampled with a negative mip bias so they keep output-resolution detail. `r.MaterialMipBias.Auto` (default 1) turns this on, `r.MaterialMipBias.Offset` adds to it and `r.MaterialMipBias.Min` (default -2) limits it.
+
+Geometry keeps its detail the same way: the meshlet level-of-detail cut is measured at the upscaled output height rather than the render height, so a 0.5x frame does not halve geometric detail and a dynamic-resolution step does not move the cut. `r.MeshletLodError.UpscaleBiasMin` (default 0.5) is the lowest render-to-output ratio the bias follows; below it the cut is no finer than that ratio allows. 1 turns the bias off. Shadow casters are unaffected.
 
 ## Auto upscaling
 
@@ -165,7 +168,7 @@ Each scene also has an anti-aliasing mode, `AntiAliasingMode`: None, FXAA (the d
 
 Where each resolve sits in the frame:
 
-- Temporal upscalers (TSR, FSR, DLSS, XeSS, MetalFX) resolve **before** tonemapping, on linear HDR.
+- Temporal upscalers (TSR, FSR, DLSS, XeSS, MetalFX) resolve **before** tonemapping, on linear HDR. That is why they work on HDR displays (scRGB, HDR10) too: the resolve never sees the display encoding.
 - Built-in TAA runs **after** tonemapping, before lens flare.
 - Spatial runs after tonemapping.
 - FXAA, or contrast-adaptive sharpening (`r.Sharpness`, 0 to 100 percent; -1 uses the scene setting), runs in the final pass.
@@ -206,6 +209,28 @@ Frame generation is a project switch, off for a new project: turn on **Project S
 | Intel XeLL | D3D12 |
 
 A running DLSS-G or XeSS-FG keeps low latency on.
+
+## Several views
+
+A secondary view that asks for temporal anti-aliasing (a split-screen player, a perspective pane, a capture) resolves through the same upscaler with a history of its own, so TSR, FSR, DLSS, XeSS and MetalFX work in every view instead of only the first. `r.Upscaler.PerViewHistory 0` returns secondary views to the built-in TAA.
+
+## Vendor SDK obligations
+
+Shipping a vendor upscaler (`graphics.upscalers` in the `.mproject`) carries duties the build cannot perform for you. `mbt package` prints each one as a warning for the vendors in the package.
+
+| Vendor | What you owe |
+|---|---|
+| NVIDIA DLSS, Streamline, Reflex | Notify NVIDIA before the commercial release. Show the NVIDIA DLSS mark on the splash, about or credits screen, and credit Reflex on the credits screen. Accept NVIDIA's over-the-air updates: NVIDIA may disable an integration it finds broken. |
+| AMD FidelityFX | Ship the signed `amd_fidelityfx` DLLs unmodified. |
+| Intel XeSS | Keep the licence notice with the game; do not use Intel's name to endorse it. |
+| FSR 3.1 and Anti-Lag 2 | Licence notice only (MIT). |
+| Apple MetalFX | An operating-system framework, nothing to ship. |
+
+The licence texts are collected into `Engine/Legal/ThirdPartyNotices.txt` in the package. The editor's About window credits NVIDIA.
+
+### Your game's identity
+
+NVIDIA keys its driver profiles, and its right to turn off a broken integration, on the Streamline project id. Each game sends its own: `project.streamlineProjectId` in the `.mproject` when it holds a GUID, otherwise a GUID derived from `project.uuid`, so the id is stable without you authoring it. Set it on **Project Settings > Project > General > NVIDIA Streamline ID**; leave it empty to use the derived one. Keep an authored id when you rename or fork a project that NVIDIA already knows. The engine version sent is the build's own. A project without a readable manifest sends the engine's id.
 
 ## API reference
 

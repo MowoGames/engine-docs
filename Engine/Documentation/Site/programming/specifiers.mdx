@@ -1,0 +1,87 @@
+---
+title: Specifier reference
+description: Every MCLASS, MPROPERTY and MFUNCTION specifier the header tool accepts, its effect in the editor and at run time, and the Unreal ones with no equivalent.
+order: 4
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Reflection/Public/Reflection/ReflectMacros.h
+verifiedAt: 55f27937c
+---
+
+Specifiers go inside the markup macros: `MCLASS(Abstract, Config=Game)`, `MPROPERTY(EditAnywhere, Category="Combat")`, `MFUNCTION(ScriptEvent)`. Names match case-insensitively and an unknown one stops the build with the list of known names. Where a name has an Unreal spelling that means the same thing, both work.
+
+## MPROPERTY
+
+| Specifier | Effect |
+| --- | --- |
+| `EditAnywhere` | Editable on the class defaults page and on placed instances |
+| `EditDefaultsOnly` | Editable on the class defaults page only; placed instances do not show it |
+| `EditInstanceOnly` | Editable on placed instances only; the class defaults page does not show it |
+| `VisibleAnywhere` | Shown read-only everywhere |
+| `VisibleDefaultsOnly` / `VisibleInstanceOnly` | Shown read-only on the defaults page / on instances only |
+| `ReadOnly` | Shown but never editable |
+| `Hidden`, `RuntimeOnly` (`Transient`) | Not shown, not saved |
+| `AdvancedDisplay` | Grouped under an **Advanced** heading in its category |
+| `Category="A"`, `DisplayName=`, `Tooltip=` | Details panel grouping and text |
+| `EditCondition=`, `Range=`, `ClampMin=`, `ClampMax=`, `Step=`, `Units=` | Editing limits and display |
+| `Instanced` (`EditInline`) | The field owns an object; the panel edits it inline |
+| `NoClear` | The object picker has no "none" entry |
+| `EditFixedSize` | An array's length cannot be changed in the panel |
+| `ExposeOnSpawn` | A spawn pin written before Begin Play; an async action input |
+| `ScriptReadOnly`, `ScriptReadWrite`, `ScriptHidden` | What a graph may do; see [Script events](/docs/programming/script-events/) |
+| `Getter=`, `Setter=` | Graph reads and writes go through these functions |
+| `Interp` | The field can be keyed by a Sequencer property track |
+| `Config`, `GlobalConfig`, `ConfigRestartRequired` | Settable from the class INI section (a subclass section too); `GlobalConfig` reads only the declaring class section; the last one tells the settings page a change needs a restart |
+| `SaveGame` | Written into saved games |
+| `Replicated`, `ReplicatedUsing=`, `RepCondition=`, `NetQuantize=` | Replication |
+| `ConstructOnDrag` | Re-runs construction while the value is scrubbed |
+| `ScriptAssignable`, `ScriptCallable` | On a multicast delegate member: graphs may bind to it / broadcast it; see [Delegates and async actions](/docs/programming/delegates-and-async/) |
+| `AssetRef`, `AssetType=`, `MetaClass=`, `Color`, `LayerMask`, `Key=`, `Custom=`, `meta=(...)` | Value editors and open metadata |
+
+<Callout type="note">
+`Instanced` fields are saved with their object nested under the field and edited in Details and the Data Asset editor with a class picker; `NoClear` removes the "None" choice, and `EditFixedSize` removes add and remove from a list. `ExposeOnSpawn` puts the field on the spawn node as an input pin written before Begin Play, and makes it an input of an async action. `Interp` makes a float, double, bool, int or vector field a [sequence](/docs/gameplay/sequencer/) property track. `AdvancedDisplay` groups the row under an Advanced heading. `GlobalConfig` and `ConfigRestartRequired` act in the INI binder and on the [settings class](/docs/programming/settings-classes/) page. `EditInlineNew` and `DefaultToInstanced` are recorded on the class; the class picker offers every concrete subclass.
+</Callout>
+
+`EditDefaultsOnly` and `EditInstanceOnly` contradict each other, and so do `VisibleDefaultsOnly` and `VisibleInstanceOnly`; the header tool reports both.
+
+## MFUNCTION
+
+| Specifier | Effect |
+| --- | --- |
+| `ScriptEvent` (`ImplementableEvent`), `ScriptNativeEvent` (`NativeEvent`) | A C++ event a Visual Scripting class overrides |
+| `ScriptHidden` | No node |
+| `ScriptProtected` | Self-only |
+| `AuthorityOnly`, `Cosmetic` | Gate a call to the authority / to presentation |
+| `ScriptPure`, `ScriptImpure` | Override the const-means-pure default |
+| `Server`, `Client`, `Multicast`, `Reliable`, `Unreliable` | RPCs |
+| `Category=`, `Tooltip=`, `DisplayName=`, `meta=(...)` | Node palette text |
+
+## MCLASS
+
+| Specifier | Effect |
+| --- | --- |
+| `Abstract`, `Transient`, `NotPlaceable`, `Deprecated` | As in Unreal |
+| `NotScriptable` (`NotBlueprintable`) | A Visual Scripting class that names it as a parent is refused at load |
+| `EditInlineNew`, `DefaultToInstanced` | Instanced properties can create it inline / every object property of this class is instanced |
+| `Tickable` | A subsystem the owning scope ticks |
+| `Config=File` | Reads the class's INI section from that file |
+| `HideCategories=(A, B)` | Those categories never reach the Details panel for this class |
+| `ClassGroup=` | A grouping label for pickers |
+| `DisplayName=`, `Category=`, `Tooltip=`, `meta=(...)` | Text and open metadata |
+
+## Not implemented, and why
+
+| Unreal specifier | Why not |
+| --- | --- |
+| `BlueprintType`, `Blueprintable` | Every reflected type is usable from graphs; use `NotScriptable` to opt out |
+| `FieldNotify` | There is no model-view binding layer to notify |
+| `NotReplicated` | A field replicates only when you opt in; nothing replicates implicitly |
+| `AssetRegistrySearchable` | Reflected objects are not asset registry entries |
+| `SimpleDisplay` | The default; `AdvancedDisplay` is the only switch |
+| `Within`, `MinimalAPI`, `ComponentWrapperClass`, `CollapseCategories` | No matching feature in the object model or the panel |
+| `CustomThunk`, `ExpandEnumAsExecs`, `WithValidation` | Not supported by the call layer yet |
+| Verse specifiers | No Verse |
+
+## For IDE tooling
+
+`mbt specifiers --out specifiers.json` writes every macro and specifier, per target, with whether it takes a value (`none`, `required`, `optional`), for editor extensions that complete or validate markup.

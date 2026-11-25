@@ -1,0 +1,66 @@
+---
+title: Water bodies
+description: Create oceans, lakes, rivers and custom water, shape them with splines, tune waves and flow, blend overlapping bodies, bound them with a zone, float things.
+order: 22
+sources:
+  - Engine/Source/Runtime/SceneTypes/Public/SceneTypes/Components/WaterBodyComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/WaterZoneComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/BuoyancyComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/AWaterActor.h
+verifiedAt: 454c23e4a
+---
+
+A level has two kinds of water. A **Water actor** is a flat, square plane with waves: quick to place, good for a pool or a distant sea. A **water body** is an entity with a **Water Body** component, and it is the one to reach for when the water has a shape, a current, or neighbours. This page covers bodies; drawing and lighting are on [Water rendering](/docs/rendering/water/), and asking the water questions from code is in [World environment](/docs/gameplay/world-environment/).
+
+## Create a body
+
+Switch to **Water** mode (<Kbd>Shift+4</Kbd>) or open **Window ▸ Water**. The panel lists the bodies in the level and creates one of four types:
+
+| Type | Shape | Use |
+| --- | --- | --- |
+| **Ocean** | A square of `Ocean Size` metres | Open sea. With **Ocean Quadtree LOD** on, the mesh is fine near the camera and coarse far away |
+| **Lake** | A polygon made of spline points, flat at its own height | Ponds, lakes, a flooded room |
+| **River** | A ribbon following a spline, with a width, depth and velocity at every point | Streams and rivers; the current runs along the spline |
+| **Custom** | A shape that floats things and answers queries but is not drawn | Water you draw yourself, or an invisible swim volume |
+
+<Kbd>Ctrl</Kbd>+click in the viewport places a body. The palette's **Lake** and **River** entries spawn a body with a preset spline. Dragging a spline point moves it on the body's own water plane, so a lake above the ground keeps its height; panel edits and viewport drags each make one undo entry.
+
+## Move, rotate and scale
+
+A body follows its transform. Rotate a lake, scale a river, or move an ocean, and the surface, the swimming and floating queries, the shoreline foam and the underwater effect all move with it. Rotation about the vertical axis and scale are exact. Tilting a body keeps its water horizontal over the body's footprint, because the wave model has no sloped sea.
+
+## Waves
+
+**Wave Amplitude**, **Wave Length**, **Wave Steepness**, **Wave Speed** and **Wave Direction** drive the base waves. For a richer sea, choose a **Wave Spectrum** asset or set the **Spectrum** fields on the body: a band mode, or two physically based wind modes with **Wind Speed** and 1 to 3 **Spectrum Cascades**. A river steers its waves along the average direction of its spline.
+
+Every body in a level uses one shared wave clock, so two bodies with the same settings show the same waves at the same place, however late either was added. In a networked game the clock is steered toward the server's.
+
+## Flow
+
+A river's current is its spline tangent times the per-point **Velocity**; a velocity of 0 inherits the body's **Flow Speed**. Oceans and lakes take their current from a painted **flow map** instead: set **Flow Map Resolution** above 0 and paint in the Water panel, with **Flow Map Strength** scaling the result. Boats, swimmers and the foam all follow the same current.
+
+## Overlapping bodies
+
+Where a river runs into a lake, **Priority** decides which wins; equal priorities blend. **Transition Width** is the distance, in metres from a body's own shoreline, over which it hands over to what it overlaps. The surface height, current, depth and colour all blend over that band, so there is no step in the water and no pop in buoyancy. A body that overlaps another bakes the blended colour into its mesh, which is why such a body is re-meshed when the neighbour changes, and why an ocean that overlaps something rebuilds its camera patch as the camera moves instead of sliding it.
+
+## Look
+
+**Color**, **Opacity**, **Depth Fade**, **Absorption Density**, **Refraction Strength**, **Foam** and **Shore Foam Width** control the shading. A water info texture rasterises depth, current and height of every body so the shader can colour the shallows and push foam along the flow; its resolution is `r.Water.InfoResolution`.
+
+## Zone
+
+Add a **Water Zone** to bound which bodies take part in the info texture (**Zone Extent**, **Info Resolution**) and to fill the horizon past them with a coarse **Far Distance Mesh**. Without a zone the texture covers the union of all bodies, which grows and re-rasters when any body is edited far away.
+
+## Terrain carve
+
+**Carve Bank Width** is the distance beyond the water's edge over which the terrain carve under a river or lake returns to the untouched ground. Too narrow leaves a slot with vertical walls; too wide flattens the valley.
+
+## Make things float
+
+Give a dynamic rigid body a **Buoyancy** component. By default four probes around the body's pivot decide how deep it sits. For a boat, set **Pontoon Count**, **Pontoon Half Width** and **Pontoon Half Length**: the pontoons are laid out along the hull in its own space, turn with it, and each lifts it by its own submersion, so the boat pitches and rolls on a wave. See [World environment](/docs/gameplay/world-environment/) for the component's fields and for character swimming.
+
+## Related
+
+- [World building](/docs/editor/world-building/)
+- [Water rendering](/docs/rendering/water/)
+- [World environment](/docs/gameplay/world-environment/)

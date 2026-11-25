@@ -1,0 +1,54 @@
+---
+title: Determinism
+description: Make a simulation replay exactly from a seed - which orders the engine fixes, how to roll random numbers, and how the tests pin the result.
+order: 42
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/FRandomStream.h
+  - Engine/Source/Runtime/ECS/Public/ECS/World.h
+  - Engine/Source/Runtime/LevelGen/Public/LevelGen/LevelGenerator.h
+verifiedAt: 0df11e70d
+---
+
+A replay, a rollback session and a generated level all depend on the same thing: given the same seed and inputs, the simulation produces the same result on every run, build and machine. Entity handles are random 64-bit ids, so the engine does not get that for free. This page lists what it fixes for you and what you must not do.
+
+## Never let entity id order reach behavior
+
+An entity id is random per run. A container keyed by it, such as an `unordered_map`, walks in an order that changes between runs. Do not let that order decide a roll, a tie or a saved byte.
+
+- `World::ForEach`, `ForEachWith` and `ForEachEntity` walk archetypes in the order they were created, then rows, then entities with no components in creation order. Take your order from them.
+- When you need a stable order of your own, keep a counter or a sorted vector and iterate that.
+- Destroying a set of entities swap-removes rows, so the survivors' order depends on the order you destroy in. Pass the set through `World::SortForStructuralBatch` first. <Source symbol="World" />
+
+## Roll with FRandomStream
+
+`FRandomStream` is a PCG32 generator with explicit state. Two streams with the same seed give the same sequence whatever else rolls in between. <Source symbol="FRandomStream" />
+
+- Never use `std::rand`, a global `std::mt19937` or `std::uniform_*_distribution` in simulation code: the standard leaves the distribution algorithm to the library, so MSVC, libstdc++ and libc++ roll differently from the same seed.
+- Seed from `FRandomStream::SeedFor("<system>")` so every system gets an independent stream that still replays under `--seed=N`.
+- `Fork("<salt>")` hands a subsystem its own child stream, so it no longer shares a draw order with its siblings.
+- `GetState` and `RestoreState` save and restore a stream for snapshots.
+- Never derive an entity id or a `FGuid` from a seed; two processes sharing a seed would mint the same ids.
+
+Randomness that cannot change game state, such as audio variation and particle jitter, may stay on the standard library.
+
+## Floating point
+
+Modules whose results must match across machines set `bDeterministicFloat` in their build rules, which adds `-ffp-contract=off` so a fused multiply-add never changes a result. Math sets it. Physics is not run in lockstep across machines; the server is authoritative, and `p.Deterministic` forces a single thread for replay.
+
+## Level generation
+
+The same seed lays out the same level. `levelgen-test` generates seeds 1 to 50 twice, compares the layout hashes, and compares them with the pinned values in `kLevelGenGolden`. The generator keeps its own `FLevelRandom` so a change to `FRandomStream` cannot move a level.
+
+To regenerate the pinned hashes after a deliberate grammar or generator change:
+
+1. Run `./mbt.cmd test --filter levelgen-test --no-build` from a build that includes your change.
+2. Read the `[LevelGenTest] hashes:` line in the row's `output.log` under `build/TestResults/cases/levelgen-test/`.
+3. Paste the 50 values into `kLevelGenGolden` in `LevelGenTests.cpp` and commit the change with the reason.
+
+To check a second configuration, run the same row with `-c debug` and again with `-c dev`; both must pass against the one list.
+
+## Tests
+
+- `determinism-test` (CoreTests) checks archetype order, batch destruction and that a scripted run hashes the same under different entity id assignments.
+- `random-seed-test` (CoreTests) checks seeding, forking and state restore.
+- `replay-hash-test` (NetTests) runs a physics scene in two processes per seed and compares transform hashes.

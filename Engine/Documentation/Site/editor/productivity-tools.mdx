@@ -1,0 +1,80 @@
+---
+title: Productivity tools
+sidebarTitle: Productivity tools
+description: Rename and edit many assets at once, switch console-variable presets, edit every actor of a kind in a table, snapshot a level, and deploy to an ssh device.
+order: 26
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/CVarPresets.h
+verifiedAt: bd403ef42
+---
+
+These tools save you from doing the same edit forty times. They share one rule: anything that changes assets or the level can be undone, and anything that touches a whole set shows what it will do before it does it.
+
+## Bulk asset operations
+
+Select several assets in the [Content Browser](/docs/editor/content-browser/) and right-click.
+
+- **Rename N Assets…** applies one pattern to every name and shows the result before anything moves. The pattern has a prefix, a suffix, a find and replace, and optional numbering. Turn on **Regex** to make the find a regular expression; the replacement can use capture groups, so `^SM_(.*)_(\d+)$` with `$2_$1` turns `SM_Crate_07` into `07_Crate`. A pattern that does not compile, two names that end up equal, a name that is not legal and a name a file already holds are marked in the preview and skipped.
+- **Resave N Assets** rewrites text assets in the format this editor writes. Nothing is written when the result is the same.
+- **Reimport N Assets** rebuilds each asset from its source.
+- **Fix Up Redirectors** rewrites references to renamed assets and retires the redirect.
+
+Renames and resaves are one undo step each. Edits to a set of data assets go through the same operations: set one property, by name or by a dotted path into a struct, on every selected struct data asset, after a dry run that lists what would change. The operations are also available to C++ editor code as `FAssetBulkOps`, which is what an agent uses over the [MCP server](/docs/editor/mcp-server/).
+
+<Callout type="note">Property edits apply to struct data assets. Object data assets and other asset types are skipped and named in the result.</Callout>
+
+## Console-variable presets
+
+A preset is a named list of console variables, for switching between setups such as scanner testing, a performance run and a handheld check in one step. Presets live in the project's `Config/DefaultCVarPresets.ini`:
+
+```ini title="Config/DefaultCVarPresets.ini"
+[CVarPreset Handheld]
+Description=Steam Deck target
++CVars=r.Shadow.Cascades=2
++CVars=r.Shadow.CsmStaticCache=1
+```
+
+Use them three ways.
+
+- **Tools ▸ CVar Presets** has an **Apply** row for each preset, **Revert Last Preset** and **Save Modified CVars As Preset**.
+- The console takes `cvar.preset.apply <name>`, `cvar.preset.revert`, `cvar.preset.list`, `cvar.preset.capture <name> [cvar...]` and `cvar.preset.delete <name>`.
+- The command line takes `--cvar-preset=<name>`, which applies the preset after the project's config has loaded. The editor and a packaged game both honor it.
+
+A preset sets variables as the console would, so a variable that only the command line or a higher source may set is left alone and counted as skipped. **Revert** undoes the last applied preset in one step, restoring each variable to what it was before; a variable you changed by hand since is not touched. Presets stack, and each revert takes off one.
+
+## Object Mixer
+
+The Property Matrix normally shows the actors you selected. Right-click inside it and choose an **Object Mixer** row to fill it with every actor in the level, or every actor that has one kind of component, and edit a property down a column. **Tools ▸ Object Mixer** opens it on every actor. A typed value or a dragged fill lands on all the rows in the column as one undo step.
+
+## Level snapshots
+
+A snapshot saves every actor in the open level to a `.lsnap` asset in `Content/LevelSnapshots`, so you can try a layout change and put back only the part you did not like.
+
+- **Tools ▸ Level Snapshots ▸ Capture Snapshot** saves the level as `Snapshot_N`.
+- **Compare With** lists what differs: actors that moved or changed, actors deleted since, and actors added since.
+- **Restore** puts the level back. Changed actors get their saved state, deleted actors are recreated with their original identity and parent, and actors added since are removed. The whole restore is one undo step.
+
+The console takes `snapshot.capture <name>`, `snapshot.list`, `snapshot.diff <name>` and `snapshot.restore <name>`. Snapshots work while you are editing, not during Play.
+
+<Callout type="note">A restore re-applies the components an actor had when you captured it. A component you added afterwards stays on the actor.</Callout>
+
+## Devices and launch
+
+Save the machines you test on, then deploy to them from the editor. Devices live in `Config/EditorDevices.ini`, which is never packaged.
+
+```text title="Console"
+device.add Deck deck@steamdeck.local /home/deck/Games/Ajax D:/Build/linux 22 Ajax
+device.deploy Deck
+```
+
+`device.add` takes a name, an ssh host, the folder on the device, the folder of your packaged build, and optionally a port and the executable name. **Tools ▸ Devices** then shows **Deploy and Run on** and **Run on** for each device. Deploy copies the package folder with `scp` and starts the executable; Run attaches to one already there. Both call the [mbt deploy and run commands](/docs/reference/mbt-cli/), and the output goes to the log. Host names and paths with quotes, spaces or shell syntax are refused.
+
+## Finding assets by letters
+
+Start a Content Browser search term with `~` and the letters only have to appear in order: `~stmsh` finds `StaticMesh_Crate`. A fuzzy term also matches the asset's type label, so `~texture` lists textures.
+
+## Other version control systems
+
+The editor ships with git and Git LFS ([Source control](/docs/editor/source-control/)). Behind it is a provider interface that the changelist, locks and history use, with a git implementation and a Perforce skeleton that reads `p4 -ztag` output for opened files and history, and issues `edit`, `add`, `revert` and `submit`. The Perforce provider is not yet wired into the Source Control window.
+
+<Callout type="warning">Perforce support is a skeleton. Detection (a `.p4config` file beside the project), status, check-out and history exist in code; the window still uses git.</Callout>

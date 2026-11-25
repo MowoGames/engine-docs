@@ -6,6 +6,7 @@ order: 1
 sources:
   - Engine/Source/Runtime/Game/Public/Game/FViewerRegistry.h
   - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Game/Public/Game/ConstructionScheduler.h
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
   - Engine/Source/Runtime/Game/Public/Game/MSceneComponent.h
   - Engine/Source/Runtime/Core/Public/Core/MSubsystem.h
@@ -20,7 +21,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/PlaceableActorRegistry.h
   - Engine/Source/Runtime/Game/Public/Game/FActorTemplateRegistry.h
   - Engine/Source/Runtime/Core/Public/Core/TSubclassOf.h
-verifiedAt: 38224a3a8
+verifiedAt: 588510704
 ---
 
 An actor (`AActor`) is a gameplay object you can place in a scene or spawn at runtime. It owns a tree of components, has a transform, and goes through a fixed lifecycle. A world (`MWorld`) holds the actors of one scene, drives that lifecycle and ticks them every frame. <Source symbol="MWorld" />
@@ -33,7 +34,7 @@ Registering an actor and starting play are two separate steps. Registration happ
 
 | Stage | When it runs | Put here |
 | --- | --- | --- |
-| `OnConstruct()` | After the backing entity exists, before `BeginPlay`. The editor runs it again when instance properties change. | State derived from properties. Keep it idempotent. <Source symbol="AActor" /> |
+| `OnConstruct()` | After the backing entity exists, before `BeginPlay`. The editor runs it again after an edit to the actor, see [Construction in the editor](#construction-in-the-editor). | State derived from properties. Keep it idempotent. <Source symbol="AActor" /> |
 | `RegisterComponents()` | At registration, including scene load | Nothing gameplay-related. The default calls `OnRegister` on every component. |
 | `BeginPlay()` | Once per play session, when the world begins play, or during registration if the world is already playing | Gameplay startup |
 | `Tick(float)` | Every frame while playing (unless paced or disabled) | Per-frame logic |
@@ -200,6 +201,36 @@ Set these in the constructor:
 
 `ShouldTickInEditor()` returns false by default. Override it to return true and implement `TickInEditor(dt)` to have the edit world tick the actor, within the `ed.TickBudgetMs` budget, for edit-mode previews. `IsEditorWorld()` (on the actor and on `MWorld`, with `MWorld::IsPlayWorld()` as its opposite) tells constructor and `OnConstruct` code which world it is in. <Source symbol="AActor" /> <Source symbol="MWorld" />
 
+### Construction in the editor
+
+An actor that derives state from its properties in `OnConstruct` updates in the viewport as soon as you change them, the way a Construction Script does in Unreal or `OnValidate` does in Unity. The editor re-runs construction after an edit commits in the level being authored; a Play world is constructed once, at spawn, and never again. <Source symbol="AActor" />
+
+What counts as an edit: a C++ property committed, reset, undone or redone in Details; a C++ component added to or removed from the actor; the end of a gizmo drag; a transform or any other component value changed in Details or through the automation and MCP set-property verbs; and the Undo or Redo of any of these. A scrubbed number re-runs when you release it. Mark a property `MPROPERTY(EditAnywhere, ConstructOnDrag)` to re-run on every step of the scrub instead, for a property whose preview you want to watch while you drag.
+
+The editor calls these, in order, once per actor per frame however many edits landed:
+
+| Step | What it does |
+| --- | --- |
+| `PostEditChangeProperty(name, object)` | Once per property that changed, with the actor or the component it belongs to. Does nothing by default. |
+| `PostEditMove(finished)` | After a transform edit. Does nothing by default. |
+| `RerunConstruction()` | `ClearGeneratedContent()`, then `OnConstruct()`, then each component's `OnConstructionRerun()`, then `RegisterComponents()` to publish the ECS mirror again. |
+
+Create preview content in `OnConstruct` with `MarkGenerated`. The re-run destroys what the last run generated first, so regenerating never piles up; an actor you spawn without `MarkGenerated` is a real, saved actor and is not removed. Deleting the actor deletes its generated content, and undoing the delete builds it again through `OnConstruct`.
+
+A re-run is derived data, not an edit: it adds nothing to the undo history, and undoing the property edit is what re-runs construction with the old value. It leaves a clean scene clean when it only touched generated content, and keeps the scene dirty when it created or destroyed an authored actor. Properties that `OnConstruct` writes on its own actor are not tracked; the edit that triggered the re-run has already marked the scene.
+
+Control it per actor and per frame:
+
+- `bRunConstructionOnEdit` (**Run Construction On Edit** in Details, true by default) turns the automatic re-run off for one actor. The `PostEdit` calls still arrive, and `RerunConstruction()` still works when you call it.
+- `ed.ConstructionBudgetMs` (default 8, 0 for unlimited) caps the time spent per editor frame. Actors over the budget wait for the next frame, oldest first. A construction that overruns the budget makes the following frames sit out until the average is back inside it, and one construction always runs in full.
+- A re-run that edits its own actor is not re-run again, a chain of re-runs through other actors is cut after 8 hops, and calling `RerunConstruction()` from inside `OnConstruct` is refused. Each is logged.
+
+Visual Scripting classes take part the same way. The `OnConstruct` graph runs again, component slots are applied again with the instance's overrides on top of the class defaults, and variables keep their current values; a class on a native parent re-runs the graph through its host component. <Source symbol="FConstructionScheduler" />
+
+<Callout type="note">
+Editing `OnConstruct` to take longer than a few milliseconds shows up as a stutter while you drag a property or a gizmo handle. Keep it cheap, or move heavy generation to `TickInEditor` and run it within `ed.TickBudgetMs`.
+</Callout>
+
 ### Viewers
 
 `FViewerRegistry::GetViewers(world)` returns every point of view a world is looked at from, with position, forward vector, field of view, clip planes, a viewport id and a kind: editor viewport, Play In Editor player or game camera. Use it for distance-based streaming, level of detail or generation in actors and scene systems alike, without knowing which host runs. <Source symbol="FViewerRegistry" />
@@ -230,6 +261,8 @@ static void ArmFuse(Mowo::MWorld* world) {
 ```
 
 A non-looping timer clears itself after it fires; pass `true` as the last argument for a looping one. <Source symbol="FTimerManager" />
+
+A callback that captures an actor should be set with `SetTimerForObject(handle, actor, callback, delay)`: when the actor is destroyed before the deadline, the timer is dropped without firing, so the callback never runs against a dead object.
 
 ## World subsystems
 

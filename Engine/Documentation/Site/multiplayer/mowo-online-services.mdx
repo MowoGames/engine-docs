@@ -1,0 +1,100 @@
+---
+title: Mowo Online Services
+sidebarTitle: Mowo Online Services
+description: Ownership checks, leaderboards, lobbies and parties, voice and telemetry for games that ship through the Mowo Games Launcher.
+order: 10
+status: in-development
+sources:
+  - Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos_sdk.h
+  - Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos_services.h
+  - Engine/Plugins/MowoOnlinePlatform/MowoOnlinePlatform.mplugin
+  - Engine/Plugins/MowoOnlinePlatform/Public/MowoOnlinePlatform/MMowoOnlineServicesStatics.h
+  - Engine/Source/Runtime/Networking/Public/Networking/OnlineService.h
+verifiedAt: ec00e77ed
+---
+
+Mowo Online Services are what a game gets when the Mowo Games Launcher starts it: the player is already signed in with a Mowo ID, and the launcher stands between the game and the Mowo backend. Presence, invites, achievements and cloud saves are described on [Online platforms](/docs/multiplayer/online-platforms/). This page covers the services built on top of them. Everything here lives in the **MowoOnlinePlatform** plugin; enable it for the project first.
+
+<Callout type="note">
+The client side is in the engine. The matching routes on the Mowo Games backend are being added service by service; until a service exists there, its calls answer as offline and a game keeps working. Plan for that the way you plan for a player without a network.
+</Callout>
+
+Every call is safe to make when the game was not started by the launcher: queries answer empty or unknown and writes return `false`, so gameplay code needs no platform branch. The calls are on `MMowoOnlineServicesStatics`, which Visual Scripting exposes as nodes, and the plugin's `IOnlineService` answers the lobby and leaderboard calls the engine already has (it never becomes the primary identity, so address it by name).
+
+## Ownership
+
+A game can ask whether the signed-in player owns it, and a signed, short-lived proof lets it answer without a network.
+
+- `GetMowoOwnership(productId)` returns 0 unknown, 1 owned or 2 not owned. Asking starts a refresh in the background when the answer is stale, and an answer is reused for ten minutes (`mowo.Online.Entitlement.FreshSeconds`).
+- A player who was verified as an owner keeps playing while the launcher or the backend is unreachable, for up to seven days (`mowo.Online.Entitlement.GraceSeconds`, or the limit the token itself names). A product never seen owned stays *unknown* offline rather than *not owned*, so a dead network never reads as "you do not own it".
+- `GetMowoEntitlementToken(productId)` returns the proof of the last good check; save it beside the player's saves and give it back with `SeedMowoEntitlementToken` on the next start, so even a cold start with no network knows.
+
+The token is verified with a public key, never with the network. List the keys your build trusts in the `mowo.Online.Entitlement.Keys` console variable as `keyId:64-hex-digits;keyId:...`; a new key is added beside the old one when keys rotate, and the Mowo Games backend publishes the current ones. With no key configured the launcher's answer is used unverified, which is fine for a casual check and not for a gate.
+
+### Requiring ownership
+
+`RequireMowoOwnership(productId)` is the call a shipped game makes at startup. It returns `false` when the policy says to refuse this player:
+
+| `mowo.Online.Ownership.Policy` | Behaviour |
+|---|---|
+| 0 | Never checks (the default). |
+| 1 | Warns in the log when the player does not own the game, never blocks. |
+| 2 | Refuses a player the backend says does not own it. A player who cannot be verified (offline on the first run) is let in. |
+| 3 | Also refuses when ownership cannot be established. Use it only for launcher-exclusive titles. |
+
+The editor and play-in-editor never enforce, whatever the policy, and a check that is still waiting for its first answer returns `true`: poll `GetMowoOwnership` until it is not 0, then decide.
+
+## Leaderboards
+
+Boards are created for your game on the Mowo Games backend and named with letters, digits, `_`, `-` and `.` (up to 64 characters). The board decides how a new score replaces the old one (best, latest or sum), whether low or high wins, and the allowed range.
+
+- `SubmitMowoScore(board, score, keepBest)` returns `false` when the score was refused before it left the game: a bad board name, a score outside the board's range, or more than one submit per board per second or 30 per minute. A score the launcher cannot take right now is queued, keeps only the best per board, and is retried with backoff, so a session played offline still reaches the board.
+- `RequestMowoLeaderboard(board, range, offset, count)` with `range` `global`, `around_user` or `friends` starts a download; read `GetMowoLeaderboardEntryCount` and the `...At(index)` accessors, `GetMowoLeaderboardUserRank` and `GetMowoLeaderboardTotal` once `IsMowoLeaderboardReady` is true. An identical request inside five seconds reuses the last answer, so asking every frame is harmless.
+- `IOnlineService::UploadLeaderboardScore` and `DownloadLeaderboard` map onto the same calls for code written against the engine interface. Scores there are 32-bit; Mowo boards hold 64-bit scores.
+
+## Lobbies and parties
+
+A **lobby** is a game's matchmaking room: public or private, searchable by metadata, with a host and a join code. A **party** is a group of friends above any game, with a leader and ready states. A player is in at most one lobby per game and one party; joining another leaves the first.
+
+- Lobbies: `CreateMowoLobby`, `JoinMowoLobby`, `JoinMowoLobbyByCode`, `LeaveMowoLobby`, `SetMowoLobbyData` (host only, batched to one update a second), `SetMowoLobbyJoinable`, `InviteToMowoLobby`, and `SearchMowoLobbies(key, value, limit)` with the `GetMowoLobbySearch...` accessors. State reads (`IsInMowoLobby`, `GetMowoLobbyMemberCount`, `GetMowoLobbyData`, `IsMowoLobbyHost`) come from the copy the launcher keeps current.
+- Parties: `CreateMowoParty`, `JoinMowoParty`, `LeaveMowoParty`, `SetMowoPartyReady`, `AreAllMowoPartyMembersReady`, `TransferMowoPartyLeader`, `KickMowoPartyMember`, `InviteToMowoParty`.
+- Staying in step: the launcher forwards every change as an event. It uses the backend's events endpoint when there is one and polls each group's state otherwise, and the game re-reads the group after a lost connection or a quiet minute, so a missed event heals itself.
+
+### Joining a session together
+
+Both kinds carry a `connect` string, the same one a friend's presence carries. When your session is up, the host (lobby host or party leader) calls `PublishMowoSession(sessionName, joinable)`. The connect string is the Steam host id when Steam carries the session, otherwise the session name. Members hear it:
+
+- A Steam host id goes through the same path an accepted Steam invite takes, so the engine's session layer joins it with no game code.
+- Anything else waits for the game: poll `ConsumeMowoGroupConnect()` and dial what it returns.
+
+A friend's presence or a join request can name a group instead (`lobby:42` or `party:7`); hand those strings to `JoinMowoFromConnect`, which joins the group and answers `false` for any other string.
+
+## Voice
+
+`StartMowoLobbyVoice()` and `StartMowoPartyVoice()` join the voice room of the current lobby or party. The backend authorises the member and issues a short-lived relay token (`GetMowoVoiceToken`, `GetMowoVoiceUrl`), refreshed before it expires for as long as the call lasts. `GetMowoVoiceStatus` is 0 disconnected, 1 joining, 2 connecting, 3 connected, 4 reconnecting, 5 failed, and participants and who is speaking come with the launcher's call events.
+
+Mute and deafen are shared with the room (`SetMowoVoiceMuted`, `SetMowoVoiceDeafened`); friends in the same room see them as part of the player's presence, and deafening implies muting. While a Mowo call is up, the in-game voice chat treats it like a platform call: it keeps the in-game microphone off so one voice is not sent twice, and follows mute and deafen (`voice.MuteDuringPlatformCall`, `voice.FollowPlatformMute`).
+
+<Callout type="note">
+The media connection to the relay belongs to the launcher, which is not built yet. Until it is, a joined call reports *connecting*; tokens, room membership and mute state already work.
+</Callout>
+
+## Telemetry
+
+`TrackMowoEvent(name)`, `TrackMowoEventString(name, key, value)` and `TrackMowoEventNumber(name, key, value)` record an event for your own dashboards. A name is letters, digits, `_`, `-`, `.` or `:` up to 64 characters; properties are flat scalars (at most 16, strings up to 128 characters). Events are batched, sent in the background and retried with backoff.
+
+Consent is the player's: events are sent only while **Share anonymous usage data** is on in the launcher's privacy settings, the same switch that governs crash reports. Before the launcher has answered, events wait in a small buffer; when the answer is no, they are dropped on the spot and never stored, and a player who turns the switch off later stops it within five minutes. `IsMowoTelemetryAllowed` tells you the current answer. Set `mowo.Online.Telemetry` to 0 to switch tracking off for the whole game. Call `SetMowoTelemetryGameVersion` once at startup so your dashboards can split by release, and `FlushMowoTelemetry` before you quit.
+
+## Console variables
+
+| Variable | Default | Effect |
+|---|---|---|
+| `mowo.Online.Ownership.Policy` | 0 | What `RequireMowoOwnership` enforces. |
+| `mowo.Online.Entitlement.Keys` | empty | Public keys trusted to sign entitlement tokens. |
+| `mowo.Online.Entitlement.FreshSeconds` | 600 | How long an ownership answer is reused. |
+| `mowo.Online.Entitlement.GraceSeconds` | 604800 | Offline grace for a verified owner. |
+| `mowo.Online.Telemetry` | 1 | 0 stops all tracking and sending. |
+
+## From C or without the engine
+
+The services ride the launcher link the SDK already has. `MOS_Services_Request` sends one request (`entitlements.check`, `leaderboards.submit`, `lobbies.create`, ...) with its parameters as JSON and answers with the result as JSON; `MOS_AddNotifyServiceEvent` delivers lobby, party and voice events. The declarations are in <Source path="Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos_services.h" />; the method names match the service names used above.

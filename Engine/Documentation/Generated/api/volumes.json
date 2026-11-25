@@ -166,37 +166,37 @@
 					"namespace": "Mowo",
 					"template": "template<typename T>",
 					"doc": "HDRP-style per-parameter override slot. `value` is read by the renderer\nonly when `overrides` is true; otherwise the underlying scene default or\nthe last volume to override wins.\n\nWe deliberately do NOT default-initialize `value` — VolumeProfile sets\neach slot's value explicitly so the defaults match ScenePostProcess.",
-					"line": 18,
+					"line": 19,
 					"members": [
 						{
 							"kind": "field",
 							"name": "overrides",
 							"signature": "bool overrides = false",
-							"line": 20
+							"line": 21
 						},
 						{
 							"kind": "field",
 							"name": "value",
 							"signature": "T value",
-							"line": 21
+							"line": 22
 						},
 						{
 							"kind": "method",
 							"name": "VolumeOverride",
 							"signature": "VolumeOverride() = default",
-							"line": 23
-						},
-						{
-							"kind": "method",
-							"name": "VolumeOverride",
-							"signature": "explicit VolumeOverride(const T& v) : overrides(false), value(v)",
 							"line": 24
 						},
 						{
 							"kind": "method",
 							"name": "VolumeOverride",
+							"signature": "explicit VolumeOverride(const T& v) : overrides(false), value(v)",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "VolumeOverride",
 							"signature": "VolumeOverride(bool ov, const T& v) : overrides(ov), value(v)",
-							"line": 26
+							"line": 27
 						}
 					]
 				},
@@ -205,7 +205,7 @@
 					"name": "VolumeProfile",
 					"namespace": "Mowo",
 					"doc": "Mirror of ScenePostProcess where every parameter is wrapped in\nVolumeOverride<T>. A profile authored by the user only flips `overrides`\non the fields they care about — everything else falls through to the\nscene's baseline ScenePostProcess. VolumeManager produces a blended\nVolumeProfile per frame; SceneRenderer then materializes the result into\nScenePostProcess for the existing render path to read.\n\nField order mirrors ScenePostProcess (Scene.h) — keep them in sync if you\nadd a field there. Add the corresponding VolumeOverride here AND the lerp\nin VolumeManager::BlendInto.",
-					"line": 40,
+					"line": 41,
 					"members": [
 						{
 							"kind": "method",
@@ -213,7 +213,7 @@
 							"signature": "static VolumeProfile MakeProfileFromScenePostProcess(const ScenePostProcess& pp)",
 							"static": true,
 							"doc": "Copies the scene's baseline ScenePostProcess into a profile where every\nslot is marked as overriding (so a downstream blend starting from this\nprofile sees full coverage). Used by VolumeManager to seed the result\nbefore walking volumes, so without any volumes the renderer sees today's\nScenePostProcess unchanged.",
-							"line": 46
+							"line": 47
 						},
 						{
 							"kind": "method",
@@ -221,357 +221,425 @@
 							"signature": "static void ApplyProfileToScenePostProcess(const VolumeProfile& profile, ScenePostProcess& out)",
 							"static": true,
 							"doc": "Inverse — materializes a (blended) VolumeProfile back into a\nScenePostProcess for the existing render path. Fields that aren't\noverridden in the profile are left as-is in `out`.",
-							"line": 51
+							"line": 52
 						},
 						{
 							"kind": "field",
 							"name": "tonemapEnabled",
 							"signature": "VolumeOverride<bool> tonemapEnabled = VolumeOverride<bool>(true)",
 							"doc": "Tonemapping",
-							"line": 54
+							"line": 55
 						},
 						{
 							"kind": "field",
 							"name": "exposure",
 							"signature": "VolumeOverride<float> exposure = VolumeOverride<float>(1.8f)",
-							"line": 55
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "toneCurveEnabled",
+							"signature": "VolumeOverride<bool> toneCurveEnabled = VolumeOverride<bool>(false)",
+							"doc": "Parametric filmic shaping ahead of the tone operator (ScenePostProcess\ntoneCurve*). A volume can pull the shoulder in for a bright exterior or\nlift the toe in a cave without touching the scene's operator.",
+							"line": 61
+						},
+						{
+							"kind": "field",
+							"name": "toneCurveSlope",
+							"signature": "VolumeOverride<float> toneCurveSlope = VolumeOverride<float>(1.0f)",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "toneCurveToe",
+							"signature": "VolumeOverride<float> toneCurveToe = VolumeOverride<float>(0.0f)",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "toneCurveShoulder",
+							"signature": "VolumeOverride<float> toneCurveShoulder = VolumeOverride<float>(0.0f)",
+							"line": 64
+						},
+						{
+							"kind": "field",
+							"name": "toneCurveBlackClip",
+							"signature": "VolumeOverride<float> toneCurveBlackClip = VolumeOverride<float>(0.0f)",
+							"line": 65
+						},
+						{
+							"kind": "field",
+							"name": "toneCurveWhiteClip",
+							"signature": "VolumeOverride<float> toneCurveWhiteClip = VolumeOverride<float>(0.0f)",
+							"line": 66
 						},
 						{
 							"kind": "field",
 							"name": "autoExposureMetering",
 							"signature": "VolumeOverride<int> autoExposureMetering = VolumeOverride<int>(0)",
 							"doc": "Auto exposure. The floor/ceiling pair belongs on a volume above all the\nothers here: a horror level wants the ceiling brought right down inside\nthe dark rooms and released again outdoors, and that is a per-room\ndecision, not a per-scene one. Metering mode is discrete (it selects a\nstatistic, and there is nothing between two statistics to blend).",
-							"line": 62
+							"line": 73
 						},
 						{
 							"kind": "field",
 							"name": "autoExposureEV",
 							"signature": "VolumeOverride<float> autoExposureEV = VolumeOverride<float>(0.0f)",
-							"line": 63
+							"line": 74
 						},
 						{
 							"kind": "field",
-							"name": "autoExposureMinEV",
-							"signature": "VolumeOverride<float> autoExposureMinEV = VolumeOverride<float>(-4.321928f)",
-							"line": 64
+							"name": "autoExposureMinEV100",
+							"signature": "VolumeOverride<float> autoExposureMinEV100 = VolumeOverride<float>(FAutoExposure::kDefaultMinEV100)",
+							"line": 75
 						},
 						{
 							"kind": "field",
-							"name": "autoExposureMaxEV",
-							"signature": "VolumeOverride<float> autoExposureMaxEV = VolumeOverride<float>(4.0f)",
-							"line": 65
+							"name": "autoExposureMaxEV100",
+							"signature": "VolumeOverride<float> autoExposureMaxEV100 = VolumeOverride<float>(FAutoExposure::kDefaultMaxEV100)",
+							"line": 76
 						},
 						{
 							"kind": "field",
 							"name": "autoExposureSpeedUp",
 							"signature": "VolumeOverride<float> autoExposureSpeedUp = VolumeOverride<float>(3.0f)",
-							"line": 66
+							"line": 77
 						},
 						{
 							"kind": "field",
 							"name": "autoExposureSpeedDown",
 							"signature": "VolumeOverride<float> autoExposureSpeedDown = VolumeOverride<float>(1.0f)",
-							"line": 67
+							"line": 78
 						},
 						{
 							"kind": "field",
 							"name": "autoExposureLowPercent",
 							"signature": "VolumeOverride<float> autoExposureLowPercent = VolumeOverride<float>(50.0f)",
-							"line": 68
+							"line": 79
 						},
 						{
 							"kind": "field",
 							"name": "autoExposureHighPercent",
 							"signature": "VolumeOverride<float> autoExposureHighPercent = VolumeOverride<float>(95.0f)",
-							"line": 69
+							"line": 80
 						},
 						{
 							"kind": "field",
 							"name": "bloomEnabled",
 							"signature": "VolumeOverride<bool> bloomEnabled = VolumeOverride<bool>(true)",
 							"doc": "Bloom",
-							"line": 72
+							"line": 83
 						},
 						{
 							"kind": "field",
 							"name": "bloomIntensity",
 							"signature": "VolumeOverride<float> bloomIntensity = VolumeOverride<float>(0.15f)",
-							"line": 73
+							"line": 84
 						},
 						{
 							"kind": "field",
 							"name": "bloomThreshold",
 							"signature": "VolumeOverride<float> bloomThreshold = VolumeOverride<float>(1.0f)",
-							"line": 74
+							"line": 85
 						},
 						{
 							"kind": "field",
 							"name": "bloomClamp",
 							"signature": "VolumeOverride<float> bloomClamp = VolumeOverride<float>(16.0f)",
-							"line": 75
+							"line": 86
 						},
 						{
 							"kind": "field",
 							"name": "ssaoEnabled",
 							"signature": "VolumeOverride<bool> ssaoEnabled = VolumeOverride<bool>(true)",
 							"doc": "SSAO",
-							"line": 78
+							"line": 89
 						},
 						{
 							"kind": "field",
 							"name": "ssaoRadius",
 							"signature": "VolumeOverride<float> ssaoRadius = VolumeOverride<float>(0.5f)",
-							"line": 79
+							"line": 90
 						},
 						{
 							"kind": "field",
 							"name": "ssaoIntensity",
 							"signature": "VolumeOverride<float> ssaoIntensity = VolumeOverride<float>(1.5f)",
-							"line": 80
+							"line": 91
 						},
 						{
 							"kind": "field",
 							"name": "ssaoBias",
 							"signature": "VolumeOverride<float> ssaoBias = VolumeOverride<float>(0.03f)",
-							"line": 81
+							"line": 92
 						},
 						{
 							"kind": "field",
 							"name": "ssrEnabled",
 							"signature": "VolumeOverride<bool> ssrEnabled = VolumeOverride<bool>(false)",
 							"doc": "SSR",
-							"line": 84
+							"line": 95
 						},
 						{
 							"kind": "field",
 							"name": "ssrIntensity",
 							"signature": "VolumeOverride<float> ssrIntensity = VolumeOverride<float>(1.0f)",
-							"line": 85
+							"line": 96
 						},
 						{
 							"kind": "field",
 							"name": "ssrMaxDistance",
 							"signature": "VolumeOverride<float> ssrMaxDistance = VolumeOverride<float>(50.0f)",
-							"line": 86
+							"line": 97
 						},
 						{
 							"kind": "field",
 							"name": "ssrMaxSteps",
 							"signature": "VolumeOverride<int> ssrMaxSteps = VolumeOverride<int>(64)",
-							"line": 87
+							"line": 98
 						},
 						{
 							"kind": "field",
 							"name": "ssrThickness",
 							"signature": "VolumeOverride<float> ssrThickness = VolumeOverride<float>(0.5f)",
-							"line": 88
+							"line": 99
 						},
 						{
 							"kind": "field",
 							"name": "ssrRoughnessCutoff",
 							"signature": "VolumeOverride<float> ssrRoughnessCutoff = VolumeOverride<float>(0.7f)",
-							"line": 89
+							"line": 100
 						},
 						{
 							"kind": "field",
 							"name": "antiAliasingMode",
 							"signature": "VolumeOverride<int> antiAliasingMode = VolumeOverride<int>((int)AntiAliasingMode::FXAA)",
 							"doc": "Anti-aliasing\nEnum — can't sensibly blend, treated like a bool (highest-priority\noverride wins).",
-							"line": 94
+							"line": 105
 						},
 						{
 							"kind": "field",
 							"name": "contrast",
 							"signature": "VolumeOverride<float> contrast = VolumeOverride<float>(1.0f)",
 							"doc": "Color grading",
-							"line": 97
+							"line": 108
 						},
 						{
 							"kind": "field",
 							"name": "saturation",
 							"signature": "VolumeOverride<float> saturation = VolumeOverride<float>(1.0f)",
-							"line": 98
+							"line": 109
 						},
 						{
 							"kind": "field",
 							"name": "temperature",
 							"signature": "VolumeOverride<float> temperature = VolumeOverride<float>(0.0f)",
-							"line": 99
+							"line": 110
 						},
 						{
 							"kind": "field",
 							"name": "colorGradingLift",
 							"signature": "VolumeOverride<Vec3> colorGradingLift = VolumeOverride<Vec3>(Vec3(1, 1, 1))",
-							"line": 100
+							"line": 111
 						},
 						{
 							"kind": "field",
 							"name": "colorGradingGamma",
 							"signature": "VolumeOverride<Vec3> colorGradingGamma = VolumeOverride<Vec3>(Vec3(1, 1, 1))",
-							"line": 101
+							"line": 112
 						},
 						{
 							"kind": "field",
 							"name": "colorGradingGain",
 							"signature": "VolumeOverride<Vec3> colorGradingGain = VolumeOverride<Vec3>(Vec3(1, 1, 1))",
-							"line": 102
+							"line": 113
 						},
 						{
 							"kind": "field",
 							"name": "colorGradingLutPath",
 							"signature": "VolumeOverride<std::string> colorGradingLutPath = VolumeOverride<std::string>(std::string())",
 							"doc": "3D LUT: the path is discrete (dominant volume wins), the\nstrength lerps — crossing between two LUT volumes crossfades the\ngrade through the strength blend.",
-							"line": 106
+							"line": 117
 						},
 						{
 							"kind": "field",
 							"name": "postProcessMaterialPath",
 							"signature": "VolumeOverride<std::string> postProcessMaterialPath = VolumeOverride<std::string>(std::string())",
-							"line": 107
+							"line": 118
+						},
+						{
+							"kind": "field",
+							"name": "postMaterials",
+							"signature": "std::vector<FPostMaterialEntry> postMaterials",
+							"line": 119
 						},
 						{
 							"kind": "field",
 							"name": "colorGradingLutStrength",
 							"signature": "VolumeOverride<float> colorGradingLutStrength = VolumeOverride<float>(1.0f)",
-							"line": 108
+							"line": 120
 						},
 						{
 							"kind": "field",
 							"name": "vignetteEnabled",
 							"signature": "VolumeOverride<bool> vignetteEnabled = VolumeOverride<bool>(false)",
 							"doc": "Vignette",
-							"line": 111
+							"line": 123
 						},
 						{
 							"kind": "field",
 							"name": "vignetteIntensity",
 							"signature": "VolumeOverride<float> vignetteIntensity = VolumeOverride<float>(0.3f)",
-							"line": 112
+							"line": 124
 						},
 						{
 							"kind": "field",
 							"name": "vignetteSmoothness",
 							"signature": "VolumeOverride<float> vignetteSmoothness = VolumeOverride<float>(0.5f)",
-							"line": 113
+							"line": 125
 						},
 						{
 							"kind": "field",
 							"name": "vignetteRoundness",
 							"signature": "VolumeOverride<float> vignetteRoundness = VolumeOverride<float>(1.0f)",
-							"line": 114
+							"line": 126
 						},
 						{
 							"kind": "field",
 							"name": "chromaticAberrationEnabled",
 							"signature": "VolumeOverride<bool> chromaticAberrationEnabled = VolumeOverride<bool>(false)",
 							"doc": "Chromatic aberration",
-							"line": 117
+							"line": 129
 						},
 						{
 							"kind": "field",
 							"name": "chromaticAberrationIntensity",
 							"signature": "VolumeOverride<float> chromaticAberrationIntensity = VolumeOverride<float>(0.1f)",
-							"line": 118
+							"line": 130
 						},
 						{
 							"kind": "field",
 							"name": "filmGrainEnabled",
 							"signature": "VolumeOverride<bool> filmGrainEnabled = VolumeOverride<bool>(false)",
 							"doc": "Film grain",
-							"line": 121
+							"line": 133
 						},
 						{
 							"kind": "field",
 							"name": "filmGrainIntensity",
 							"signature": "VolumeOverride<float> filmGrainIntensity = VolumeOverride<float>(0.2f)",
-							"line": 122
+							"line": 134
 						},
 						{
 							"kind": "field",
 							"name": "filmGrainSize",
 							"signature": "VolumeOverride<float> filmGrainSize = VolumeOverride<float>(1.5f)",
-							"line": 123
+							"line": 135
 						},
 						{
 							"kind": "field",
 							"name": "dofEnabled",
 							"signature": "VolumeOverride<bool> dofEnabled = VolumeOverride<bool>(false)",
 							"doc": "Depth of field",
-							"line": 126
+							"line": 138
 						},
 						{
 							"kind": "field",
 							"name": "dofFocusDistance",
 							"signature": "VolumeOverride<float> dofFocusDistance = VolumeOverride<float>(10.0f)",
-							"line": 127
+							"line": 139
 						},
 						{
 							"kind": "field",
 							"name": "dofFocusRange",
 							"signature": "VolumeOverride<float> dofFocusRange = VolumeOverride<float>(5.0f)",
-							"line": 128
+							"line": 140
 						},
 						{
 							"kind": "field",
 							"name": "dofMaxBlur",
 							"signature": "VolumeOverride<float> dofMaxBlur = VolumeOverride<float>(1.0f)",
-							"line": 129
+							"line": 141
 						},
 						{
 							"kind": "field",
 							"name": "motionBlurEnabled",
 							"signature": "VolumeOverride<bool> motionBlurEnabled = VolumeOverride<bool>(false)",
 							"doc": "Motion blur",
-							"line": 132
+							"line": 144
 						},
 						{
 							"kind": "field",
 							"name": "motionBlurIntensity",
 							"signature": "VolumeOverride<float> motionBlurIntensity = VolumeOverride<float>(0.5f)",
-							"line": 133
+							"line": 145
 						},
 						{
 							"kind": "field",
 							"name": "motionBlurMaxVelocity",
 							"signature": "VolumeOverride<float> motionBlurMaxVelocity = VolumeOverride<float>(32.0f)",
-							"line": 134
+							"line": 146
 						},
 						{
 							"kind": "field",
 							"name": "lensFlareEnabled",
 							"signature": "VolumeOverride<bool> lensFlareEnabled = VolumeOverride<bool>(false)",
 							"doc": "Lens flare (screen-space)",
-							"line": 137
+							"line": 149
 						},
 						{
 							"kind": "field",
 							"name": "lensFlareIntensity",
 							"signature": "VolumeOverride<float> lensFlareIntensity = VolumeOverride<float>(0.3f)",
-							"line": 138
+							"line": 150
 						},
 						{
 							"kind": "field",
 							"name": "lensFlareThreshold",
 							"signature": "VolumeOverride<float> lensFlareThreshold = VolumeOverride<float>(0.5f)",
-							"line": 139
+							"line": 151
 						},
 						{
 							"kind": "field",
 							"name": "lensFlareGhostCount",
 							"signature": "VolumeOverride<int> lensFlareGhostCount = VolumeOverride<int>(4)",
-							"line": 140
+							"line": 152
 						},
 						{
 							"kind": "field",
 							"name": "lensFlareGhostSpacing",
 							"signature": "VolumeOverride<float> lensFlareGhostSpacing = VolumeOverride<float>(0.25f)",
-							"line": 141
+							"line": 153
 						},
 						{
 							"kind": "field",
 							"name": "lensFlareHaloRadius",
 							"signature": "VolumeOverride<float> lensFlareHaloRadius = VolumeOverride<float>(0.5f)",
-							"line": 142
+							"line": 154
+						},
+						{
+							"kind": "field",
+							"name": "giIntensity",
+							"signature": "VolumeOverride<float> giIntensity = VolumeOverride<float>(1.0f)",
+							"doc": "Global illumination",
+							"line": 157
+						},
+						{
+							"kind": "field",
+							"name": "giBounce",
+							"signature": "VolumeOverride<float> giBounce = VolumeOverride<float>(1.0f)",
+							"line": 158
+						},
+						{
+							"kind": "field",
+							"name": "giSkyLeakFloor",
+							"signature": "VolumeOverride<float> giSkyLeakFloor = VolumeOverride<float>(0.0f)",
+							"line": 159
+						},
+						{
+							"kind": "field",
+							"name": "giUpdateSpeed",
+							"signature": "VolumeOverride<float> giUpdateSpeed = VolumeOverride<float>(1.0f)",
+							"line": 160
 						}
 					]
 				}

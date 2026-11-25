@@ -3,10 +3,12 @@ title: Debug views and debug drawing
 sidebarTitle: Debug views
 description: Inspect intermediate buffers with view modes, draw debug lines and shapes from code, read GPU timings, and capture frames.
 order: 19
+verifiedAt: c03236f0e
 sources:
   - Engine/Source/Runtime/DebugDraw/Public/Tools/DebugDraw.h
   - Engine/Source/Runtime/RHI/Public/RHI/DebugDrawRenderer.h
-verifiedAt: 7f8f31f8d
+  - Engine/Source/Runtime/RHI/Public/RHI/GpuCapture.h
+  - Engine/Source/Runtime/RHI/Public/RHI/GpuTextureDump.h
 ---
 
 When a frame looks wrong, isolate the term that is wrong. The viewport's view modes show each intermediate buffer, the DebugDraw module draws lines and shapes from your own code, and the `stat` command and GPU markers tell you where the time goes.
@@ -19,17 +21,37 @@ Open the view-mode menu on the viewport toolbar. The modes are grouped:
 |---|---|
 | — | Lit (<Kbd>Alt+4</Kbd>), Unlit (<Kbd>Alt+3</Kbd>), Wireframe (<Kbd>Alt+2</Kbd>) |
 | Buffer Visualization | Base Color, World Normals, Roughness, Metallic, Ambient Occlusion, Depth, Velocity, Custom Depth, Custom Stencil |
-| Optimization | Light Complexity, Overdraw, LOD Coloration, Emissive |
-| Lighting | Detail Lighting (<Kbd>Alt+5</Kbd>), Lighting Only (<Kbd>Alt+6</Kbd>), Global Illumination, Reflections, Shadow Cascades |
+| Optimization | Light Complexity, Overdraw, LOD Coloration, Shader Complexity, Wireframe on Shaded, Meshlet Clusters, Shading Model, Scene Luminance, Emissive |
+| Textures | Texture Mip Level, Texel Density, UV Checker |
+| Lighting | Detail Lighting (<Kbd>Alt+5</Kbd>), Lighting Only (<Kbd>Alt+6</Kbd>), Global Illumination, GI Sky Visibility, GI Rough Specular, GI Probes, GI Screen Probes, GI Surface Coverage, GI Radiance Cache, Reflections, Shadow Cascades, Virtual Shadow Map, Local Shadow Tiles, Shadow Light Complexity |
 | Reference | Path Tracing, see [Ray tracing](/docs/rendering/ray-tracing/#path-tracer) |
 
 <Screenshot id="rendering-pipeline-view-modes" alt="Mowo Editor viewport with the view-mode dropdown open on the viewport toolbar, showing Lit, Unlit and Wireframe at the top, then the Buffer Visualization, Optimization, Lighting and Reference groups with Path Tracing under Reference, and the Sample project scene visible behind the menu" caption="The view-mode menu gives you each intermediate buffer and the path-traced reference." />
 
-Outside the editor, set `r.ViewMode`: 0 Shaded, 1 Wireframe, 2 Unlit, 3 Normals, 4 Depth, 5 Roughness, 6 Metallic, 7 BaseColor, 8 Emissive, 9 AmbientOcclusion, 10 ShadowCascades, 11 DetailLighting, 12 LightingOnly, 13 Velocity, 14 GlobalIllumination, 15 Reflections, 16 PathTracing. The default, -1, lets the host decide.
+Outside the editor, set `r.ViewMode`: 0 Shaded, 1 Wireframe, 2 Unlit, 3 Normals, 4 Depth, 5 Roughness, 6 Metallic, 7 BaseColor, 8 Emissive, 9 AmbientOcclusion, 10 ShadowCascades, 11 DetailLighting, 12 LightingOnly, 13 Velocity, 14 GlobalIllumination, 15 Reflections, 16 PathTracing, 17 CustomDepth, 18 CustomStencil, 19 LightComplexity, 20 Overdraw, 21 LodColoration, 22 ShadowVirtualMap, 23 ShadowLocalTiles, 24 ShadowLightComplexity, 31 TextureMipLevel, 32 TexelDensity, 33 UvChecker, 34 ShadingModel, 35 ShaderComplexity, 36 WireframeOnShaded, 37 MeshletClusters, 38 SceneLuminance. The GI views (25 to 30) need the live probe field and are menu-only. The default, -1, lets the host decide.
+
+Five views find cost and structure problems:
+
+- **Shader Complexity** adds an estimate of each draw's pixel cost to every pixel it covers, from its textures, shading model, transparency, graph shader and parallax. Black is empty, blue is cheap, then green, yellow and red, with white at the cap. Two stacked cheap layers read hotter than one, the way overdraw of an expensive material does.
+- **Wireframe on Shaded** keeps the lit frame and draws every visible triangle edge over it in light blue. Hidden edges stay hidden. The plain **Wireframe** view replaces the frame with the edges alone.
+- **Meshlet Clusters** colours each virtual-geometry cluster with its own hue, whichever path drew it. A mesh drawn by the classic raster path shows as flat grey, so a mesh that should be clustered and is not stands out.
+- **Shading Model** paints each pixel by its shading model: Default Lit grey, every other model its own hue.
+- **Scene Luminance** shows the scene's HDR luminance in stops, before exposure and tone mapping: deep blue at -8, green near 0, red at +8 and white above +14. Use it to find where an interior is darker than the tone curve can recover, or a light is far brighter than its surroundings.
+
+The three texture views are drawn by the G-Buffer fill and shown as raw albedo, so lighting does not tint them:
+
+- **Texture Mip Level** colours each pixel by the mip of its albedo map being sampled, red at mip 0 through green to blue at mip 10. Red where you expect blue means the texture is bigger than the screen needs; blue close up means it is too small.
+- **Texel Density** compares the albedo's texels per world metre with `r.TexelDensityTarget` (default 100): green is on target, blue is blurrier, red is denser, across four octaves. Use it to even out texel density between neighbouring assets.
+- **UV Checker** replaces the albedo with an 8-by-8 checker per UV tile and draws a red line on every UV tile border, so stretching, mirroring and how often a surface repeats are visible without touching the material.
+
+A draw with no albedo map is measured as a 1024 square.
 
 A few systems have their own debug output:
 
+- **Virtual Shadow Map**, **Local Shadow Tiles** and **Shadow Light Complexity** show the sun's virtual shadow clipmap, the local shadow atlas and how many shadow-casting lights reach each pixel. They are listed in the menu with the other lighting views; the [Shadows](/docs/rendering/shadows/#debug-views) page explains their colours.
 - `r.TSR.Debug` shows TSR's history weight, rejection or velocity. See [Upscaling](/docs/rendering/upscaling-and-anti-aliasing/#tsr).
+- **GI Probes** draws the world probes as spheres (green nominal, yellow relocated, red failed), **GI Screen Probes** the anchor tile grid and each anchor (green holds a surface, red does not; adaptive probes are not drawn), **GI Surface Coverage** whether a mesh card (green) or the voxel fallback (red) answers a pixel, and **GI Radiance Cache** the voxel radiance cache at each pixel. They need the live probe field and the main view.
+- **GI Sky Visibility** shows how much open sky the probe field sees along each pixel's reflection (white is open, black is enclosed). **GI Rough Specular** shows the probe radiance that replaces the sky on rough surfaces. Magenta means the pass did not run: Global Illumination is off, the live probe field is not built yet, or the view is not the main one. Both are editor-menu modes (View > Lighting) and are not reachable through `r.ViewMode`.
 - The SDF debug view shows the Global Illumination distance field. See [Global Illumination](/docs/rendering/global-illumination/#tune-it-for-a-scene).
 - `r.ColorBlind.Simulate` previews the image as a viewer with a color-vision deficiency sees it.
 
@@ -69,7 +91,7 @@ Debug drawing is grouped into categories: General, Perception, Navigation, Physi
 
 ## GPU timings
 
-- `stat fps`, `stat unit` and `stat gpu` show frame rate, frame times and the per-pass GPU breakdown. `stat none` hides them; `stat list` shows every group.
+- `stat fps`, `stat unit`, `stat unitgraph` and `stat gpu` show frame rate, frame times, the last 240 frames of them as lines and the per-pass GPU breakdown, as shadowed text with no background plate. `stat none` hides them; `stat list` shows every group. `stat.Corner`, `stat.Opacity` and `stat.Background` move and dim them (see [Profiling](/docs/programming/profiling/)). Print String lines and Message Log errors share the same overlay, top left; `ui.DebugOverlays.Hide 1` hides all of it.
 - `r.GpuTimings` records per-pass GPU timestamps. It is on by default in `debug`, `dev` and `debuggame` builds and off in `release` and `profile`.
 - `r.LogGpuTimings N` logs the pass timings every N frames, useful in headless runs.
 - `r.GpuMarkers` (default 1) names every GPU scope so PIX, RenderDoc, Nsight and Xcode captures show the pass names.
@@ -86,6 +108,16 @@ MowoGame.exe --project=MyGame.mproject --scene=Content/Maps/MyMap.mmap --screens
 ```
 
 `--screenshot-frame` (default 90) is the frame to capture. Combine it with `--cvar=r.ViewMode=14` to capture a single buffer, or with `r.PathTracer.Enable` for a converged reference. Release builds drop these switches.
+
+## Capture the GPU frame
+
+`gpu.Capture` captures the next GPU frame with whichever tool is available and logs the file it saved under `Saved/GpuCaptures`. It uses the Xcode capture on Metal, then RenderDoc (Direct3D 11, Direct3D 12 and Vulkan), then PIX on Direct3D 12. `gpu.Capture renderdoc`, `pix` or `native` picks one, and `gpu.Capture.Status` reports the last request and its path. With no tool installed it says what to install instead of failing quietly.
+
+RenderDoc and PIX hook only a device created after they load. Launch the game from RenderDoc or PIX, or set `gpu.Capture.Preload` to 1 (RenderDoc, found on the standard path or in the folder named by the `MOWO_RENDERDOC_PATH` environment variable) or 2 (PIX) so the engine loads the library before it creates the device.
+
+`gpu.DumpTexture <name> [png|exr|both]` writes one named intermediate of the frame to `Saved/GpuDumps` without any tool: `HDR`, `Depth`, `Normals`, `Albedo`, `Material`, `GTAO_Raw`, `Gi_Color` and the other render-graph targets. 8-bit targets are written as PNG and float targets as EXR, which keeps the values; a PNG of a float target is normalised for viewing. A name matches as a case-insensitive substring. `gpu.ListTargets` logs the names the next frame touches. Targets only an asynchronous-compute pass uses, and integer targets, are skipped.
+
+With `r.RDG.PassScopes` on, which is the default in builds that carry asserts, every render-graph pass is a named span in the capture, and in the crash report when the device is lost. `r.RDG.Validate`, on in the same builds, logs each render-graph mistake once with the pass that made it: a read before any write, a texture written and never read, a missing barrier, or two textures sharing memory while both are live.
 
 ## API reference
 

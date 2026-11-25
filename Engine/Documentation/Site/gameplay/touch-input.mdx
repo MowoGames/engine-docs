@@ -1,0 +1,97 @@
+---
+title: Touch input
+description: Touch contacts, gestures (tap, double tap, long press, swipe, pinch, rotate, pan), on-screen sticks and buttons, and testing touch from a desktop.
+order: 5
+sources:
+  - Engine/Source/Runtime/Input/Public/Input/TouchInput.h
+  - Engine/Source/Runtime/Input/Public/Input/TouchGesture.h
+  - Engine/Source/Runtime/Input/Public/Input/VirtualInput.h
+  - Engine/Source/Runtime/Input/Public/Input/InputAction.h
+  - Engine/Source/Runtime/Input/Public/Input/InputManager.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Widgets/AVirtualJoystick.h
+  - Engine/Source/Runtime/AIGG/Public/AIGG/Widgets/AVirtualButton.h
+  - Engine/Source/Runtime/Game/Public/Game/MInputStatics.h
+verifiedAt: 8aa26dab6
+---
+
+Touch works through the same input actions as a keyboard or a pad. Fingers become contacts, a recognizer turns contacts into gestures, and a mapping context binds a gesture to an action. On-screen sticks and buttons are UI widgets that feed the same actions, so one mobile control scheme works on every device.
+
+## Contacts
+
+`InputManager::GetTouch()` holds the fingers that are down this frame, with window-pixel positions, per-frame movement, pressure and a phase (`Began`, `Moved`, `Stationary`, `Ended`, `Canceled`). A finger that lifts stays in the list for the one frame it ended in, so a release is never missed. Four mapping sources read a contact by slot (0 is the first finger down): Touch Contact (1 while the slot is live), Touch Position X and Y, and Touch Delta X and Y for drag-to-look.
+
+## Gestures
+
+The recognizer reads the contacts once per input frame and reports:
+
+| Gesture | Fires | Mapping source value |
+|---|---|---|
+| Tap | A quick press and release that stayed near where it landed | 1 on that frame |
+| Double Tap | A second tap close to the first, soon after it (it replaces the second tap) | 1 on that frame |
+| Long Press | A finger that rests past the delay | 1 on the frame the delay passes; the lift is then not a tap |
+| Swipe | A fast drag that covers enough distance | 1 on the frame the finger lifts; choose a direction or Any |
+| Pinch | Two fingers spreading or closing | Change in finger spread this frame, in pixels (positive when they spread) |
+| Rotate | Two fingers twisting | Change in angle this frame, in radians |
+| Pan X, Pan Y | One or two fingers dragging | Centroid movement this frame, in pixels; choose 1 finger, 2 fingers or any |
+
+A gesture with more than one finger down never produces a tap, double tap, long press or swipe. Pinch and rotate engage only after the fingers have moved past a threshold, so a two-finger pan does not jitter the zoom.
+
+Tune the feel in Project Settings › Engine › Input › Touch and gestures. Every row is a console variable:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `i.Touch.TapSlop` | 24 | Pixels a contact may drift and still be a tap, double tap or long press |
+| `i.Touch.TapSeconds` | 0.3 | Longest press that is still a tap |
+| `i.Touch.DoubleTapSeconds` | 0.35 | Longest gap between the taps of a double tap |
+| `i.Touch.LongPressSeconds` | 0.5 | Rest time before a long press |
+| `i.Touch.SwipeDistance` | 96 | Pixels a quick drag must cover to be a swipe |
+| `i.Touch.SwipeSeconds` | 0.6 | Longest drag that is still a swipe |
+| `i.Touch.PinchStart` | 16 | Pixels of spread before a pinch engages |
+| `i.Touch.RotateStart` | 0.15 | Radians of twist before a rotate engages |
+
+## Bind a gesture to an action
+
+<Steps>
+<Step title="Open the mapping context">
+Double-click an Input Mapping Context asset in the Content Browser, or create one.
+</Step>
+<Step title="Add a mapping">
+Pick the action, then set Source to Tap, Double Tap, Long Press, Swipe, Pinch, Rotate, Pan X or Pan Y. Swipe shows a direction row and the Pan sources a finger-count row.
+</Step>
+<Step title="Pick the action type">
+Tap, Double Tap, Long Press and Swipe suit a Button action. Pinch and Rotate suit a one-axis action. Pan X and Pan Y feed the X and Y of a two-axis action: set Target axis to X on one mapping and Y on the other.
+</Step>
+</Steps>
+
+Gesture values are pixels or radians, not normalized, so they pass through without the usual -1 to 1 clamp. Scale them with the mapping's Scale or a Scale modifier.
+
+## On-screen controls
+
+In the UI designer, the palette's More section has two widgets:
+
+- **Virtual Joystick** publishes a two-axis value. Mode is Fixed (the stick sits where you put it) or Floating (it appears where the finger lands inside the widget). Stick Radius, Dead Zone, Up Is Positive, Idle Opacity and the two colors are Details properties.
+- **Virtual Button** is held while a finger is on it, or latched on and off when Toggle is set. Button Size, Round and the colors are Details properties.
+
+Both have an Input Slot (0 to 7). The widget writes its value into that slot, and the mapping sources On-screen Stick X, On-screen Stick Y and On-screen Button read the same slot. Set the slot on the widget and on the mapping and the action is wired; nothing in code.
+
+Fingers are tracked one by one, so a thumb on the stick and another on a button work together. A control takes a finger only when the finger lands on it. Widgets that are not virtual controls still receive the first finger as a normal click and drag, so existing screens work on a touch device unchanged. The widgets also answer the mouse, so you can test them on a desktop.
+
+Place a Text or Image widget over a button in an Overlay to give it a label; the button itself draws only its shape.
+
+## Test touch on a desktop
+
+Turn on Project Settings › Engine › Input › Emulate Touch With Mouse (`i.Touch.Emulate 1`). The left mouse button then drives a touch contact, so gesture and touch mappings work without a touchscreen. Hold Shift while pressing to add a second contact mirrored around the press point, and drag to pinch. Emulation feeds the input layer only; the on-screen widgets already respond to the mouse on their own.
+
+## Scripts and Visual Scripting
+
+`MInputStatics` exposes touch to Visual Scripting: Get Touch Count, Get Touch Position, Was Tapped, Was Double Tapped, Was Long Pressed, Was Swiped, Get Swipe Direction, Get Swipe Velocity, Get Gesture Position, Get Pinch Delta, Get Pinch Scale, Get Rotate Delta, Get Pan Delta, Get Pan Finger Count, Get Virtual Stick and Is Virtual Button Down. The gesture nodes read the current frame, so poll them from a Tick graph. Prefer mapping contexts for gameplay and use the nodes for one-off effects.
+
+## In the editor viewport
+
+On a touchscreen or tablet, pinch in a viewport to dolly and drag with two fingers to pan. One finger remains the pointer, so selection and the gizmos behave as with a mouse.
+
+## Related
+
+- [Input](/docs/gameplay/input/)
+- [UI designer](/docs/ui/aigg-designer/)
+- [Settings and accessibility](/docs/ui/settings-and-accessibility/)

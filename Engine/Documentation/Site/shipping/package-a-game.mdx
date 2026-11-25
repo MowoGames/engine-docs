@@ -5,10 +5,10 @@ order: 1
 sources:
   - Engine/Source/Runtime/Project/Public/Project/PackagingSettings.h
   - Samples/SampleProject/SampleProject.mproject
-verifiedAt: 8f1cfbd42
+verifiedAt: f1dfd4d02
 ---
 
-This guide takes a project from the editor to a folder you can hand to a player. It targets Windows, the platform packaging is finished for. macOS, Linux and Android are covered at the end, with what does not work yet.
+This guide takes a project from the editor to a folder you can hand to a player. It targets Windows, the platform packaging is finished for. macOS, Linux, Android and iOS are covered at the end, with what does not work yet.
 
 You need a built engine (see [Build tool](/docs/build-tool/)) and a game project with a start scene.
 
@@ -59,7 +59,7 @@ Open the project in the editor at least once before packaging. That writes `Inte
 </Step>
 <Step title="Create the content keys">
 
-A `release` package encrypts your content and signs every archive and module. It refuses to run when the project has no keys. Create them once, in **Project Settings > Crypto** (**Generate** next to **Encryption Key** and **Signing Keys**, then **Apply**), or from the command line:
+A `release` package encrypts your content and signs every archive and module. It refuses to run when the project has no keys. A project made in the Project Launcher already has them, and when you press **Package** on a project that does not, the editor offers **Generate keys and package** (the private signing key goes to your key store, never into the project). To make them yourself, use **Project Settings > Crypto** (**Generate** next to **Encryption Key** and **Signing Keys**, then **Apply**), or from the command line:
 
 ```powershell
 ./mbt.cmd crypto generate --project D:/Projects/MyGame/MyGame.mproject
@@ -78,9 +78,9 @@ Play through your game once in a development build, then run `mbt package --prom
 <Tabs>
 <Tab label="Editor">
 
-Choose **Build > Package Project…**. Select **Release** on the toolbar, leave the **Monolithic** row enabled unless you want the modular layout (see [Targets and link modes](/docs/shipping/targets-and-modes/)), pick the folder in **Archive to**, then press **Package**.
+Choose **Build > Package Project…**. Choose the configuration on the toolbar: **Release**, **Profile** or **Dev**. An installed editor offers exactly the configurations whose game libraries it ships (**Release** and **Profile**), and a greyed button says why it is unavailable. Leave the **Monolithic** row enabled unless you want the modular layout (see [Targets and link modes](/docs/shipping/targets-and-modes/)), pick the folder in **Archive to**, then press **Package**.
 
-The window shows the pipeline and a live log, and **Cancel** stops the whole build. A package always cooks the whole `Content/` tree; the **Used only** choice applies to **Cook Content** only.
+The window shows the pipeline and a live log, and **Cancel** stops the whole build. By default a package cooks the whole `Content/` tree; the **Used only** choice applies to **Cook Content** only. To ship only what your levels use, list them under **Project Settings > Packaging > Maps To Package**: the package then keeps those levels, the start level, everything they reference, the AlwaysCook assets and the **Always Cook Folders** (put data your code loads by name there, such as data tables or localization), and leaves the rest of `Content/` out. The same page holds compression, the installer and zip switches, the dedicated server flag, the build number and the certificate to sign with.
 
 <Screenshot id="shipping-package-window-running" alt="The packaging window during a release run: Release selected on the toolbar, the Monolithic row Enabled, the pipeline with Build and Cook done and Stage running, and the log showing lines [3/6] Cooking assets... and [4/6] Staging runtime files...." />
 
@@ -187,17 +187,23 @@ cookOutputDir=Saved/Cooked
 
 `--strict-refs` turns quiet degradations into failures: an asset reference that resolves to nothing, or a texture or mesh cook that could not run. Use it on release builds. `--no-validate` skips the asset-validation gate that runs before the cook.
 
-## macOS, Linux and Android
+## macOS, Linux, Android and iOS
 
 <Callout type="warning" title="In development">
-Only Windows packaging is ready to ship. The packaging window packages for the host only, and Linux packages build only on a Linux host.
+Only Windows packaging is ready to ship. The packaging window packages for the host only: it has a button for Windows, Linux and macOS, and Android and iOS appear when their SDK is found, but a package is built on the platform it targets.
 </Callout>
 
-**macOS.** `mbt package -p osx-arm64 --installer` on a Mac builds a `.dmg` holding a self-contained `.app`. The bundle is signed ad hoc only (`codesign --sign -`), and the game package has no Developer ID signing and no notarization step. Gatekeeper on a buyer's Mac will not open it; the ROADMAP lists notarization as an open blocker. The `.dmg` step needs a macOS host.
+**macOS.** On a Mac, `mbt package` signs every binary inside out (with the hardened runtime under a Developer ID), and `--installer` adds a `.dmg` holding a self-contained `.app`. With a Developer ID and a notarization profile in `Config/Packaging.ini` the package is notarized and stapled, and opens on any Mac; without them it is signed ad hoc and runs only on the Mac that built it. See [macOS signing and notarization](/docs/shipping/macos-signing-and-notarization/).
 
-**Linux.** `-p linux-x64` exists. A `release` or `profile` package splits debug information out of every shipped image (`objcopy --only-keep-debug` on Linux, `dsymutil` on macOS) and keeps it beside the build for the symbol upload; this path was written on Windows and has not run on a POSIX host yet. See [Platforms](/docs/reference/) for the platform status.
+**Linux.** `-p linux-x64` exists. A `release` or `profile` package splits debug information out of every shipped image and keeps it beside the build for the symbol upload: `objcopy --only-keep-debug` on Linux, which has not run on a Linux host yet; on macOS the build already wrote a `.dSYM` for each image when it linked it. See [Platforms](/docs/reference/) for the platform status.
 
-**Android.** `mbt package` refuses mobile platforms. A separate command, `mbt package-android`, builds an installable Android Gradle project (Vulkan only, arm64-v8a). Android is not a supported product platform; treat that command as experimental.
+**Android.** `mbt package` refuses mobile platforms. A separate command, `mbt package-android`, builds an installable Android Gradle project: Vulkan only, arm64-v8a, minSdk 26, linked monolithically. The manifest requires Vulkan 1.3 (`android.hardware.vulkan.version` 0x00403000), so the store hides the game from devices below it, and a device that slips past still stops at start with a message. Pass `--artifacts apk`, `aab` or `both` and the command also runs Gradle with the JDK 17 and Android SDK that `mbt android-setup` installs, and checks the result: `aapt2` reads the manifest (Vulkan 1.3 feature, `RECORD_AUDIO`, minSdk, arm64-v8a only), `apksigner` verifies the signature, bundletool validates the bundle, and every native library must have 16 KB aligned load segments, and stored libraries must sit on a 16 KB boundary inside the APK. Without `--release` the package is signed with a debug key `mbt` generates under `build/android`; with `--release` it is signed with the keystore named by `MOWO_ANDROID_KEYSTORE`, `MOWO_ANDROID_KEY_ALIAS` and the passwords in `MOWO_ANDROID_KEYSTORE_PASSWORD` and `MOWO_ANDROID_KEY_PASSWORD`, or the same passwords stored in the OS credential store under the service `MowoEngine.BuildSecrets` (accounts `AndroidKeystorePassword`, `AndroidKeyPassword`). The keystore and passwords reach Gradle only through its environment and are never written into the generated project. On the device the launcher activity requests audio focus for the game, so a phone call or another app's sound pauses the game's audio (a request to duck lowers it to a quarter instead) and the audio returns with the focus. Unplugging headphones pauses it, and so does leaving the app; both resume when the app is brought back. Sound plays through AAudio in low-latency mode; the OpenSL ES backend is not compiled in. The platform's open-URL call hands https, http, mailto, market and tel links to the system through an intent; other schemes, and file paths, are refused. A crash on Android writes the same report as on desktop, from a signal handler running on its own stack, with the device's manufacturer, model, Android version and SDK level as tags. Android is in development; the command is not a release path yet.
+
+**iOS.** `mbt package-ios` writes the app bundle skeleton: `Info.plist` (iOS 16.0, iPhone and iPad, Metal) and `PrivacyInfo.xcprivacy`. Compiling, signing and archiving need a Mac and are not wired yet.
+
+## Releases and timing
+
+`--release <version>` records the package under `Releases/<version>/`, `--based-on <version>` packs against a previous record, `--patch-out <dir>` writes the update and `--verify-reproducible` packages twice and compares the file manifests; see [Releases, updates and uploads](/docs/shipping/releases/). Every package prints how long each step took and writes `<Product>-package-trace.json` beside it for `chrome://tracing` or Perfetto. A cook for a mobile target (`mbt cook --platform android`) writes its textures as ASTC under names that carry the target, so it never shares cooked textures with a Windows package.
 
 ## Related
 

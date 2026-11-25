@@ -7,6 +7,8 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/AGameState.h
   - Engine/Source/Runtime/Game/Public/Game/AController.h
   - Engine/Source/Runtime/Game/Public/Game/APlayerController.h
+  - Engine/Source/Runtime/Game/Public/Game/APlayerState.h
+  - Engine/Source/Runtime/Game/Public/Game/AHUD.h
   - Engine/Source/Runtime/Game/Public/Game/APawn.h
   - Engine/Source/Runtime/Game/Public/Game/ACharacter.h
   - Engine/Source/Runtime/Game/Public/Game/APlayerStart.h
@@ -20,7 +22,8 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptCharacter.h
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptGameMode.h
   - Engine/Source/Runtime/Core/Public/Core/MSubsystem.h
-verifiedAt: 38224a3a8
+  - Engine/Source/Runtime/Game/Public/Game/FCheatManager.h
+verifiedAt: 242cff96d
 ---
 
 Mowo ships the same framework classes you know from Unreal: a game mode that holds the rules, a game state that holds match status, controllers that possess pawns, and a character class with movement built in. The framework is optional. A project that names no game mode class gets plain actors and nothing else.
@@ -33,11 +36,13 @@ Mowo ships the same framework classes you know from Unreal: a game mode that hol
 | `AGameState` | Match phase (`WaitingToStart`, `InProgress`, `WaitingPostMatch`) and elapsed time <Source symbol="AGameState" /> |
 | `AController` | A non-physical actor that possesses a pawn |
 | `APlayerController` | The human player's controller. Owns the player's input bindings and Enhanced Input subsystem. |
+| `APlayerState` | One player's record as an actor: name, score, team, ping, ready. A game adds its own per-player fields by subclassing. <Source symbol="APlayerState" /> |
+| `AHUD` | A local player's heads-up display: a list of `.ui` screens shown while the game runs. <Source symbol="AHUD" /> |
 | `AIController` | The AI controller, in the AINavigation module <Source symbol="AIController" /> |
 | `APawn` | An actor a controller can possess. Collects movement input. |
 | `ACharacter` | A pawn with a root, a character movement component and an ability system component <Source symbol="ACharacter" /> |
 | `APlayerStart` | A placed spawn point with a player index |
-| `MGameInstance` | A key-value store that survives scene loads and travel <Source symbol="MGameInstance" /> |
+| `MGameInstance` | The one object that outlives every world: a key-value store that survives scene loads and travel, and a class a game may subclass <Source symbol="MGameInstance" /> |
 
 ## How a match starts
 
@@ -45,7 +50,7 @@ When the start scene begins play, the host looks up the project's game mode clas
 
 <Flow steps={["InitializeGameMode", "InitGame", "StartMatch", "Spawn game state", "Spawn player controller", "Spawn default pawn at a player start", "Possess + PostLogin", "Match InProgress"]} highlight={2} caption="StartMatch spawns the framework actors in this order. A second call does nothing." />
 
-`StartMatch` spawns the game state, the player controller and the default pawn, possesses the pawn, fires `PostLogin`, and sets the match to `InProgress`. The pawn is placed at the `APlayerStart` whose player index matches the game mode's `playerIndex`, or the first one found. With no player start in the world, the pawn spawns at the origin.
+`StartMatch` spawns the game state, the player controller, the controller's player state and HUD when the game mode names those classes, and the default pawn, possesses the pawn, fires `PostLogin`, and sets the match to `InProgress`. The pawn is placed at the `APlayerStart` whose player index matches the game mode's `playerIndex`, or the first one found. With no player start in the world, the pawn spawns at the origin.
 
 On a dedicated server the game mode starts with `spawnLocalPlayerOnStart` off, so no local controller or pawn exists; each joining connection gets its pawn through `RestartPlayer`. <Source symbol="AGameMode" />
 
@@ -152,6 +157,36 @@ Replace `AThirdPersonCharacter` with your own pawn class. `FindForType<T>()` ret
 The engine ships template game modes, such as `AThirdPersonGameMode`, that point the framework at a ready-made pawn and camera. Set the project's game mode class to one of them to get a playable character with no code. <Source symbol="AThirdPersonGameMode" />
 </Callout>
 
+## Choose the framework classes in the editor
+
+You do not need code to wire a game together. `AGameMode` carries one class property for each piece of the framework (**Default Pawn**, **Player Controller**, **Game State**, **Player State** and **HUD**), and each is a class picker that offers C++ classes and Visual Scripting classes alike.
+
+<Steps>
+<Step title="Make the classes">
+Create the pawn, the HUD, the player state and the rest as Visual Scripting classes, or write them in C++. A Visual Scripting class can sit directly under `AHUD` or `APlayerState`; it is hosted on that native class, so it needs no backing class of its own.
+</Step>
+<Step title="Pick them on a game mode">
+Create a game mode class, open its Class Defaults, and pick the classes. A game mode placed in a level carries the same properties in Details, so one level can play differently from the project default.
+</Step>
+<Step title="Choose the game mode">
+**Project Settings › Project › Maps & Modes › Game Mode Class** sets the project's game mode. **World Settings › Game mode** overrides it for one level. Play-in-editor and the packaged game resolve it the same way. The **Selected game mode** block on the Maps & Modes page shows what the chosen mode spawns, class by class, so a missing choice is visible before you press Play.
+</Step>
+</Steps>
+
+An empty **Player State** or **HUD** property spawns nothing, so a project that sets neither behaves as it did before these classes existed. A class that is not registered, or does not derive from the property's type, is logged as an error and Play falls back to the base class for that slot.
+
+### Player state
+
+`APlayerState` is the handle on a player's session record, not a second copy of it: `GetScore()`, `GetTeam()`, `GetPlayerName()`, `GetPing()` and `IsReady()` read the replicated `PlayerState` record that every machine already holds, and `FPlayerStateSystem` and the player-state functions in Visual Scripting keep working unchanged. Writes (`AddScore`, `SetScore`, `SetTeam`) go to that record and succeed on the host only. Outside a session there is no record, and the actor keeps the values itself, so a single-player game uses the same calls.
+
+A game's own replicated per-player data, such as a class choice or a loadout, is a reflected component with `MREPLICATED` fields. `EnsureRecordComponent<T>()` adds it to the player's record on the host, and `FindRecordComponent<T>()` reads it on every machine; replication ships whatever components the record carries. See [Replication](/docs/multiplayer/replication/). Ordinary members of a subclass stay on the machine that spawned the actor.
+
+The game mode spawns a player state for its own local player and, on the host, for each remote player it creates a controller for. A client sees the other players through the record (`MPlayerStateStatics`), not through actors. <Source symbol="APlayerState" />
+
+### HUD
+
+`AHUD` has one property, **Screens**: the `.ui` assets the player always sees. The HUD shows them when play begins and removes them when it ends or the controller is destroyed, in the editor's Play viewport and in the game alike. The screen stack can come up a moment after the first `BeginPlay`, so a HUD waits for it and shows its screens on the next tick; a screen that fails to load is logged once and skipped. One HUD exists per local player controller. <Source symbol="AHUD" />
+
 ## Possession
 
 `AController::Possess(pawn)` releases the current pawn first, then calls the pawn's `PossessedBy`. Override `OnPossess` and `OnUnPossess` on a controller subclass to react. <Source symbol="AController" />
@@ -166,7 +201,7 @@ A pawn gathers movement through `AddMovementInput(direction, scale)`. The charac
 
 ## Data that survives travel
 
-Loading a scene tears the actor world down. Values that must survive, such as a chosen difficulty or a run seed, go in `MGameInstance`:
+Loading a scene tears the actor world down. Values that must survive, such as a chosen difficulty or a run seed, go in `MGameInstance`. The game instance is the one object that lives for the whole run:
 
 ```cpp title="Difficulty.cpp" wrap
 #include "Game/MGameInstance.h"
@@ -178,7 +213,11 @@ int32_t difficulty = instance.GetInt("Difficulty", 1);
 (void)difficulty;
 ```
 
-The same store is reachable from Visual Scripting through its reflected functions. <Source symbol="MGameInstance" />
+The same store is reachable from Visual Scripting through its reflected functions.
+
+To keep your own fields and logic there, derive from `MGameInstance`, mark the class `MCLASS()`, and name it in **Project Settings › Project › Maps & Modes › Game Instance Class**. `MGameInstance::Get()` then returns your subclass, built on first use; `Init()` runs once after it is built, `Shutdown()` before it is dropped, and `OnWorldBegan()` each time a world begins play. The key-value store works the same in every subclass. A class name that is not registered, or that does not derive from `MGameInstance`, is logged as an error and the base class stands in.
+
+The instance is not part of any scene, so a scene load, a travel and a Play-in-Editor copy of the level leave it alone. A hot reload of the module that defines the subclass drops the instance and builds the reloaded class by name; the key-value store and the world count carry over, but fields the subclass declares itself restart from their defaults, so keep anything that must survive a reload in the store. A Visual Scripting class cannot be the game instance: its graphs run on an actor, and the game instance is not one. <Source symbol="MGameInstance" />
 
 ## Local multiplayer
 
@@ -196,7 +235,7 @@ Three ready-made characters back the project templates. Each reads the input act
 
 Point a game mode at one of them (`AThirdPersonGameMode`, `AFirstPersonGameMode`, `ATopDownGameMode`), or subclass one and override what you need. The fields are editable in the Details panel.
 
-The game mode's own class fields (`defaultPawnClass`, `playerControllerClass`, `gameStateClass`) are `TSubclassOf` properties with `EditAnywhere`, so a game mode placed or edited in the editor picks its pawn, controller and game state from a class picker, Visual Scripting classes included, instead of naming them in a constructor. The picker only offers classes that derive from the field's type. <Source symbol="AGameMode" />
+The game mode's own class fields (`defaultPawnClass`, `playerControllerClass`, `gameStateClass`, `playerStateClass`, `hudClass`) are `TSubclassOf` properties with `EditAnywhere`, so a game mode placed or edited in the editor picks its pawn, controller and game state from a class picker, Visual Scripting classes included, instead of naming them in a constructor. The picker only offers classes that derive from the field's type. <Source symbol="AGameMode" />
 
 ## Subsystems
 
@@ -212,6 +251,23 @@ Override `Initialize` and `Deinitialize`. Do not rely on the order in which subs
 ## Framework classes in Visual Scripting
 
 A Visual Scripting class can take `AActor`, `APawn`, `ACharacter`, `AGameMode`, `AGameState` or `APlayerController` as its native parent. The engine backs each with a thin class (`AVisualScriptCharacter`, `AVisualScriptGameMode` and so on) that runs the native lifecycle first and then the graph, so a graph-based character still gets capsule movement and health from `ACharacter`. <Source symbol="AVisualScriptCharacter" /> <Source symbol="AVisualScriptGameMode" /> See [Visual Scripting](/docs/visual-scripting/).
+
+## Cheats
+
+`cheat <name> [args]` in the console runs a cheat against the running world and the local player's pawn; `cheat` alone lists them. Cheats are off in release builds.
+
+| Cheat | Does |
+|---|---|
+| `Slomo [scale]` | Sets the world's time scale from 0 to 20; no number restores 1. |
+| `Pause` | Toggles the world's pause. |
+| `Teleport x y z` | Moves the pawn. |
+| `God` | Toggles the `Cheat.God` Gameplay Tag on the pawn. Your damage or ability code decides what the tag means. |
+| `Tag add\|remove <tag>` | Adds or removes a Gameplay Tag on the pawn. |
+| `Summon <class>` | Spawns an actor of the class at the pawn. |
+| `DestroyAll <class>` | Destroys every actor of the class and its derived classes, except the pawn. |
+| `Feature [<name> on\|off]` | Lists the [Game Features](/docs/gameplay/game-features/) or switches one. |
+
+Register your own with `FCheatManager::Register(name, help, handler)`. The handler receives the world, the player controller and the pawn, and the arguments split on spaces, and answers with a message. `FCheatManager::UnregisterOwnedBy` removes everything a plugin registered. `FCheatManager::SetEnabled` turns the whole set on or off.
 
 ## Related
 

@@ -10,7 +10,7 @@ sources:
   - Engine/Source/Runtime/RHI/Public/RHI/BlasCompaction.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/RHI/Public/RHI/RayTracingCapability.h
-verifiedAt: 47c78cd0a
+verifiedAt: c6c835140
 ---
 
 Mowo uses hardware ray tracing to improve four real-time effects: reflections, ambient occlusion, sun shadows and the Global Illumination gather. MegaLights also traces its shadow rays against the same scene. Every one is optional: when the device has no ray query, or the ray-tracing scene is not ready, each falls back to its raster or screen-space version for that frame. A progressive path tracer uses the same scene as a reference.
@@ -68,6 +68,7 @@ You do not need Epic to try ray tracing. With the project switch on, on a High-t
 `SceneRenderer` builds acceleration structures at the start of each frame whenever a consumer wants them: `r.RTScene`, or any of the features above.
 
 - **Bottom-level cache.** One structure per mesh, built once and shared across instances and frames. New builds are limited per frame (`r.RTScene.BlasBudget`, default 8), so a large scene streams in over a few frames instead of hitching. Built structures are compacted (`r.RT.BLASCompaction`).
+- **Coarse structures.** `r.RT.CoarseBlas` builds a static mesh's structure from its coarsest LOD whose measured simplification error stays under `r.RT.CoarseBlasError` (default 0.005, half a percent of the mesh's size) instead of the full-resolution level, which cuts the memory and build time of dense meshes. A mesh without measured LOD errors keeps its full level, and skinned meshes always do. Off by default until measured.
 - **Top-level structure.** One per frame in flight. When only transforms change, it is refitted instead of rebuilt.
 - **Terrain** joins as tiles of real triangles generated from the height texture (`r.RT.Terrain`, default 1).
 - **Foliage** clumps near the camera join, up to `r.RT.Foliage.Distance` (default 40) and `r.RT.Foliage.MaxInstances` (`r.RT.Foliage`, default 1).

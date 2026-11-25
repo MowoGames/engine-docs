@@ -1,0 +1,68 @@
+---
+title: Fast startup
+sidebarTitle: Fast startup
+description: How a packaged game gets its first frame on screen quickly, the two startup numbers it reports, and the settings that tune and budget them.
+order: 9
+sources:
+  - Engine/Source/Runtime/Logging/Public/Logging/StartupTrace.h
+  - Engine/Source/Runtime/RHI/Public/RHI/GpuProbeCache.h
+  - Engine/Source/Runtime/RHI/Public/RHI/PsoCache.h
+verifiedAt: 2783e8031
+---
+
+A game that opens on a black window for seconds feels broken. The packaged game reports two numbers, both measured from the start of the process:
+
+- **First pixel**: the first frame the graphics device presents, which is your Game Splash image (or a black frame with `--no-splash`). The target is under one second.
+- **Interactive**: the first frame of the running game, once the start level is loaded and the renderer is ready.
+
+## What happens before the first pixel
+
+The window opens first and the operating system's queue is read from then on, so the game never shows "not responding". The graphics device is created straight after the shader and content archives mount, before plugins, the project manager and input. Audio and networking start right after that first frame is presented, before the feature modules load, instead of before the archive mounts.
+
+## Splash from a .ui asset
+
+Set **Game Splash** (Project Settings, Game Window) to a `.ui` widget asset such as `Content/Splash/Splash.ui` instead of an image. The splash is drawn before any UI runtime exists, so only a subset is drawn: Border and Image (without a picture) as filled rectangles, and ProgressBar, whose fill follows the startup progress, and Text in a built-in bitmap font. In a Text node, `{Game}` becomes the game name and `{Phase}` the startup phase being run, for example "Loading: Compiling pipelines". The asset is laid out against its design resolution, fitted to the window and centered. A full-screen opaque Border sets the background color. Pictures and buttons are skipped (the startup log lists the skipped types); the full UI appears when the game starts. Project Settings checks that the file reads and has something drawable. A packaged game stages the asset as `GameSplash.ui`.
+
+On Windows the first launch on a GPU and driver also probes every adapter with a throwaway device. The result is kept in `GpuProbe.tsv` in the user cache directory, keyed by GPU and driver version, so later launches skip the probe. A driver update changes the key and the file refreshes itself. Use `--cold-shader-cache` to ignore it when you want to measure a first launch.
+
+A packaged game opens its cooked project from the archives and does not scan the project folder.
+
+## Pipelines
+
+The recorded pipeline list ships with the package (see [Bundled PSO cache](/shipping/pso-cache)). `startup.PsoPrewarmMode` picks how it is used:
+
+| Value | Behavior |
+|---|---|
+| `1` (default) | Compile in the loading screen with an "N / M pipelines" progress line |
+| `2` | Compile on a worker while the scene renderer builds, joined before the first game frame |
+| `0` | Skip the prewarm |
+
+## Reading the startup log
+
+Every host writes `Startup_<date>_<time>_<pid>.log` (see [Logging](/programming/logging)). The end of it holds the timeline, for example:
+
+```
+startup: first pixel at 640 ms
+startup: first frame after 3180 ms
+startup: interactive at 3180 ms
+startup timeline: first pixel 640 ms, interactive 3180 ms; slowest: 'Loading level' 1210 ms (38%), ...
+```
+
+The slowest phases are named with their share, so a slow start names its cause.
+
+## Budgets
+
+| Console variable | Default | Warns when |
+|---|---|---|
+| `startup.PhaseBudgetMs` | 2000 | one phase takes longer than this |
+| `startup.FirstPixelBudgetMs` | 1000 | the first pixel comes later than this |
+| `startup.InteractiveBudgetMs` | 0 (off) | the game is interactive later than this |
+
+A breach writes a `WARNING` line to the startup log. `0` turns a budget off.
+
+## Switches for troubleshooting
+
+| Console variable | Default | Use |
+|---|---|---|
+| `startup.EarlyDevice` | 1 | `0` restores the original order, with the device after the plugins |
+| `startup.DeferSubsystems` | 1 | `0` starts audio and networking before the archive mounts, as before |

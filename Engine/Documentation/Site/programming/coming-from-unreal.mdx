@@ -1,0 +1,57 @@
+---
+title: Coming from Unreal
+description: A map from Unreal C++ gameplay concepts, macros and specifiers to their Mowo equivalents, for programmers who know UCLASS, UPROPERTY and UFUNCTION.
+order: 3
+sources:
+  - Engine/Source/Runtime/Core/Public/Core/MObject.h
+  - Engine/Source/Runtime/Core/Public/Core/MSubsystem.h
+  - Engine/Source/Runtime/Game/Public/Game/AActor.h
+  - Engine/Source/Runtime/Game/Public/Game/MWorld.h
+verifiedAt: 55f27937c
+---
+
+Mowo's gameplay layer is built to read like Unreal's: C++ classes reflected through a header tool, Visual Scripting classes that extend them, and the same framework classes. The names use `M` where Unreal uses `U`. This page maps what you already know.
+
+## Macros and types
+
+| Unreal | Mowo |
+| --- | --- |
+| `UCLASS()` / `GENERATED_BODY()` | `MCLASS()` / `MGENERATED_BODY()` |
+| `UPROPERTY()` / `UFUNCTION()` | `MPROPERTY()` / `MFUNCTION()` |
+| `USTRUCT()` / `UENUM()` / `UINTERFACE()` | `MSTRUCT()` / `MENUM()` / `MINTERFACE()` |
+| `UObject`, `AActor`, `UActorComponent` | `MObject`, `AActor`, `MActorComponent` |
+| `TObjectPtr<T>`, `TSubclassOf<T>`, `TSoftObjectPtr<T>` | the same names |
+| `FName`, `FGameplayTag` | the same names |
+| `UWorld`, `UGameInstance` | `MWorld`, `MGameInstance` |
+| `AGameModeBase`, `APlayerController`, `APawn`, `ACharacter`, `AHUD` | `AGameMode`, `APlayerController`, `APawn`, `ACharacter`, `AHUD` |
+| `TArray`, `TMap`, `TSet` | `std::vector`, `std::map`, `std::set` |
+| `.generated.h` as the last include | the same rule |
+
+## Specifiers
+
+| Unreal | Mowo |
+| --- | --- |
+| `BlueprintCallable` | every `MFUNCTION` is a node; `ScriptHidden` removes it |
+| `BlueprintPure` | a `const` function; `ScriptPure` forces it |
+| `BlueprintImplementableEvent` / `BlueprintNativeEvent` | `ScriptEvent` / `ScriptNativeEvent` |
+| `BlueprintReadOnly` / `BlueprintReadWrite` | `ScriptReadOnly` / `ScriptReadWrite` |
+| `BlueprintProtected`, `BlueprintAuthorityOnly`, `BlueprintCosmetic` | `ScriptProtected`, `AuthorityOnly`, `Cosmetic` |
+| `BlueprintAssignable` | `ScriptAssignable` |
+| `NotBlueprintable` | `NotScriptable` |
+| `EditAnywhere`, `EditDefaultsOnly`, `EditInstanceOnly` | the same |
+| `VisibleAnywhere`, `VisibleDefaultsOnly`, `VisibleInstanceOnly` | the same |
+| `AdvancedDisplay`, `Instanced`, `NoClear`, `EditFixedSize`, `Interp` | the same |
+| `ExposeOnSpawn` (a `meta` entry) | `ExposeOnSpawn` (a specifier) |
+| `Config`, `GlobalConfig` | the same |
+| `Getter=`, `Setter=` | the same |
+| `CallInEditor` | `CallInEditor` |
+
+The full list, including what has no equivalent, is the [specifier reference](/docs/programming/specifiers/).
+
+## Differences that matter
+
+- **Exposure is opt-out.** Everything reflected is available to graphs. Hide what you want private.
+- **Script events live on functions of the same name.** A Visual Scripting class overrides `OnOpened` by declaring a function called `OnOpened`; there is no separate override list.
+- **Subsystems are discovered.** Declare an `MCLASS` deriving from a subsystem base and it exists; there is no registration. See [Subsystems](/docs/programming/subsystems/).
+- **Two reflection dialects.** `MCLASS` types use `MPROPERTY`; components and plain structs use `MOWO_REFLECTED_NAMED` with field markers such as `MOWO_RANGE`. They carry the same meanings. See [Reflection](/docs/programming/reflection/).
+- **Iteration.** Edit a `.cpp` while the editor runs and Live Coding patches it; a header edit rebuilds the game module and swaps it on the next stop. See [Live Coding](/docs/programming/live-coding/).

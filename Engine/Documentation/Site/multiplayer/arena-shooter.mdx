@@ -1,0 +1,104 @@
+---
+title: Arena Shooter sample
+sidebarTitle: Arena Shooter
+description: A multiplayer team deathmatch you can open, host and read, built on the ArenaKit plugin, the Combat weapons and the session layer.
+order: 12
+status: in-development
+sources:
+  - Engine/Plugins/ArenaKit/ArenaKit.mplugin
+  - Engine/Plugins/ArenaKit/Public/ArenaKit/ArenaMatch.h
+  - Engine/Plugins/ArenaKit/Public/ArenaKit/ArenaMatchSystem.h
+  - Engine/Plugins/ArenaKit/Public/ArenaKit/ArenaBotBrain.h
+  - Engine/Plugins/ArenaKit/Public/ArenaKit/AArenaGameMode.h
+  - Engine/Plugins/ArenaKit/Public/ArenaKit/AArenaCharacter.h
+  - Engine/Plugins/ArenaKit/Public/ArenaKit/AArenaBot.h
+  - Engine/Plugins/ArenaKit/Public/ArenaKit/ArenaServices.h
+  - Samples/ArenaShooter/README.md
+  - Samples/ArenaShooter/ArenaShooter.mproject
+  - Samples/ArenaShooter/Content/Scenes/Arena.mmap
+  - Samples/ArenaShooter/Content/UI/MainMenu.ui
+  - Samples/ArenaShooter/Content/UI/HUD.ui
+  - Samples/ArenaShooter/Content/UI/Scoreboard.ui
+verifiedAt: 2efc5a58b
+---
+
+`Samples/ArenaShooter` is a small, complete multiplayer game: two teams, a warmup, a timed live round, a results screen, bots that fill empty seats, a scoreboard and a front end with host or join, settings and key bindings. The rules live in the `ArenaKit` plugin so another project can reuse them; the sample is the project around it. It is a sample to read, not a framework to extend.
+
+<Callout type="note">
+The sample is written against the engine's public surface but has not yet been captured or play-tested end to end. The match rules, the bot brain and the wire format are covered by test cases; the maps, screens and the nav bake are the parts to check first.
+</Callout>
+
+## Open and play
+
+<Steps>
+<Step title="Open the project">
+Open `Samples/ArenaShooter/ArenaShooter.mproject`. `Config/Plugins.ini` enables `ArenaKit`, `Combat` and `AINavigation`.
+</Step>
+<Step title="Add the starter content">
+The maps name materials from the CC0 starter content (`Content/StarterContent`). Copy the pack in, or the arena draws flat colours.
+</Step>
+<Step title="Bake navigation once">
+Open `Content/Scenes/Arena.mmap`, build navigation and save. The bots walk the baked `Arena.navmesh`; without it they steer in straight lines.
+</Step>
+<Step title="Play from the menu">
+Play `Content/Scenes/MainMenu.mmap`. **Practice** starts an offline match against bots; **Host or Join** opens the lobby.
+</Step>
+</Steps>
+
+## The front end
+
+`MainMenu.ui` is one screen with a switcher. Its pages are the home buttons, the engine lobby screen (host, direct connect by `address:port`, ready-up, server browser), the engine settings screen (display, graphics, audio, controls, accessibility) and the key-rebinding screen. The buttons fire the actions `Arena.Menu:<page>`, `Arena.Practice`, `Arena.EnterArena` and `Arena.BackToMenu`, which the plugin registers in the AIGG (Arc In-Game Graphics) action registry. See [AIGG screens](/docs/ui/aigg-screens/) and [Settings and accessibility](/docs/ui/settings-and-accessibility/).
+
+## Match rules
+
+| Phase | What happens |
+| --- | --- |
+| Warmup | Weapons are off. The timer runs only while a human is in the match. |
+| Live | A kill on the other team adds one to the killer's team. A friendly kill takes one point off. A killed player respawns after `arena.RespawnTime` at the team start farthest from the enemy. |
+| Results | The winning team is shown for `arena.ResultsTime`, then a fresh warmup starts with scores cleared. |
+
+The first team to `arena.ScoreLimit`, or the higher score at `arena.TimeLimit`, wins; equal scores are a draw. Humans take the seats of bots on their team (`arena.TeamSize` seats per team). The rules are console variables, so a dedicated server sets them in `Config/DefaultGame.ini`.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `arena.ScoreLimit` | 15 | Team kills that end the match |
+| `arena.TimeLimit` | 300 | Seconds a live match lasts |
+| `arena.WarmupTime` | 10 | Seconds of warmup |
+| `arena.ResultsTime` | 15 | Seconds of results |
+| `arena.RespawnTime` | 3 | Seconds dead |
+| `arena.TeamSize` | 3 | Seats per team, bots included |
+| `arena.Bots` | true | Fill empty seats with bots |
+| `arena.Replay` | true | Record live matches when the Replay plugin is loaded |
+
+## How it is built
+
+- **Authority.** The host, a dedicated server or an offline game runs `FArenaMatchSystem`, which owns the match. Clients never run the rules; they receive a snapshot event (phase, clock, team scores, every seat) twice a second and on every change, plus one event per kill for the kill feed. Both ride the session's gameplay event channel.
+- **Teams.** A joining human is put on the team with fewer humans and the choice is written to the replicated player record, so the scoreboard and team colours read it like any other player state. See [Player state](/docs/multiplayer/player-state/).
+- **Weapons.** Each pawn equips `Content/Weapons/ArenaRifle.weapon` through the Combat weapon system. Clients fire locally and send the request to the server, which validates and applies damage. Weapons are disabled outside the live phase.
+- **Kills.** Damage goes through the engine's damage pipeline; the match system listens for deaths and credits the instigator.
+- **Bots.** A bot is a pawn with a navigation agent. A pure decision function picks the nearest visible enemy, strafes inside engage range, fires when aimed and roams between the spawns otherwise; the system turns its decision into an agent destination, a facing and the trigger. Bots use the same weapon and damage code as players.
+- **HUD and scoreboard.** `HUD.ui` and `Scoreboard.ui` bind to the `arena.*` sources (`arena.timer`, `arena.score.team1`, `arena.row.N.name`, `arena.feed.N`, `arena.health`) and to the Combat `weapon.*` sources. The scoreboard shows during warmup and results.
+- **Remote players.** On a client, other players and bots arrive as replicated ghosts; the system gives each a capsule coloured by team. The local pawn is first person and hidden from its own camera.
+
+## Optional hooks
+
+ArenaKit works alone. When another plugin is present it uses it, and does nothing when it is not.
+
+| Plugin | What the sample does with it |
+| --- | --- |
+| Replay | Records each live match with `replay.record` and stops at the results. |
+| Anti-cheat | Shows "Anti-cheat: protected" on the HUD and the menu when a service is registered. |
+| Matchmaking | Adds **Find Match** to the Host or Join page, shows the queue status, and prints the address of the match it found. Join it with Direct Connect. |
+
+## Run a dedicated server
+
+```bash
+MowoServer --project ArenaShooter.mproject --map Content/Scenes/Arena.mmap --gamemode AArenaGameMode
+```
+
+Clients join from **Host or Join** with `address:port`. See [Dedicated server](/docs/multiplayer/dedicated-server/) and [Sessions and hosting](/docs/multiplayer/sessions-and-hosting/).
+
+## Related
+
+- [Replication](/docs/multiplayer/replication/) and [RPCs and events](/docs/multiplayer/rpcs/) for the transport this sits on.
+- [Templates](/docs/getting-started/templates/) for the project templates.

@@ -18,12 +18,15 @@ sources:
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIStimulusBus.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/AINoiseMap.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/AITeamAttitude.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AISense.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AITagsComponent.h
+  - Engine/Source/Runtime/AINavigation/Public/AINavigation/AIDecisionLog.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/EnvQuery.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/EnvQueryAsset.h
   - Engine/Source/Runtime/AINavigation/Public/AINavigation/EnvQuerySystem.h
   - Engine/Source/Runtime/Game/Public/Game/Components/PerceivableComponent.h
   - Engine/Source/Runtime/Game/Public/Gameplay/AISignals.h
-verifiedAt: c1d08db53
+verifiedAt: 7e914649a
 ---
 
 The AI module gives non-player characters a brain. An `AIController` possesses a pawn and runs a behavior tree or a state tree over a blackboard; perception feeds what the agent senses into that blackboard; environment queries pick where to go. Movement is on [Navigation](/docs/gameplay/navigation/), and large populations on [AI crowds and director](/docs/gameplay/ai-crowds-and-director/).
@@ -43,13 +46,18 @@ For a placed character you rarely write this: add a `BehaviorTree` component (`t
 
 ## Blackboards
 
-A blackboard is a typed key-value store that is the agent's working memory. Keys are names; values are `Bool`, `Int`, `Float`, `Vector`, `Object`, `Name` or `Enum`. <Source symbol="Blackboard" />
+A blackboard is a typed key-value store that is the agent's working memory. Keys are names; values are `Bool`, `Int`, `Float`, `Vector`, `Object`, `Name`, `Enum` or `Tags`. <Source symbol="Blackboard" />
 
 - Reading a key that is unset or holds another type returns a default, so reads never fail.
 - Object values are weak: when the actor is destroyed, the key reads null instead of a dangling pointer.
 - A tree's blackboard is cleared when the tree restarts, unless `preserveBlackboard` is set on the component.
 - `AddObserver(key, fn)` calls you when a key changes. Writing the same value again is not a change.
 - A key marked **Instance Synced** is shared by every agent running the same tree, so one guard spotting the player tells the whole squad.
+- A `Tags` key holds a set of gameplay tags. `SetTags`, `AddTag` and `GetTags` write and read it, and a `Name` key reads as a single tag, so a stance written as `Stance.Crouched` answers a query for `Stance`.
+
+### Tag conditions
+
+Blackboard decorators in behavior trees and enter and transition conditions in state trees share one query set. Besides the comparisons they offer **has tag**, **has any tag**, **has all tags** and **has no tags**. The tags go in the condition's text as a comma separated list (`Status.Stunned, Team.Crew`), and matching is hierarchical: an owned `Team.Crew.Engineer` satisfies `Team.Crew`. Put an `AITags` component on an entity to give it tags that perception filters, smart objects and environment queries can ask about.
 
 ## Behavior trees
 
@@ -77,6 +85,14 @@ A state tree (`.statetree`) is a hierarchy of states. Where a behavior tree re-d
 - **Enter conditions** are blackboard queries that must hold for a state to be entered.
 - **Tasks** are any behavior-tree task, or **Run Behavior Tree** on a whole `.btree`. Every state on the active path runs its tasks; a state completes when one of its tasks completes.
 - **Transitions** fire `OnCompleted`, `OnSucceeded`, `OnFailed`, `OnEvent` or `OnTick`, and go to a named state, the next sibling, or end the tree.
+- **Parameters** are named values the tree seeds into its blackboard at start (`Bool`, `Int`, `Float`, `Enum`, `Name` or `Tags`). `StateTree::SetParameterNumber` and `SetParameterText` override the authored default for the next start, so one asset serves a guard and a sentry with different ranges.
+- **Evaluators** run every tick before transitions and write an output key: `DistanceToKey` (distance from the agent to a vector or actor key), `TagQuery` (a tag condition over a key as a bool) or `Native`, a function you register with `FStateTreeEvaluators::Register`.
+- **Global tasks** run for as long as the tree does, whatever state is active, and are aborted when it stops.
+- **Bindings** copy one blackboard key into another every tick, optionally only while a named state is active, which is how an evaluator's output feeds the input a task or condition reads.
+
+Parameters, evaluators, global tasks and bindings are saved in the `.statetree` file and are edited in the file for now; the State Tree editor still shows states, tasks, transitions and keys.
+
+While Play In Editor runs, open the state tree and pick **Debug** in the toolbar to attach to a running instance of that asset. The states on the active path light up in the list, and the Debugger column shows the active path, the run status and tick, each evaluator's output value, and the last entries of the trace: states entered and exited, the transitions taken with their trigger, and the events received. The trace is recorded only for the instance you attached to and keeps the last 64 entries. In code, `StateTree::SetDebugTraceEnabled` turns it on and `GetDebugLog` reads it.
 
 Create one from the Content Browser's **New › State Tree**. Drive it from gameplay with `MStateTreeStatics`: `SendStateTreeEvent(actor, event)`, `GetActiveStateName`, `IsInState` and `SetStateTreeBool`. <Source symbol="MStateTreeStatics" />
 
@@ -92,10 +108,23 @@ Add an `AIPerception` component to an AI entity. Its outputs are written back to
 | Touch | An enemy within `touchRadius` is perceived with no cone and no sight line |
 | Team | A teammate nearby that gains a target shares it |
 | Prediction | When sight is lost, the last known position moves along the target's velocity for a short time |
+| Smell | A perceivable with a `scentStrength` leaves a trail point every `ai.ScentSpacing` metres that fades over its `scentLifetime`; a perceiver within `smellRadius` senses the freshest point |
 
-Targets are entities with a `Perceivable` component, or any character. Agents never perceive their own team. Line-of-sight traces are budgeted by `ai.PerceptionMaxRaysPerFrame` (default 64), nearest first.
+Every sense keeps its own memory: `sightMaxAge`, `hearingMaxAge`, `damageMaxAge` and `smellMaxAge` say how long an actor stays remembered after that sense last picked it up, and it is forgotten once all of them have run out. **Required Target Tags** and **Ignored Target Tags** filter what a perceiver senses by the target's `AITags`, on top of the team attitude.
+
+### Your own senses
+
+A sense is an object that reads the stimulus bus from where a perceiver stands and reports what it picked up. Derive from `FAISense`, give it a name, and register it with `FAISenseRegistry::Register`; it takes one of eight custom slots. A perceiver enables it by listing its name in **Extra Senses**, with the radius and memory of **Extra Sense Radius** and **Extra Sense Max Age**. The Resident runs the same registered senses.
+
+Targets are entities with a `Perceivable` component, or any character. Agents never perceive their own team. Line-of-sight traces are budgeted by `ai.PerceptionMaxRaysPerFrame` (default 64), nearest first, and optionally by time: `ai.PerceptionBudgetMs` (default 0, off) stops casting once a frame has spent that many milliseconds on them, and the rest coast on their last visibility.
+
+A LiDAR scan is both a sound and a flash. A perceiver with sight sees the flash like any light, in its cone and line of sight. Turn **Sight Enabled** off for a creature that hunts in the dark: it never acquires anyone by looking, but with **Feels Scan Flashes** (`flashEnabled`, on by default) it still notices every scan within `ai.ScanFlashReach` (30 m), behind it too, dimmed by walls and portals the way a sound is. It finds targets by hearing, damage and touch, and it discovers a body only by coming within its touch radius. <Source symbol="AIPerceptionComponent" />
 
 Gameplay reports noises through `FAISignals::ReportNoise`; footsteps report their own when `ai.FootstepNoise` is on. Noises also spread over a decaying noise map that the AI director reads (`ai.NoiseMap`). <Source symbol="FAISignals" />
+
+## Decision history
+
+Every AI decision is recorded in a ring buffer of 512 entries: a state tree entering a state, a condition that failed, an environment query's winner, and each stimulus a perceiver or Resident acted on, with the agent, the time and where it applies. `ai.DumpDecisions [agent] [count]` prints it to the log and `ai.ClearDecisions` empties it. `ai.DecisionTrace 1` draws the recent decisions in the viewport under the Perception debug layer, each as a marker at its place linked to the agent that made it and fading over `ai.DecisionTraceSeconds`; `ai.DecisionLog 0` turns recording off.
 
 ## Environment queries
 
@@ -118,9 +147,14 @@ EnvQuery "FlankSpot" {
 
 | Part | Options |
 | --- | --- |
-| Generators | `Grid`, `Ring`, `Donut`, `ActorsWithTag`, `NavReachable` |
-| Tests | `Distance`, `Dot`, `Trace`, `Pathfind`, `Random`; each filters, scores or both |
+| Generators | `Grid`, `Ring`, `Donut`, `ActorsWithTag`, `NavReachable`, `ContextPoints` |
+| Contexts | `Querier`, `Target`, `LastKnownStimulus`, `ActorsWithTag`, `RoomNeighbours`, `NavPointsAround` |
+| Tests | `Distance`, `Dot`, `Trace`, `Pathfind`, `Random`, `Hidden`; each filters, scores or both |
 | Run mode | `Best`, `RandomBest25`, `RandomBest5`, `AllMatching` |
+
+A context says what a generator or test measures against. `LastKnownStimulus` is where the querier last sensed something, from its perception component or a Resident's belief. `ActorsWithTag` is every actor that carries the test's context tag, either an actor tag or a gameplay tag on an `AITags` component, and a test measures each item against the nearest of them. `RoomNeighbours` is the centres of the rooms joined to the querier's room by an open portal and those portals, and `NavPointsAround` is navmesh points within the context radius. The `ContextPoints` generator turns a context's own points into the candidates, so a hide query can start from the neighbouring rooms.
+
+`Hidden` measures 1 when any context point has a line of sight to the item and 0 otherwise. Filter it to a maximum of 0 to keep only places no threat can see, and prefer low to rank them; with no context points every item counts as hidden. `eqs.DebugDraw 1` draws every finished query's items as dots coloured red to green by score, with the winner ringed and linked to the querier, for `eqs.DebugDrawSeconds`.
 
 Run a query from a behavior tree with the **Run EQS Query** task or service, which writes the winner to a blackboard vector. Queries submitted through the world's query system are time-sliced: at most `eqs.ItemBudget` measurements a frame (default 512) across all queued queries. <Source symbol="EnvQuerySystem" />
 

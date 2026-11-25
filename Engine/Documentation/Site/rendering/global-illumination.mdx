@@ -6,7 +6,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/DdgiBake.h
-verifiedAt: 28d30be51
+verifiedAt: efef8f4ff
 ---
 
 Global Illumination is Mowo's real-time indirect lighting. It combines a camera-centred signed distance field, a grid of irradiance probes, a radiance cache, a mesh-card surface cache and a screen-space probe gather, with temporal denoising on top. At Epic it can also trace its gather rays through the hardware ray-tracing scene. Nothing has to be baked for it to work; a baked field is only a fallback for tiers that turn the live system off.
@@ -27,7 +27,7 @@ The world-space builds run first, and on D3D12, Vulkan and Metal they can run on
 
 ### Distance field
 
-Every ray marches a camera-centred distance field: a 3D volume built on the GPU from the scene's triangles and signed, so that thin walls do not leak light. Meshes can carry a field baked at cook time, which the runtime composites instead of voxelizing them. A baked field is signed from the connectivity of the open space around the mesh, not by ray parity, so an open mesh such as a single-sided wall or gallery does not turn its air into solid; fields baked by an older build heal on load. Outside its own box a mesh's field is a bound built from the value at the nearest point of the box, so the box of a large, mostly empty mesh never reads as a surface. The nearest small meshes additionally march their own baked field at its baked resolution (`r.GI.BakedSdf.DetailTrace`), which resolves wires and grilles the clipmap fattens. The field of a mesh larger than 64 clipmap cells (16 m at the 0.25 m near cell) is never put in that detail atlas, because its fixed 64-cell slot would be coarser than the clipmap and only cost fetches; the atlas itself is one persistent volume that is rewritten in place when the nearest set changes. The field is a clipmap: moving the camera only rebuilds the slab that scrolled into view. A coarser far cascade covers more distance (`r.GiCascades`, default 2; `r.GI.FarCascadeScale` sets its reach).
+Every ray marches a camera-centred distance field: a 3D volume built on the GPU from the scene's triangles and signed, so that thin walls do not leak light. The sign comes from a flood through the empty space from the edge of the volume, so air the flood cannot reach would read as solid; the cell around the camera is a second starting point, which keeps a room whose doors and windows are all closed lit instead of black, because the camera is always in air. Meshes can carry a field baked at cook time, which the runtime composites instead of voxelizing them. A baked field is signed from the connectivity of the open space around the mesh, not by ray parity, so an open mesh such as a single-sided wall or gallery does not turn its air into solid; fields baked by an older build heal on load. Outside its own box a mesh's field is a bound built from the value at the nearest point of the box, so the box of a large, mostly empty mesh never reads as a surface. The nearest small meshes additionally march their own baked field at its baked resolution (`r.GI.BakedSdf.DetailTrace`), which resolves wires and grilles the clipmap fattens. The field of a mesh larger than 64 clipmap cells (16 m at the 0.25 m near cell) is never put in that detail atlas, because its fixed 64-cell slot would be coarser than the clipmap and only cost fetches; the atlas itself is one persistent volume that is rewritten in place when the nearest set changes. The field is a clipmap: moving the camera only rebuilds the slab that scrolled into view. A coarser far cascade covers more distance (`r.GiCascades`, default 2; `r.GI.FarCascadeScale` sets its reach).
 
 What enters the field:
 
@@ -93,6 +93,8 @@ The same cache feeds reflections. A screen-space reflection ray that leaves the 
 | Probe rays per probe | — | 24 | 32 | 48 | 64 |
 | Probes per axis | — | 12 | 16 | 16 | 16 |
 | Screen-probe rays | — | — | 48 | 64 | 96 |
+| Screen-probe tile (pixels) | — | — | 32 | 16 | 16 |
+| Probes traced per frame while the field changes | — | half | all | all | all |
 | Radiance cache interval (frames) | — | 8 | 8 | 2 | 1 |
 | Surface cache card resolution | — | 64 | 128 | 256 | 256 |
 | Distance field resolution | — | 64 | 64 | 64 | 128 |
@@ -104,6 +106,33 @@ Values come from the tier rows in. Each has an `r.*` override; see [Quality tier
 <Callout type="tip">
 To keep a tier's shadows and resolution but drop the cost of Global Illumination, set `sg.GlobalIlluminationQuality=0`. The on/off switch is part of the tier row, so the group can turn it off without touching anything else.
 </Callout>
+
+## Distance, lights and voxel worlds
+
+**Beyond the probe window.** The live world-probe gather (Medium and the Steam Deck row) only knows the probes around the camera. Past the outermost probes the field now fades out over one probe cell and the sky's mean radiance, leaned toward the upward hemisphere, fills the rest, so a floor 100 m away no longer wears the lighting of the window's border. `r.GI.WorldProbeFarField 0` brings back the old clamp. The fill does not look at the distance field, so a far surface under cover reads as open sky; the ambient occlusion pass still darkens it. The screen-probe gather (High and up) has a far cascade instead and is not affected.
+
+**Probe levels.** The world-probe field has up to three levels. Level 0 is the near window around the camera. Levels 1 and 2 are the same field at 4 times and 16 times the spacing (`r.GI.FarCascadeScale`; about 64 m and 256 m at Medium), each following the camera in whole steps of its own spacing. They exist only while the scene is wider than the near window, and `r.GI.WorldProbeLevels` sets how many run: 1 is the single near window with the fade to the sky, and it is the switch to reach for when you suspect the coarse levels. A coarse level traces at most `r.GI.DDGI.ProbeBudget` probes per frame once it is built. A scheduler picks them: a new level and the planes a scroll exposes go first and may exceed the budget, then the probes near the camera, then the probes that have waited longest, so every probe is revisited within a few frames. Everything that samples the probe field reads all the levels, blending each by how far inside its window the point sits: the world-probe gather, the specular environment pass, forward-lit translucents, the fog, the card relight, the radiance cache bake, the probe bounce and the reflection and planar captures. The screen-probe gather's own per-pixel world fallback reads the near window only. Coarse levels are not relocated away from geometry, so a probe inside a wall just carries little weight.
+
+
+**Probe budget while the field changes.** A converged field already traces one probe in four. While it is changing (a scroll, a moved light, an edited mesh) Medium and the Deck row now trace one probe in two instead of all of them, each probe still updating every other frame. Set `r.GI.DDGI.MotionStride` to 1 to trace everything or up to 4 to save more; a fresh field and a probe scroll always trace everything.
+
+**Screen-probe tile.** The screen-probe gather places one probe per 32 px tile on Low, Medium and High and per 16 px tile on Epic and Cinematic; the 8 px adaptive probes put density back at edges. `r.GI.ScreenProbes.Tile` forces 16 or 32 and is read when the renderer builds its screen-probe pipelines, so set it before the scene renders.
+
+**Screen-probe rays at large resolutions.** The tier's rays per screen probe are sized for 1080p. Above 1080p of allocated render extent they fall in proportion, so a 4K frame traces about as many rays per frame as a 1080p one, with a floor of 32 rays per probe. `r.GI.ScreenProbes.RayBudgetPixels` sets the pixel count the rays are sized for (2073600 by default), and 0 turns the scaling off.
+
+**Which lights feed the caches.** The caches are shaded by at most 32 lights. When a scene has more, they are ranked by power weighed against the distance from the camera to the edge of the light's reach, so one strong far light no longer evicts the lamp in the room you stand in. `r.GI.LightSelection 0` restores the global power order and `r.GI.LightSelection.Radius` sets the distance past which a light is last in line. Each light has an **Indirect Lighting Intensity** (Details > Advanced): it scales that light's contribution to the bounce, and 0 keeps the light out of the caches.
+
+**Volume overrides.** A volume profile has a **Global Illumination** group with **Indirect Intensity** and **Bounce** multipliers that blend by priority and distance like the other overrides; the renderer still caps the bounce below 1.
+
+**Voxel worlds.** [Voxel chunk meshes](/docs/rendering/voxel-chunks/) enter the distance field as a box per chunk, taken from the chunk bounds with the top pulled down to half of the height (`r.GI.VoxelChunks.TopFraction`), so terrain and builds occlude and bounce light. The box is a coarse stand-in: it follows the chunk bounds, not the blocks, so it is right on average and wrong in the dips of a hilly chunk. `r.GI.VoxelChunks 0` leaves chunks out as before.
+
+**Glossy surfaces in covered rooms.** The probe field also remembers, per direction, how many of its rays escaped to the sky. A pass before the lighting (`r.GI.SpecularOcclusion`) reads it along each pixel's reflection and scales only the SKY part of the environment specular by it, so a glossy floor inside a room with no reflection capture stops mirroring the open sky. On rough surfaces (roughness 0.45 and up) `r.GI.RoughSpecular` swaps the sky prefilter for the probe field's own radiance along the reflection, so interiors reflect their bounce light. The reflection resolve subtracts exactly the term lighting added, and the diffuse ambient is untouched. A volume's **Sky Leak Floor** keeps a minimum of sky in those reflections (0 allows full occlusion) and **Update Speed** makes the probe field adapt faster or slower to a change. The View menu has **GI Sky Visibility** and **GI Rough Specular** to inspect the result. The pass needs the live probe field, so it does not run on Low's baked field.
+
+**Screen trace.** The screen-probe gather's screen leg, the reflection trace and the hardware ray-traced gather take twice the fine steps and leaps over stretches where the ray stays in front of the nearest surface of every 16 px tile it crosses (`r.GI.ScreenTrace.Hzb 0` restores the linear march). Thin occluders are missed less often at about the same cost.
+
+**Baked field format.** A `.mgi` bake is version 2: it carries the coarse probe levels after the near one and records whether its depth atlas holds sky visibility. Version 1 bakes still load. A scene wider than the near window can be baked once the coarse levels are built, and the world-probe gather samples the baked coarse levels the same way as live ones.
+
+**Surface-cache size.** The mesh-instance cap of the surface cache (`r.GI.SurfaceCache.Instances`) is now a tier value. Every tier keeps the 64 it always had; set the cvar above 0 to raise it for a scene with many hero meshes.
 
 ## Settings
 

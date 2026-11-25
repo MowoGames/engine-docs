@@ -1,0 +1,66 @@
+---
+title: Faster loading with DirectStorage
+sidebarTitle: DirectStorage
+description: What Windows DirectStorage speeds up in a Mowo game, how to turn it off, and what to know about each GPU vendor and drive.
+order: 13
+sources:
+  - Engine/Documentation/Generated/console.json
+verifiedAt: 727ceee93
+---
+
+On Windows, a game reads its streamed files through Microsoft DirectStorage when the machine has it. DirectStorage batches many reads into the drive's queue, keeps NVMe drives busy, and can hand the bytes straight to the GPU. You change nothing in your project: a packaged game uses it automatically, and falls back to the ordinary file reads when it cannot.
+
+## What it speeds up
+
+Level loads and streaming read many files at once: scene preloads, texture and mesh streaming, asset loads started with `RequestAsyncLoad`, and anything else that goes through the engine's IO queue. With DirectStorage on, those reads of loose files and of uncompressed archive entries go to DirectStorage instead of the engine's own read threads. The bytes are identical; only how they reach memory changes.
+
+What stays on the ordinary path, because the engine has to process the bytes before anything can use them:
+
+- Archive entries that are block-compressed, encrypted or integrity-checked. They are read and decoded as before.
+- Very large single reads (over 32 MiB), which the ordinary path already reads in bounded chunks.
+- Files the platform cannot open for DirectStorage.
+
+The gain depends on the drive. An NVMe drive with a deep queue gains the most, and a level load that is mostly many mid-size files gains more than one that is a few huge files. On a SATA SSD or a hard disk the drive is the limit and the difference is small. A machine that has just written or read the same files can serve them from the operating system's file cache, which hides the difference completely.
+
+## Turning it off
+
+DirectStorage is on by default where it works. The console variable `io.DirectStorage` is read on every read, so it takes effect at once:
+
+```ini
+[ConsoleVariables]
+io.DirectStorage=0
+```
+
+Set it to 0 to compare load times, or to rule it out while chasing a storage driver problem. See the [console variables reference](/docs/reference/console-variables/) for the current text.
+
+## When it is not available
+
+The game starts and loads normally, on the ordinary path, when:
+
+- the game runs on macOS or Linux, where there is no DirectStorage;
+- `dstorage.dll` or `dstoragecore.dll` is missing from the game's `Binaries` folder (the engine ships them with every Windows build);
+- Windows cannot create a DirectStorage queue on the machine.
+
+If DirectStorage fails a read it was handed, the engine reads that file again the ordinary way before reporting anything, so a driver problem costs time, not a failed load. The log line `[DirectStorage] read of ... failed` names the file and the error code, and the shutdown log prints how many reads fell back.
+
+## Loading straight to the GPU
+
+On the D3D12 backend the engine can also read a file range directly into a buffer or a texture, with the DirectStorage runtime decompressing GDeflate data on the GPU and zstd data on the CPU. The renderer reports a DirectStorage capability that is false on Vulkan, Metal and D3D11 and on a Windows machine without the DirectStorage DLLs; engine code checks it before using this path. This is an engine-level service; the stock texture and mesh streamers still upload through the CPU.
+
+## Per-vendor notes
+
+These are the points Microsoft and the GPU vendors document for DirectStorage. They describe the platform, not a measurement of your game.
+
+| Hardware | What to expect |
+|---|---|
+| NVIDIA | GDeflate runs on the GPU on every DirectX 12 card the driver supports. Keep the driver current: DirectStorage behaviour moves with it. |
+| AMD | GDeflate runs on the GPU on current Radeon drivers. Older drivers can be slow or unstable with GPU decompression, and an update is the first fix. |
+| Intel | Arc and recent integrated GPUs decompress on the GPU with current drivers. An older integrated GPU can end up with the decompression on the CPU, which competes with the game for cores. |
+| Any GPU, old driver | The runtime falls back to decompressing on the CPU, so the load still works, slower. |
+
+Storage matters as much as the GPU:
+
+- **Windows version.** DirectStorage runs on Windows 10 (version 1909 and later) and Windows 11. Windows 11's storage stack lets a read skip more of the operating system on NVMe, so it gains more there.
+- **Drive.** NVMe drives gain the most; SATA SSDs and hard disks gain little.
+- **Filter drivers.** Antivirus, backup, software disk encryption and similar filters sit between the game and the drive. When one is present Windows can keep reads on the slower compatibility path, and the speed-up shrinks.
+- **Compressed bytes on disk.** zstd and GDeflate shrink what the drive must deliver, so a compressed set loads faster on a slow drive; on a fast NVMe the decompression becomes the limit.

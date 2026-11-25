@@ -1,38 +1,45 @@
 ---
 title: Online platforms
-description: Add Steam, Discord and Mowo Online through their opt-in plugins - lobbies, invites, relay hosting, presence, achievements, cloud saves and ticket validation.
+description: Add Steam, Discord, Mowo Online and Epic Online Services through opt-in plugins - lobbies, invites, relay hosting, presence, achievements and cloud saves.
 order: 9
 sources:
   - Engine/Plugins/SteamPlatform/SteamPlatform.mplugin
   - Engine/Plugins/DiscordPlatform/DiscordPlatform.mplugin
   - Engine/Plugins/MowoOnlinePlatform/MowoOnlinePlatform.mplugin
+  - Engine/Plugins/EosPlatform/EosPlatform.mplugin
+  - Engine/Plugins/EosPlatform/Public/EosPlatform/EosBackend.h
   - Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos_sdk.h
+  - Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos.hpp
   - Engine/Source/Runtime/Networking/Public/Networking/OnlineService.h
   - Engine/Source/Runtime/Networking/Public/Networking/PlatformInit.h
   - Engine/Source/Runtime/Networking/Public/Networking/Subsystems/MPlatformSubsystem.h
-  - Engine/Source/Runtime/Networking/Public/Networking/SteamTicketValidator.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Auth/ServerAuth.h
+  - Engine/Source/Runtime/Networking/Public/Networking/OnlineImages.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Subsystems/MPlatformSocialSubsystem.h
   - Engine/Source/Runtime/Networking/Public/Networking/ClientAuth.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-verifiedAt: 500cf5785
+verifiedAt: 2c55dcf54
 ---
 
-Steam, Discord and Mowo Online are not built into the engine. Each lives in its own plugin, and all three are **off by default** for a project (`"enabledByDefault": false`). When a plugin loads, it registers an `IOnlineService` with the engine, and engine code talks only to that interface <Source symbol="IOnlineService" />. No engine module includes a platform SDK header. A build without the plugins still hosts and joins over ENet with a direct address.
+Steam, Discord, Mowo Online and Epic Online Services are not built into the engine. Each lives in its own plugin, and all of them are **off by default** for a project (`"enabledByDefault": false`). When a plugin loads, it registers an `IOnlineService` with the engine, and engine code talks only to that interface <Source symbol="IOnlineService" />. No engine module includes a platform SDK header. A build without the plugins still hosts and joins over ENet with a direct address.
 
 | Plugin | Provides |
 |---|---|
-| **SteamPlatform** | Identity, SDR P2P transport, lobbies and invites, rich presence with party groups, stats and achievements, encrypted session tickets, cloud saves, Workshop items, Remote Play Together, the on-screen keyboard and Steam Input action sets and glyphs |
+| **SteamPlatform** | Identity, SDR P2P transport, lobbies and invites, rich presence with party groups, stats and achievements with their names, icons and rarity, the friends list with avatars, overlay pages, server-bound session tickets and encrypted app tickets, cloud saves with delete and quota, Workshop items, Remote Play Together, the on-screen keyboard and Steam Input action sets and glyphs |
 | **DiscordPlatform** | Rich presence, Ask to Join, sign-in with stored and refreshed tokens, lobbies with a voice call, linked channels, friends and join invites, and the per-frame callback pump. See [Discord Social](/docs/multiplayer/discord-social/). Does not load on dedicated servers. |
+| **EosPlatform** | Epic product-user sign-in, lobbies and session adverts, stats, achievements, leaderboards, friends and presence, Connect ID tokens and cloud saves. See [Epic Online Services](#epic-online-services). Does not load on dedicated servers. |
 | **MowoOnlinePlatform** | Mowo ID identity and token, friends and presence, invites and join requests, achievements, cloud saves of the SaveGames folder and the launcher overlay, through the Mowo Games Launcher. Does not load on dedicated servers. |
 
 ## Build options
 
-Each plugin builds unless its MBT build option is off. All three default to on:
+Each plugin builds unless its MBT build option is off. All of them default to on:
 
 | Option | Plugin | Also needs |
 |---|---|---|
 | `MOWO_ENABLE_STEAM` | SteamPlatform | The vendored Steamworks SDK for the platform (`win-x64`, `linux-x64`, `osx-arm64`). Never on mobile. |
 | `MOWO_ENABLE_DISCORD` | DiscordPlatform | The vendored Discord Social SDK (`win-x64`, `linux-x64`, `osx-arm64`). Never on mobile. |
 | `MOWO_ENABLE_MOWO_ONLINE` | MowoOnlinePlatform | Nothing; the MOS SDK ships with the engine. Never on mobile. |
+| `MOWO_ENABLE_EOS` | EosPlatform | The Epic Online Services SDK, which you drop into `Engine/Source/ThirdParty/EOSSDK` yourself. Without it the plugin still builds and stays unavailable. Never on mobile. |
 
 Build with `-o MOWO_ENABLE_STEAM=false` (and so on) to leave a platform out entirely. See the [mbt CLI reference](/docs/reference/mbt-cli/).
 
@@ -75,6 +82,10 @@ The `platform` settings and their defaults:
 | `platform.mowoOnlineEnabled` | `false` | Bring up Mowo Online |
 | `platform.mowoProductId` | empty | The game's product id on Mowo ID |
 | `platform.mowoRestartThroughLauncher` | `false` | A start outside the launcher hands the start to the launcher and quits |
+| `platform.eosEnabled` | `false` | Bring up Epic Online Services |
+| `platform.eosProductId`, `eosSandboxId`, `eosDeploymentId`, `eosClientId` | empty | The ids from the Epic Developer Portal; all four must be set |
+| `platform.eosClientSecret` | empty | The client policy's secret; `MOWO_EOS_CLIENT_SECRET` overrides it at run time |
+| `platform.eosEncryptionKey` | empty | 64 hex characters; encrypts the cloud save cache, and cloud saves stay off without it |
 | `platform.defaultLobbyType` | `FriendsOnly` | Visibility for new lobbies |
 | `platform.defaultMaxPlayers` | `4` | Session capacity the runtime and lobbies fall back to |
 | `platform.requireTicketAuth` | `false` | Clients send an encrypted app ticket on connect |
@@ -94,9 +105,29 @@ To receive invites, a game claims the invite handler with `FNetSession::EnableIn
 
 Discord's Ask to Join and a Mowo Online join request whose connect string is a SteamID64 dispatch the same join, so both players still need Steam running for those; Discord and Mowo Online are the social surface. Any other Mowo Online connect string waits for your game in `MMowoOnlineStatics::ConsumeMowoJoinRequest`.
 
+### Joining while the game is closed
+
+A friend who clicks **Join Game** while your game is not running makes Steam start it with `+connect_lobby <lobby id>` (a lobby invite) or `+connect <SteamID64>` (the `connect` rich-presence key the host publishes). The engine reads these launch arguments once Steam is up, joins the lobby and hands the host to the same join flow an accepted invite takes. The session layer may not have claimed invites yet at that moment, so the join is held until it does: the player lands in the session, not on the main menu. `MPlatformSocialSubsystem::HasPendingLaunchJoin` tells a menu graph a launch join is waiting. A `+connect` that carries anything but a SteamID64 (an address, for example) is ignored.
+
+Discord does the same: the plugin registers the game's launch command with Discord at startup (through Steam when the project has a Steam App ID), so Join on a friend's Discord profile starts a closed game and delivers the join secret once Discord is ready.
+
+The launch arguments are kept apart from the dash switches. They never reach `FCommandLine::GetValue`, and a packaged game's player-argument filter leaves them alone; read them with `FCommandLine::GetPlusValue`.
+
+### Lobby lists and builds
+
+A lobby advertises the build id of the game that made it, and the plain lobby list leaves out lobbies of another build and lobbies that are full. Hosts publish it automatically; pass a query with `AnyBuild` to see every build.
+
 ### Relay hosting
 
-The Steam plugin initializes Steam Datagram Relay network access at startup, so the first connection does not wait for the relay configuration. A listen server with Steam running hosts through the relay only and does not expose the host's IP. See [Hosting on both](/docs/multiplayer/transport-and-encryption/#hosting-on-both) for the ways to allow direct hosting.
+The Steam plugin initializes Steam Datagram Relay network access at startup, so the first connection does not wait for the relay configuration. Each relay connection gets one send lane per engine channel (reliable, unreliable, bulk, voice), so a large reliable transfer such as a late-join snapshot or a scan sync no longer stalls gameplay messages behind it. Turn it off with the console variable `net.steam.Lanes` if a project needs the relay's single ordered stream; it applies to connections opened afterwards. A listen server with Steam running hosts through the relay only and does not expose the host's IP. See [Hosting on both](/docs/multiplayer/transport-and-encryption/#hosting-on-both) for the ways to allow direct hosting.
+
+## Friends, avatars and overlay pages
+
+`MPlatformSocialSubsystem` is the Visual Scripting surface for the social graph of every platform at once <Source symbol="MPlatformSocialSubsystem" />. **Refresh Friends** snapshots the friends of Steam and Discord into one list (players in this game first); read each row by index for its name, platform, presence, status line and the lobby it is in, and **Join Friend At** joins that lobby on its platform, or, for a Steam friend hosting without a visible lobby, the host in their connect string, exactly as an accepted invite would. **Get Change Serial** moves whenever lobby data, the lobby roster, a friend, an avatar or an achievement icon changed, so a screen refreshes on a change instead of polling every frame. Steam lobbies publish their changes through the same notice.
+
+An avatar is addressed by a path, `online://avatar/<Platform>/<id>`, which an Arc image widget loads like any texture path <Source symbol="FOnlineImages" />. Steam hands over pixels; Discord hands over a link, which the plugin downloads in the background. The image is empty until it arrives, then **Get Change Serial** moves. **Mark Played With** tells Steam you played with someone, so they appear under recent players; the host does this for every player that joins on its own.
+
+Overlay shortcuts open the platform's own pages from your UI: **Show Profile** (report or block a player), **Show Store Page** (your demo's store page, a DLC, with or without adding it to the cart), **Show Web Page**, **Show Achievements Overlay**, **Show Friends Overlay** and **Show Platform Dialog**. Each returns false when the player turned the overlay off or the platform has no such page; show your own UI then. Web pages must be `http` or `https` links.
 
 ## Presence, stats and achievements from code
 
@@ -127,6 +158,12 @@ Rich presence goes to every available service, formatted through the project's p
 - Discord: `IsDiscordReady`, `AuthorizeDiscord`, `IsDiscordAuthorized`;
 - Discord friends and invites: `GetDiscordFriendCount` with `GetDiscordFriend…At` (presence 0 offline, 1 online elsewhere, 2 in this game), `SendDiscordInvite`, `GetPendingDiscordInviteCount`, `GetPendingDiscordInviteSenderAt` and `AcceptDiscordInvite`, which joins through the same path as a Steam invite. They need the player to sign in with the social scopes, which `discord.Social` turns on (off by default: a presence-only game keeps the smaller consent screen). Written against the 1.10 headers and covered by mock rows, but not yet run against a live Discord client. Lobbies, voice calls, linked channels, provisional accounts and relationships are on [Discord Social](/docs/multiplayer/discord-social/).
 
+### An in-game achievements screen
+
+**Refresh Achievements** reads the player's achievements with the platform's localised name and description, the hidden flag, whether and when each was unlocked (Unix seconds) and an icon path, `online://achievement/<id>`. **Request Achievement Rarity** asks the platform for the share of all players who unlocked each one; the value reads negative until it arrives. With no platform up the screen reads the project's own definitions and local store instead, so it works in Play in Editor too.
+
+You do not have to build the list yourself: place an **AchievementsScreen** node in a `.ui` asset and the game player fills it with the same data, unlocked first, hidden locked ones veiled, with a `closed` event for its Back button. Its rows carry the icon path, so a custom screen can place Image nodes on `online://achievement/<id>`.
+
 ## Mowo Online
 
 Mowo Online connects a game to the **Mowo Games Launcher** that started it. The plugin wraps the MOS SDK (`mos_sdk`), an engine-free shared library with a C API in the `MowoOnlineServices` module, which talks to the launcher over a loopback connection <Source path="Engine/Source/Runtime/MowoOnlineServices/Public/mos/mos_sdk.h" />. Packaging ships `mos_sdk` beside the game whenever the plugin is enabled.
@@ -148,35 +185,66 @@ While running, the plugin ticks the SDK every frame, places the launcher overlay
 | `OpenMowoOverlay`, `ShowMowoNotification`, `IsMowoOverlayOpen` | The overlay (`home`, `friends`, `notifications`, `achievements`, `settings`, `invite`) |
 | `SetMowoCloudSaveDirectory`, `GetMowoCloudSaveDirectory`, `RequestMowoCloudSync`, `HasMowoCloudConflict`, `ResolveMowoCloudConflict` | Cloud saves |
 
-A game not built with the engine can link `mos_sdk` directly: include `mos/mos_sdk.h`, call `MOS_Initialize`, and call `MOS_Tick` once per frame on the game thread; every callback runs inside `MOS_Tick`.
+A game not built with the engine can link `mos_sdk` directly: include `mos/mos_sdk.h` (or the header-only C++ wrapper `mos/mos.hpp`), call `MOS_Initialize`, and call `MOS_Tick` once per frame on the game thread; every callback runs inside `MOS_Tick`. [Mowo Online Services SDK](/docs/multiplayer/mowo-online-sdk/) covers that route.
+
+### The launcher overlay and exclusive fullscreen
+
+The launcher draws its overlay in a separate transparent window over your game, so it works over windowed and borderless games on Windows and macOS, and cannot appear over an exclusive fullscreen game. Offer **borderless fullscreen** in your display settings: it switches away instantly and keeps the overlay and its notifications. **Shift+Tab** opens the overlay by default, and players can pick another preset or record any chord in the launcher's settings; **F11** is allowed but flagged, because many games and browsers use it to toggle fullscreen.
+
+When the game runs in exclusive fullscreen, the plugin shows its own overlay instead: Arc widgets drawn over the game's swap chain, with the player's friends (and an invite button), the invitations waiting, the game's achievements, and toasts for new invites and unlocked achievements. It opens and closes on the same shortcut, takes the input while open, and gives it back on close. `OpenMowoOverlay`, `ShowMowoNotification` and `IsMowoOverlayOpen` work the same whichever overlay is showing. Start the game with `--mowo-overlay=always` to use the in-process overlay in every window mode, or `--mowo-overlay=never` to leave everything to the launcher.
+
+If your game uses the overlay's shortcut itself, tell the launcher: calling `MOS_Overlay_ReserveChord` with that chord stops the launcher reacting to it for the session, and `MOS_Overlay_SetEnabled(false)` turns the overlay off for the game altogether.
 
 ## Steam extras
 
 - **Workshop.** The player's subscribed, installed Workshop items load as mod folders. Each one is verified like a local mod, so a Workshop item gets no more trust than one in `Saved/Mods`. See [Steam features](/docs/multiplayer/steam-features/#workshop).
 - **On-screen keyboard.** `IOnlineService::ShowTextInput` opens the Big Picture keyboard, or the Steam Deck's floating keyboard over a focused Arc text field.
+- **Cloud saves.** Deleting a save slot deletes its cloud copy too: the slot's manifest first, so a delete that stops half way reads as "no cloud slot", then the document, thumbnail and the large scan files that count against the player's quota. An upload that cannot fit the quota is refused before it writes anything, with the free space in the log. `MPlatformSocialSubsystem::GetCloudQuotaTotal` and `GetCloudQuotaAvailable` let a save screen show the allowance.
 - **Steam Input.** Action sets, the player's own bindings and glyphs per action; see [Steam features](/docs/multiplayer/steam-features/#steam-input). `GetGamepadFamily` and `GetGamepadGlyphPath` still report the controller family (including Steam Deck) and a glyph image per button.
 
-## Encrypted app tickets
+## Authenticating players on a dedicated server
 
-Steam Encrypted App Ticket validation lives in the engine's Networking module, not in the plugin, because it needs only Valve's ticket library and no running Steam client <Source symbol="SteamTicketValidator" />.
+A dedicated server can require every joining player to prove who they are, whichever platform they play through. The server side is a small interface, `IServerAuthVerifier`, that a platform plugin registers with `FServerAuthRegistry` <Source symbol="FServerAuthRegistry" />; no engine module links a platform SDK. The Steam plugin supplies two verifiers, Mowo Online one and Discord one.
 
 <Steps>
-<Step title="The client sends a ticket">With `platform.requireTicketAuth` on, the client requests an encrypted app ticket from Steam after connecting and sends it, framed with an auth tag, as its first packet <Source symbol="FClientAuth" />.</Step>
-<Step title="The server validates it">`SteamTicketValidator::ValidateTicket` decrypts the ticket with the app's secret key, checks the App ID and ownership, and returns the player's SteamID and VAC status.</Step>
-<Step title="The server admits or drops the peer">The dedicated server also refuses a SteamID that is already connected. Until a peer is authenticated, its packets never reach the simulation, and a peer that sends no valid ticket is dropped after 15 seconds.</Step>
+<Step title="The server challenges the peer">Right after a peer connects, the server sends a challenge: a fresh random nonce for that connection, the time it was issued, and every identity provider it accepts with what a credential for it must be bound to.</Step>
+<Step title="The client answers with a credential">The client asks the platform that can produce one of the offered providers for a credential bound to the challenge and sends it back with the nonce <Source symbol="FClientAuth" />. A credential whose nonce is not the one issued to that connection is refused before any verifier sees it, so a captured ticket cannot be replayed on another connection.</Step>
+<Step title="The verifier admits or refuses">The verifier checks the credential with its platform and names the player's id. The server refuses an account that is already connected. Until a peer is admitted its packets never reach the simulation, and a peer that sends no valid credential is dropped after 15 seconds. The admitted id is the user id the anti-cheat service sees; see [Anti-cheat](/docs/multiplayer/anti-cheat/).</Step>
 </Steps>
 
-On `MowoServer`, validation turns on when you pass both an App ID and the key:
+| Provider | What the client sends | What the server checks |
+|---|---|---|
+| `steam-session` | A Steam auth-session ticket bound to the server's SteamID | Steam's `BeginAuthSession`; Steam later reports a ban, a cancelled ticket or a lapsed licence and the server removes the player at once |
+| `steam-ticket` | An encrypted app ticket whose embedded data is the connection's nonce | The ticket decrypts with the app key, belongs to the app, is owned, carries this connection's nonce and was issued within the last 10 minutes |
+| `mowo-id` | The Mowo ID access token | The game's verification endpoint, which receives the token, the nonce and the peer address |
+| `discord` | The player's Discord access token | Discord's token introspection: the token must belong to your application |
+
+Turn providers on in **Project Settings, Networking, Server Authentication** (Steam session tickets, refusing VAC-banned accounts, the Mowo ID verify URL, the Discord application id), or with MowoServer options, which win over the settings:
 
 ```powershell
-MowoServer.exe --port=7777 --appid=480 --ticket-key-file=C:\secrets\ticket.key
+MowoServer.exe --port=7777 --appid=480 --ticket-key-file=C:\secrets\ticket.key --steam-session-auth
+MowoServer.exe --port=7777 --mowoid-verify-url=https://api.example.com/verify --discord-app=123456789012345678
 ```
 
-The key comes from the Steamworks partner site (App Admin, Auth and Security). The key file holds 32 raw bytes or 64 hex characters. Keep it out of source control.
+The Steam ticket key comes from the Steamworks partner site (App Admin, Auth and Security). The key file holds 32 raw bytes or 64 hex characters. Keep it out of source control. `--steam-reject-vac` also refuses accounts with a VAC ban; without it a ban is only logged. Clients of an older build that send the previous unbound ticket are refused.
 
 <Callout type="danger">
-Without `--appid` and a key, the dedicated server accepts every connection without authentication and logs that validation is disabled.
+With no provider configured the dedicated server accepts every connection without authentication and logs that join authentication is disabled.
 </Callout>
+
+## Epic Online Services
+
+Drop the EOS C SDK where `Engine/Source/ThirdParty/EOSSDK/README.md` says (headers, the import library and the runtime library; none of it is committed), turn on **Enable Epic Online Services** on the Platform page and fill in the four ids and, for cloud saves, the encryption key. A build without the SDK still compiles the plugin; the service logs once that the SDK is missing and stays unavailable.
+
+- **Sign-in.** A game launched from the Epic Games Store signs in with the Epic account (the exchange code the launcher passes), which also turns on friends and presence. Any other launch signs in with a device identity, which is a product user without friends.
+- **Lobbies.** Create, search, join and leave work through `IOnlineService`. Lobbies are tagged with the game name and searched by it. This plugin has no relay transport, so a lobby carries the data the host publishes with `SetLobbyData` (a connect address, a session name) and the joiner reads it back; the game connects with its own transport.
+- **Stats and leaderboards.** EOS stats are ingest-only, so define each stat in the Developer Portal with the **Latest** aggregation and the engine's set-a-value calls behave as written. A leaderboard score is ingested as a stat of the board's name. Float stats round to integers. Global boards download; friends and around-user boards are not offered.
+- **Achievements.** Unlocking needs the player's data to have arrived first (the same ready gate as Steam). Achievements cannot be relocked.
+- **Friends and presence.** Needs the Epic account sign-in. Friend ids are Epic account ids, a different namespace from lobby members, so a friend row does not carry a lobby to join.
+- **Cloud saves.** Player Data Storage, mirrored in memory: after sign-in the plugin lists and downloads the account's files, and `IsCloudAvailable` turns true only when that finished, so a save read before then falls back to the local file.
+- **Server checks.** The credential kind is `eos-connect`, the player's Connect ID token. The engine ships no EOS verifier for dedicated servers.
+
+The EOS plugin was written without the SDK on hand: its SDK calls have not been compiled or run, while the service logic over them is covered by `eos-service-test`.
 
 ## Status
 
@@ -191,4 +259,4 @@ Without `--appid` and a key, the dedicated server accepts every connection witho
 - [Dedicated server](/docs/multiplayer/dedicated-server/) for the Steam game server.
 - [Voice chat](/docs/multiplayer/voice-chat/) for following Discord mute and deafen.
 - [Discord Social](/docs/multiplayer/discord-social/) for Discord sign-in, lobbies, voice calls and linked channels.
-- API: [`IOnlineService`](/docs/api/networking/ionlineservice/), [`FOnlineServices`](/docs/api/networking/fonlineservices/), [`FPlatformInit`](/docs/api/networking/fplatforminit/), [`MPlatformSubsystem`](/docs/api/networking/mplatformsubsystem/), [`SteamTicketValidator`](/docs/api/networking/steamticketvalidator/), [`FClientAuth`](/docs/api/networking/fclientauth/).
+- API: [`IOnlineService`](/docs/api/networking/ionlineservice/), [`FOnlineServices`](/docs/api/networking/fonlineservices/), [`FPlatformInit`](/docs/api/networking/fplatforminit/), [`MPlatformSubsystem`](/docs/api/networking/mplatformsubsystem/), [`FServerAuthRegistry`](/docs/api/networking/fserverauthregistry/), [`FClientAuth`](/docs/api/networking/fclientauth/), [`MPlatformSocialSubsystem`](/docs/api/networking/mplatformsocialsubsystem/).

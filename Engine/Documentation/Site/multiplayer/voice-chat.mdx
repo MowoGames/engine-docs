@@ -14,7 +14,7 @@ sources:
   - Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceAdpcmCodec.h
   - Engine/Source/Runtime/VoiceChat/Public/VoiceChat/FVoiceSettings.h
   - Engine/Source/Runtime/Networking/Public/Networking/NetworkTypes.h
-verifiedAt: 500cf5785
+verifiedAt: a592fa42e
 ---
 
 The `VoiceChat` engine module adds in-game voice to a session: microphone capture, encoding, a per-speaker jitter buffer and positional playback. It uses the session's existing connection on its own `Voice` channel, so there is no second socket to open or NAT to punch.
@@ -26,6 +26,10 @@ The `VoiceChat` engine module adds in-game voice to a session: microphone captur
 - **Capture** runs at the active codec's rate in 20 ms mono frames: 48 kHz on Opus, 16 kHz on ADPCM <Source symbol="FVoiceOpusCodec" />. Each frame is cleaned up (echo cancellation, noise suppression, automatic gain) before the gate reads it.
 - **Transport.** Frames ride `NetworkChannel::Voice`, which is unreliable and unsequenced so late frames can still be put back in order <Source symbol="NetworkChannel" />. On the host, the speaker identity is always the sending peer, whatever the packet header claims.
 - **Playback.** Each speaker gets its own decoder and jitter buffer (3 frames target, 12 maximum). Decoded audio plays through an ordinary audio source on the Voice bus, so distance attenuation and occlusion work like any world sound.
+
+## What the server accepts
+
+The server relays voice on behalf of every speaker, so it treats each frame as hostile until it has passed three checks, all before a single listener is sent anything. The sender must be a registered voice peer (`RegisterPeer`) and, when the host installs one with `SetPeerAdmittedPredicate`, admitted by the session; a frame from anyone else is dropped and counted in `framesUnauthorized`. The payload must be non-empty and no larger than the codec's encoded frame size. Each peer then has a budget of 60 frames a second with a burst of 30, three times a normal 20 ms stream; frames past it are dropped and counted in `framesRateLimited`. The speaker id in a relayed frame is always the sending peer, whatever the header claims.
 
 ## Proximity and radio
 
@@ -59,8 +63,20 @@ A radio transmission is not heard in anyone's head. It comes out of each **recei
 The module links Opus only where its archive is vendored and otherwise compiles the Opus codec as an unavailable stub; `voice.Codec auto` then selects ADPCM.
 
 <Callout type="warning">
-Opus binaries are vendored for **Windows x64 and macOS** only, so Linux builds run voice on ADPCM. Every peer in a session must use the same codec: frames from a peer on a different codec are refused, not decoded, and counted in `FVoiceStats::framesCodecMismatch`. An explicit request for Opus on a build without it fails rather than silently downgrading.
+Every peer in a session must use the same codec: frames from a peer on a different codec are refused, not decoded, and counted in `FVoiceStats::framesCodecMismatch`. An explicit request for Opus on a build without it fails rather than silently downgrading.
 </Callout>
+
+## Platforms
+
+| Platform | Codec | Microphone |
+| --- | --- | --- |
+| Windows x64 | Opus | WASAPI, through miniaudio |
+| macOS (Apple silicon) | Opus | Core Audio, through miniaudio |
+| Linux x64 | Opus (built, not yet run on Linux) | through miniaudio |
+
+Opus is built with the same settings on every platform, so a Windows player and a macOS player in one session hear each other: the packet header, the 48 kHz 20 ms mono frame and the Opus framing are identical.
+
+On macOS the system asks the player for microphone access the first time voice capture starts. A packaged game and the editor declare why in their `Info.plist` (`NSMicrophoneUsageDescription`), which `mbt package` writes for you. A build signed with a Developer ID runs under the hardened runtime, which blocks the microphone unless the app claims the `com.apple.security.device.audio-input` entitlement; mbt signs games and the editor with it. If the player declines, capture produces silence and the player can still hear everyone else; they can allow it later in **System Settings › Privacy & Security › Microphone**.
 
 ## Transmit modes
 

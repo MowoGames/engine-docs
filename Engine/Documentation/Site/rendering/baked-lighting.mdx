@@ -1,0 +1,104 @@
+---
+title: Baked lighting
+sidebarTitle: Baked lighting
+description: Bake a level's static lighting into lightmap atlases that the Low quality tier uses in place of Global Illumination, and keep the bake current.
+order: 19
+sources:
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/LightmapScene.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/LightmapFormat.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/LightmapAtlasPacker.h
+verifiedAt: 55f27937c
+---
+
+The Low quality tier runs no [Global Illumination](/docs/rendering/global-illumination/). Baked lighting gives its static meshes the indirect light they would otherwise lose: the editor path-traces the level once, stores the result in lightmap atlases, and the renderer adds it to the lit image where Global Illumination is off.
+
+## Enable the baker
+
+Baking is an editor tool in the **Lightmap Baker** plugin, off by default. Enable it in the Plugins window and restart the editor. A packaged game does not need the plugin: the baked files ship and the renderer samples them on its own.
+
+## What gets baked
+
+A mesh is baked when all of these hold:
+
+- Its transform's **Mobility** is **Static**.
+- Its **Bake Lightmap** property (Details, Lighting) is on. It is on by default.
+- It has a mesh: a mesh asset or a primitive shape.
+
+Skinned meshes bake too, in their rest pose. A mesh whose import produced its own second UV set for lightmaps keeps it when the set is usable (inside the unit square, different from the first set, almost no overlap); every other mesh is unwrapped by the baker.
+
+A Static mesh with **Bake Lightmap** off still blocks and bounces light for the meshes that are baked; it just gets no lightmap of its own.
+
+### Lightmap density
+
+**Lightmap Density** (Details, Lighting) is the resolution in texels per world meter. `0` takes the project default, `r.Lightmap.DefaultDensity` (4). Each mesh instance gets a square tile whose edge is the square root of its world surface area times the density, rounded up to a multiple of 4 and clamped between `r.Lightmap.Bake.MinResolution` and `r.Lightmap.Bake.MaxResolution`. Doubling the density therefore quadruples the texels.
+
+## Bake settings
+
+Place a **Lightmap Bake Settings** component on any actor in the level to choose the quality for that level; it is saved with the level. Without one, the `r.Lightmap.Bake.*` variables below apply.
+
+| Property | Effect |
+|---|---|
+| Samples Per Texel | Path samples per texel. |
+| Indirect Bounces | Bounces after the first hit. |
+| Denoise | Edge-aware denoise of each tile. |
+| Directional Lightmaps | Also bake the dominant light direction, so normal maps and curved surfaces react to where the light comes from. Adds one atlas per atlas. |
+| Spherical Harmonics | Bake four coefficients per colour channel (first-order spherical harmonics) and evaluate them with each pixel's normal. The most faithful with normal maps; adds three atlases per atlas. Wins over Directional Lightmaps. |
+| Indirect Intensity | Scales the baked light. |
+| Maximum Atlas Size, Minimum / Maximum Tile Resolution | Layout limits. |
+
+Each mesh's Details panel shows its **Lightmap Status** and tile density in the Lighting section.
+
+## Bake the level
+
+Choose **Build > Bake Lighting**, or press the sun button on the level toolbar. Progress and **Cancel** are in the **Lightmap Baker** panel under **Window > Plugins**; **Build > Cancel Lighting Bake** does the same.
+
+The bake:
+
+1. Reads every enabled light and the scene's sky colour.
+2. Unwraps each mesh instance into its own chart layout, so no two instances share lightmap texels.
+3. Packs the tiles into atlases up to `r.Lightmap.Bake.MaxAtlasSize` wide, with a gutter around each tile.
+4. Path-traces direct light, `r.Lightmap.Bake.Bounces` bounces of indirect light and the sky for every texel, then denoises each tile (`r.Lightmap.Bake.Denoise`).
+5. Encodes the atlases as BC6H textures and writes them with a `.lightmap` file to `Content/Lightmaps/`, named after the level. The `.lightmap` file is built data: every bake rewrites it, it is never locked or edited, and it keys each entry on the actor's id, which is the id the level loads the actor with, so the entries still apply after a reload.
+
+The bake assigns the set to the baked meshes. **Save the level** to keep the assignment. **Build > Clear Baked Lighting** removes it.
+
+The bake uses each light's colour and intensity as the renderer does. Photometric units are converted the same way, but the baked result is a diffuse approximation: it carries no specular and no light cookies, IES profiles or light functions.
+
+## When the baked light is used
+
+`r.Lightmap.Mode` decides:
+
+| Value | Behaviour |
+|---|---|
+| `0` | Never draw baked lighting. |
+| `1` (default) | Draw it only when the active quality row has Global Illumination off, which is the Low tier. |
+| `2` | Always draw it, on top of whatever Global Illumination adds. |
+
+`r.Lightmap.Intensity` scales the baked light. The pass runs after direct lighting and before the sky, and a baked pixel multiplies the baked value by the surface's own albedo, so the lightmap follows material changes without a re-bake.
+
+## Keeping the bake current
+
+Each baked entry remembers the transform, density and mesh it was baked against. When a baked mesh moves, or its density changes, the entry no longer matches: the renderer stops drawing it, so a stale layout never lights the wrong place, and the **Lightmap Baker** panel reports how many objects need a rebuild. Bake again to bring them back. The bake also remembers the sky, every enabled light, and each Static mesh's placement, density and material colours. When any of them changes, the level is out of date: baked meshes are outlined in orange in the viewport, the **Lightmap Baker** panel says so, the toolbar button highlights and a warning is logged. Bake again to clear it.
+
+## Console variables
+
+| Variable | Default | Effect |
+|---|---|---|
+| `r.Lightmap.Mode` | 1 | Whether baked lighting is drawn. |
+| `r.Lightmap.Intensity` | 1 | Scale of the baked light. |
+| `r.Lightmap.DefaultDensity` | 4 | Texels per meter for a mesh whose density is 0. |
+| `r.Lightmap.Bake.SamplesPerTexel` | 128 | Path samples per texel. |
+| `r.Lightmap.Bake.Bounces` | 2 | Indirect bounces. |
+| `r.Lightmap.Bake.MaxAtlasSize` | 2048 | Largest atlas edge. |
+| `r.Lightmap.Bake.MinResolution` | 16 | Smallest tile edge. |
+| `r.Lightmap.Bake.MaxResolution` | 512 | Largest tile edge. |
+| `r.Lightmap.Bake.Denoise` | 1 | Denoise each tile. |
+| `r.Lightmap.Bake.Directional` | 0 | Bake the dominant light direction. |
+| `r.Lightmap.Bake.SphericalHarmonics` | 0 | Bake first-order spherical harmonics. |
+
+## Limits
+
+- Dynamic objects are lit by the ordinary ambient, not by the lightmap.
+- Baked light is diffuse only; rect lights are not baked.
+- Spherical harmonics are first order: a light shining straight at a surface bakes about a quarter dimmer at the peak than exact cosine lighting.
+- The lightmap is drawn from the baked copy of each mesh's geometry. A mesh whose LOD differs from level 0 by more than a few centimeters at a pixel loses its baked light there.

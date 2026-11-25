@@ -503,50 +503,57 @@
 						},
 						{
 							"kind": "method",
+							"name": "ResolvePixelPerfect",
+							"signature": "void ResolvePixelPerfect(float outputHeight)",
+							"doc": "Resolves every pixel-perfect camera against an output of this height (in\npixels) without touching the aspect ratios, for hosts that build the view\nfrom a pane (the editor viewport and PIE) instead of a window.",
+							"line": 88
+						},
+						{
+							"kind": "method",
 							"name": "GetMainCameraMatrices",
 							"signature": "bool GetMainCameraMatrices(Mat4& outView, Mat4& outProj, Vec3& outPos, Vec3& outForward, Vec3& outUp)",
-							"line": 85
+							"line": 90
 						},
 						{
 							"kind": "method",
 							"name": "GetMainSceneRendererCamera",
 							"signature": "bool GetMainSceneRendererCamera(SceneRendererCamera& out, float aspectRatio)",
-							"line": 87
+							"line": 92
 						},
 						{
 							"kind": "method",
 							"name": "BuildSceneRendererCamera",
 							"signature": "bool BuildSceneRendererCamera(Entity camEntity, float aspectRatio, SceneRendererCamera& out)",
 							"doc": "Build a SceneRendererCamera for an arbitrary camera entity. Used\nby multi-camera setups that iterate every registered camera and\nrender each into its assigned viewport. Returns false if the\nentity is invalid or lacks Camera + Transform components.",
-							"line": 93
+							"line": 98
 						},
 						{
 							"kind": "method",
 							"name": "GetCamerasSortedByRenderOrder",
 							"signature": "std::vector<Entity> GetCamerasSortedByRenderOrder() const",
 							"doc": "List of camera entities sorted by CameraComponent::renderOrder\n(ascending — earlier renderOrder is drawn first, later ones can\noverdraw for PiP). Skips cameras whose component is disabled.",
-							"line": 98
+							"line": 103
 						},
 						{
 							"kind": "method",
 							"name": "GetCameraAtViewportPosition",
 							"signature": "Entity GetCameraAtViewportPosition(float x, float y) const",
 							"doc": "Find best camera for viewport position (for multi-camera setups)",
-							"line": 101
+							"line": 106
 						},
 						{
 							"kind": "method",
 							"name": "Clear",
 							"signature": "void Clear()",
 							"doc": "Clear all registrations (e.g., on scene load)",
-							"line": 104
+							"line": 109
 						},
 						{
 							"kind": "method",
 							"name": "ClearWorld",
 							"signature": "void ClearWorld(World* world)",
 							"doc": "Drop every registration that belongs to `world`. A registered Entity\nholds a raw World*, so the registry MUST be purged before the world it\npoints at is destroyed — a scene unload, map travel or editor shutdown\notherwise leaves handles that read freed memory on the next lookup.",
-							"line": 110
+							"line": 115
 						}
 					]
 				}
@@ -563,19 +570,19 @@
 					"name": "CameraProjectionType",
 					"namespace": "Mowo",
 					"reflected": true,
-					"line": 13,
+					"line": 15,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Perspective",
 							"signature": "Perspective",
-							"line": 14
+							"line": 16
 						},
 						{
 							"kind": "enumerator",
 							"name": "Orthographic",
 							"signature": "Orthographic",
-							"line": 15
+							"line": 17
 						}
 					]
 				},
@@ -584,142 +591,223 @@
 					"name": "CameraComponent",
 					"namespace": "Mowo",
 					"reflected": true,
-					"line": 18,
+					"line": 20,
 					"members": [
 						{
 							"kind": "field",
 							"name": "enabled",
 							"signature": "bool enabled = true",
-							"line": 19
+							"line": 21
 						},
 						{
 							"kind": "field",
 							"name": "projectionType",
 							"signature": "CameraProjectionType projectionType = CameraProjectionType::Perspective",
-							"line": 23
+							"line": 25
 						},
 						{
 							"kind": "field",
 							"name": "fieldOfView",
 							"signature": "float fieldOfView = CameraDefaults::DefaultFOV",
 							"doc": "Perspective settings",
-							"line": 28
+							"line": 30
 						},
 						{
 							"kind": "field",
 							"name": "orthographicSize",
 							"signature": "float orthographicSize = CameraDefaults::DefaultOrthoSize",
 							"doc": "Orthographic settings",
-							"line": 34
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "pixelPerfect",
+							"signature": "bool pixelPerfect = false",
+							"doc": "Pixel-perfect 2D framing (orthographic only): the view shows a whole\nnumber of screen pixels per texel. Ortho Size is ignored while on; the\nlargest integer multiple of Reference Height that fits the window\ndecides the framing instead.",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "pixelsPerUnit",
+							"signature": "float pixelsPerUnit = 0.0f",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "referenceHeight",
+							"signature": "uint32_t referenceHeight = 0",
+							"line": 53
+						},
+						{
+							"kind": "field",
+							"name": "snapToPixelGrid",
+							"signature": "bool snapToPixelGrid = true",
+							"line": 58
+						},
+						{
+							"kind": "field",
+							"name": "resolvedPixelScale",
+							"signature": "uint32_t resolvedPixelScale = 0",
+							"doc": "Filled in by FPixelPerfectCamera::Resolve from the output size.",
+							"line": 62
+						},
+						{
+							"kind": "field",
+							"name": "resolvedOrthoSize",
+							"signature": "float resolvedOrthoSize = 0.0f",
+							"line": 63
+						},
+						{
+							"kind": "field",
+							"name": "resolvedPixelsPerUnit",
+							"signature": "float resolvedPixelsPerUnit = 0.0f",
+							"line": 64
 						},
 						{
 							"kind": "field",
 							"name": "nearPlane",
 							"signature": "float nearPlane = CameraDefaults::DefaultNearPlane",
-							"line": 39
+							"line": 66
 						},
 						{
 							"kind": "field",
 							"name": "farPlane",
 							"signature": "float farPlane = CameraDefaults::DefaultFarPlane",
-							"line": 43
+							"line": 70
 						},
 						{
 							"kind": "field",
 							"name": "aspectRatio",
 							"signature": "float aspectRatio = CameraDefaults::DefaultAspect",
-							"line": 47
+							"line": 74
 						},
 						{
 							"kind": "field",
 							"name": "viewportX",
 							"signature": "float viewportX = 0.0f",
 							"doc": "Viewport region of the final output (normalized 0-1). Default\n(0, 0, 1, 1) covers the whole output — the common single-camera\ncase. For split-screen left/right use (0, 0, 0.5, 1) and\n(0.5, 0, 0.5, 1); for picture-in-picture put the inset camera at\nsomething like (0.7, 0.7, 0.3, 0.3).",
-							"line": 55
+							"line": 82
 						},
 						{
 							"kind": "field",
 							"name": "viewportY",
 							"signature": "float viewportY = 0.0f",
-							"line": 60
+							"line": 87
 						},
 						{
 							"kind": "field",
 							"name": "viewportWidth",
 							"signature": "float viewportWidth = 1.0f",
-							"line": 65
+							"line": 92
 						},
 						{
 							"kind": "field",
 							"name": "viewportHeight",
 							"signature": "float viewportHeight = 1.0f",
-							"line": 70
+							"line": 97
 						},
 						{
 							"kind": "field",
 							"name": "renderOrder",
 							"signature": "int renderOrder = 0",
 							"doc": "Render order — cameras are rendered low → high; later cameras\noverdraw earlier ones in any overlapping viewport region. Useful\nfor PiP (background = order 0, inset = order 1) and for layering\nUI-camera passes that share the same viewport.",
-							"line": 80
+							"line": 107
 						},
 						{
 							"kind": "field",
 							"name": "clearColor",
 							"signature": "Vec3 clearColor = Vec3(0.2f, 0.2f, 0.2f)",
-							"line": 84
+							"line": 111
 						},
 						{
 							"kind": "field",
 							"name": "isMain",
 							"signature": "bool isMain = false",
 							"doc": "Is this the main camera?",
-							"line": 88
+							"line": 115
+						},
+						{
+							"kind": "field",
+							"name": "viewOwner",
+							"signature": "EntityID viewOwner = 0",
+							"doc": "The entity whose body this camera sees through: a third-person rig or a\nfirst-person eye lives on its own actor, so comparing a mesh's entity with\nthe camera's would never match the pawn the player controls and the\nowner-no-see / only-owner-see flags would hide the wrong meshes. Set by\nthe rig each frame; INVALID_ENTITY means the camera's own entity is the owner.",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "ResolveViewOwner",
+							"signature": "EntityID ResolveViewOwner(EntityID cameraEntity) const",
+							"line": 126
 						},
 						{
 							"kind": "field",
 							"name": "clearColorBuffer",
 							"signature": "bool clearColorBuffer = true",
 							"doc": "Clear color on render",
-							"line": 91
+							"line": 129
 						},
 						{
 							"kind": "field",
 							"name": "clearDepthBuffer",
 							"signature": "bool clearDepthBuffer = true",
 							"doc": "Clear depth on render",
-							"line": 92
+							"line": 130
 						},
 						{
 							"kind": "field",
 							"name": "cullingMask",
 							"signature": "uint32_t cullingMask = 0xFFFFFFFF",
 							"doc": "Layer culling mask (renders entities whose layer bit is set)",
-							"line": 95
+							"line": 133
+						},
+						{
+							"kind": "field",
+							"name": "postMaterialPath",
+							"signature": "std::string postMaterialPath",
+							"line": 138
+						},
+						{
+							"kind": "field",
+							"name": "postMaterialPoint",
+							"signature": "int32_t postMaterialPoint = 1",
+							"line": 144
+						},
+						{
+							"kind": "field",
+							"name": "postMaterialPriority",
+							"signature": "int32_t postMaterialPriority = 0",
+							"line": 150
+						},
+						{
+							"kind": "field",
+							"name": "postMaterialWeight",
+							"signature": "float postMaterialWeight = 1.0f",
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "GetViewMatrix",
 							"signature": "Mat4 GetViewMatrix(const Vec3& position, const Vec3& forward, const Vec3& up) const",
 							"doc": "Matrices (computed from transform + settings)",
-							"line": 101
+							"line": 164
 						},
 						{
 							"kind": "method",
 							"name": "GetProjectionMatrix",
 							"signature": "Mat4 GetProjectionMatrix() const",
-							"line": 102
+							"line": 165
 						},
 						{
 							"kind": "method",
 							"name": "WorldToScreen",
 							"signature": "Vec2 WorldToScreen(const Vec3& worldPos, const Vec3& cameraPos, const Vec3& cameraForward, const Vec3& cameraUp, const Vec2& screenSize) const",
-							"line": 104
+							"line": 167
 						},
 						{
 							"kind": "method",
 							"name": "ScreenToWorldRay",
 							"signature": "Ray ScreenToWorldRay(const Vec2& screenPos, const Vec3& cameraPos, const Vec3& cameraForward, const Vec3& cameraUp, const Vec2& screenSize) const",
-							"line": 107
+							"line": 170
 						}
 					]
 				}
@@ -1053,6 +1141,71 @@
 							"signature": "void AddTrauma(float delta)",
 							"doc": "Additive — multiple explosions stack until the cap.",
 							"line": 75
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Camera/Public/Camera/PixelPerfect.h",
+			"include": "Camera/PixelPerfect.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FPixelPerfectCamera",
+					"namespace": "Mowo",
+					"doc": "Pixel-perfect orthographic framing for 2D games: the view always shows a whole\nnumber of screen pixels per texel, so a 16 px sprite never lands on a\nfractional pixel and never shimmers while the camera pans.",
+					"line": 15,
+					"members": [
+						{
+							"kind": "method",
+							"name": "IntegerScale",
+							"signature": "static uint32_t IntegerScale(uint32_t viewportHeightPx, uint32_t referenceHeightPx)",
+							"static": true,
+							"doc": "The largest whole-number multiple of the reference height that fits the\nviewport, never below 1 (a window smaller than the reference crops instead\nof shrinking the art).",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "OrthoHalfHeight",
+							"signature": "static float OrthoHalfHeight(uint32_t viewportHeightPx, uint32_t scale, float pixelsPerUnit)",
+							"static": true,
+							"doc": "Half the viewport height in world units for `scale` screen pixels per\ntexel and `pixelsPerUnit` texels per world unit.",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "PixelWorldSize",
+							"signature": "static float PixelWorldSize(uint32_t scale, float pixelsPerUnit)",
+							"static": true,
+							"doc": "World length of one screen pixel.",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "SnapToPixel",
+							"signature": "static float SnapToPixel(float value, float pixelWorldSize)",
+							"static": true,
+							"doc": "Rounds `value` to a whole screen pixel.",
+							"line": 30
+						},
+						{
+							"kind": "method",
+							"name": "Resolve",
+							"signature": "static void Resolve(CameraComponent& camera, uint32_t viewportHeightPx)",
+							"static": true,
+							"doc": "Resolves the component's scale and ortho size for a viewport of this\nheight. A component that is not pixel-perfect is left alone.",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "SnapPosition",
+							"signature": "static void SnapPosition(const CameraComponent& camera, const Vec3& right, const Vec3& up, Vec3& position)",
+							"static": true,
+							"doc": "Snaps a camera position along its own right and up axes so the pan moves in\nwhole pixels. No-op until Resolve has run for the component.",
+							"line": 38
 						}
 					]
 				}

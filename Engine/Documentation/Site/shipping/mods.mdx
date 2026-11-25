@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Mods/ModManager.h
   - Engine/Source/Runtime/Game/Public/Game/MModStatics.h
   - Templates/TemplateResources/Mod/Template.mplugin.in
-verifiedAt: 5922e6e5e
+verifiedAt: a592fa42e
 ---
 
 Players add content to a shipped game as **mods**: signed content paks that mount above the game's own archives. A mod replaces a game file by carrying the same path, and adds files under new paths. Mods carry content only; no code loads from a mod.
@@ -67,7 +67,9 @@ The packaged game looks for mods in `<package>/Mods/`, in its per-user `Saved/Mo
 2. **Applies the enable list** in `Saved/Config/Mods.ini`. A mod it has not seen before starts disabled, so the player turns it on.
 3. **Orders** the enabled mods: dependencies and `loadAfter` first, then the player's order, then the name. A missing or disabled dependency refuses the mod and everything that depends on it; a cycle refuses every mod in it.
 4. **Verifies** each pak's signature before it mounts. A pak signed by a key other than the one its manifest names is refused, and so is an unsigned pak. The key a mod was first enabled with is pinned in `Mods.ini`, and an update signed by another key is refused until the player enables the mod again.
-5. **Mounts** each mod above the game, its patches and DLC, at priority 300 plus its load index, so a later mod wins a file two mods carry.
+5. **Checks replaced game files.** A mod may add files freely, but it may only replace a game file its manifest lists under `overrides` (exact paths, or a prefix ending in `/` or `*`). A mod that replaces any other game file is refused as `UndeclaredOverride`; `mods.RequireOverrideList` turns the check off for development.
+6. **Checks for code.** A pak that carries a Visual Script, a plugin manifest, a module signature or source code is refused unless it was signed by a trusted key: the game's own signing key or one in `mods.TrustedKeys`. A key that only the mod's own manifest names proves who made the pak, not that you trust them, and a script reaches every reflected function. The conflict report names the file as `ExecutableContent`.
+7. **Mounts** each mod above the game, its patches and DLC, at priority 300 plus its load index, so a later mod wins a file two mods carry.
 
 Every refusal and every file two sources share is a conflict. The report is logged at start when there is anything in it.
 

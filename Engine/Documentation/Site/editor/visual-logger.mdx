@@ -1,0 +1,90 @@
+---
+title: Visual Logger
+description: Record text and debug shapes from game code with MOWO_VLOG, scrub back frame by frame, filter by category, verbosity and text, and see the frame's shapes.
+order: 21
+sources:
+  - Engine/Source/Runtime/Logging/Public/Logging/VisualLogger.h
+  - Engine/Source/Runtime/Logging/Public/Logging/VisualLogTimeline.h
+  - Engine/Plugins/VisualLogger/VisualLogger.mplugin
+verifiedAt: e4da24ab4
+---
+
+The Output Log tells you what happened; the Visual Logger shows you where and when. Game code records short messages and shapes (a path, a sight cone, a goal) against the frame they belong to. Afterwards you drag a timeline back to the frame something went wrong and see the messages of that moment and its shapes drawn in the level. It is the tool for AI, navigation and gameplay bugs that last a single frame and are gone before you can look.
+
+## Turn it on
+
+The panel comes from the **Visual Logger** plugin, which is off by default. Enable it in the Plugins window ([Plugins and extensions](/docs/editor/plugins/)) and restart the editor. It is an editor-only plugin: a game or server build never loads it, and your game code can keep its `MOWO_VLOG` calls either way. Then open **Window ▸ Plugins ▸ Visual Logger**.
+
+Nothing records until you ask. Press **Record** in the panel, or tick **Tools ▸ Visual Logger Recording**, and then play. Game code costs one atomic load per call while recording is off, and the calls compile away in a release build.
+
+## Record from C++
+
+Include the header and call the macros from any game module. A category groups messages (`"AI"`, `"Nav"`) and an owner names what the message is about, usually an actor.
+
+```cpp title="Guard.cpp" nocompile
+#include <Logging/VisualLogger.h>
+
+void AGuard::Tick(float deltaSeconds) {
+	AActor::Tick(deltaSeconds);
+
+	MOWO_VLOG("AI", "Guard", "state %d, target %s", m_state, m_targetName.c_str());
+
+	const float from[3] = { pos.x, pos.y, pos.z };
+	const float to[3] = { goal.x, goal.y, goal.z };
+	MOWO_VLOG_LINE("Nav", "Guard", from, to, 0x00FF00FFu, "path leg");
+	MOWO_VLOG_SPHERE("Nav", "Guard", to, 0.5f, 0xFFFF00FFu, "goal");
+}
+```
+
+| Macro | Records |
+| --- | --- |
+| `MOWO_VLOG`, `MOWO_VLOG_WARN`, `MOWO_VLOG_ERROR` | A formatted text line at that verbosity |
+| `MOWO_VLOG_POINT` | A point in world space |
+| `MOWO_VLOG_LINE` | A line between two points |
+| `MOWO_VLOG_SPHERE` | A sphere with a centre and radius |
+| `MOWO_VLOG_BOX` | A box between its minimum and maximum corners |
+| `MOWO_VLOG_TEXT` | A text label at a point in the world, drawn facing the editor camera |
+
+Colours are `0xRRGGBBAA`. Every entry is stamped with the current frame. The recording is a ring of the last 20,000 entries, so a long session keeps its newest history; the oldest entries fall off first. A category can be switched off at the source with `FVisualLogger::Get().SetCategoryEnabled("AI", false)`.
+
+The engine records into it too, so you see AI bugs without writing a call first:
+
+| Category | What the engine records |
+| --- | --- |
+| `AI.Navigation` | Each finished path request as a line from start to destination, green with its waypoint count or red when it failed |
+| `AI.Perception` | A directed attention point, a noise as a sphere of its loudness, and damage as a point with the instigator |
+| `AI.BehaviorTree` | A behavior tree starting on an entity |
+| `Physics.Constraint` | A constraint breaking, with the force and torque against its limits |
+
+Switch a category off with `SetCategoryEnabled` when it is too chatty.
+
+## Save and load a recording
+
+**Save** writes the ring to `<Project>/Saved/VisualLogger/Latest.mvlog`, and **Load** replaces the ring with that file, so a bug caught on a server or a colleague's machine can be scrubbed later with recording off. From code, `SaveRecording(path)` and `LoadRecording(path, append)` take any path, and `SerializeRecording` returns the bytes. A truncated or foreign file is refused and the current ring is left as it was.
+
+## The panel
+
+<Steps>
+<Step title="Scrub">
+The strip under the toolbar is the timeline: one bar per slice of frames, taller where more was logged and coloured by the worst verbosity there (grey for text, amber for warnings, red for errors). Click or drag on it to move the cursor.
+</Step>
+<Step title="Step">
+**&lt;** and **&gt;** move one frame. **|&lt;** and **&gt;|** jump to the previous and next frame that has an entry.
+</Step>
+<Step title="Read">
+The list shows the entries of the last 180 frames up to the cursor, with the ones on the cursor's frame highlighted: frame, `[category]`, owner, text and the number of shapes.
+</Step>
+<Step title="Filter">
+The text box filters messages and shape labels. **Show** cycles All, Warnings+ and Errors. The chips switch categories off and on for viewing.
+</Step>
+</Steps>
+
+**Live** keeps the cursor on the newest frame while you play. Grabbing the timeline leaves Live and the cursor stays on its frame while newer entries arrive; if the ring wraps past it, the cursor moves to the oldest frame still held. **Clear** empties the recording.
+
+**Shapes** draws the cursor frame's shapes in the level viewport, so with Play paused and the cursor on the frame, the path or goal the AI had at that moment appears where it was.
+
+## Related
+
+- [Output Log, console and Message Log](/docs/editor/logs/)
+- [Play in editor](/docs/editor/play-in-editor/)
+- [Plugins and extensions](/docs/editor/plugins/)

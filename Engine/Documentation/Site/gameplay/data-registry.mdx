@@ -1,0 +1,93 @@
+---
+title: Data Registry
+description: Name registries of data tables and data assets, look items up by id, load them asynchronously, and let plugins add their own rows at runtime.
+order: 10
+sources:
+  - Engine/Source/Runtime/AssetSystem/Public/AssetSystem/DataRegistry.h
+verifiedAt: b90619b27
+status: in-development
+---
+
+A **Data Registry** is a named collection of items that the game asks for by id, such as `Items:Sword` or `Quests:FindTheKey`. Where an item lives is the registry's business, not the caller's. Game code holds a `FDataRegistryId` instead of a table path, so rows can move between tables, a plugin can add its own, and a later source can replace a row without the caller changing.
+
+Use a registry when one kind of data (items, creatures, quests) comes from several tables or from content a plugin adds. For a single table, a Data Table asset is enough.
+
+## Registries and sources
+
+A registry has a name and an optional row type. Its **sources** are where the items come from:
+
+| Kind | Path means | Items |
+|---|---|---|
+| `DataTable` | a data table asset | one per row, named by the row |
+| `DataAsset` | a data asset | one, named by `Item` or else the file name |
+| `PrimaryAssetType` | a primary asset type from the Asset Manager | one per primary asset of the type |
+
+When two sources hold the same item name, the higher `Priority` wins. A source with an `Owner` (a plugin or a Game Feature) is removed in one call when that owner goes away, and the next source down answers again.
+
+When the registry names a row type, a source with another row type is refused with a message that names both.
+
+## Declaring registries in settings
+
+Registries and their sources are rows in `Config/DefaultGame.ini`. A plugin can ship the same rows in its own `Config/DefaultGame.ini`; they are laid under the project's.
+
+```ini title="Config/DefaultGame.ini"
+[/Script/Mowo.DataRegistrySettings]
++Registries=(Name="Items",RowType="ItemRow",Description="Everything a player can carry")
++Sources=(Registry="Items",Kind=DataTable,Path="Content/Data/Items.data")
++Sources=(Registry="Items",Kind=DataTable,Path="Content/Data/Items_Event.data",Priority=5)
++Sources=(Registry="Props",Kind=DataAsset,Path="Content/Data/Crate.data")
+```
+
+The settings load when a project opens and unload when it closes.
+
+## Looking items up
+
+`Acquire` loads whatever the item needs and calls back on the main thread. When everything is already resident the callback runs at once.
+
+```cpp title="Shop.cpp" wrap
+#include <AssetSystem/DataRegistry.h>
+
+Mowo::FDataRegistryId id = Mowo::FDataRegistryId::FromString("Items:Sword");
+Mowo::FDataRegistry::Get().Acquire(id, [](const Mowo::FDataRegistryAcquireResult& result) {
+	if (!result.bSuccess) {
+		return;
+	}
+
+	const void* row = result.Row;
+	(void)row;
+});
+```
+
+A result keeps its asset alive for as long as you hold it. `As<T>()` returns the row as your struct, or nothing when the row type is not `T`. `GetCachedRow<T>` answers from what is loaded already without starting a load.
+
+`AcquireRegistry` loads every source of a registry, for a loading screen. `Tick` completes pending loads; every world's Game Feature subsystem ticks it each frame, and a load that has not finished after `kMaxPendingTicks` ticks fails with a timeout message.
+
+`ListItems` returns the items the registry knows without loading anything more: rows of a table appear once that table has been loaded, data assets and primary assets are known up front. Each entry says which source provides it, who owns the source and whether it is loaded.
+
+## Plugins and Game Features
+
+Code that adds content at runtime registers a registry and sources under its own owner name:
+
+```cpp title="MyPlugin.cpp" wrap
+#include <AssetSystem/DataRegistry.h>
+
+Mowo::FDataRegistrySource source;
+source.Path = "Plugins/MyPack/Content/Weapons.data";
+source.Owner = "MyPack";
+source.Priority = 1;
+Mowo::FDataRegistry::Get().AddSource("Items", source);
+```
+
+On shutdown call `RemoveSourcesOwnedBy("MyPack")`. A [Game Feature](/docs/gameplay/game-features/) does this for you with its `AddDataRegistrySource` and `RegisterDataRegistry` actions.
+
+## In the editor
+
+The **Gameplay Data** panel (Window menu, from the Gameplay Data Browser plugin, on by default) lists every registry with its sources and the items known so far, marks the loaded ones, and has a **Load** button that loads a registry's sources.
+
+## Over MCP
+
+With the editor's MCP server an agent can list the registries (`data_registry_list`), the items of one (`data_registry_items`, with `load` to read table rows first) and where one item comes from (`data_registry_find`). Open the source asset with the data table tools to read or edit the row.
+
+<Callout type="note">
+Registries are not cooked as a unit. List the tables and data assets that feed a registry as primary assets with an always-cook rule when a packaged game must have them.
+</Callout>

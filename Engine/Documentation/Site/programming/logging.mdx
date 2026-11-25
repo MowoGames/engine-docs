@@ -1,12 +1,15 @@
 ---
 title: Logging
-description: Log macros and levels, declaring log categories and their verbosity, the log console command, -LogCmds and [Core.Log], once-only and rate-limited lines, what release builds keep, and where log files are written.
+description: Log macros and levels, log categories and verbosity, the log command, -LogCmds and [Core.Log], rate-limited lines, what release builds keep and where logs go.
 order: 12
 sources:
   - Engine/Source/Runtime/Logging/Public/Logging/Logger.h
+  - Engine/Source/Runtime/Logging/Public/Logging/MessageLog.h
+  - Engine/Source/Runtime/Logging/Public/Logging/StructuredLog.h
   - Engine/Source/Runtime/Core/Public/Core/Constants.h
   - Engine/Source/Runtime/Core/Public/Core/AppDataPath.h
-verifiedAt: 026f26db8
+  - Engine/Source/Runtime/Core/Public/Core/FScreenMessages.h
+verifiedAt: c6c835140
 ---
 
 The Logging module writes every message to a set of sinks: the console, a log file, and in the editor the Output Log. Messages carry a level and a category, and each category has its own threshold you can change at run time. <Source symbol="Logger" />
@@ -26,7 +29,7 @@ MOWO_LOG_ERROR("Device lost");
 MOWO_LOG_DEBUG("Streaming pass done");
 ```
 
-The macros take a `printf`-style format. The levels, quietest first, are Unreal's verbosities under the engine's names:
+The macros take a `printf`-style format, and the compiler checks it: a `%d` given a `size_t` or a `%s` given a `std::string` is a `-Wformat` warning at the call site instead of undefined behaviour at run time. The levels, quietest first, are Unreal's verbosities under the engine's names:
 
 | Level | Unreal name | Macro | Where it goes by default |
 | --- | --- | --- | --- |
@@ -35,7 +38,7 @@ The macros take a `printf`-style format. The levels, quietest first, are Unreal'
 | `Info` | Log | `MOWO_LOG_INFO` | Log file and console; the Output Log shows it for your own categories |
 | `Display` | Display | `MOWO_LOG_DISPLAY` | Everywhere, the Output Log included |
 | `Warning`, `Error` | Warning, Error | `MOWO_LOG_WARN`, `MOWO_LOG_ERROR` | Everywhere |
-| `Fatal` | Fatal | `MOWO_LOG_FATAL` | Everywhere; never compiled out |
+| `Fatal` | Fatal | `MOWO_LOG_FATAL` | Everywhere; never compiled out. Writes the line, flushes the log, writes a crash report and aborts, so use it only where the process cannot go on. A failure you can recover from is `Error` |
 
 | Helper | What it does |
 | --- | --- |
@@ -60,6 +63,41 @@ MOWO_LOG_CAT(LogAI, Warning, "lost the path: %s", name);
 ```
 
 A category your game module or plugin defines is your own: the editor's Output Log shows its `Info` lines, where it hides the engine's below `Display` unless **Show engine logs** is on. Define the category once and export it: an inline definition would give every DLL its own copy, and changing the level would reach only one of them. A message below its category's threshold costs one atomic load and is dropped before its arguments are formatted.
+
+## Posting to the Message Log
+
+A log line is for the person reading the file. When the problem is about an asset, an actor or a line of source, post it to the Message Log as well: the entry carries that target, so the editor's Message Log window can open it with a click. `FMessageLog` is in Logging, so a game module or a plugin posts without linking the editor, and a build without an editor simply keeps the entries in a bounded ring (2000). <Source symbol="FMessageLog" />
+
+```cpp nocompile
+#include "Logging/MessageLog.h"
+
+FMessageLog::Get().RegisterPage("MyGameQuests", "Quest checks");
+
+FMessageEntry entry;
+entry.Severity = EMessageSeverity::Warning;
+entry.Page = "MyGameQuests";
+entry.AddText("Quest has no reward: ").AddAsset("Content/Quests/Rescue.quest");
+FMessageLog::Get().Post(std::move(entry));
+```
+
+Pages are open: register one by id and label, or just post to an id, which registers it. The editor's own pages have ids in `FMessageLogPages` (`Pie`, `MapCheck`, `AssetCheck`, …); posting to one of those lands on the same page the editor's checks use. Tokens are text, an asset path, one or more actor ids, a source file and line, or an editor command. `AddObserver` lets your own tool follow the stream.
+
+## On-screen debug messages
+
+`MDebugStatics::PrintString` (the Visual Scripting Print String node) writes to the log and, for its duration, to an on-screen list that the debug HUD draws at the top left of the game view, newest line on top, as shadowed text with no background. `PrintStringKeyed` takes an integer key: printing again with the same key replaces that line and restarts its timer, which suits a value you update every frame; key -1 always adds a line. Identical unkeyed lines collapse into one with a repeat count (`text x3`). Lines age on real time, so a paused world does not freeze them, and the last half second fades. A negative duration only logs. The timed Draw Debug shapes do nothing in `release` builds.
+
+From C++ call `FScreenMessages::Add(key, seconds, color, text)` from `Core/FScreenMessages.h`; it is safe from any thread. <Source symbol="FScreenMessages" />
+
+| Console variable or command | Effect |
+| --- | --- |
+| `ui.ScreenMessages` | 1 (default) collects and draws the list; 0 drops new lines |
+| `ui.ScreenMessages.MaxLines` | The most lines drawn at once (24) |
+| `ui.ScreenMessages.MessageLogSeverity` | Also show Message Log entries: 0 off (a game's default), 1 errors, 2 errors and warnings |
+| `ui.ScreenMessages.MessageLogPages` | Which pages are shown, `Pie,Scripts` by default |
+| `ui.DebugOverlays.Hide` | 1 hides the messages and the `stat` displays without clearing them, for a screenshot |
+| `DisableAllScreenMessages`, `EnableAllScreenMessages`, `ToggleAllScreenMessages` | Console commands for `ui.ScreenMessages` |
+
+A game build prints a faint "DisableAllScreenMessages to suppress" line under the messages. The editor's screenshot automation and the MCP `screenshot` tool take `nooverlays` to hide the overlays for one capture.
 
 ## Changing a category's verbosity
 
@@ -99,6 +137,37 @@ Every category starts at `Info` in every build, so a `Debug` line is quiet until
 
 Outside `release` and `profile` builds a flood guard watches each category. When one writes more than 20 lines a second for three seconds in a row, it warns once, naming the call site that wrote the most. `FloodGuardLinesPerSecond=` under `[Core.Log]` changes the budget; `0` turns the guard off.
 
+## Fields on a line
+
+A plain `printf` line is easy to read and hard to aggregate. `MOWO_LOG_FIELDS` appends named values to the message as ` key=value` pairs, quoting a value that has a space, quote or equals sign, so a log collector splits it without a regular expression per message:
+
+```cpp nocompile
+#include "Logging/StructuredLog.h"
+
+MOWO_LOG_FIELDS(LogNetwork, Warning, "client dropped", FLogFields().Add("client", id).Add("reason", why).Add("rtt_ms", rtt));
+```
+
+```text
+[WARN] [LogNetwork] client dropped client=17 reason="timed out" rtt_ms=412.5
+```
+
+The field list is built only when the category is active. `MOWO_LOG_FIELDS_DEFAULT(Level, message, fields)` uses the module's default category. <Source path="Engine/Source/Runtime/Logging/Public/Logging/StructuredLog.h" />
+
+## Frame and thread on each line
+
+Every line is stamped with the engine frame it was written on and a small id for the writing thread (1 is normally the main thread). Both are off in the printed line, so the format tools already parse is unchanged. Turn them on to match a line with a profiler capture or a Visual Logger frame:
+
+```text
+log prefix frame thread      [12:00:01.123] [F4812] [T00001] [WARN] [LogAI] lost the path
+log prefix none
+```
+
+`--logprefix=frame,thread` on the command line and `LinePrefix=Frame,Thread` under `[Core.Log]` do the same at startup.
+
+## Logs in the profiler
+
+In a build with Tracy, warnings and errors are posted to the capture's message timeline next to the frame they happened in. `log tracy all` posts every line, `log tracy off` none; `--logtracy=all` and `ProfilerForward=All` under `[Core.Log]` set it at startup.
+
 ## Release builds
 
 A `release` or `profile` build passes no source file names into the binary, and messages below a compile-time floor are removed entirely, format string included. The floor is Info by default; `mbt package --log-floor warning` raises it. See [Shipping](/docs/shipping/).
@@ -107,6 +176,20 @@ A `release` game keeps its console and file logs off unless it is started with `
 
 ## Where files go
 
-With a project open, logs go to `<Project>/Saved/Logs/`. Without one they go to the per-user folder, `%LOCALAPPDATA%\MowoEngine\Saved\Logs\` on Windows (a packaged game uses its own product name instead of `MowoEngine`). Files are named `Mowo_<date>_<time>_<pid>.log`, and the newest five per folder are kept. <Source path="Engine/Source/Runtime/Core/Public/Core/Constants.h" />
+With a project open, logs go to `<Project>/Saved/Logs/`. Without one they go to the per-user folder, `%LOCALAPPDATA%\MowoEngine\Saved\Logs\` on Windows (a packaged game uses its own product name instead of `MowoEngine`). Files are named `Mowo_<date>_<time>_<pid>.log`, and the newest five per folder are kept. `Mowo-latest.log` in the same folder always leads to the newest session's file (a hard link to it, or a symbolic link where hard links are not available), so a script or a bug report template can name one file. When an editor and its Play in editor clients share a folder, the last one to start owns the name. <Source path="Engine/Source/Runtime/Core/Public/Core/Constants.h" />
+
+### The startup log
+
+A host that is slow to its first frame cannot be diagnosed from `Mowo_*.log`: that file opens inside `Engine::Initialize`, and the project's `Saved/Logs` exists only once a project is routed. So every host also writes `Startup_<date>_<time>_<pid>.log` to `<state root>/<Product>/Saved/Logs/` (under `--app-data=<dir>` when the process was given one), from the first line of `main`. It is a plain file, flushed as each line is written, and the newest eight are kept apart from the session logs. A packaged `release` game writes it only with `--log` or `--startup-trace`. <Source symbol="FStartupTrace" />
+
+```text
+[    0.182 s] startup: phase 'Creating window' took 17 ms
+[    0.639 s] startup: phase 'Probing GPU drivers' took 2906 ms
+[    6.935 s] startup: engine initialized after 6935 ms
+```
+
+Each line names a phase and how long it took. When one phase runs longer than `startup.StallWarnSeconds` (60) before the first frame, the file and the log say which one: `startup: STALLED in phase 'Indexing scenes' for 61.0 s; the last completed phase was 'Queueing asset imports'`. With the crash watchdog attached, a report with every thread's stack is written next to the crash logs as well. A host that stops being watched when the engine is up (any but the editor) never raises it later; an error box is not reported as a stall.
+
+`--startup-trace[=<file>]` also writes the timeline as tab-separated name, start and duration in milliseconds, rewritten after every phase so a start that never finishes leaves it behind; without a path it goes beside the startup log as `<log>.phases.tsv`.
 
 The file sink buffers lines and writes them on a background thread, so a slow disk never stalls the thread that logs. `Logger::Flush()` writes the buffer on demand, and the crash handler flushes it before it copies the log next to a crash dump.

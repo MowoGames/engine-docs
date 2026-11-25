@@ -1,0 +1,101 @@
+---
+title: Replays and spectating
+description: Record a match to a .mreplay file, play it back with seek and speed, let spectators watch read-only, and cut to a kill-cam from the killer's side.
+order: 10
+status: in-development
+sources:
+  - Engine/Plugins/Replay/Replay.mplugin
+  - Engine/Plugins/Replay/Public/ReplayPlugin/ReplayFormat.h
+  - Engine/Plugins/Replay/Public/ReplayPlugin/ReplayRecorder.h
+  - Engine/Plugins/Replay/Public/ReplayPlugin/ReplayPlayer.h
+  - Engine/Plugins/Replay/Public/ReplayPlugin/ReplaySpectator.h
+  - Engine/Plugins/Replay/Public/ReplayPlugin/ReplayKillCam.h
+  - Engine/Plugins/Replay/Public/ReplayPlugin/ReplaySession.h
+  - Engine/Plugins/Replay/Public/ReplayPlugin/MReplayStatics.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
+verifiedAt: 55f27937c
+---
+
+The **Replay** plugin records what a client would have been told during a match, plays it back in a separate spectator scene, and reuses the same machinery for read-only spectators and for a kill-cam. Enable it in **Project Settings > Plugins**. It is off by default.
+
+## How a recording works
+
+The recorder is a virtual peer on the host. It receives the replicated stream (spawns, snapshots, state and multicast RPCs) exactly as a connected client would, sees every object whatever its distance, and has none of the host's authority. The stream is cut into chunks of about a second:
+
+- A **checkpoint** chunk starts with every object's spawn and full state, so playback can begin there on its own. One is written every `replay.CheckpointSeconds`.
+- **Delta** chunks between checkpoints carry only what changed.
+
+Chunks are compressed with zstd. The file is written as it grows, so a match that crashes leaves a replay that plays up to the last finished chunk. The header carries the game build, map, engine version, replication protocol and replicated-component schema. A replay recorded by a build with a different protocol or schema is refused with a message instead of being decoded into the wrong components.
+
+The file format itself is additive: a build opens every format version from 1 up to its own, and reads a field an older version lacks as empty (version 2 added the platform the match was recorded on). A replay written by a newer format is refused with a message that names its version and the versions this build reads.
+
+Recordings go to `Saved/Replays/` as `.mreplay` files.
+
+## Recording from Visual Scripting or the console
+
+| Visual Scripting node | Console | Does |
+|---|---|---|
+| `StartRecording` | `replay.record [label]` | Records the running match to a file. |
+| `StopRecording` | `replay.stop` | Finishes the file and returns its path. |
+| `AddBookmark` | `replay.bookmark <name>` | Marks the moment so playback can jump to it. |
+| `RecordKill` | | Marks a kill, with killer, victim and weapon. |
+| `PlayReplay` | `replay.play <file>` | Opens the recording in a spectator scene. |
+| `PauseReplay`, `ResumeReplay` | `replay.pause` | Pauses and resumes. |
+| `SetReplaySpeed` | `replay.speed <x>` | 0.05 to 16 times normal speed. |
+| `Seek`, `SeekToBookmark` | `replay.seek <seconds>` | Jumps to a time or a bookmark. |
+| `StopReplay` | `replay.stopplay` | Returns to the match. |
+| `KillCam` | | Replays the last seconds from the killer's side. |
+| `ListReplays` | `replay.list` | Lists the files in `Saved/Replays/`. |
+
+Record on the host: the dedicated server or the listen server's host. A client that is not the authority has nothing to record.
+
+## Playback and seeking
+
+A replay plays into its own scene, built from the map the recording names, with replicated objects spawned the way a joining client's would be. Your live scene is not touched; while a replay plays the spectator scene is the active one and the live scene keeps updating behind it so a network session does not time out.
+
+A seek finds the nearest checkpoint at or before the target, empties the spectator scene, applies the checkpoint and fast-forwards the later packets to the target. Its cost is bounded by the checkpoint interval, not the length of the match.
+
+<Callout type="note">
+Only replicated state is replayed. Props that are not replicated and are simulated by physics in the spectator scene can drift from what the match showed. Particles, sounds and other client-side effects are not part of the stream.
+</Callout>
+
+## Spectators and cameras
+
+The spectator camera has four modes, set with `SetSpectatorMode`:
+
+| Mode | Behaviour |
+|---|---|
+| Free | Fly anywhere with movement and look input. |
+| Follow | Trail a replicated object. |
+| Orbit | Circle a replicated object. |
+| First person | Look out of a replicated object. |
+
+A target is a network id, so it stays valid when a checkpoint recreates the object. `CycleSpectatorTarget` steps through the networked objects.
+
+A live match can also admit **spectators** (see below): connections marked read-only on the host. A spectator sees every object, its acknowledgements are honoured, and anything else it sends (input, RPCs, state) is dropped and counted. The number of spectator slots is `replay.MaxSpectators`. Your join flow decides who is a spectator and admits them with `FReplaySpectatorSlots::Admit`.
+
+## Kill-cam
+
+While a match is recorded with `replay.RingSeconds` above zero the recorder also keeps the last seconds in memory, starting at a checkpoint. `KillCam(killer, victim)` copies that ring into a spectator scene, seeks to `replay.KillCamSeconds` before now and plays to the moment of the kill with the camera in the killer's eyes. When it ends the live scene and its camera are handed back.
+
+## Joining a live match as a spectator
+
+`replay.spectate <address> [port]` (or the `JoinAsSpectator` node) joins a host as a read-only spectator. The host admits it through the same join handshake, up to `replay.MaxSpectators`, and refuses it with a message when the slots are full or the host does not run the Replay plugin. A spectator gets no player, pawn or roster entry; it sees the whole match and gets a free-fly camera that you can switch with `SetSpectatorMode`. `replay.leavespectate` leaves.
+
+## What a recording contains
+
+The recording holds everything a client would be told: spawns, destroys, snapshots, state, fast-array and owner changes, and every multicast RPC, including the large ones that travel as blobs. It does not hold RPCs addressed to one player (`SendRpcToClient`), because they are often private to that player and a replay file can be opened by anyone. Install a handler with `FReplayPlayer::SetRpcHandler` to play multicast effects and announcements back.
+
+## The Replay Browser
+
+With the plugin enabled the editor adds a **Replay Browser** dock panel (**Window > Plugins**). It lists the files in `Saved/Replays/` with their label, date, map, length, size and engine version, and each row has **Play** (opens the recording in a spectator scene) and **Delete**. **Tools > Stop Replay** returns to the level. A file from a build with a different replication protocol is shown but cannot be played.
+
+## Console variables
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `replay.RingSeconds` | 15 | Seconds kept in memory for the kill-cam; 0 turns the ring off. |
+| `replay.CheckpointSeconds` | 10 | Seconds between checkpoints. |
+| `replay.ChunkSeconds` | 1 | Seconds of stream per chunk. |
+| `replay.KillCamSeconds` | 6 | Seconds before the kill the kill-cam starts. |
+| `replay.MaxSpectators` | 4 | Read-only spectator connections the host admits. |

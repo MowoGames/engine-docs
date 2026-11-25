@@ -1,0 +1,122 @@
+---
+title: macOS signing and notarization
+sidebarTitle: macOS notarization
+description: Sign a macOS game with a Developer ID and the hardened runtime, notarize and staple it, and fix the usual rejections.
+order: 4
+verifiedAt: 6416350a4
+---
+
+A Mac only opens a downloaded game without a warning when the game is signed with an Apple **Developer ID** and **notarized** by Apple. `mbt package` does both when you give it a signing identity and a notarization profile. Without them it still signs the package ad hoc, so it runs on the Mac that built it, but Gatekeeper blocks it everywhere else, and the package log says so in one line.
+
+## What mbt package does on a Mac
+
+<Flow steps={["Stage binaries", "Embed content keys", "Sign inside out", "Verify", "Notarize and staple", "Module sign", "File manifest", "Disk image"]} highlight={2} caption="Signing runs after the last step that rewrites a binary and before anything that hashes one." />
+
+1. **Every binary is signed, inside out.** The packager finds each Mach-O file in the package by its header, not its name, so extensionless helpers and vendor libraries count. It signs every loose library and executable first, then each `.app` bundle, deepest first. A bundle's own executable is signed with the bundle. Third-party libraries such as the Steam API are signed again with your identity, which is what lets the game load them under the hardened runtime.
+2. **A Developer ID signature gets the hardened runtime** (`codesign --options runtime`), a secure timestamp (`--timestamp`) and the entitlements below, all of which notarization requires. An ad hoc signature is bare: no hardened runtime, no timestamp, no entitlements.
+3. **Each item is verified** with `codesign --verify --strict`, and each bundle with `--deep --strict`. A failure stops the package: a binary whose signature does not match its pages is killed at launch on Apple silicon.
+4. **The code is notarized.** With a notarization profile, the packager zips the signed binaries (never your content archives, which can be gigabytes), submits them with `xcrun notarytool submit --wait`, staples the ticket to the game's `.app` with `xcrun stapler staple`, and checks it with `spctl --assess --type execute`. Loose binaries cannot hold a ticket; Gatekeeper fetches theirs from Apple the first time they run.
+5. With `--installer`, the `.dmg`'s app is sealed with the same identity, the `.dmg` is signed, notarized and stapled too, and checked with `spctl --assess --type open`.
+
+Signing runs before the game's module signatures (`.mowosig`) and the file manifest, because both hash the signed bytes. Those steps only add files beside the libraries, never inside the `.app`, and the packager checks every bundle's seal again after them. A package whose bundle no longer verifies fails there instead of reaching a player's Mac.
+
+## Entitlements
+
+The hardened runtime blocks anything an app has not asked for. A game asks for one thing:
+
+| Entitlement | Why |
+|---|---|
+| `com.apple.security.device.audio-input` | Voice chat. Without it the microphone records silence and no permission prompt appears. |
+
+The game's `Info.plist` also carries `NSMicrophoneUsageDescription`, the sentence macOS shows when it asks the player for the microphone.
+
+A notarized game asks for nothing that weakens the runtime: no JIT, no unsigned executable memory, no library validation exception. Every library it loads is in the package and signed with your identity, which library validation accepts.
+
+An ad hoc package carries no entitlements, because it has no hardened runtime for them to lift. It cannot have one: an ad hoc signature has no team, so under the hardened runtime macOS refuses to load any of the game's own libraries ("different Team IDs") and the game quits before its first log line. Without the runtime the microphone is still gated by the `Info.plist` prompt.
+
+One Developer ID package does carry a library validation exception: a modular package made from an installed engine whose libraries keep the engine's own signature: they are signed by Mowo Games, so the host also gets `com.apple.security.cs.disable-library-validation`, and the log says so. Release packages are monolithic by default, so this rarely applies.
+
+<Callout type="warning">
+The Steam overlay injects a library into the game. Under the hardened runtime that needs `com.apple.security.cs.allow-dyld-environment-variables` and `com.apple.security.cs.disable-library-validation`, which the packager does not add. Without them the game runs on Steam but the overlay does not appear.
+</Callout>
+
+## One-time setup
+
+You need a paid Apple Developer Program membership. These steps are done once per machine that packages releases, by the account holder or an admin.
+
+1. **Create the certificate.** In Xcode, open **Settings > Accounts**, select your team, click **Manage Certificates** and add a **Developer ID Application** certificate. It lands in your login keychain. Check that it is there:
+
+   ```bash
+   security find-identity -v -p codesigning
+   ```
+
+   The line you want reads `Developer ID Application: Your Studio (TEAMID1234)`.
+
+2. **Store the notarization credentials.** Create an app-specific password at account.apple.com (**Sign-In and Security > App-Specific Passwords**), then save it in the keychain under a profile name:
+
+   ```bash
+   xcrun notarytool store-credentials mygame-notary --apple-id you@example.com --team-id TEAMID1234
+   ```
+
+   `notarytool` asks for the app-specific password and keeps it in the keychain. An App Store Connect API key (`--key`, `--key-id`, `--issuer`) works instead and suits a build machine. The profile name is all mbt ever sees.
+
+3. **Tell the project.** Add both names to `Config/Packaging.ini`. Neither is a secret: one names a certificate, the other a keychain entry.
+
+   ```ini
+   [packaging]
+   macSignIdentity=Developer ID Application: Your Studio (TEAMID1234)
+   macNotaryProfile=mygame-notary
+   ```
+
+## Configuration
+
+Each setting is looked up in this order: the mbt option, then the environment variable, then `Config/Packaging.ini`.
+
+| Setting | Option | Environment | `Packaging.ini` | Empty means |
+|---|---|---|---|---|
+| Signing identity | `--sign` | `MOWO_SIGN_IDENTITY` | `macSignIdentity` | Ad hoc |
+| Notarization profile | `--notarize` | `MOWO_NOTARY_PROFILE` | `macNotaryProfile` | Not notarized |
+
+`--sign -` forces ad hoc signing, for a machine without the certificate packaging a project whose `Packaging.ini` names one. Notarization needs a Developer ID; with a profile but no identity, the package is signed ad hoc and not notarized.
+
+```bash
+./mbt.sh package --project ~/Projects/MyGame/MyGame.mproject -c release --installer
+```
+
+A notarized package logs `Notarized: MyGame.app stapled, Gatekeeper accepts it`. Anything else logs one warning that starts with `macOS signing:` and says `NOT notarized`.
+
+## Check a package yourself
+
+```bash
+codesign --verify --deep --strict --verbose=2 MyGame/Binaries/osx-arm64/MyGame.app
+codesign --display --entitlements - MyGame/Binaries/osx-arm64/MyGame
+spctl --assess --type execute -vv MyGame/Binaries/osx-arm64/MyGame.app
+xcrun stapler validate MyGame/Binaries/osx-arm64/MyGame.app
+```
+
+`spctl` answers `accepted, source=Notarized Developer ID` for a notarized app, and `rejected` for an ad hoc one.
+
+## When Apple rejects it
+
+When the notary service rejects a submission, mbt fetches Apple's log (`xcrun notarytool log <id> --keychain-profile <profile>`) and prints it in the error. The usual causes:
+
+| Message in the log | Cause and fix |
+|---|---|
+| `The signature of the binary is invalid` | A binary was changed after it was signed. Something outside mbt rewrote the package; sign last. |
+| `The executable does not have the hardened runtime enabled` | A binary was signed by another tool without `--options runtime`. Repackage instead of re-signing by hand. |
+| `The signature does not include a secure timestamp` | Signed without `--timestamp`, or the timestamp server was unreachable. Check the network and package again. |
+| `The binary is not signed with a valid Developer ID certificate` | Ad hoc, an Apple Development certificate, or an expired or revoked Developer ID. Use a **Developer ID Application** certificate. |
+| `The binary uses an SDK older than the 10.9 SDK` | A vendor library built with an ancient SDK. Rebuild or replace it. |
+| `HTTP status code: 401` from `notarytool` | The profile's password was revoked or the team ID is wrong. Run `store-credentials` again. |
+
+Gatekeeper problems after notarization:
+
+- **"MyGame is damaged and can't be opened."** The download lost its extended attributes or a file was changed after stapling. Ship the `.dmg` or a zip made with `ditto -c -k --keepParent`, not one made by a tool that drops them.
+- **The game starts and quits at once, with no log.** A binary's signature no longer matches it. `codesign --verify --strict` on each file finds which one.
+- **No microphone prompt, voice chat silent.** The entitlement or `NSMicrophoneUsageDescription` is missing because the bundle was re-signed by hand. Repackage. Players who answered **Don't Allow** re-enable it in **System Settings > Privacy & Security > Microphone**.
+
+## Related
+
+- [Installers and code signing](/docs/shipping/installers-and-signing/)
+- [Package a game](/docs/shipping/package-a-game/)
+- [Shipping checklist](/docs/shipping/shipping-checklist/)

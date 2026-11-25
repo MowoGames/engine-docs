@@ -3,7 +3,7 @@ title: Output Log, console and Message Log
 sidebarTitle: Logs and console
 description: Read and filter every log line, jump to the source that printed it, run console commands, and work through the Message Log's actionable issues and Map Check.
 order: 20
-verifiedAt: 026f26db8
+verifiedAt: 146f8a93e
 ---
 
 The editor has two logs. The **Output Log** is what the engine and your game printed, in order, with the console at the bottom. The **Message Log** is the curated list of problems you need to act on, each with a link to the asset, actor or source it is about.
@@ -22,10 +22,12 @@ Like Unreal's, the Output Log keeps the engine's own detail out of your way. By 
 
 - every warning and error;
 - **Display** lines, the few the engine writes for you: the project opened, a level opened or saved, Play started, paused or stopped, a game module compiled, an import finished;
-- every line from your own categories at **Log** and above: your game module's (`LogGame` unless you declare your own), and what your scripts print (`Print`, Wolang output and Visual Scripting logpoints, under `LogScriptUser`);
+- every line from your own categories at **Log** and above: your game module's (`LogGame` unless you declare your own), and what your scripts print (`Print` and Visual Scripting logpoints, under `LogScriptUser`);
 - the answer to a console command you type here.
 
 The engine's Log-level lines (startup, device and subsystem detail) still go to the log file, where a bug report needs them. Turn on **Show engine logs** in the options menu to see them here too. Verbose lines reach neither the panel nor the file until you lower a category (see [Log verbosity](#log-verbosity)).
+
+The panel keeps the session: 100,000 lines by default, after which the oldest fall off. `editor.OutputLog.MaxEntries` changes the cap (1,000 to 2,000,000) and applies on the next tick; a larger cap costs memory and a slower filter change.
 
 Identical consecutive lines from the same place fold into one row with a `×N` count (**Collapse repeats**, on by default).
 
@@ -68,6 +70,17 @@ The line at the bottom of the Output Log runs console commands and variables. Ty
 
 `name` prints a variable's value; `name value` or `name=value` sets it; a console command such as `log` or `stat` runs with its arguments. The command and its result are echoed into the log under `[Cmd]`. Variables marked as cheats are refused when cheats are off, and read-only variables are refused everywhere. Every variable and command is listed in the [console variables](/docs/reference/console-variables/) and [console commands](/docs/reference/console-commands/) references.
 
+### The Console Variables browser
+
+**Window ▸ Content ▸ Console Variables** lists every registered console variable, including the many that no settings page has a control for.
+
+- The list on the left groups variables by the first part of their name (`r`, `net`, `editor`) with a count; **All** clears the group.
+- The search box matches the name or the description, and every word you type has to match. **Favourites** and **Changed** narrow the list to the variables you starred or that no longer hold their registered default.
+- Each row shows the current value, the default it registered with and **Set by**: which source holds the value (the constructor default, a quality tier, the project INI, code, the console or the command line). Edit the value and press <Kbd>Enter</Kbd> to set it as the console would; a value that does not parse, a read-only variable and a cheat variable are refused with the reason shown under the list.
+- The star keeps a variable in your favourites, saved per user, and the arrow resets it to its default. A reset also forgets what the project INI remembered for it.
+
+Values you set here last for the session. To keep one, put it under `[ConsoleVariables]` in the project config or use its settings page where it has one. The editor's own behaviour variables have one: **Project Settings ▸ Editor Behaviour**.
+
 ## The Message Log
 
 Open it with **Window ▸ Message Log**, <Kbd>Ctrl+6</Kbd>, or the message badge in the status bar. It can also come forward as a tool document beside the level.
@@ -84,10 +97,18 @@ One **page** is in front at a time. Each page is one producer's report:
 | Lighting | Reserved for lighting builds |
 | Packaging | Cook and package warnings and errors |
 | Source control | Git errors and refused saves |
+| C++ compiler | The errors and warnings of a failed game-module **Compile**, one row each; click the file and line to open the source there (shown only while it has messages) |
 | Load errors | Levels or assets that failed to load, open or save, and failed imports (shown only while it has messages) |
-| Play in editor | Multiplayer launch failures, server exits and travel failures (shown only while it has messages) |
+| Play in editor | Multiplayer launch failures, server exits and travel failures, and every warning and error your game logs while Play is running, each ending with the source file and line that printed it (shown only while it has messages) |
+| Your own pages | A game module or plugin registers a page with `FMessageLog::RegisterPage` and posts to it (see [Logging](/docs/programming/logging/#posting-to-the-message-log)). Up to eight such pages get a button, labelled as registered, shown while they have messages |
+
+A burst of errors during Play is capped at 200 rows a second on the Play in editor page; the Output Log still has every line.
 
 The filter row toggles **Errors**, **Warnings** and **Info** for the page, **Clear page** empties it, and a page that can re-run its check (such as **Re-run map check**) has that button. The Play in editor page clears when Play starts, Packaging when a cook starts, and Map Check is replaced by each run.
+
+### Errors on screen during Play
+
+An error posted to the Play in editor or Scripts page also draws over the viewport while Play runs, in red at the top left, so a failing game does not hide its problem behind the game view. The same error posted every frame is one line with a repeat count (`text x40`). **Editor Preferences ▸ Play ▸ Message Log errors on screen** turns it off. The console variable behind it is `ui.ScreenMessages.MessageLogSeverity` (0 off, 1 errors, 2 errors and warnings), with `ui.ScreenMessages.MessageLogPages` naming the pages (`Pie,Scripts` by default); a game starts with it at 0.
 
 ### Acting on a message
 

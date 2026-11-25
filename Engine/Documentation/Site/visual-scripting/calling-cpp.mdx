@@ -102,7 +102,7 @@ A **Call Function** node stores a function name. The VM resolves it like this:
 
 1. **Qualified name.** If the name has the form `Class::Function`, the VM finds that class and calls the function on its default object, or with no instance if the function is static. This is how the **Library** nodes such as `MGameplayStatics::SpawnActorByClass` work from any graph.
 2. **The running class.** Otherwise it walks the running instance's native class chain and takes the first match. `AActor` exposes functions such as `GetActorLocation`, `SetActorLocation`, `GetActorName` and `GetComponentByClass` this way <Source symbol="AActor" />. A Character class reaches `ACharacter`'s functions the same way.
-3. **Call On Target.** A **Call On Target** node resolves on the target object's class instead. If the target has no reflected function of that name but is a visual class, the VM runs the target's visual function in the target's own context, with the target's variables. A reflected method always wins over a visual function of the same name.
+3. **Call On Target.** A **Call On Target** node resolves on the target object's class instead. If the target has no reflected function of that name but is a visual class, the VM runs the target's visual function in the target's own context, with the target's variables. A reflected method wins over a visual function of the same name. When the reflected method is a [script event](/docs/programming/script-events/), the visual function of that name is its override and the call reaches it.
 
 A non-static function with no instance to call on logs "without a target instance" and does nothing. Answers are cached per thread and dropped whenever a class registers, unregisters or a module unloads.
 
@@ -120,7 +120,8 @@ A non-static function with no instance to call on logs "without a target instanc
 | `MClass*` | String class name |
 | `MObject*` and subclasses, such as `AActor*` | Object |
 | A registered `MSTRUCT`, `FTransform` | Struct (`Custom`) |
-| An unregistered struct, any container | Refused: the call is skipped with an error |
+| A vector, map or set of scalars, strings or object pointers | Copied in and out as an array, map or set pin |
+| An unregistered struct, a container of enums or structs | Refused: the call is skipped with an error |
 
 A non-const reference parameter, such as `Vec3& outLocation`, is an **out-parameter**. The node shows it as an output pin: pin 0 is the return value and pin *k* is the *k*-th out-parameter, in declaration order. A type that marshals through another pin (an enum, `FName`, `FRotator` and so on) cannot be an out-parameter; the header tool fails the build on one.
 
@@ -184,7 +185,7 @@ static bool OpenDoorFromCpp(Mowo::MWorld* world)
 | --- | --- |
 | It is per-actor behavior: a door, a pickup, a trap. | It is a reusable system other code calls. |
 | Designers need to tune and rewire it. | It runs on a hot path. |
-| It wires existing functions together. | It needs containers across the call boundary. |
+| It wires existing functions together. | It copies large containers across the call boundary every frame. |
 
 Expose the heavy lifting from C++ as `MFUNCTION`s, then compose it in a graph.
 

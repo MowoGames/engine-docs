@@ -10,7 +10,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/CapsuleShadows.h
   - Engine/Source/Runtime/Game/Public/Game/APointLightActor.h
   - Engine/Source/Runtime/Game/Public/Game/MPointLightComponent.h
-verifiedAt: 5922e6e5e
+verifiedAt: efef8f4ff
 ---
 
 Every light is a `LightComponent` on an entity, or one of the light actors that wrap it: `ADirectionalLightActor`, `APointLightActor`, `ASpotLightActor` and `ARectLightActor`. The Details panel builds its UI from the component's reflected fields, so what you see there is what this page describes. The renderer reads each light every frame; there is no light baking step.
@@ -24,9 +24,30 @@ Every light is a `LightComponent` on an entity, or one of the light actors that 
 | Spot | The entity's forward axis | Range window and cone | One tile in the local shadow atlas |
 | Rect (area) | Forward, with width along the right axis | Area integral and range window | One tile in the local shadow atlas, projected from the centre |
 
-Lights are culled into a froxel grid (clustered lighting), so a scene can hold many local lights; each pixel only evaluates the lights whose radius reaches it. Shadows are covered on the [Shadows](/docs/rendering/shadows/) page.
+Lights are culled into a froxel grid (clustered lighting), so a scene can hold many local lights; each pixel only evaluates the lights whose radius reaches it. Lights outside the view are culled before the grid is built. A froxel holds at most 128 lights. When one overflows, it keeps the lights nearest the camera and drops the most distant ones, and the renderer logs the count of overflowing froxels. Shadows are covered on the [Shadows](/docs/rendering/shadows/) page.
 
 <Screenshot id="rendering-lights-details-panel" alt="Mowo Editor Details panel for a selected spot light actor, showing the Light component with Type, Color, Intensity, Intensity Units and Color Temperature at the top, and the Shape, Shadows and Advanced categories expanded below" caption="A spot light in the Details panel." />
+
+## Several directional lights
+
+A scene may hold more than one directional light, for example a sun and a moon. Each carries a **Role** (Details, Directional category): Sun, Moon or Fill. The renderer elects two roles every frame. The **sky sun** is the Sun role over Fill over Moon, and among equals the brighter one, so a moon that outshines a setting sun never takes the sky from it: the atmosphere, the sun disc and the sky light always follow it. The **shadow owner** is the brightest directional light that is above the horizon. By day that is the sky sun, so a scene with a single directional light behaves exactly as before.
+
+The shadow owner is the primary light and owns everything expensive: the shadow cascades, virtual shadow maps, ray-traced sun shadows, contact and cloud shadows, capsule shadows from the sun, fog scattering and the Global Illumination sun. When the sun sinks below the horizon and a moon (or any other directional light) is above it, the moon takes the shadows over, so night scenes get moonlit shadows instead of none. A light that is not the owner is **secondary**: it lights opaque surfaces, translucent surfaces, volumetric fog (as an isotropic term) and reflection captures, but it casts no shadows and its contact length is ignored. When no directional light is above the horizon, the sun shadow chain does not run at all. Everything that depicts the light falling on the scene follows the shadow owner, so at night the moon also lights ray-traced reflection hits and the underwater light shafts, while the sky, the atmosphere and the sky light keep following the sky sun. The owner is tracked per view, so two viewports never disturb each other's handover.
+
+The owner changes with a small margin at the horizon (a light must rise 0.02 above it to take over, and an owner keeps the shadows until it sets 0.02 below) and the incumbent keeps a luminance advantage, so a moon and a setting sun never trade the shadows frame to frame. The handover is budgeted: the virtual shadow map serves the cascades while its pages are redrawn.
+
+| Setting | Effect |
+|---|---|
+| `r.Light.SecondaryDirectional` | Secondary directional lights shaded, 0 to 2. `-1` follows the quality tier: Low shades the primary light only, Medium and up shade two secondaries |
+| `r.Light.MoonIntensityScale` | Multiplier on the intensity of Moon-role lights, for tuning night brightness without touching the cycle |
+
+A **Moon** role light is also what the sky draws its moon disc from: the disc sits where the light is and shows the light's **Moon Phase** (0 new, 0.5 full, 1 new again) as a lit fraction. Without a Moon light the sky keeps its fixed anti-sun disc. The stars wheel with the sun's path as before; their brightness stays on the sky's Star and Moon layer settings.
+
+On the Low tier the moon contributes nothing but its disc, so the day-night component's **Night Tint** carries the mood instead: see [World environment](/docs/gameplay/world-environment/).
+
+## A level with no directional light
+
+When a level has no directional light, Play adds a default white sun so the scene is not black. That is the **Fallback Light** setting in World Settings (Environment, `fallback_light` in the `.mmap` Environment block), on by default. Turn it off for a level that is meant to be dark (a black sky, zero ambient, no lights): the level then renders only what its lights, ambient and sky put there. The editor viewport follows the setting in Play and in the game view; the editing view never injects the sun, so an unlit level looks dark while you author it. Asset previews and thumbnails always keep their own light.
 
 ## Common properties
 
@@ -41,7 +62,7 @@ Lights are culled into a froxel grid (clustered lighting), so a scene can hold m
 | Inner Angle, Outer Angle | Spot | Cone angles in degrees. |
 | Cast Shadows | All | On by default. |
 | Contact Shadow Length | All | Length of a screen-space contact shadow ray in metres. 0 is off. |
-| IES Profile | Point, spot | A photometric profile from an `.ies` file or a built-in preset. |
+| IES Profile | Point, spot, rect | A photometric profile from an `.ies` file or a built-in preset. The vertical curve and the horizontal planes of the file are both kept (16 azimuth planes per profile), so an asymmetric fixture such as a wall washer throws its own pattern. A point light's profile points along the light's own down axis, so rotating the light turns the pattern (an unrotated light points the profile at the ground, azimuth zero along world X); a spot's points along its aim axis and a rect light's along its forward axis, both with azimuth zero world-up-referenced, because a light has no roll. Volumetric fog has no rect lights, so a rect light's profile shapes the surfaces only. By default the profile only shapes the light's own Intensity (the curve is divided by its peak); **Use IES Intensity** on the light uses the file's measured candela instead, so set the light's Intensity to 1 for the luminaire's own brightness. |
 | Light Cookie | Point, spot, rect | A texture projected through the light. |
 | Light Function | Point, spot, rect | A material evaluated every frame and projected through the light. |
 | Light Channels | All | A bitmask that limits which meshes the light affects. |
@@ -66,8 +87,12 @@ The shadow fields (bias, resolution bias, near plane) are described on the [Shad
 
 Lux on a local light, or Lumens, Candela or EV100 on a directional light, behaves as Legacy.
 
+The inverse-square falloff is `intensity / max(distance², 1 cm²)`: a lamp at 0.25 m delivers its full candela over distance squared, with the floor only guarding the singularity at the light itself (the earlier +1 m² under-lit a surface half a metre away by a factor of five). One helper serves the deferred, forward, volumetric fog, MegaLights, Global Illumination and path-traced passes. New levels start with a Lux sun, a metering window of EV100 -10 to 20, the filmic tone operator and lights that are placed in lumens (800 lm for a point light, 1000 lm for a spot or rect light, from the Place Actors panel); levels saved earlier keep their Legacy sun, their old window and Legacy lights.
+
+There is no screen-space light-shaft pass. Shafts come from volumetric fog, which lights the air with the same shadows, cookies and IES profiles as the surfaces; a radial blur on top would double-count that scattering and cannot respect occlusion, so it is left out on purpose.
+
 <Callout type="note">
-Physical values are large: a clear-sky sun is around 100 000 lux. Scene color stores radiance multiplied by a pre-exposure scale that follows the previous frame's exposure (`r.PreExposure`, on by default), so bright scenes do not overflow the HDR targets. Use [auto-exposure](/docs/rendering/post-processing-and-volumes/) or a matching manual exposure with physical units.
+Physical values are large: a clear-sky sun is around 100 000 lux. Scene color stores radiance multiplied by a pre-exposure scale that follows the previous frame's exposure (`r.PreExposure`, on by default), so bright scenes do not overflow the HDR targets. Auto-exposure meters absolute luminance over about 30 stops, so a sun at 100 000 lux and a moon at 0.1 lux both expose correctly once the scene's **Min EV100** and **Max EV100** are widened to cover them (about -6 to 18); see [exposure](/docs/rendering/post-processing-and-volumes/#exposure). The default range suits Legacy units.
 </Callout>
 
 ## Area lights
@@ -88,14 +113,26 @@ A shadow-casting area light renders its shadow as a spot-style projection from i
 
 ## Cookies and light functions
 
-A **cookie** is a texture projected through the light that tints and masks it: a window grille, leaf dapple or a logo. Spot and rect lights project along their axis; point lights map the texture by direction. The cookie multiplies the light color.
+A **cookie** is a texture projected through the light that tints and masks it: a window grille, leaf dapple or a logo. Spot and rect lights project along their axis; point lights map the texture by direction; a directional light projects it along its direction onto the ground (below). The cookie multiplies the light color.
 
 A **light function** is a material instead of a texture, evaluated every frame. Pick a material in **Light Function**:
 
 - A material graph whose Output **Domain** is **Light Function** contributes its **Emissive**, evaluated over the light's projection with `Time` and the material's parameters, so it can animate.
 - Any other material contributes its base color times its albedo texture, like a tinted cookie.
 
-The result is clamped to 0 to 1: a light function filters light and never adds it. A light function replaces the light's cookie; sample the texture inside the function to combine them. Directional lights ignore light functions (use cloud shadows for the sun), and lights shaded by MegaLights render without theirs.
+The result is clamped to 0 to 1: a light function filters light and never adds it. A light function replaces the light's cookie; sample the texture inside the function to combine them. Lights shaded by MegaLights apply their IES profile, cookie and light function like any other. A surface with an extended lobe (clear coat, cloth sheen, anisotropy, subsurface, hair) keeps that lobe under a light MegaLights owns: the lobe is shaded inline, with a depth-march shadow where the base lobe uses the ray-traced one, so a light losing its shadow tile does not drop the surface back to plain GGX.
+
+### Directional light functions
+
+A directional light accepts a cookie or a light function too: canopy dapple, window gobos, drifting cloud shadows. Because the sun has no position, the pattern is laid on the world plane perpendicular to the light and repeats every **Light Function Scale** metres (Details, Advanced; default 10), so it slides over the ground as the sun moves. The sun is filtered by the pattern's brightness (a grey gobo); the light's own colour still tints. Only the primary directional light is filtered; secondary lights (moon, fill) are not. Translucent surfaces are filtered too.
+
+### In the fog
+
+Volumetric fog applies a light's IES profile, cookie or light function, and the sun's cookie or light function, to the light in the air, so a gobo throws a shaft with the same pattern the lit ground shows. This costs a few texture reads per fog light, inside the `r.VolumetricFog.MaxLocalLights` budget.
+
+### Rect light source texture and barn doors
+
+A rect light has a **Source Texture** (Details, Shape): the emitter shows that image, so a softbox with a pattern or a window throws a patterned light. The pattern is read where the lit surface projects onto the emitter plane, a single-sample approximation of a textured area light, and it applies to opaque surfaces. **Barn Door Angle** (0 to 89 degrees, 0 = off) confines the light to that half-angle around the emitter's forward axis. The doors are geometric: from a lit point, each pair of flaps shows only the strip of the emitter within the door angle of the point's own position, so the visible part of the rectangle is clipped to a smaller rectangle. A wide softbox under narrow doors throws only the slice the doors leave, and a point the doors hide completely gets no light. Disc and tube emitters keep a soft angle fade instead.
 
 ## Light channels
 
@@ -105,7 +142,7 @@ Channels scope **direct** light only. Ambient light, sky lighting, Global Illumi
 
 ## Contact shadows
 
-Set **Contact Shadow Length** to march a short ray through the depth buffer toward the light. It grounds small details such as feet, prop bases and cube edges that the shadow map's resolution or bias misses. It works for every light type. On the sun it is skipped when ray-traced shadows are on, because the traced ray is already exact at contact. The number of steps comes from the tier, and `r.ContactShadowSteps` overrides it.
+Set **Contact Shadow Length** to march a short ray through the depth buffer toward the light. It grounds small details such as feet, prop bases and cube edges that the shadow map's resolution or bias misses. It works for every light type. The result is soft: each step adds a partial occlusion that ramps in behind the surface and out past an occluder thickness derived from the step length and the depth, and the ray fades toward its end, so fine geometry gives a partial value instead of a binary crawl. On the sun it is skipped when ray-traced shadows are on, because the traced ray is already exact at contact. The number of steps comes from the tier, and `r.ContactShadowSteps` overrides it.
 
 ## Capsule shadows
 
@@ -114,7 +151,9 @@ A shadow map is too coarse to ground a character, and the sky light under a crou
 - **Indirect**: each capsule occludes sky and Global Illumination light beneath it.
 - **Sun**: a cone toward the sun gives a penumbra that is sharp at contact and softer further away.
 
-Local lights are not capsule-shadowed. The settings are on **Project Settings > Engine > Shadows**:
+- **Local lights**: the two shadow-casting point or spot lights nearest the capsules that hold no shadow tile or page (the budget denied them, or the tier uses the cheap screen-space fallback) are shadowed by the capsules too, with the same cone toward the light. Lights with a real shadow map are left to it.
+
+The settings are on **Project Settings > Engine > Shadows**:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -123,6 +162,7 @@ Local lights are not capsule-shadowed. The settings are on **Project Settings > 
 | `r.CapsuleShadows.DirectStrength` | 0.85 | How much a capsule shadows the sun |
 | `r.CapsuleShadows.SoftnessAngle` | 12 | Half-angle in degrees of the sun cone; wider is softer |
 | `r.CapsuleShadows.MaxDistance` | 4 | Distance along the sun ray over which the shadow fades out |
+| `r.CapsuleShadows.LocalLights` | 1 | 0 limits capsule shadows to the sun and the sky |
 
 ## Lights from code
 

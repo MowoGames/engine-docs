@@ -6,10 +6,11 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/FCrashHandler.h
   - Engine/Source/Runtime/Core/Public/Core/CrashReportClientSettings.h
   - Engine/Source/Runtime/Core/Public/Core/FAssertions.h
+  - Engine/Source/Runtime/Core/Public/Core/FDiagnosticReport.h
   - Engine/Source/Runtime/Core/Public/Core/Constants.h
   - Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h
   - Engine/Config/CrashReporting.example.ini
-verifiedAt: 8510fff13
+verifiedAt: f6c565a6a
 ---
 
 When a packaged game crashes, Mowo writes a report to disk and shows the player a crash dialog. With the player's consent the report goes to your own Sentry project, and with the build's symbols uploaded too, Sentry turns the raw dump into a readable call stack. A game that names no Sentry project keeps its reports on the player's disk.
@@ -101,6 +102,14 @@ Reports are never uploaded from the crashing process, whose heap may be corrupt.
 Crashes of Mowo Editor, Mowo Project Launcher and their crash reporter go to the engine team's Sentry project. A game in its own process never does: standalone or packaged, it uses the DSN you set, or none. Play-In-Editor runs inside the editor, so a crash there is an editor crash.
 </Callout>
 
+## Diagnostic reports without a crash
+
+For a desync or "it felt wrong" there is no crash to report, so a player can ask for a report. The console command `diag.Report [send] [note]` and the launch switch `--diagnostic-report[=send]` (with `--diagnostic-report-note=<text>`, written when the game exits) write a non-fatal report to the crash directory: the hardware and build tags every report carries, the tail of the log, the frame-time percentiles and hitch counts of the run, and a block from any module that registers one, the Replay plugin's recording state among them. A player-supplied note is cut to one line of 200 characters.
+
+Nothing leaves the machine by default: the report is saved and the log says where. Only `send` uploads it, once, to your `Dsn`, and only the player's own command or launch switch triggers that, so it needs no standing `bAgreeToCrashUpload`. A game with no `Dsn` or with `bEnabled=False` never sends it; the report stays on disk and is shown in the log. An upload that fails is retried at the next launch only if the player agreed up front, and the same endpoint backoff the crash uploader uses applies. A report holds no save data, input or screenshots; the log tail can contain paths from the player's machine, so say that where you ask for consent.
+
+Bind `diag.Report send` to a key or a menu button of your own to give players a "Report a problem" entry. A module adds its own block with `FDiagnosticReport::AddSection`.
+
 ## Symbols
 
 A minidump holds addresses, not function names. For the server to show a readable stack, it needs the build's symbols. Every configuration emits them, `release` included, and they stay beside the binaries in `Engine/Binaries/<platform>/<config>/`; they never ship in a package.
@@ -115,7 +124,9 @@ The symbols go to the game's own project: `--sentry-org` / `--sentry-project` on
 
 A machine without `sentry-cli` or an auth token skips the upload with a warning and keeps the archive.
 
-On Linux and macOS, `release` and `profile` packages first split debug information out of each shipped image into `<binary>.debug` or `<binary>.dSYM` beside the build, and those are what the archive and the upload pick up. This path has not run on a POSIX host yet.
+`--sentry-sources` adds source bundles to the upload (`sentry-cli --include-sources`), so a crash report shows the source lines of the crashing frames. `--symstore <dir>` also indexes the archived PDBs into a Windows symbol server directory with `symstore`, labelled with the product and build id, for WinDbg and Visual Studio; it needs the Debugging Tools for Windows from the Windows SDK. `mbt symbols` takes `--include-sources` and `--symstore` too.
+
+On macOS, a `release` or `profile` build writes `<binary>.dSYM` beside every executable and library as it links them. The image itself keeps no debug map, so it names none of your build machine's folders. The package keeps that `.dSYM` (its UUID matches the image) and strips the shipped copy. On Linux the package splits `<binary>.debug` out of each shipped image instead, and Linux and Android images are linked with a GNU build id (`--build-id=sha1`), the key a crash server matches a dump to its `.debug` file by; a package built from images linked before that change warns that they carry none, and relinking fixes it. The upload skips a `.debug` or `.dSYM` whose build id or UUID differs from the binary beside it (a split left over from an earlier build) and says so. The archive and the upload pick up either file. The Linux path has been exercised only on synthetic inputs so far: nothing has crashed a packaged build on a Linux host or a Steam Deck and read the symbolicated frame back from Sentry.
 
 To upload separately, use `mbt symbols`:
 
@@ -130,7 +141,7 @@ Point the upload at your own project:
 
 | Setting | Purpose |
 |---|---|
-| `SENTRY_AUTH_TOKEN` (environment) | Required. A token with upload rights. It is a secret; keep it in your CI secret store or shell, never in a file in the repository. mbt never logs it |
+| `SENTRY_AUTH_TOKEN` (environment) | Required. On a development machine you can store it in **Editor Preferences > Accounts** instead; the environment variable still wins. A token with upload rights. It is a secret; keep it in your CI secret store or shell, never in a file in the repository. mbt never logs it |
 | `SENTRY_URL`, `SENTRY_ORG`, `SENTRY_PROJECT` (environment) | Your Sentry's web address, organization and project |
 | `--url`, `--org` / `--sentry-org`, `--project` / `--sentry-project` | The same, on the `mbt symbols` command line |
 | `Engine/Config/CrashReporting.ini`, section `[CrashReporting]`, keys `Url`, `Org`, `Project` | A developer machine's defaults. Gitignored; copy `CrashReporting.example.ini`. An auth token in this file is ignored |

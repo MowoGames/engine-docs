@@ -1,0 +1,63 @@
+---
+title: Importing Alembic caches
+sidebarTitle: Alembic import
+description: Import Alembic point caches, transforms and cameras with the Alembic Importer plugin, and how an animated cache is baked into vertex animation.
+order: 8
+status: in-development
+sources:
+  - Engine/Plugins/AlembicImporter/AlembicImporter.mplugin
+  - Engine/Plugins/AlembicImporter/Public/AlembicImporter/AbcImportOptions.h
+  - Engine/Plugins/AlembicImporter/Public/AlembicImporter/AbcSceneBuilder.h
+  - Engine/Plugins/AlembicImporter/Public/AlembicImporter/AbcArchiveReader.h
+verifiedAt: c6c835140
+---
+
+The **Alembic Importer** plugin reads `.abc` files (the Ogawa format every current DCC writes) as source models. It goes through the same import path as FBX and glTF, so [importing](/docs/content-pipeline/importing/) works the same way. Enable **Alembic Importer** in the Plugins window; it is an editor plugin and games ship only the cooked result.
+
+<Callout type="warning">
+Alembic files are read through the Alembic library (version 1.8.8, Ogawa only), which the Windows editor includes. Builds for other platforms do not include it yet: there `.abc` files are refused with a message saying the library is missing.
+</Callout>
+
+## What carries over
+
+| Alembic | Imported as |
+|---|---|
+| Transforms | Nodes; a transform with several samples becomes an animation track |
+| Polygon meshes with normals and UVs | A mesh, welded and triangulated; missing normals are generated |
+| Cameras | A camera with the field of view from focal length and film back |
+| A mesh whose points change over time (a point cache) | Baked vertex animation, below |
+
+Subdivision surfaces, curves and point clouds are skipped with a warning. Face sets and materials are not imported: meshes use the default material.
+
+Alembic polygons are wound clockwise, the opposite of the engine, so the importer reverses every face. A mesh authored facing outward renders facing outward under backface culling.
+
+Every skipped or approximated object is listed in the import report of the imported model (the **Message Log** and the warning count on the asset), not only in the log file.
+
+Alembic stores no units and no up axis. The importer leaves both to the model import dialog's **Import Scale** and **Up Axis**, and the `abc.ImportScale` and `abc.ZUp` console variables set the starting values (Maya writes centimetres, so `0.01`; Blender and 3ds Max write Z-up).
+
+## Baked vertex animation
+
+An animated cache with more than 32 frames imports as a [geometry cache](/docs/content-pipeline/geometry-caches/): the importer writes a streamed `.gcache` asset and the mesh is frame 0. `abc.PointCacheAs` chooses the route: `0` automatic, `1` always a geometry cache, `2` always morph targets. Shorter caches, or `abc.PointCacheAs 2`, are baked into per-frame vertex animation on the mesh:
+
+- Frame 0 is the mesh. Every later frame becomes a morph target holding each vertex's offset from frame 0.
+- An animation clip named `AlembicCache` carries one weight track per target. Each ramps from 0 at the previous frame, to 1 at its own frame, to 0 at the next, so playback blends between frames exactly where the cache was sampled.
+
+Every frame is a full set of vertex offsets, so long caches are expensive. The importer keeps at most `abc.MaxBakedFrames` frames (default 120) and drops the rest evenly, and warns when it does. It reads only the frames it keeps, one at a time, and opens the archive by its path rather than loading the file, so a multi-gigabyte cache does not need that much memory. A cache whose vertex count changes over time cannot be baked; its first frame is imported with a warning.
+
+## Options
+
+Each option is a **Tools** menu entry while the plugin is enabled, backed by a console variable:
+
+| Menu entry | Console variable | Default |
+|---|---|---|
+| Alembic Import: Cameras | `abc.ImportCameras` | on |
+| Alembic Import: Bake Vertex Animation | `abc.BakeVertexAnimation` | on |
+| Alembic Import: Z-Up Source | `abc.ZUp` | off |
+| (console only) | `abc.MaxBakedFrames` | 120 |
+| (console only) | `abc.ImportScale` | 1 |
+
+With baking off, a point cache imports as its first frame.
+
+The console variables only seed the first import of a file. The options it used are stored with the imported model, so a **reimport** repeats them even if the toggles or console variables have changed since. To import a file differently, change the options and import it again as a new import.
+
+A source that only exists inside the project's packed content is copied to a temporary folder of its own for the import, together with the files beside it, and the folder is removed afterwards; two imports at once never share it.

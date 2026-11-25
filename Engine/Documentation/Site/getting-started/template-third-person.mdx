@@ -1,0 +1,73 @@
+---
+title: Third Person template
+sidebarTitle: Third Person
+description: "A third-person starter: a clothed hero on a full animation graph, a follow camera, a brick-lined plaza, footsteps, a quest and a scheduled NPC."
+order: 11
+sources:
+  - Templates/TP_ThirdPerson/README.md
+  - Templates/TP_ThirdPerson/ASSET_LICENSES.md
+  - Templates/TP_ThirdPerson/Config/TemplateDefs.ini
+  - Templates/TP_ThirdPerson/Content/Characters/Mannequins/ABP_Locomotion.animgraph
+  - Templates/TP_ThirdPerson/Content/Characters/Npc.animgraph
+  - Templates/TP_ThirdPerson/Content/Audio/Core/Footsteps/Default.cuegraph
+  - Templates/TP_ThirdPerson/Content/Blueprints/BP_ThirdPersonHero.vscript
+  - Templates/TP_ThirdPerson/Content/Blueprints/BP_ThirdPersonGameMode.vscript
+  - Templates/TP_ThirdPerson/Content/Blueprints/BP_QuestBoard.vscript
+  - Templates/TP_ThirdPerson/Source/TP_ThirdPerson/Private/TP_ThirdPerson.cpp
+  - Templates/TP_ThirdPerson/Source/TP_ThirdPerson/Public/TP_ThirdPerson/AThirdPersonPlayer.h
+verifiedAt: 12c4a67bc
+---
+
+The Third Person template starts in an urban plaza. A clothed Quaternius hero runs, jumps, crouches and interacts on a state machine, a follow camera orbits behind, and a quest board sends you to a supply crate while a watchman patrols on a daily schedule. Everything shipped is CC0 and listed in `ASSET_LICENSES.md` at the template root.
+
+## Controls
+
+| Input | Action |
+|---|---|
+| <Kbd>W</Kbd> <Kbd>A</Kbd> <Kbd>S</Kbd> <Kbd>D</Kbd> | Move, relative to the camera |
+| Mouse | Orbit the camera |
+| <Kbd>Space</Kbd> | Jump |
+| <Kbd>Left Ctrl</Kbd> | Crouch |
+| <Kbd>Left Shift</Kbd> | Sprint |
+| <Kbd>E</Kbd> | Interact |
+
+Rebind them in `Content/Input/IMC_Default.inputcontext`.
+
+## Variants
+
+| Variant | What you get |
+|---|---|
+| Explore | The plaza, the quest and the scheduled NPC, with the male hero |
+| Explore (female hero) | The same map; the player is the female hero (`AThirdPersonFemaleGameMode`) |
+| Melee combat | A walled arena on the same materials, with the Combat plugin enabled: sword on <Kbd>E</Kbd>, combos on the left mouse button, block and parry on the right, four target dummies |
+
+## How the character is built
+
+`Hero_Male.glb` and `Hero_Female.glb` each hold the mesh, its skeleton and the sixteen clips the template uses, so a graph state names a clip and nothing needs retargeting. The player is `BP_ThirdPersonHero`, a Visual Script class on `AThirdPersonCharacter`: its defaults name the mesh, `ABP_Locomotion.animgraph` and the footstep folder, and the engine character builds the body, turns it half a turn (glTF characters face +Z, the engine's forward is -Z), binds the graph and sets its parameters from the movement component every frame. All of it works the moment the project opens, without compiling anything. See [Character presentation](/docs/gameplay/character-movement/).
+
+| Parameter | Type | Set from |
+|---|---|---|
+| `Speed` | float | Horizontal velocity in m/s: the Walk, Jog and Sprint blend space samples sit at 2, 4.5 and 7.2 |
+| `Airborne` | bool | Not grounded: moves to JumpStart, then JumpLoop, then JumpLand on landing |
+| `Crouched` | bool | Crouch state: an idle and walk blend |
+| `Interact` | trigger | Fired by <Kbd>E</Kbd> |
+
+A `Footsteps` component added in `BeginPlay` plays `Content/Audio/Footsteps/Default.cuegraph`, a random pick of four sounds, every stride.
+
+## The level
+
+The map is a paved plaza made of 96 sidewalk tiles, with a two-lane street and its sidewalks along the north and south edges, ringed by six brick buildings from the Quaternius Downtown City kit: shopfronts, windows and cornices, with invisible box colliders. Bollards and planters line the edges, and a crosswalk and a stop marking are painted on the street. Each piece is one `.glb` that carries its own materials and textures (`Content/Environment/City`), so there are no `.mat` files to keep in step; the kit's vertex-colour masks were removed because the engine multiplies them into the base colour. Props are Poly Haven crates, barrels and furniture; four lamp posts carry point lights; a quiet engine hum plays as ambience. The sun is fixed at 10:30 and the sky is a Poly Haven HDRI. The combat variant's arena still uses the `Env_*.gltf` box meshes whose UVs repeat shared texture sets.
+
+The heroes wear the Peasant outfit of Quaternius' Modular Character Outfits pack on the Superhero head and skeleton, so the Universal Animation Library clips drive them unchanged; the outfit parts are a second skin over the same 65 joints. The watchman's `Npc.animgraph` switches between Idle and Walk on a `Speed` parameter: with the module built, `AThirdPersonPlayer` measures every Npc-graph entity's ground speed each frame and writes it there, so he idles when he stops. Without the module the parameter keeps its default and he walks.
+
+## Make it yours
+
+- Swap the character by importing another glTF with the same bone names and clips, and set `meshAsset` in `BP_ThirdPersonHero`.
+- Add a state in `ABP_Locomotion.animgraph` for a new clip; `Speed`, `Airborne`, `Crouched`, `Sprinting` and `AimPitch` are already written for you.
+- Replace the City pieces with your own level meshes; the combat arena's `Env_*` boxes use the images in `Content/Environment/Models/textures`.
+- Build the project module from the editor with **Build > Compile Game Module** to extend the player in C++; the hero already plays without it.
+
+## Related
+
+- [Animation](/docs/gameplay/animation/)
+- [Templates](/docs/getting-started/templates/)

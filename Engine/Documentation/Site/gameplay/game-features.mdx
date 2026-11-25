@@ -1,0 +1,101 @@
+---
+title: Game Features
+description: Ship optional gameplay as a Game Feature that adds components, tags, abilities, input mappings and data to matching actors while active, and removes them after.
+order: 11
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/GameFeatures.h
+  - Engine/Source/Runtime/Game/Public/Game/MGameFeatureSubsystem.h
+  - Engine/Source/Runtime/Game/Public/Game/InstanceComponents.h
+  - Engine/Source/Runtime/Game/Public/Gameplay/AbilitySystemComponent.h
+verifiedAt: b90619b27
+status: in-development
+---
+
+A **Game Feature** is a bundle of gameplay that is switched on and off as a unit: an optional co-op mode, a seasonal event, a set of abilities. It declares what it adds and to which actors. While it is active every matching actor has it, including actors that spawn later; when it is deactivated the engine takes it back. Nothing in the base game has to know the feature exists.
+
+## States
+
+| State | Meaning |
+|---|---|
+| Unregistered | Declared but blocked: its plugin is missing or off, or the project disabled it. `BlockedReason` says why. |
+| Registered | Known and allowed to load. |
+| Loaded | Its dependencies are present and it is ready to activate. |
+| Active | Its actions are applied. |
+
+Activating a feature loads it first and activates the features it depends on. Deactivating a feature deactivates the features that depend on it first. A dependency cycle is refused with a message.
+
+## Declaring a feature
+
+Features are rows in `Config/DefaultGame.ini`. A plugin ships its features in its own `Config/DefaultGame.ini`, so the feature exists exactly when the plugin is enabled in the project.
+
+```ini title="Config/DefaultGame.ini"
+[/Script/Mowo.GameFeatureSettings]
++Features=(Name="Flashlight",Plugin="HorrorPack",InitialState=Active,Dependencies=("Core"),Description="A torch for every player")
++Actions=(Feature="Flashlight",Type="AddComponent",ActorClass="ACharacter",RequiredTag="Player",ComponentClass="MFlashlightComponent",ComponentName="Flashlight")
++Actions=(Feature="Flashlight",Type="AddTag",ActorClass="ACharacter",RequiredTag="Player",Tag="Gear.Flashlight")
++Actions=(Feature="Flashlight",Type="AddInputMapping",Context="Content/Input/IMC_Flashlight.imc")
++DisabledFeatures=SeasonalEvent
+```
+
+- `Plugin` ties the feature to a plugin: it stays Unregistered while that plugin is not live.
+- `InitialState` is `Registered` (default), `Loaded` or `Active`; the engine moves the feature there when the project opens.
+- `DisabledFeatures` is the per-project switch. A disabled feature is declared but blocked.
+- Parameter names in an action are written in camel case in the file (`ActorClass`) and read in snake case (`actor_class`) by code.
+
+## Actions
+
+An action that targets actors names them with `ActorClass` (a class name; derived classes match) and `RequiredTag` (a Gameplay Tag; an actor with a child tag matches). At least one of the two is required, except for `AddInputMapping`, which applies to player controllers.
+
+| Type | Parameters | Does |
+|---|---|---|
+| `AddComponent` | `ComponentClass`, `ComponentName` (default: the class name), `AllowDuplicate` | Adds a component to each matching actor; the actor must not already have one of the class. |
+| `AddTag` | `Tag` | Adds a Gameplay Tag to each matching actor. |
+| `GrantAbility` | `Ability` | Grants an ability that C++ registered under that name with `FGameFeatureAbilities::Register`, to each matching actor that has an ability system. |
+| `AddInputMapping` | `Context`, `Priority` | Adds an input mapping context asset to each matching player controller. |
+| `AddDataRegistrySource` | `Registry`, `Path`, `Kind`, `Item`, `Priority` | Adds a source to a [Data Registry](/docs/gameplay/data-registry/), owned by the feature. |
+| `RegisterDataRegistry` | `Registry`, `RowType`, `Description` | Registers a Data Registry while the feature is active. |
+
+`AddComponent` takes the classes a designer can add to a placed actor in the editor: concrete components that do not publish an ECS mirror. Its component class must keep `OnRegister` free of effects outside the component, as for any instance component.
+
+Deactivating a feature removes the components, tags, abilities and input mappings it added, and removes its data registry sources. A tag the actor already had before the feature stays.
+
+### Your own action types
+
+```cpp title="MyGame.cpp" wrap
+#include <Game/GameFeatures.h>
+
+Mowo::FGameFeatureActionType type;
+type.OnActivate = [](const Mowo::FGameFeatureDesc& feature, const Mowo::FGameFeatureAction& action) {
+	(void)feature;
+	(void)action;
+};
+type.OnDeactivate = [](const Mowo::FGameFeatureDesc& feature, const Mowo::FGameFeatureAction& action) {
+	(void)feature;
+	(void)action;
+};
+Mowo::FGameFeatures::Get().RegisterActionType("MyAction", type);
+```
+
+Set `ApplyToActor` and `RemoveFromActor` as well for an action that works on actors: `ApplyToActor` returns true when it applied (and fills in a token it gets back on removal) and false when the actor does not match or is not ready yet; it is tried again on the next scan. Register action types from a game module's startup, before a feature that uses them is declared.
+
+## When actions reach actors
+
+The world's `MGameFeatureSubsystem` applies the active actions:
+
+- to an actor as it is registered in the world, before its Begin Play, so a spawned actor already has the feature;
+- to every actor when a feature activates;
+- again every quarter of a second, so an actor that gains a required tag later, or whose asset finished loading, is picked up.
+
+Worlds of the editor in edit mode are never modified, so a feature's components and tags are never saved into a level. Play In Editor and games are.
+
+## In the editor
+
+The **Gameplay Data** panel (Window menu, from the Gameplay Data Browser plugin, on by default) lists every feature with its state, plugin, dependencies and blocked reason, and has buttons to activate, deactivate, enable and disable it. The `cheat Feature <name> on|off` console command does the same from the console.
+
+## Activating from code and Visual Scripting
+
+`MGameFeatureSubsystem` exposes `ActivateFeature`, `DeactivateFeature`, `IsFeatureActive`, `GetFeatureState`, `GetFeatureCount` and `GetFeatureNameAt` to Visual Scripting. C++ uses `FGameFeatures::Get()` directly: `Activate`, `Deactivate`, `Load`, `Unload`, `SetFeatureEnabled`, `List` and `Subscribe` for a change callback.
+
+<Callout type="note">
+The state of a feature is shared by every world of the process. Plugins that go off while the game runs deactivate the features that name them within a second.
+</Callout>

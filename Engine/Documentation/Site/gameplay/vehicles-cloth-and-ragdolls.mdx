@@ -6,6 +6,7 @@ order: 10
 sources:
   - Engine/Source/Runtime/Physics/Public/Physics/Components/VehicleComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/VehicleSystem.h
+  - Engine/Source/Runtime/Game/Public/Game/MVehicleStatics.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/ClothComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/ClothSystem.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/RagdollComponent.h
@@ -14,7 +15,7 @@ sources:
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicsAsset.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/PhysicalAnimationComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicalAnimationSystem.h
-verifiedAt: 57ea8e727
+verifiedAt: 37c8653a1
 ---
 
 These features sit on top of the core [physics](/docs/gameplay/physics/) setup. Each is a reflected component you add from the Add Component picker and tune in the Details panel.
@@ -26,19 +27,26 @@ A `Vehicle` component turns a dynamic rigid body into a Jolt wheeled vehicle. <S
 | Group | Fields |
 | --- | --- |
 | Engine | `maxEngineTorque`, `minRPM`, `maxRPM`, `torqueCurve` (RPM fraction to torque fraction; empty uses Jolt's curve) |
-| Transmission | `gearRatios`, first gear first; empty uses a default automatic box |
+| Transmission | `transmission` (`Automatic` or `Manual`), `gearRatios` first gear first, `reverseGearRatios`, `shiftUpRPM` and `shiftDownRPM` for the automatic box and `shiftTime`; empty ratios use a default box |
+| Drivetrain | `differentialRatio` (the final drive), `limitedSlipRatio` and, when both axles are driven, `frontTorqueSplit` |
 | Steering and drive | `maxSteerDegrees`, `rearWheelDrive` |
 | Tires | `longitudinalFrictionCurve`, `lateralFrictionCurve` |
-| Stability | `antiRollStiffness`: the spring constant in N/m of a bar joining the left and right wheel of each axle; 0 is off |
+| Stability | `antiRollStiffness`: the spring constant in N/m of a bar joining the left and right wheel of each axle; 0 is off. `downforce` presses the car down with the square of its speed, and `maxTiltDegrees` keeps its up direction within that angle of the world up so it cannot roll onto its roof (180 is off) |
 | Wheels | `wheels`, one entry per wheel |
 
-Each wheel entry sets its chassis-local `position`, `radius` and `width`, whether it `steering`, is `driven` or takes the `handbrake`, its own `maxSteerDegrees`, suspension length, frequency and damping, brake torques and a friction scale. A six-wheel truck and a trike are the same component with a different table. When the table is empty, the four-wheel layout comes from `wheelRadius`, `axleOffset` and `trackHalfWidth`.
+Each wheel entry sets its chassis-local `position`, `radius` and `width`, whether it `steering`, is `driven` or takes the `handbrake`, its own `maxSteerDegrees`, suspension length, frequency and damping, brake torques and a friction scale. The mesh that turns with a wheel is named in `visualChildName`, a child of the vehicle; the older `visualChildIndex` still works but shifts whenever a child is added. A six-wheel truck and a trike are the same component with a different table. When the table is empty, the four-wheel layout comes from `wheelRadius`, `axleOffset` and `trackHalfWidth`.
 
 An anti-roll bar presses the outside wheel down and lifts the inside one in a corner. It is read every frame, so you can raise it while driving; a narrow, high car that rolls over in a hard turn stays on its wheels with a bar of a few tens of thousands. With `p.Debug 1` and `p.DebugVehicles 1` each wheel draws its suspension travel, green while it touches the ground and red while it hangs, and its contact normal.
 
 Drive it by writing the runtime inputs `throttle`, `steer`, `brake` and `handbrake` each frame. `currentRPM` and `currentGear` are written back for engine audio and dashboards.
 
 Set `tracked` to make it a tank: `wheelsPerTrack` road wheels per side inside two driven tracks, and `steer` becomes skid steering, up to a pivot turn at full deflection.
+
+Wheel meshes are interpolated between physics steps, so the wheels turn and the suspension moves smoothly at any frame rate instead of stepping at the physics rate. With the vehicle selected in the editor viewport, each wheel draws its suspension travel, the wheel circle at both ends of the travel and, for steering wheels, an arrow showing the steering direction.
+
+A manual gearbox holds the gear in `gearRequest` (-1 reverse, 0 neutral) and a `clutch` of 1 is fully engaged, so a game can shift from input. The component reports `currentRPM`, `currentGear` and `speed`; from Visual Scripting, `MVehicleStatics` reads the RPM (also as a 0-1 fraction for driving an audio parameter), the gear, the speed and a wheel's slip, and sets the manual gear. A rigid body can be authored up to 200 000 kg, enough for a truck or a tank.
+
+The Vehicle Kit plugin's **Drivable Vehicle** placeable builds everything it needs when it has none of it: a dynamic body, a collider, the vehicle with four wheels, a body mesh and four wheel meshes. Only the pawn the player possesses gets a chase camera, so a level can hold many vehicles. A gamepad drives it too: the left stick steers, the triggers are throttle and brake and the south button is the handbrake. A resting stick inside `inputDeadzone` does nothing, and the pedals ease in and out at `pedalRiseRate` and `pedalFallRate` instead of jumping.
 
 ## Cloth and soft bodies
 

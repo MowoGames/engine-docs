@@ -24,6 +24,20 @@
 	],
 	"commands": [
 		{
+			"name": "android-setup",
+			"path": "mbt android-setup",
+			"description": "Download the pinned JDK 17 and Android SDK (platform 35, build-tools) that package-android builds with",
+			"arguments": [],
+			"options": [
+				{
+					"name": "--accept-licenses",
+					"description": "Print and accept the Android SDK licences non-interactively (required to install the SDK)",
+					"type": "bool"
+				}
+			],
+			"subcommands": []
+		},
+		{
 			"name": "asset",
 			"path": "mbt asset",
 			"description": "Inspect asset packages (any asset or level file) and migrate text assets into them",
@@ -137,6 +151,87 @@
 						}
 					],
 					"subcommands": []
+				},
+				{
+					"name": "resave",
+					"path": "mbt asset resave",
+					"description": "Resave a project's text assets and levels in the current formats (refreshes import tables and version mirrors, gives actors stable sort keys); writes nothing that is already current",
+					"arguments": [
+						{
+							"name": "project",
+							"description": "The project's .mproject file",
+							"type": "string"
+						}
+					],
+					"options": [
+						{
+							"name": "--report-only",
+							"description": "Report what would change and write nothing",
+							"type": "bool"
+						},
+						{
+							"name": "--report",
+							"description": "Also write the report to this file",
+							"type": "string"
+						}
+					],
+					"subcommands": []
+				},
+				{
+					"name": "sizes",
+					"path": "mbt asset sizes",
+					"description": "Group a package's bytes by asset type and by directory, optionally against an earlier package",
+					"arguments": [],
+					"options": [
+						{
+							"name": "--package",
+							"description": "The package folder (an mbt package output)",
+							"type": "string",
+							"required": true
+						},
+						{
+							"name": "--against",
+							"description": "An earlier package folder: print what grew or shrank per type and directory",
+							"type": "string"
+						},
+						{
+							"name": "--top",
+							"description": "Rows per table",
+							"type": "int",
+							"default": "25"
+						},
+						{
+							"name": "--json",
+							"description": "Print one JSON object instead of tables",
+							"type": "bool"
+						}
+					],
+					"subcommands": []
+				},
+				{
+					"name": "verify",
+					"path": "mbt asset verify",
+					"description": "Parse every asset of a project and report corrupt files, unresolved references, versions newer than this engine and orphan actor files",
+					"arguments": [
+						{
+							"name": "project",
+							"description": "The project's .mproject file or a folder",
+							"type": "string"
+						}
+					],
+					"options": [
+						{
+							"name": "--strict",
+							"description": "Fail on warnings and stale assets too",
+							"type": "bool"
+						},
+						{
+							"name": "--json",
+							"description": "Print a JSON counts line first",
+							"type": "bool"
+						}
+					],
+					"subcommands": []
 				}
 			]
 		},
@@ -182,12 +277,52 @@
 				},
 				{
 					"name": "--shared-cache",
-					"description": "Team object cache: a shared directory or an S3-compatible https:// bucket (also MBT_SHARED_CACHE). Objects are pulled before compiling and pushed after",
+					"description": "Team object cache behind the machine one (on by default under the build cache; MOWO_COMPILE_CACHE=<path>|0): a shared directory or an S3-compatible https:// bucket (also MBT_SHARED_CACHE), or a MowoDDC server in MOWO_COMPILE_CACHE_HTTP. Objects are pulled before compiling and pushed after a build without errors",
 					"type": "string"
 				},
 				{
 					"name": "--shared-cache-read-only",
 					"description": "Pull from the shared cache but never push to it (also MBT_SHARED_CACHE_PUSH=0)",
+					"type": "bool"
+				},
+				{
+					"name": "--timing",
+					"description": "Profile the build: clang -ftime-trace on every compile, then the costliest headers and template instantiations and the time of each set-up phase (rules, resolve, toolchain, cache, header tool, fingerprints)",
+					"type": "bool"
+				},
+				{
+					"name": "--explain",
+					"description": "Log why each translation unit recompiles (missing object, newest changed input, precompiled header), why each image relinks, why each archive repacks and why mowoprotect reran; at most 40 units per module",
+					"type": "bool"
+				},
+				{
+					"name": "--explain-all",
+					"description": "--explain without the per-module cap: list every recompiling unit",
+					"type": "bool"
+				},
+				{
+					"name": "--no-tests",
+					"description": "Leave the Test targets out: a target-less build skips them and the Developer modules only they link, and the rebuild of targets a relinked library made stale skips the test hosts (mbt test builds what it needs itself)",
+					"type": "bool"
+				},
+				{
+					"name": "--no-plan-cache",
+					"description": "Hash every source and header on every build instead of reusing the persisted plan (.mbt-cache/plan; also MOWO_PLAN_CACHE=0)",
+					"type": "bool"
+				},
+				{
+					"name": "--verify-plan-cache",
+					"description": "Recompute every hash and report files whose content changed without their size or time changing, and compare this build's plan with the last one (also MOWO_PLAN_CACHE=verify)",
+					"type": "bool"
+				},
+				{
+					"name": "--no-index-cache",
+					"description": "Parse every header again in the header tool instead of reading the persisted type index (.mbt-cache/mht-index.cache; also MOWO_MHT_INDEX_CACHE=0)",
+					"type": "bool"
+				},
+				{
+					"name": "--verify-index-cache",
+					"description": "Parse every header and count persisted index entries that differ (also MOWO_MHT_INDEX_CACHE=verify)",
 					"type": "bool"
 				},
 				{
@@ -207,6 +342,11 @@
 					],
 					"description": "Custom build option KEY=VALUE for the rules (e.g. -o MOWO_ENABLE_FSR=true)",
 					"type": "string[]"
+				},
+				{
+					"name": "--json",
+					"description": "For build, test, cook, package, docs, doctor and deck-check: print one JSON object {exit, durationMs, diagnostics, artifacts, skipped} on stdout and send the human output to stderr",
+					"type": "bool"
 				}
 			],
 			"subcommands": []
@@ -342,6 +482,11 @@
 					"name": "--config",
 					"description": "Build of MowoGame/MeafBuilder/MdfTool/MaudioTool the cook runs (default: dev, then debug): debug | dev | profile | release | debuggame",
 					"type": "BuildConfiguration"
+				},
+				{
+					"name": "--json",
+					"description": "For build, test, cook, package, docs, doctor and deck-check: print one JSON object {exit, durationMs, diagnostics, artifacts, skipped} on stdout and send the human output to stderr",
+					"type": "bool"
 				}
 			],
 			"subcommands": []
@@ -547,11 +692,241 @@
 			]
 		},
 		{
+			"name": "deploy",
+			"path": "mbt deploy",
+			"description": "Install a package on a device or copy it to a server (android: adb; ios: devicectl; ssh: scp + ssh)",
+			"arguments": [],
+			"options": [],
+			"subcommands": [
+				{
+					"name": "android",
+					"path": "mbt deploy android",
+					"description": "adb install a packaged APK (the package-android output), optionally start it and follow logcat",
+					"arguments": [],
+					"options": [
+						{
+							"name": "--app-id",
+							"description": "The applicationId (read from the Gradle project next to the APK when omitted)",
+							"type": "string"
+						},
+						{
+							"name": "--serial",
+							"description": "adb device serial (required when more than one device is ready)",
+							"type": "string"
+						},
+						{
+							"name": "--activity",
+							"description": "Activity to start",
+							"type": "string",
+							"default": "com.mowo.engine.MowoActivity"
+						},
+						{
+							"name": "--seconds",
+							"description": "How long to follow logcat; 0 = until Ctrl+C",
+							"type": "int",
+							"default": "0"
+						},
+						{
+							"name": "--all-logs",
+							"description": "Follow the whole log of the app's process instead of only the engine tags and crash lines",
+							"type": "bool"
+						},
+						{
+							"name": "--forward",
+							"description": "adb forward the engine's trace and MCP ports to the same host ports",
+							"type": "bool"
+						},
+						{
+							"name": "--trace-port",
+							"description": "Device port of the trace server",
+							"type": "int",
+							"default": "8081"
+						},
+						{
+							"name": "--mcp-port",
+							"description": "Device port of the MCP server",
+							"type": "int",
+							"default": "8765"
+						},
+						{
+							"name": "--pull-logs",
+							"description": "After following, copy the app's Saved/Logs and Saved/Crashes (run-as, debuggable builds) into this folder",
+							"type": "string"
+						},
+						{
+							"name": "--no-grant",
+							"description": "Skip granting RECORD_AUDIO and POST_NOTIFICATIONS after installing",
+							"type": "bool"
+						},
+						{
+							"name": "--apk",
+							"description": "An .apk, or the package-android output folder (the newest APK under it is used)",
+							"type": "string"
+						},
+						{
+							"name": "--run",
+							"description": "Start the app after installing",
+							"type": "bool"
+						},
+						{
+							"name": "--logcat",
+							"description": "Follow the app's logcat after starting it",
+							"type": "bool"
+						}
+					],
+					"subcommands": []
+				},
+				{
+					"name": "connect",
+					"path": "mbt deploy connect",
+					"description": "Connect to a paired device over wireless debugging",
+					"arguments": [
+						{
+							"name": "host-port",
+							"description": "The connect address on the Wireless debugging screen, host:port",
+							"type": "string"
+						}
+					],
+					"options": [],
+					"subcommands": []
+				},
+				{
+					"name": "ios",
+					"path": "mbt deploy ios",
+					"description": "Install a package-ios app on a connected iPhone or iPad with xcrun devicectl (Xcode 15+), optionally launch it with its console",
+					"arguments": [],
+					"options": [
+						{
+							"name": "--app",
+							"description": "The signed .app, or the package-ios output folder (the .app under it is used)",
+							"type": "string"
+						},
+						{
+							"name": "--bundle-id",
+							"description": "CFBundleIdentifier (read from the .app's Info.plist when omitted)",
+							"type": "string"
+						},
+						{
+							"name": "--device",
+							"description": "Device identifier, UDID or name (required when more than one is connected)",
+							"type": "string"
+						},
+						{
+							"name": "--seconds",
+							"description": "How long to stream the console; 0 = until Ctrl+C",
+							"type": "int",
+							"default": "0"
+						},
+						{
+							"name": "--run",
+							"description": "Launch the app after installing",
+							"type": "bool"
+						}
+					],
+					"subcommands": []
+				},
+				{
+					"name": "pair",
+					"path": "mbt deploy pair",
+					"description": "Pair with a device over wireless debugging (Settings > Developer options > Wireless debugging > Pair device with pairing code)",
+					"arguments": [
+						{
+							"name": "host-port",
+							"description": "The pairing address shown on the device, host:port",
+							"type": "string"
+						},
+						{
+							"name": "code",
+							"description": "The six digit pairing code",
+							"type": "string"
+						}
+					],
+					"options": [],
+					"subcommands": []
+				},
+				{
+					"name": "ssh",
+					"path": "mbt deploy ssh",
+					"description": "Copy only the changed files of a package folder to a Linux server (hash manifest, scp, ssh), optionally start it",
+					"arguments": [],
+					"options": [
+						{
+							"name": "--host",
+							"description": "user@host (or an ssh config alias)",
+							"type": "string",
+							"required": true
+						},
+						{
+							"name": "--dir",
+							"description": "Directory on the server",
+							"type": "string",
+							"required": true
+						},
+						{
+							"name": "--port",
+							"description": "ssh port",
+							"type": "int"
+						},
+						{
+							"name": "--exe",
+							"description": "Executable inside --dir to run",
+							"type": "string",
+							"default": "MowoServer"
+						},
+						{
+							"name": "--args",
+							"description": "Arguments passed to the executable",
+							"type": "string"
+						},
+						{
+							"name": "--seconds",
+							"description": "How long to stay attached; 0 = until Ctrl+C",
+							"type": "int",
+							"default": "0"
+						},
+						{
+							"name": "--source",
+							"description": "The package folder to copy (its contents land in --dir)",
+							"type": "string"
+						},
+						{
+							"name": "--dry-run",
+							"description": "Print what would be uploaded and deleted and change nothing on the server",
+							"type": "bool"
+						},
+						{
+							"name": "--full",
+							"description": "Ignore the server's deploy manifest and upload every file",
+							"type": "bool"
+						},
+						{
+							"name": "--run",
+							"description": "Start the executable after copying",
+							"type": "bool"
+						}
+					],
+					"subcommands": []
+				}
+			]
+		},
+		{
 			"name": "doctor",
 			"path": "mbt doctor",
 			"description": "Check build environment and dependencies",
 			"arguments": [],
-			"options": [],
+			"options": [
+				{
+					"name": "--profile",
+					"description": "Which checks to run: engine (a source checkout: needs .NET, Git and Git LFS too), installed (an installed editor build: compiler and platform SDK only), or auto (installed when the engine root carries InstalledBuild.txt)",
+					"type": "string",
+					"default": "auto"
+				},
+				{
+					"name": "--json",
+					"description": "For build, test, cook, package, docs, doctor and deck-check: print one JSON object {exit, durationMs, diagnostics, artifacts, skipped} on stdout and send the human output to stderr",
+					"type": "bool"
+				}
+			],
 			"subcommands": []
 		},
 		{
@@ -638,7 +1013,13 @@
 			"path": "mbt info",
 			"description": "Show project information and modules",
 			"arguments": [],
-			"options": [],
+			"options": [
+				{
+					"name": "--timing",
+					"description": "Print how long the process took to reach this command and each phase of it (the startup measurement for the single-file mbt)",
+					"type": "bool"
+				}
+			],
 			"subcommands": []
 		},
 		{
@@ -664,6 +1045,45 @@
 				{
 					"name": "--no-source",
 					"description": "Skip the C++ game module scaffold (content-only project)",
+					"type": "bool"
+				}
+			],
+			"subcommands": []
+		},
+		{
+			"name": "itch-upload",
+			"path": "mbt itch-upload",
+			"description": "Push existing `mbt package` outputs to an itch.io page with butler, one channel per platform",
+			"arguments": [],
+			"options": [
+				{
+					"name": "--target",
+					"description": "itch.io page as user/game (default: the manifest's platform.itchTarget)",
+					"type": "string"
+				},
+				{
+					"name": "--platform-dir",
+					"description": "Add a platform as <platform>=<packageDir>, repeatable (e.g. --platform-dir win64=out/Win --platform-dir linux=out/Linux)",
+					"type": "string[]"
+				},
+				{
+					"name": "--project",
+					"description": "Game project manifest (.mproject); its version becomes --userversion",
+					"type": "string"
+				},
+				{
+					"name": "--userversion",
+					"description": "Version label shown in the itch.io build history (default: the manifest's version)",
+					"type": "string"
+				},
+				{
+					"name": "--butler",
+					"description": "Path to butler (default: MOWO_BUTLER, then butler on PATH)",
+					"type": "string"
+				},
+				{
+					"name": "--dry-run",
+					"description": "Print the butler commands and stop",
 					"type": "bool"
 				}
 			],
@@ -1131,6 +1551,12 @@
 					"name": "--parent-include",
 					"description": "Include path of --parent-class's header, e.g. Game/ACharacter.h",
 					"type": "string"
+				},
+				{
+					"name": "--parent-lineage",
+					"description": "Lineage of --parent-class: actor (overrides Tick) or component (overrides TickComponent)",
+					"type": "string",
+					"default": "actor"
 				}
 			],
 			"subcommands": []
@@ -1296,7 +1722,7 @@
 				},
 				{
 					"name": "--sign",
-					"description": "Code-sign the shipped exe + first-party DLLs with this cert (.pfx path, store subject, or SHA1 thumbprint). Falls back to the MOWO_SIGN_CERT env var.",
+					"description": "Code-sign the shipped binaries. Windows: this cert (.pfx path, store subject, or SHA1 thumbprint; falls back to MOWO_SIGN_CERT). macOS: this codesign identity, \"Developer ID Application: …\" (falls back to MOWO_SIGN_IDENTITY, then Config/Packaging.ini macSignIdentity; \"-\" or none signs ad hoc)",
 					"type": "string"
 				},
 				{
@@ -1378,6 +1804,56 @@
 					"name": "--iostore",
 					"description": "Convert every staged pak into an IoStore container (.mutoc table of contents + .mucas blocks) with MowoIoStore: on-demand block reads, and unchanged content keeps byte-identical blocks across builds. Config/Packaging.ini `ioStore=true` turns it on for the project.",
 					"type": "bool"
+				},
+				{
+					"name": "--release",
+					"description": "Record this package as release <version> in Releases/<version>/ at the game root: every pak's size and hash, each pak's entries in write order with the hash of each, Manifest.txt, BuildInfo.json and the chunk report. `mbt package` wipes its output on the next run; the record is what the next release is laid out and patched against.",
+					"type": "string"
+				},
+				{
+					"name": "--based-on",
+					"description": "Pack every archive in the entry order of release <version> (new entries are appended, dropped ones close up), so a patch against that release moves bytes only where content changed. Needs the release recorded with --release.",
+					"type": "string"
+				},
+				{
+					"name": "--compact",
+					"description": "With --based-on: ignore the previous release's entry order and lay the archives out fresh (defragment), keeping only the comparison.",
+					"type": "bool"
+				},
+				{
+					"name": "--patch-out",
+					"description": "With --based-on: write the update from that release into this directory as a patch pak of only the entries whose bytes changed (plus a report), and with --iostore as patch containers of only the changed chunks.",
+					"type": "string"
+				},
+				{
+					"name": "--verify-reproducible",
+					"description": "After packaging, package the same inputs again into a scratch folder and compare the two Manifest.txt files; any file whose bytes differ fails the command. Reuses the cooked intermediates, so it judges the packing, staging and signing steps.",
+					"type": "bool"
+				},
+				{
+					"name": "--verify-keep-cooked",
+					"description": "With --verify-reproducible: let the second package reuse the cooked textures and meshes of the first (a faster check that leaves cook determinism untested). By default the cooked intermediates are set aside so the second package cooks from the sources.",
+					"type": "bool"
+				},
+				{
+					"name": "--sentry-sources",
+					"description": "Upload source bundles with the debug symbols (sentry-cli --include-sources), so a crash report shows the source lines of the crashing frames",
+					"type": "bool"
+				},
+				{
+					"name": "--symstore",
+					"description": "Index the package's PDBs into this Windows symbol server directory with symstore, labelled with the product and build id",
+					"type": "string"
+				},
+				{
+					"name": "--notarize",
+					"description": "macOS: notarize the package's code (and the .dmg with --installer) with this notarytool keychain profile, then staple and check with Gatekeeper (falls back to MOWO_NOTARY_PROFILE, then Config/Packaging.ini macNotaryProfile); needs a Developer ID identity",
+					"type": "string"
+				},
+				{
+					"name": "--json",
+					"description": "For build, test, cook, package, docs, doctor and deck-check: print one JSON object {exit, durationMs, diagnostics, artifacts, skipped} on stdout and send the human output to stderr",
+					"type": "bool"
 				}
 			],
 			"subcommands": []
@@ -1385,7 +1861,7 @@
 		{
 			"name": "package-android",
 			"path": "mbt package-android",
-			"description": "Build + cook + generate an installable Android Gradle project (M0.1: Vulkan-only, arm64-v8a, minSdk 26)",
+			"description": "Build + cook + generate an installable Android Gradle project (Vulkan 1.3 only, arm64-v8a, minSdk 26)",
 			"arguments": [],
 			"options": [
 				{
@@ -1443,6 +1919,22 @@
 				{
 					"name": "--unprotected",
 					"description": "Ship plaintext, unsigned content even when Config/DefaultCrypto.ini has keys. Release otherwise refuses to package without them.",
+					"type": "bool"
+				},
+				{
+					"name": "--artifacts",
+					"description": "Run Gradle and produce: none (the project only), apk, aab or both. Needs the toolchain mbt android-setup installs.",
+					"type": "string",
+					"default": "none"
+				},
+				{
+					"name": "--release",
+					"description": "Sign with the release keystore (MOWO_ANDROID_KEYSTORE, MOWO_ANDROID_KEY_ALIAS, MOWO_ANDROID_KEYSTORE_PASSWORD or the OS credential store) instead of a generated debug key",
+					"type": "bool"
+				},
+				{
+					"name": "--accept-licenses",
+					"description": "Install a missing JDK/Android SDK first and accept the SDK licences (see mbt android-setup)",
 					"type": "bool"
 				}
 			],
@@ -1513,6 +2005,268 @@
 				}
 			],
 			"subcommands": []
+		},
+		{
+			"name": "publish-mowo",
+			"path": "mbt publish-mowo",
+			"description": "Chunk a packaged build into the games launcher's content-addressed chunk store and write its manifest",
+			"arguments": [],
+			"options": [
+				{
+					"name": "--package",
+					"description": "The package folder to publish (a `mbt package` output)",
+					"type": "string"
+				},
+				{
+					"name": "--out",
+					"description": "Directory the manifest and chunks/ are written to; reuse it across builds so unchanged chunks are stored once",
+					"type": "string"
+				},
+				{
+					"name": "--previous",
+					"description": "Manifest of the build players have now: only used to report how much of this build they download",
+					"type": "string"
+				},
+				{
+					"name": "--min-kib",
+					"description": "Smallest chunk in KiB",
+					"type": "int",
+					"default": "256"
+				},
+				{
+					"name": "--avg-kib",
+					"description": "Average chunk in KiB (a power of two)",
+					"type": "int",
+					"default": "1024"
+				},
+				{
+					"name": "--max-kib",
+					"description": "Largest chunk in KiB (the launcher accepts up to 65536)",
+					"type": "int",
+					"default": "4096"
+				},
+				{
+					"name": "--zstd",
+					"description": "A zstd executable to compress chunks with. Default: the MowoIoStore built beside MeafBuilder (zstd-batch), then zstd on PATH; with neither, chunks are stored as raw zstd blocks (valid, but uncompressed)",
+					"type": "string"
+				}
+			],
+			"subcommands": []
+		},
+		{
+			"name": "release",
+			"path": "mbt release",
+			"description": "Run the ship sequence as resumable steps: test gate, package per platform, launcher chunk store, Steam and itch.io uploads, with an artifact manifest",
+			"arguments": [],
+			"options": [
+				{
+					"name": "--release-version",
+					"description": "Release label (recorded as Releases/<version>/ and used as the upload version)",
+					"type": "string"
+				},
+				{
+					"name": "--based-on",
+					"description": "Previous release to keep the pak layout of and to write patch paks against",
+					"type": "string"
+				},
+				{
+					"name": "--platforms",
+					"description": "Comma-separated platforms to package: win64, linux, macos-arm64",
+					"type": "string",
+					"default": "win64"
+				},
+				{
+					"name": "--out",
+					"description": "Directory for the packages, patches, state and artifact manifest (default: build/Release/<version>)",
+					"type": "string"
+				},
+				{
+					"name": "--skip-test",
+					"description": "Do not run `mbt test --cpu-only` first",
+					"type": "bool"
+				},
+				{
+					"name": "--verify-reproducible",
+					"description": "Package each platform twice and fail when the file manifests differ",
+					"type": "bool"
+				},
+				{
+					"name": "--launcher",
+					"description": "Also chunk each package into the games launcher's chunk store (mbt publish-mowo)",
+					"type": "bool"
+				},
+				{
+					"name": "--steam",
+					"description": "Also upload to Steam (mbt steam-upload; app and depot ids come from the .mproject)",
+					"type": "bool"
+				},
+				{
+					"name": "--steam-branch",
+					"description": "Steam branch to set live after the upload (default: none)",
+					"type": "string"
+				},
+				{
+					"name": "--itch",
+					"description": "Also push to this itch.io page (user/game) with butler",
+					"type": "string"
+				},
+				{
+					"name": "--package-args",
+					"description": "Extra arguments appended to every `mbt package` step, e.g. \"--iostore --sentry-sources\"",
+					"type": "string"
+				},
+				{
+					"name": "--resume",
+					"description": "Continue the release started in --out: steps that already succeeded are skipped",
+					"type": "bool"
+				},
+				{
+					"name": "--plan",
+					"description": "Print the steps and stop",
+					"type": "bool"
+				}
+			],
+			"subcommands": []
+		},
+		{
+			"name": "run",
+			"path": "mbt run",
+			"description": "Start an installed game on a device or a deployed server and follow its log (android: am start + logcat; ios: devicectl launch --console; ssh: remote console)",
+			"arguments": [],
+			"options": [],
+			"subcommands": [
+				{
+					"name": "android",
+					"path": "mbt run android",
+					"description": "Start an installed app on a device and follow its logcat",
+					"arguments": [],
+					"options": [
+						{
+							"name": "--app-id",
+							"description": "The applicationId (read from the Gradle project next to the APK when omitted)",
+							"type": "string"
+						},
+						{
+							"name": "--serial",
+							"description": "adb device serial (required when more than one device is ready)",
+							"type": "string"
+						},
+						{
+							"name": "--activity",
+							"description": "Activity to start",
+							"type": "string",
+							"default": "com.mowo.engine.MowoActivity"
+						},
+						{
+							"name": "--seconds",
+							"description": "How long to follow logcat; 0 = until Ctrl+C",
+							"type": "int",
+							"default": "0"
+						},
+						{
+							"name": "--all-logs",
+							"description": "Follow the whole log of the app's process instead of only the engine tags and crash lines",
+							"type": "bool"
+						},
+						{
+							"name": "--forward",
+							"description": "adb forward the engine's trace and MCP ports to the same host ports",
+							"type": "bool"
+						},
+						{
+							"name": "--trace-port",
+							"description": "Device port of the trace server",
+							"type": "int",
+							"default": "8081"
+						},
+						{
+							"name": "--mcp-port",
+							"description": "Device port of the MCP server",
+							"type": "int",
+							"default": "8765"
+						},
+						{
+							"name": "--pull-logs",
+							"description": "After following, copy the app's Saved/Logs and Saved/Crashes (run-as, debuggable builds) into this folder",
+							"type": "string"
+						}
+					],
+					"subcommands": []
+				},
+				{
+					"name": "ios",
+					"path": "mbt run ios",
+					"description": "Launch an installed app on a connected iPhone or iPad and stream its console",
+					"arguments": [],
+					"options": [
+						{
+							"name": "--app",
+							"description": "The signed .app, or the package-ios output folder (the .app under it is used)",
+							"type": "string"
+						},
+						{
+							"name": "--bundle-id",
+							"description": "CFBundleIdentifier (read from the .app's Info.plist when omitted)",
+							"type": "string"
+						},
+						{
+							"name": "--device",
+							"description": "Device identifier, UDID or name (required when more than one is connected)",
+							"type": "string"
+						},
+						{
+							"name": "--seconds",
+							"description": "How long to stream the console; 0 = until Ctrl+C",
+							"type": "int",
+							"default": "0"
+						}
+					],
+					"subcommands": []
+				},
+				{
+					"name": "ssh",
+					"path": "mbt run ssh",
+					"description": "Run a deployed server executable over ssh and stream its console",
+					"arguments": [],
+					"options": [
+						{
+							"name": "--host",
+							"description": "user@host (or an ssh config alias)",
+							"type": "string",
+							"required": true
+						},
+						{
+							"name": "--dir",
+							"description": "Directory on the server",
+							"type": "string",
+							"required": true
+						},
+						{
+							"name": "--port",
+							"description": "ssh port",
+							"type": "int"
+						},
+						{
+							"name": "--exe",
+							"description": "Executable inside --dir to run",
+							"type": "string",
+							"default": "MowoServer"
+						},
+						{
+							"name": "--args",
+							"description": "Arguments passed to the executable",
+							"type": "string"
+						},
+						{
+							"name": "--seconds",
+							"description": "How long to stay attached; 0 = until Ctrl+C",
+							"type": "int",
+							"default": "0"
+						}
+					],
+					"subcommands": []
+				}
+			]
 		},
 		{
 			"name": "shaders",
@@ -1606,7 +2360,7 @@
 				},
 				{
 					"name": "--metallib",
-					"description": "macOS host only: compile the .metal outputs to .metallib via xcrun before packing (implies the msl target)",
+					"description": "macOS host only: compile the .metal outputs to .metallib via xcrun before packing (implies the msl target); -p macos-arm64 builds against the macosx SDK, -p ios against iphoneos",
 					"type": "bool"
 				},
 				{
@@ -1616,7 +2370,7 @@
 				},
 				{
 					"name": "--ddc",
-					"description": "Reuse compiled blobs from a shader DDC keyed by source closure, defines, target and compiler: a folder, or '1' for build/ShaderDDC; same as MOWO_SHADER_DDC",
+					"description": "The shader DDC (content-addressed compiled blobs, keyed by source closure, defines, target and compiler) is on by default under the build cache; a folder relocates it, 0 turns it off; same as MOWO_SHADER_DDC",
 					"type": "string"
 				}
 			],
@@ -1746,6 +2500,16 @@
 					"name": "--wait",
 					"description": "Wait for the server to fully process uploaded files",
 					"type": "bool"
+				},
+				{
+					"name": "--include-sources",
+					"description": "Also upload source bundles (sentry-cli --include-sources): a crash report then shows the source lines of the crashing frames",
+					"type": "bool"
+				},
+				{
+					"name": "--symstore",
+					"description": "Also index the PDBs found into this Windows symbol server directory with symstore (Windows SDK Debugging Tools)",
+					"type": "string"
 				}
 			],
 			"subcommands": []

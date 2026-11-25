@@ -14,7 +14,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
   - Engine/Source/Runtime/Components/Public/Components/TransformComponent.h
   - Engine/Source/Runtime/ECS/Public/ECS/EntityCommandBuffer.h
-verifiedAt: 5922e6e5e
+verifiedAt: 1cbbecbe4
 ---
 
 Underneath actors, Mowo stores scene data in an entity-component system. An entity is an ID, a component is a plain struct, and a system is a class whose `Update` walks every entity with a given set of components. The renderer, physics, animation and most engine subsystems work at this level. You drop down to it when you have data on many entities that you want to process in a tight loop.
@@ -54,6 +54,24 @@ Iteration order is defined: archetypes in creation order, then rows in order. En
 | Deferred changes | `SubmitDeferred(fn)` |
 
 `AddComponent` on an entity that already has the component returns the existing instance instead of adding a second one.
+
+### IDs, handles and liveness
+
+An `EntityID` is the entity's identity: it is saved in scenes and save games, kept by undo and Play-in-Editor copies, and written into actor references. Inside one `World` every entity also owns a slot in a dense table, and `GetHandle(id)` returns an `FEntityHandle` (slot plus generation) that reaches components with no hash lookup. A handle stops resolving the moment its entity is destroyed, even after the slot is reused, so it is the right thing to keep across frames in a hot system. Handles are never saved or sent. <Source path="Engine/Source/Runtime/ECS/Public/ECS/Types.h" />
+
+| Question | API |
+| --- | --- |
+| Does this `Entity` name something at all? | `IsValid()`: a non-zero ID and a world. It does not mean alive. |
+| Is the entity still alive? | `Entity::IsAlive()` or `World::IsEntityValid(id)` |
+| Keep a reference for later frames | `GetHandle(id)`, then `IsHandleValid(handle)` and `GetComponent<T>(handle)` |
+
+`IsAlive()` follows the ID, like every other `Entity` call, so an entity that an undo recreates under the same ID is alive again. If your code must not see such a recreation, keep a handle: a destroyed entity's generation never comes back. <Source symbol="Entity" />
+
+Slot reuse and iteration order depend only on the sequence of creations and destructions, not on the random ID values. Run the same sequence twice and you get the same handles and the same `ForEach` order. Entity IDs can be minted on any thread (`UUID::Generate` uses one generator per thread); creating the entity itself still happens on the main thread, through `CreateEntityWithID` or a command buffer.
+
+<Callout type="warning">
+Never replicate an `EntityID`. An entity spawned at runtime gets a different ID on the server and on every client. Send its `NetworkId` and resolve it on the receiver, as described in [Replication](/multiplayer/replication).
+</Callout>
 
 <Callout type="danger">
 Never add or remove components, or create or destroy entities, inside a `ForEach` or `ForEachWith` callback. The world checks this and aborts, because the change would move the very row the loop is reading. Queue the change with `SubmitDeferred` instead; queued work runs at the end of `World::Update`, after every system. <Source symbol="World" />
@@ -156,6 +174,8 @@ Notes:
 ### Parallel batches
 
 A system that declares its read and write masks can run at the same time as other declared systems it does not conflict with. Two systems conflict when either one declares nothing, when both write the same component, or when one writes what the other reads. Undeclared systems always run serially in registration order, so declaring access is purely opt-in. <Source symbol="System" />
+
+A declaration the system does not keep is a data race the scheduler cannot see. In builds with assertions the world checks every component a declared system touches (queries and lookups alike) against its masks while it runs, and logs each undeclared access once with the system's name. `ecs.AccessValidation` is 1 by default, 0 turns the check off and 2 also asserts, for runs that must stay clean. The check is compiled out of release builds. <Source path="Engine/Source/Runtime/ECS/Public/ECS/System.h" />
 
 <Callout type="warning">
 Declare access only when `Update` does no structural work inline and touches no shared state outside the ECS. The masks cannot see physics-world writes, debug drawing or another system's members.

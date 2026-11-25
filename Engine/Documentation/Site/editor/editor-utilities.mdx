@@ -1,0 +1,91 @@
+---
+title: Editor utilities
+sidebarTitle: Editor utilities
+description: Automate the open level with Details buttons, C++ or Visual Scripting utility classes, Tools > Run Script and Run on Selection in the Content Browser.
+order: 25
+sources:
+  - Engine/Plugins/EditorUtility/EditorUtility.mplugin
+  - Engine/Plugins/EditorUtility/Public/EditorUtility/AEditorUtilityActor.h
+  - Engine/Plugins/EditorUtility/Public/EditorUtility/MEditorUtilityStatics.h
+  - Engine/Plugins/EditorUtility/Public/EditorUtility/EditorUtilityRunner.h
+verifiedAt: 2783e8031
+---
+
+Repetitive level work, such as renaming every light in a room, snapping props to a grid or checking that every door has a tag, belongs in a script. The **Editor Utility** plugin lets you write that script as a class, run it from a button or a menu, and undo it with one Ctrl+Z.
+
+The plugin is on by default and loads only in the editor. A packaged game never contains it.
+
+## Buttons in Details
+
+Mark a function `CallInEditor` and the Details panel shows a button for it on every actor of that class, and on every component of that class on the actor.
+
+```cpp title="AHarborLamp.h" nocompile
+MFUNCTION(CallInEditor, Tooltip = "Snaps the lamp to the nearest 50 cm.")
+void SnapToGrid();
+```
+
+The function becomes a row in an **Editor Actions** section, or in a **\<Component\> Actions** section for a component. The label is the function name with spaces added at each capital letter.
+
+- The function must take no parameters and return nothing. Other `CallInEditor` functions are ignored.
+- Pressing the button runs the function in the open level and records everything it changed on the selected actors as one undo step named after the function.
+- The button works while you are editing. During Play it reports an error on the Message Log instead of running.
+
+## Utility classes
+
+A **utility class** is a class that derives from `AEditorUtilityActor`. It is not placed in a level. When you run it, the editor creates one in the open level, calls its `Run` function, and removes it again, all inside a single undo step.
+
+You can write one two ways.
+
+<Tabs>
+<Tab label="Visual Scripting">
+Create a Visual Script class whose parent is `AEditorUtilityActor`, add a custom function named `Run`, and build the graph from the **Editor Utility** node library (below) and any other node.
+
+To take assets as input, add a second function named `RunOnAssets` with one text parameter. It receives the paths of the selected assets, one per line.
+</Tab>
+<Tab label="C++">
+Derive from `AEditorUtilityActor` in your game module and override `Run`, and `RunOnAssets` if you want assets.
+</Tab>
+</Tabs>
+
+### Running a utility
+
+- **Tools > Run Script** lists every utility class. Choose one to run it. **Refresh List** rebuilds the list; it also updates by itself when a class is saved or a module loads.
+- In the **Content Browser**, a utility that has `RunOnAssets` adds **Run \<Name\> on Selection** to the right-click menu of an asset or a multiple selection.
+
+While a utility runs, Tools > Run Script and the Content Browser rows are disabled, and a utility cannot start another. Rows are disabled during Play.
+
+### The undo step
+
+The whole run is one entry in the undo history, labelled with the utility's name. It covers:
+
+- everything the utility does through the editor: spawning, deleting, renaming, setting properties and selecting through the node library;
+- changes the utility makes directly to the actors that were **selected when it started**, such as moving them from a graph.
+
+Changes to actors that were not selected, and state an actor keeps that has no entity component behind it, are not recorded. Do those edits through the node library's commands.
+
+## The Editor Utility node library
+
+The nodes live under **Editor Utility** in the Visual Script palette. They work from any graph, but only a run started from the editor has an editor to talk to.
+
+| Group | Nodes |
+|---|---|
+| Selection | Get Selected Actor Count, Get Selected Actor, Get Primary Actor, Select Actor By Name, Select Actor, Clear Actor Selection |
+| Assets | Get Selected Asset Count, Get Selected Asset |
+| Level | Get Level Actor Count, Get Level Actor, Find Level Actor |
+| Editing | Spawn Actor, Delete Actor By Name, Set Actor Property, Set Console Variable, Run Console Command, Open Asset, Open Level, New Level, Save Level, Import Asset |
+| Any command | Run Automation Command, Get Automation Command Count, Get Automation Command Name, Get Automation Command Help |
+| Message Log | Log Info, Log Warning, Log Error, Log Actor Warning |
+
+The editing nodes run the same commands as [editor automation](/docs/editor/automation/), so they are undoable and behave the same way. **Run Automation Command** takes any command line from that language, for example `select-add Lamp_03`. The commands that wait for frames, such as `play`, `wait` and `screenshot`, are refused, because a utility runs inside one frame. The three **Get Automation Command** nodes list the commands that are allowed.
+
+An editing node returns false when the editor refuses the command and writes the reason to the Message Log. **Get Selected Asset** reads the paths the run was started on, or the Content Browser selection when the utility runs from the Tools menu.
+
+## Errors
+
+Everything a utility reports goes to the **Scripts** page of the Message Log: a failed command, a utility that has no `Run` function, a run attempted during Play, and anything written with **Log Info**, **Log Warning** or **Log Error**. **Log Actor Warning** adds a link that selects the actor.
+
+## Limits
+
+- Utilities run on the open level only. They do not run in a packaged game.
+- A run is synchronous. It cannot wait for Play or for a frame to pass.
+- `CallInEditor` buttons are available on actors and components. An asset has no Details button; use a utility's **Run on Selection** instead.

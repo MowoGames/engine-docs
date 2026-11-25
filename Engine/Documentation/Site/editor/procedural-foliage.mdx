@@ -1,0 +1,62 @@
+---
+title: Foliage
+description: Paint foliage types, procedural grass and trees from a Foliage component, and the settings that control batching, impostors, collision and navigation.
+order: 7
+sources:
+  - Engine/Source/Runtime/Game/Public/Game/Components/FoliageComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/Components/FoliageInstancesComponent.h
+  - Engine/Source/Runtime/Game/Public/Terrain/FoliageSystem.h
+verifiedAt: c6c835140
+---
+
+Mowo has two foliage sources. **Painted foliage** is what the Foliage mode puts in a level by hand. A **Foliage component** next to a terrain scatters grass and trees across it procedurally. Both draw through the same GPU path. The painting workflow is on the [World building](/docs/editor/world-building/) page; this page covers the settings and the behaviour.
+
+## Painted foliage
+
+Everything the Foliage mode places is stored in one **Painted Foliage** container. Its palette rows are foliage types.
+
+### Type settings
+
+| Setting | Meaning |
+| --- | --- |
+| Mesh | The mesh to place. Empty draws a grass clump |
+| Density, Radius | Instances per square metre the brush fills toward, and the minimum spacing between instances of the type |
+| Min / Max Scale, Scaling | The scale roll and how the axes roll: Uniform, Free or Lock XY |
+| Align To Normal, Align Max Angle | Stand on the surface normal, tilting at most this far from upright |
+| Slope Limit, Min / Max Height | Where the brush may place |
+| Cull Distance | Hide instances past this distance. 0 = never |
+| Use Impostor | Hand off to camera-facing cards past `r.Foliage.ImpostorDistance`. Off keeps the mesh out to the cull distance |
+| Collision, Collision Radius, Collision Height | **Simple** gives every instance a vertical capsule. Capsules in a 32 m cell share one static physics body |
+| Affects Navigation | Adds the instance's footprint (the capsule, or a 0.5 m trunk without collision) as an obstacle when the navigation mesh is baked |
+
+### How it draws
+
+A type with a mesh is drawn as GPU batches: one batch per 64 m cell and mesh section, culled per instance on the GPU, with an impostor past the handoff distance. The cull compute rejects whole cells before it looks at an instance. A type falls back to one draw per instance, with a CPU distance test, when it needs something the instance record cannot carry: **Align To Normal** above 0, or a **Scaling** mode other than Uniform.
+
+A grass type (no mesh) is one batch per row under the same rules, except that a **Cull Distance** moves it to the per-instance path.
+
+### Cells and streaming
+
+The container stores its instances in 64 m cells, one entry per occupied cell, instead of one string for the whole level. Three things follow:
+
+- A brush stroke re-encodes only the cells it changed. The container is updated at most every 0.12 s while you paint, and once at the end of the stroke, so a stroke's cost depends on what the brush touches rather than on the level's total instance count. Cancelling a stroke restores the container exactly.
+- Only cells within the container's **Stream Radius** (768 m by default) of the camera have GPU batches and collision bodies. A cell the camera leaves keeps its data and is built again when the camera returns; a cell is released once it is two cells past the radius. Set the radius to 0 to keep every cell resident. A dedicated server has no camera and keeps them all.
+- Cells build a few per frame, nearest first, so a teleport fills in over a few frames.
+
+A level saved before cells existed stores its instances in one string. It loads unchanged and is converted to cells the first time it is updated or edited; the converted level is saved in the new form and older builds do not read it. Merge Actors and PCG still write the single string, and the container converts it the same way.
+
+## The Foliage component
+
+A Foliage component on a terrain actor scatters grass (and optionally trees) over the terrain.
+
+- **Density** is instances per square metre; **Max Instances** caps the total. A cap that cuts the requested density short is logged as a warning that says how much of the density was kept. The range of **Max Instances** goes to four million, so a large terrain can have an explicit budget instead of a silent one.
+- Every instance is placed from its own seed. Painting a terrain layer or changing a filter moves only the blades it touches, never the rest of the terrain.
+- **Terrain Layer** limits the grass to one weight layer (0-7) above the **Layer Weight Threshold**.
+- **Align To Slope** blends from upright (0) to lying in the surface (1). A tilted scatter is baked into per-cell meshes instead of GPU batches.
+- Trees use a mesh or a built-in procedural tree and switch to impostor cards past the handoff distance.
+
+Grass authored per layer on the terrain's own **Grass Types** list is described on the [Landscape](/docs/editor/landscape/) page.
+
+## Console variables
+
+`r.Foliage.GPU` turns the GPU path off, `r.Foliage.DensityScale` scales every density, `r.Foliage.GrassDistance` is the far band for grass and `r.Foliage.ImpostorDistance` is the handoff to impostor cards. See the [console variable reference](/docs/reference/console-variables/).

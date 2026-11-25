@@ -12,6 +12,8 @@ sources:
   - Engine/Source/Runtime/Game/Public/PointCloud/LidarTracer.h
   - Engine/Source/Runtime/Game/Public/PointCloud/LidarShotJournal.h
   - Engine/Source/Runtime/Game/Public/PointCloud/ScanBvhWorld.h
+  - Engine/Source/Runtime/Game/Public/PointCloud/ScanRange.h
+  - Engine/Source/Runtime/Game/Public/PointCloud/LidarTrace.h
   - Engine/Source/Runtime/PointCloud/Public/PointCloud/PointCloudScannerComponent.h
   - Engine/Source/Runtime/PointCloud/Public/PointCloud/ScanMeshComponent.h
   - Engine/Source/Runtime/Scan/Public/Scan/ScanResponse.h
@@ -19,7 +21,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Gameplay/AttentionProfile.h
   - Engine/Source/Runtime/Game/Public/Gameplay/AttentionSystem.h
   - Engine/Source/Runtime/Game/Public/Game/MAttentionStatics.h
-verifiedAt: 5922e6e5e
+verifiedAt: 49f6079ba
 ---
 
 Mowo can reveal a dark world with a LiDAR scanner: each shot traces rays into the level and leaves points behind as screen-space splats. The cloud persists, can fade with age, is reproducible from a seed, and is shared between players by sending shots, not points.
@@ -51,19 +53,45 @@ Add a `PointCloudScanner` component and set `firing` while the player holds the 
 | `densityFalloff` | 1 | How density drops with distance |
 | `cloudMaxPoints`, `sharedShare` | 2,000,000, 0.2 | Point budget, and the share kept for other players' scans |
 | `fillRays`, `fillRange`, `waveSpeed` | 12000, 25, 18 | The **fill**: set `fillRequested` to fire one sphere of rays that spreads as a wave |
-| `traceBackend` | 0 | 0 automatic, 1 physics colliders, 2 the scan hierarchy |
+| `rangeBand` | 2 | The scan range, see below |
+| `traceBackend` | 0 | 0 automatic (the deterministic scan hierarchy), 1 physics colliders, 2 the Embree plugin, 3 the deterministic scan hierarchy |
 
 Each machine holds two clouds: what this player scanned and what other players scanned. <Source symbol="FLidarScanService" />
 
 ### What the scanner sees
 
-A `ScanMesh` component controls how an entity appears to the scan: an authored scan mesh can stand in for the render mesh, a moving body is traced as a live instance, and an animated character gets a capsule per bone that follows its pose. A response table decides what each ray does when it hits a material. <Source path="Engine/Source/Runtime/PointCloud/Public/PointCloud/ScanMeshComponent.h" />
+A `ScanMesh` component controls how an entity appears to the scan: an authored scan mesh can stand in for the render mesh, a moving body is traced as a live instance, and an animated character gets a capsule per bone that follows its pose. A response table decides what each ray does when it hits a material: return it, absorb it, displace, delay or jitter the point, let the ray penetrate, or `Reflect` it, so a mirror surface bounces the ray and the point comes back as the ghost of whatever the bounce met. The table can also hide an instance from chosen viewers: a hidden instance is transparent to that viewer's rays while the other players still scan it, which suits a creature only some of the crew can see. <Source path="Engine/Source/Runtime/PointCloud/Public/PointCloud/ScanMeshComponent.h" />
 
 The **LiDAR Scan Hierarchy** plugin traces shots against an Embree hierarchy of the level's render triangles, on all cores, with moving bodies and bone capsules re-posed every frame. Without it, the engine's own deterministic scan hierarchy is used. The plugin adds about 6.8 MB to a packaged game, so it is off by default. <Source path="Engine/Plugins/ScanHierarchy/ScanHierarchy.mplugin" /> Sound uses the same geometry; see [Acoustics](/docs/gameplay/acoustics/).
+
+### When the level changes
+
+The deterministic scan hierarchy follows the level: a static mesh renderer that is added, removed, enabled or disabled, moved, or given another mesh changes what the next scan hits, so opening a wall or replacing a pipe shows up on the next scan. The hierarchy rebuilds its static part at the next frame's sync; the first change after a quiet spell rebuilds at once, and further changes within a quarter of a second are batched into one rebuild, so an animated door costs at most four rebuilds a second. A change the hierarchy cannot see (a mesh edited in place) is announced from C++ with `Mowo::FScanStaticInvalidation::Invalidate(world)`, which rebuilds unthrottled. Sound uses the same rule. The physics-collider fallback reads live physics; the Embree plugin does not watch the level: call `Mowo::FScanStaticInvalidation::Invalidate(world)` after a change and its next sync re-bakes the static level and re-admits the moving parts (a whole re-bake, since Embree scenes have no per-mesh removal).
+
+### Cost of five scanners
+
+The `scan-five-scanners-perf` test row measures the Behind the Walls load on the scan side: five scanners firing at once in a furnished house with two moving characters, 4096 rays a shot. One frame is one hierarchy sync plus five traces. The row records the mean and 99th percentile milliseconds per frame in the perf trends, and in dev and release builds fails above 6 ms mean or 12 ms at the 99th percentile; a debug build only records. Point-store memory and per-client bandwidth are not part of this row.
+
+### Scan ranges
+
+A scanner fires on one of six ranges. The range travels with every shot and is stored in every point, so the cloud can color points by range and keeps each range's points apart. <Source symbol="EScanRange" />
+
+| `rangeBand` | Range | What it does |
+| --- | --- | --- |
+| 1 | Far | Keeps one point per 8 cm |
+| 2 | Standard | Keeps one point per 4 cm (the default) |
+| 3 | Precise | Keeps one point per 1.5 cm |
+| 4 | Bio | Sees only bodies (bone capsules), through walls |
+| 5 | Tracer | Also sees where moving things were during the last second; those points are flagged ghost |
+| 6 | Deep | Returns the first surface and the next surface behind it; the second is flagged hollow |
+
+Bio, Tracer and Deep need the deterministic scan hierarchy (the default). With the Embree plugin, Bio works and Tracer and Deep trace as Standard; with physics colliders all three trace as Standard. The attention meter weighs each shot by its range's name.
 
 ## Multiplayer
 
 Shots replicate, not points. A shot carries its origin, direction, cone, range, ray count, seed and tick, so every machine traces the same cloud from it. The host keeps a history of shots for late joiners and limits what each player may send. <Source symbol="FLidarShotJournal" />
+
+Moving bodies and animated characters are at a different pose on every machine. So the shooter records every moving part its rays hit, with the pose it had at that moment, and sends that list (the hit manifest) with the shot. Other machines then trace against the level plus exactly those poses, and get the same points as the shooter, bit for bit. A part is named by its entity's `NetworkObject` id, so only replicated entities can be in the list, and it holds up to 64 parts. A shot that hits a moving part without a `NetworkObject`, or more parts than that, is sent without a manifest, and each machine traces it against its own pose as before. <Source symbol="FScanPoseManifest" />
 
 | Console variable | Default | Effect |
 | --- | --- | --- |

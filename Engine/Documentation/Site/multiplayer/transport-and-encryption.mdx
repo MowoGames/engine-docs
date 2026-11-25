@@ -9,7 +9,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/NetworkTypes.h
   - Engine/Source/Runtime/Networking/Public/Networking/GnsTransport.h
   - Engine/Source/Runtime/Networking/Public/Networking/NetTransportFactory.h
-verifiedAt: c74f75b83
+verifiedAt: b07c2cd4b
 ---
 
 Under the session layer, a transport moves bytes between peers. Mowo has three: **ENet** over UDP for direct and LAN play, **Steam P2P** through the SteamPlatform plugin, and **GameNetworkingSockets** (GNS), Valve's open-source connection library, over IP. By default a composite transport picks between ENet and Steam for each connection, and ENet sessions are encrypted at the application layer.
@@ -118,9 +118,13 @@ Each receive channel keeps a 1024-entry sliding window. A counter above the high
 
 In code, `ENetTransport::SetEncryptionMode` and `SetPreSharedKey` override them for one transport before `Host` or `Connect` <Source symbol="ENetTransport::SetEncryptionMode" />.
 
+### Connection limits
+
+An ENet host is reachable by anyone who can send it a UDP datagram, so it bounds what an unauthenticated peer can cost. ENet's own defaults of 32 MiB per packet and 32 MiB of waiting data per peer are lowered to `net.enet_max_packet_bytes` (1 MiB) and `net.enet_max_waiting_bytes` (4 MiB), because fragment reassembly allocates before the peer has authenticated. The server also refuses a new connection when `net.max_connections_per_ip` (8) connections from that address are already open, or when the address opens more than `net.connects_per_second_per_ip` (2, burst 6): every connect costs two key-exchange operations and holds a slot until the handshake times out. Loopback is never limited. All four are security-policy cvars, so a release player cannot change them from the console or command line. The policy is `FConnectionGuard`.
+
 ### Join keys
 
-With encryption on and no `net.psk`, the host generates a 26-character **join key** for the session and uses it as the pre-shared key for every link from another machine <Source symbol="FNetCrypto::GenerateJoinKey" />. Links from the same machine (loopback) need no key. The host logs the key and `FNetSession::GetJoinKey()` returns it as `<address>:<port>#<key>`; a player joins with `--connect=<address>:<port>#<key>` or by setting `FNetSessionSettings::joinKey`. Dashes and spaces in a typed key are ignored, letters are case-insensitive, and `O`, `I` and `L` are read as `0`, `1` and `1`.
+With encryption on and no `net.psk`, the host generates a 26-character **join key** for the session and uses it as the pre-shared key for every link from another machine <Source symbol="FNetCrypto::GenerateJoinKey" />. Links from the same machine (loopback) need no key. The host prints the key to the console (standard output) and `FNetSession::GetJoinKey()` returns it as `<address>:<port>#<key>`; a player joins with `--connect=<address>:<port>#<key>` or by setting `FNetSessionSettings::joinKey`. Dashes and spaces in a typed key are ignored, letters are case-insensitive, and `O`, `I` and `L` are read as `0`, `1` and `1`.
 
 So by default a direct session is both encrypted and authenticated: only someone the host gave the key to can complete the handshake. A configured `net.psk` replaces the per-session key for everybody.
 

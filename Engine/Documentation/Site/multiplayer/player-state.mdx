@@ -4,9 +4,11 @@ description: The replicated per-player record (name, score, team, ping, ready) t
 order: 2
 sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Components/PlayerStateComponent.h
+  - Engine/Source/Runtime/Networking/Public/Networking/Components/GameStateComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/AGameState.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/PlayerStateSystem.h
   - Engine/Source/Runtime/Game/Public/Game/MPlayerStateStatics.h
-verifiedAt: c1d08db53
+verifiedAt: 588510704
 ---
 
 Every player in a session has a **player state**: a small replicated record that every machine sees. A scoreboard, a name tag, a lobby "who is ready" list and a team color all read it. The host keeps the authoritative records; clients receive them as ordinary replicated ghosts.
@@ -78,6 +80,10 @@ static void OnKill(Mowo::World& world, uint32_t killerPlayerId) {
 ## Read and change records from Visual Scripting
 
 `MPlayerStateStatics` <Source symbol="MPlayerStateStatics" /> exposes the same data to [Visual Scripting](/docs/visual-scripting/) graphs: `GetPlayerCount`, `GetPlayerIdAt`, `GetLocalPlayerId`, `GetPlayerName`, `GetScore`, `GetTeam`, `GetPing`, `IsReady`, `IsHostPlayer`, `IsInactive`, and the host-only `AddScore`, `SetScore`, `SetTeam` and `SetSpectator`.
+
+## The match state
+
+The match phase and the clock are replicated the same way. The host's `AGameState` <Source symbol="AGameState" /> keeps one always-relevant record carrying a `GameStateComponent` <Source symbol="GameStateComponent" />: the phase (`WaitingToStart`, `InProgress`, `WaitingPostMatch`) and the elapsed time in whole seconds. Every client's `AGameState` mirrors that record each tick, so `GetMatchState`, `IsMatchInProgress`, `HasMatchEnded` and `GetElapsedTime` answer the same on every machine. Only the host writes: `SetMatchState`, `EndMatch` and `AddElapsedTime` do nothing on a client. Scores and the player list are the player-state records above, so a scoreboard reads `AGameState` for the phase and `FPlayerStateSystem` for the rows.
 
 ## Related
 

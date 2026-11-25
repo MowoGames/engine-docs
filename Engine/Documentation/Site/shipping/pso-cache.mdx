@@ -6,7 +6,7 @@ order: 8
 sources:
   - Engine/Source/Runtime/RHI/Public/RHI/PsoCache.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
-verifiedAt: aee5cfcae
+verifiedAt: 48f76ce0b
 ---
 
 The first time a GPU driver sees a pipeline, it compiles the shader bytecode into the GPU's own instruction set. If that happens during play, the player sees a hitch. A **bundled PSO cache** moves that work to startup: development runs record which pipelines the game creates, the result ships with the package, and the packaged game creates every recorded pipeline before its first frame.
@@ -70,6 +70,10 @@ Before packaging, it runs a `dev` or `debug` `MowoGame` over your project. The g
 |---|---|---|
 | `r.PSOCache.Record` | `-1` | `-1` records automatically when a project is open in a build that is not `release` or `profile`; `0` off; `1` on |
 | `r.PSOCache.Prewarm` | `1` | Prewarm from the bundled cache at game startup |
+| `r.PSOCache.PrewarmParallel` | `1` | Load the recorded shaders and create the pipelines across the job system's workers; `0` does one record at a time |
+| `r.PSOCache.NonBlockingBind` | `1` | A draw that can do without a pipeline for a frame skips it while the pipeline compiles, instead of stalling the frame |
+| `r.PSOCache.LogMisses` | `1` | Log each pipeline's first miss by name, so a pipeline missing from the cache shows in the log of a tested build; `0` counts only |
+| `r.PSOPrecache.OnRegister` | `1` | Start compiling the pipelines a mesh component will draw with the first time it is submitted, before it reaches the screen |
 
 See the [console variables reference](/docs/reference/console-variables/).
 
@@ -83,8 +87,12 @@ A development machine has a warm driver shader cache, which hides exactly the co
 
 ## Notes
 
-- The record format is versioned. A file with an unknown version is skipped as a whole rather than misread, and a change to the engine's pipeline layouts raises the version, so an old cache is ignored rather than prewarming pipelines nothing uses. Record or gather again after such an engine update.
+- The record format is versioned. A file with an unknown version is skipped as a whole rather than misread, and a change to the engine's pipeline layouts raises the version, so an old cache is ignored rather than prewarming pipelines nothing uses. Record or gather again after such an engine update. Each graphics pipeline record also keeps the depth format, sample count and swap-chain flag of its render target, so prewarm builds the pipelines the renderer uses for its targets, including the ones that draw with depth.
 - A recorded pipeline whose shader no longer exists, or whose vertex layout no longer matches, is skipped at prewarm, and the log counts the stale records.
+
+## Misses
+
+A pipeline that is still compiling when a draw reaches it is a miss. The engine counts them per pipeline name: a draw that waits on the build and a draw that is skipped for the frame both count, and the skipped ones are totalled separately. The first miss of each pipeline is also logged as a `[PsoCache] miss:` warning with its name (`r.PSOCache.LogMisses`). A pass that keeps appearing in the miss list is a pipeline missing from the cache; record again from a session that visits it.
 
 ## Related
 

@@ -5,7 +5,7 @@ description: What each mbt command is for, grouped by task, with the common invo
 order: 1
 sources:
   - Engine/Documentation/Generated/cli.json
-verifiedAt: dc3188855
+verifiedAt: 4ef885b19
 ---
 
 `mbt` has one command per job. This page groups the commands a game project uses by task and shows the common invocations. The [mbt command reference](/docs/reference/mbt-cli/) is generated from the tool itself and lists every option with its default; `mbt <command> --help` prints the same.
@@ -16,7 +16,7 @@ Run every command through the wrapper at the root of the install, `./mbt.cmd`.
 
 | Command | Use |
 |---|---|
-| `mbt doctor` | Checks the toolchain against `Engine/Config/Toolchains.ini`, the Windows SDK and Visual C++ libraries, and the optional tools. Exits 1 when a required one is missing. |
+| `mbt doctor` | Checks the toolchain against `Engine/Config/Toolchains.ini`, the Windows SDK and Visual C++ libraries, and the optional tools. Exits 1 when a required one is missing. It also reports the Android JDK 17 and SDK (platform 35, build-tools 35.0.0) with the fix `mbt android-setup --accept-licenses`; both are optional and only package-android needs them. `--profile installed` checks only a compiler and the platform SDK (the default in an installed build); `--profile engine` also requires .NET, Git and Git LFS (the default in a source checkout). `--json` adds a `doctor` block listing every check. |
 | `mbt info` | Lists the modules and targets the build sees. |
 
 ## Build the game module
@@ -29,6 +29,8 @@ Run every command through the wrapper at the root of the install, `./mbt.cmd`.
 `-t` names the module to build and `--extra-source <Project>/Source` adds the project's modules. Engine modules are prebuilt, so only your modules compile, in the configuration the engine shipped as. `-o KEY=VALUE` passes a build option to the rules (see [Modules and targets](/docs/build-tool/modules-and-targets/#build-options)). `--hot-reload` links the module to a versioned library a running editor loads, and `mbt livecoding` patches changed functions into a running editor or game. The editor runs both for you; see [Working with C++](/docs/editor/working-with-cpp/) and [Live coding](/docs/programming/live-coding/). `--shared-cache` shares compiled objects across a team; see [Build tool](/docs/build-tool/).
 
 `mbt clean` removes build output; `--all` also removes the intermediate caches.
+
+Two options say where a build's time went. `mbt build --timing` asks clang for a time trace on every compile and ends with the costliest headers and template instantiations plus how long each set-up phase took (rules, resolving modules, toolchain, cache, fingerprints). `mbt build --explain` logs why each translation unit recompiles (a missing object, the newest changed header, or a precompiled header that is rebuilding), why each image relinks, why each shader or content archive repacks and why mowoprotect stamped an image again; it lists at most 40 units per module, and `--explain-all` lists every one, then ends with the changed headers that invalidated the most units, so you can see which edit fanned out. mbt judges every input by its content, never by its write time: touching files, a `git checkout`, re-copying a precompiled header or a runtime DLL changes nothing, and a library relinks for a dependency only when that dependency's import library changed in content. A build ends with a `Build tail` block that times what runs after the last link: the modules manifest, the wait for shader compiles, each archive pack and each mowoprotect run. A full-tree build builds MeafBuilder first when none exists, because the archives are packed with it, and a build that cannot pack an archive it needs fails instead of warning. A full-tree build then builds the programs side by side rather than one after another, with each log line prefixed by the program's name, and a failing program does not hide the results of the others. `--no-tests` leaves the Test targets out of a build that names no target, and skips the test hosts when the build rebuilds executables that a relinked library made stale; `mbt test` still builds what it needs. `mbt info --timing` shows how long the tool itself took to start. An unchanged build also skips most of its reading: mbt keeps each file's content hash with its size and write time in `.mbt-cache/plan`, and the header tool keeps the parsed type index in `.mbt-cache/mht-index.cache`. `--no-plan-cache` and `--no-index-cache` turn them off; `--verify-plan-cache` and `--verify-index-cache` recompute everything and report an entry whose content changed without its size or time changing. A header-tool error reads like a compiler error, `File.h(12,5): error: MHT0001: ...`, so an IDE can open the file at that line.
 
 ## Content
 
@@ -70,7 +72,11 @@ Run every command through the wrapper at the root of the install, `./mbt.cmd`.
 | `mbt steam-upload` | Uploads a package to Steamworks. |
 | `mbt mod new\|edit`, `mbt package-mod`, `mbt workshop-upload` | Makes, packages and publishes mods. |
 | `mbt liveops sign\|report` | Signs remote config and renders the telemetry dashboard. |
-| `mbt package-android` | Builds an Android Gradle project. Experimental; Android is not a supported product platform. |
+| `mbt android-setup` | Downloads the JDK 17 (Temurin) and the Android SDK (command-line tools, platform 35, build-tools 35.0.0) that package-android builds with, into `Engine/Source/ThirdParty/JDK` and `AndroidSDK`. Every archive is pinned by SHA-256 and a mismatch is deleted and refused. The JDK needs no licence; the SDK needs `--accept-licenses`, which prints the Android SDK licence text and accepts it. An existing `ANDROID_HOME`, or a `JAVA_HOME` of JDK 17 to 21, is used as found. |
+| `mbt package-android` | Builds an Android Gradle project (Vulkan 1.3 floor, arm64-v8a, minSdk 26); `--artifacts apk\|aab\|both` also runs Gradle and verifies the result, `--release` signs it with the keystore from `MOWO_ANDROID_KEYSTORE` and the credential store. In development; not a release path yet. |
+| `mbt package-ios` | Writes the iOS app bundle skeleton (`Info.plist`, `PrivacyInfo.xcprivacy`). Building, signing and archiving need a Mac and are not wired yet. |
+| `mbt deploy android\|ssh` | `android` installs the built APK with adb and grants RECORD_AUDIO and POST_NOTIFICATIONS (`--no-grant` skips it; `--run` starts it, `--logcat` follows the engine's log tags and crash lines, `--all-logs` the whole process log; `--forward` forwards the trace and MCP ports; `--pull-logs <dir>` copies Saved/Logs and Saved/Crashes off a debuggable build); `deploy pair <host:port> <code>` and `deploy connect <host:port>` set up wireless debugging; `ssh` copies only the changed files of a package folder to a Linux server and, with `--run`, starts it over ssh. It hashes the folder, compares it with the manifest the last deploy left in `--dir` (`.mowo-deploy.manifest`), uploads the files that differ or went missing on the server, deletes the files the package no longer has, and skips the rest; files the server holds that no deploy ever listed (logs, saves) are left alone. `--dry-run` prints the uploads and deletions and changes nothing; `--full` ignores the server's manifest and uploads everything. |
+| `mbt run android\|ssh` | Starts an installed app (`--app-id`) or a deployed server (`--host`, `--dir`, `--exe`) and streams its log until Ctrl+C or `--seconds`. |
 
 The [Packaging and shipping](/docs/shipping/) section covers each of these.
 
