@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptProgram.h
   - Engine/Source/Runtime/VisualScriptCompiler/Public/VisualScriptCompiler/VisualScriptCompiler.h
-verifiedAt: 92c3f98b5
+verifiedAt: 60cdf7435
 ---
 
 A Visual Script class is compiled before it runs: its graphs are checked, macros are inlined, every pin gets a type, and the result is a compact register program that a small interpreter runs. The program is plain data, so it can be cached or shipped next to the class as a `.vsprog` file.
@@ -31,6 +31,27 @@ The first time a class runs under backend 1 the engine looks for a program in th
 2. The compiler, run on the spot when the class loads.
 
 A compiled program is relinked against the live classes whenever a class registers or unregisters, so a hot reload never leaves a call pointing at a function that no longer exists.
+
+## Compiling a project from the command line
+
+`mbt visual-scripts compile` compiles every Visual Script class of a project without opening the editor, which is what a build server runs.
+
+```bash
+mbt visual-scripts compile --project MyGame/MyGame.mproject
+mbt visual-scripts compile --project MyGame/MyGame.mproject --out build/vsprog --warnings-as-errors --json
+```
+
+The command runs `MowoGame --compile-visual-scripts=<project>` from the dev configuration (`-c debug` picks the debug build; a release player has no compiler entry point). The game host loads the project's game modules first, so the classes your C++ registers are what a call node is checked against, exactly as in the editor. Without `--out` nothing is written; with it, each class's program lands under that folder in the same layout as `Content/`, as `<Class>.vsprog`.
+
+Every diagnostic prints on one line: `Content/BP_Door.vscript(graph=Open,node=4F3D): error VS1102: ...`. The code is stable, and the graph and node name where to look. With `--json` the report carries each diagnostic's `asset`, `graph` and `node` beside the usual fields.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Every class compiled without an error. |
+| 1 | At least one error, or the project would not open. |
+| 3 | No errors, but warnings with `--warnings-as-errors`. |
+
+`mbt cook` runs the same compile after asset validation. A class with an error stops the cook with its diagnostics, and the programs of the other classes go into the content archive next to their `.vscript`, so the shipped game loads them instead of compiling at start. `--no-validate` skips the compile along with the validation.
 
 ## Waiting nodes
 

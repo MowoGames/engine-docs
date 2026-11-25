@@ -15,7 +15,7 @@ sources:
   - Engine/Source/Runtime/Audio/Public/Audio/Components/AudioSourceComponent.h
   - Engine/Source/Runtime/Game/Public/Gameplay/GeometricAcousticsSystem.h
   - Engine/Source/Runtime/Game/Public/Game/MAcousticsStatics.h
-verifiedAt: 629bda799
+verifiedAt: f759a914b
 ---
 
 Mowo works out how sound travels from the level's geometry. One occlusion rule applies to every sound, including world sources, proximity voice chat, radio speakers and AI hearing, so the creature on the far side of a door hears exactly what the player does.
@@ -31,7 +31,7 @@ A ray from the source to the listener collects every wall it crosses, and each h
 
 Several walls on one ray add up in decibels and take the darkest cutoff, down to a -60 dB floor. Override any row in **Project Settings › Engine › Audio › Occlusion Materials**.
 
-Turn occlusion on per source with `useOcclusion`; `occlusionSmoothing` sets how fast the voice glides to its new level. Only the nearest `audio.OcclusionRaycastBudget` (default 32) sources are traced each frame; the rest keep their last state.
+Turn occlusion on per source with `useOcclusion`; `occlusionSmoothing` sets how fast the voice glides to its new level. `audio.OcclusionRaycastBudget` (default 32) sources are traced each frame, the ones waiting longest first (nearer sources weigh more), so every source is reached within a bounded number of frames; the rest keep their last state in between. Each trace is a fan of `audio.OcclusionFanRays` rays (default 5: the straight ray and four around the listener, 25 cm out), averaged in linear gain, so a wall edge ramps a source in instead of flipping it between open and blocked.
 
 ## Rooms and portals
 
@@ -47,6 +47,7 @@ Propagation takes the louder of the straight path through the walls and the path
 An `AudioReverbZone` component makes a box or sphere reverberant. The highest-`priority` zone containing the listener wins, so a small closet zone can nest inside a warehouse zone. `fadeDistance` blends at the edge and `crossfadeRate` sets how fast the send follows. The reverb is parametric (`roomSize`, `damping`, `wet`, `dry`), or a convolution reverb when `irPath` names an impulse response. Only the SFX and Ambient buses get reverb; Music and Voice stay dry. <Source symbol="AudioReverbZoneComponent" />
 
 The zone follows its actor: rotate the actor and the box turns with it, scale it and the box (per axis) or the sphere (by the largest axis) grows with it. `fadeDistance` stays a distance in metres however the zone is scaled. <Source symbol="FReverbZoneSolver" />
+
 ## Reverb and reflections from geometry
 
 With `audio.Acoustics` on (the default), the engine also traces the listener's surroundings a few times a second (`audio.Acoustics.UpdateHz`): <Source symbol="FGeometricAcoustics" />

@@ -22,7 +22,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/AAmbientSoundActor.h
   - Engine/Source/Runtime/Game/Public/Game/Components/FootstepComponent.h
   - Engine/Source/Runtime/Game/Public/Audio/FootstepSystem.h
-verifiedAt: 2279abb89
+verifiedAt: 9d6fe74da
 ---
 
 Mowo's audio runs on [miniaudio](https://miniaud.io/). An audio engine owns the output device and a tree of submixes; sound sources play clips into it; and an `AudioSource` ECS component, wrapped by `MAudioComponent` on actors, brings sound into a scene. Source files can be WAV, MP3, FLAC, Ogg Vorbis or Opus; they import as `.sound` assets.
@@ -80,11 +80,15 @@ On top of routing, three category controls work across submixes: <Source path="E
 - **Sound mixes**: `FSoundClasses::PushMix(name, adjusters)` scales named classes until `PopMix(name)`.
 - **Concurrency groups** (`audio.concurrency`, entries `Name:MaxCount:Rule`) cap how many sounds of a kind play at once. When a group is full, the rule decides what gives way: `PreventNew`, `StopOldest`, `StopFarthest`, `StopLowestPriority` or `StopQuietest`.
 
+A `LimiterEffect` (`AudioEngine::CreateLimiterEffect(ceilingDb, lookAheadMs, releaseMs)`) is a look-ahead brickwall limiter for the end of the master chain: it delays the signal by the look-ahead (1.5 ms by default) and lowers the gain before a peak arrives, so no sample passes the ceiling. `GetGainReductionDb` reports what it is taking.
+
 For whole-mix states such as a pause menu or underwater, use mix snapshots; see [Music and mixing](/docs/gameplay/music-and-mixing/).
 
 ## Voice budget
 
 Only the highest-scoring voices are audible. Each playing voice scores its `priority` plus its effective volume at the listener. The top `audio.max_voices` (default 32) play; per-bus caps `audio.max_voices_sfx`, `audio.max_voices_music` and so on apply on top. Voices below the cap are **virtualized**: they cost no mixing, but their playback position keeps advancing, so a voice that wins its slot back resumes where it would have been.
+
+`AudioSource::LoadAsync` decodes a clip on the resource manager's job thread: the call returns at once, the voice plays silence until the decode lands, and `IsLoadPending` reports the gap. Use it for long clips that are not streamed, so loading one never hitches a frame.
 
 Large clips stream from disk instead of loading whole. `audio.resident_budget_mb` caps the memory used by fully loaded clips; 0 picks a budget from the machine's memory.
 
@@ -113,6 +117,10 @@ A MetaSound (`.metasound`) is a DSP graph that synthesizes or processes sound li
 
 Audio parameters are named floats that gameplay sets and sources read, like Wwise RTPCs: tension, health, speed. `MAudioStatics::SetAudioParameter(name, value)` sets one and `SetAudioParameterSmoothing` glides it. A source modulates by the parameter named in `modulationParameter`. <Source symbol="MAudioStatics" />
 
+## Binaural and plugin spatializers
+
+`Panner` is a control-rate equal-power pan. `Binaural` is a built-in head model for headphones: per ear it applies an interaural time difference (up to about 0.65 ms), a level difference, head-shadow low-pass filtering and a darker rear, on the voice's samples. A spatializer that processes samples implements `IAudioSpatializerVoice` and returns one from `IAudioSpatializer::CreateVoice`; the engine inserts a per-voice node after the sound and publishes the listener and source transform to it without locking, so an HRTF library such as Steam Audio attaches at the same place. <Source symbol="IAudioSpatializerVoice" />
+
 ## What the player can hear
 
 `MAudioStatics::GetAudibleSoundCount(minLoudness)` and its `GetAudibleSoundAzimuth`, `GetAudibleSoundLoudness` and `GetAudibleSoundCaption` siblings list the audible sounds, loudest first, with their direction around the listener and their caption. Use them for a sound compass or directional captions.
@@ -123,7 +131,8 @@ Audio parameters are named floats that gameplay sets and sources read, like Wwis
 | --- | --- |
 | `au.Debug` | Prints voices, submix meters, concurrency groups, the memory budget and parameters |
 | `au.Debug.Attenuation` | Draws each spatial voice's min and max distance in the viewport |
-| `audio.Spatializer` | `Native` (miniaudio), `Panner`, or a spatializer plugin's name |
+| `audio.Spatializer` | `Native` (miniaudio), `Panner`, `Binaural`, or a spatializer plugin's name |
+| `audio.OcclusionRaycastBudget` | Occlusion raycasts per frame (default 32); sources waiting longest are traced first |
 | `audio.DopplerScale` | Global doppler multiplier; 0 disables doppler |
 
 The editor's **Audio** panel shows the submix tree with faders and meters. <Source symbol="FAudioDebug" />
