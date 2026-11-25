@@ -22,7 +22,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/AAmbientSoundActor.h
   - Engine/Source/Runtime/Game/Public/Game/Components/FootstepComponent.h
   - Engine/Source/Runtime/Game/Public/Audio/FootstepSystem.h
-verifiedAt: 9d6fe74da
+verifiedAt: 11e9af9a3
 ---
 
 Mowo's audio runs on [miniaudio](https://miniaud.io/). An audio engine owns the output device and a tree of submixes; sound sources play clips into it; and an `AudioSource` ECS component, wrapped by `MAudioComponent` on actors, brings sound into a scene. Source files can be WAV, MP3, FLAC, Ogg Vorbis or Opus; they import as `.sound` assets.
@@ -125,11 +125,15 @@ Audio parameters are named floats that gameplay sets and sources read, like Wwis
 
 `MAudioStatics::GetAudibleSoundCount(minLoudness)` and its `GetAudibleSoundAzimuth`, `GetAudibleSoundLoudness` and `GetAudibleSoundCaption` siblings list the audible sounds, loudest first, with their direction around the listener and their caption. Use them for a sound compass or directional captions.
 
+## Measuring loudness
+
+`FLoudnessMeter` is an ITU-R BS.1770 / EBU R128 meter: K-weighting, momentary (400 ms) and short-term (3 s) LUFS, integrated LUFS through the absolute and relative gates, and a 4x oversampled true peak in dBTP. `Init(sampleRate, channels)`, then `Process` interleaved frames (the master mix read from `AudioEngine::ReadFrames`, or any capture). A -20 dBFS 997 Hz sine in one channel reads -23.0 LUFS and a full-scale stereo sine 0 LUFS. <Source symbol="FLoudnessMeter" />
+
 ## Debugging
 
 | Command or variable | Effect |
 | --- | --- |
-| `au.Debug` | Prints voices, submix meters, concurrency groups, the memory budget and parameters |
+| `au.Debug` | Prints voices, submix meters, concurrency groups, the memory budget and parameters and the output line: queued latency, device callbacks, overruns (a callback that took longer than its buffer lasts, where a device runs dry), the worst callback and the mean load |
 | `au.Debug.Attenuation` | Draws each spatial voice's min and max distance in the viewport |
 | `audio.Spatializer` | `Native` (miniaudio), `Panner`, `Binaural`, or a spatializer plugin's name |
 | `audio.OcclusionRaycastBudget` | Occlusion raycasts per frame (default 32); sources waiting longest are traced first |

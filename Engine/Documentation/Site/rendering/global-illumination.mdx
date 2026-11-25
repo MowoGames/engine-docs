@@ -6,7 +6,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/DdgiBake.h
-verifiedAt: efef8f4ff
+verifiedAt: bcdfcfa55
 ---
 
 Global Illumination is Mowo's real-time indirect lighting. It combines a camera-centred signed distance field, a grid of irradiance probes, a radiance cache, a mesh-card surface cache and a screen-space probe gather, with temporal denoising on top. At Epic it can also trace its gather rays through the hardware ray-tracing scene. Nothing has to be baked for it to work; a baked field is only a fallback for tiers that turn the live system off.
@@ -110,6 +110,8 @@ To keep a tier's shadows and resolution but drop the cost of Global Illumination
 ## Distance, lights and voxel worlds
 
 **Beyond the probe window.** The live world-probe gather (Medium and the Steam Deck row) only knows the probes around the camera. Past the outermost probes the field now fades out over one probe cell and the sky's mean radiance, leaned toward the upward hemisphere, fills the rest, so a floor 100 m away no longer wears the lighting of the window's border. `r.GI.WorldProbeFarField 0` brings back the old clamp. The fill does not look at the distance field, so a far surface under cover reads as open sky; the ambient occlusion pass still darkens it. The screen-probe gather (High and up) has a far cascade instead and is not affected.
+
+**Bounce energy.** A closed room lit by one lamp is the energy check: with the walls at albedo 0.5 the gather returns about half of the lamp-lit wall radiance a second time on Medium and High, about 0.4 of it on Epic and Cinematic under Vulkan, and the bounce grows with the wall colour. Every gather clamps a single ray or pixel at 64 times the scene unit; the clamps were 8 on the hardware-traced gather and the final screen-probe write, which capped a bright lamp room at a fraction of its bounce.
 
 **Probe levels.** The world-probe field has up to three levels. Level 0 is the near window around the camera. Levels 1 and 2 are the same field at 4 times and 16 times the spacing (`r.GI.FarCascadeScale`; about 64 m and 256 m at Medium), each following the camera in whole steps of its own spacing. They exist only while the scene is wider than the near window, and `r.GI.WorldProbeLevels` sets how many run: 1 is the single near window with the fade to the sky, and it is the switch to reach for when you suspect the coarse levels. A coarse level traces at most `r.GI.DDGI.ProbeBudget` probes per frame once it is built. A scheduler picks them: a new level and the planes a scroll exposes go first and may exceed the budget, then the probes near the camera, then the probes that have waited longest, so every probe is revisited within a few frames. Everything that samples the probe field reads all the levels, blending each by how far inside its window the point sits: the world-probe gather, the specular environment pass, forward-lit translucents, the fog, the card relight, the radiance cache bake, the probe bounce and the reflection and planar captures. The screen-probe gather's own per-pixel world fallback reads the near window only. Coarse levels are not relocated away from geometry, so a probe inside a wall just carries little weight.
 

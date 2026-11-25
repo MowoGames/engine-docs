@@ -301,6 +301,112 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/Audio/Public/Audio/AudioClock.h",
+			"include": "Audio/AudioClock.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "enum",
+					"name": "EQuantBoundary",
+					"namespace": "Mowo",
+					"bases": "uint8_t",
+					"doc": "Where on a beat grid a scheduled sound may start.",
+					"line": 10,
+					"members": [
+						{
+							"kind": "enumerator",
+							"name": "Immediate",
+							"signature": "Immediate",
+							"line": 11
+						},
+						{
+							"kind": "enumerator",
+							"name": "Bar",
+							"signature": "Bar",
+							"line": 12
+						},
+						{
+							"kind": "enumerator",
+							"name": "Beat",
+							"signature": "Beat",
+							"line": 13
+						},
+						{
+							"kind": "enumerator",
+							"name": "EighthNote",
+							"signature": "EighthNote",
+							"line": 14
+						},
+						{
+							"kind": "enumerator",
+							"name": "SixteenthNote",
+							"signature": "SixteenthNote",
+							"line": 15
+						},
+						{
+							"kind": "enumerator",
+							"name": "TripletEighth",
+							"signature": "TripletEighth",
+							"line": 16
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FAudioClock",
+					"namespace": "Mowo",
+					"doc": "A musical grid laid over the engine's PCM clock (UE's Quartz role). Because\nboth the grid and the start of a scheduled sound are frame numbers on the\nsame clock the mixer advances, a start lands on its boundary to the sample\nwhatever the game thread was doing when it was requested.",
+					"line": 23,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Bpm",
+							"signature": "double Bpm = 120.0",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "BeatsPerBar",
+							"signature": "uint32_t BeatsPerBar = 4",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "SampleRate",
+							"signature": "uint32_t SampleRate = 48000",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "StartFrame",
+							"signature": "uint64_t StartFrame = 0",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "FramesPerBeat",
+							"signature": "double FramesPerBeat() const",
+							"line": 29
+						},
+						{
+							"kind": "method",
+							"name": "FramesPerBoundary",
+							"signature": "double FramesPerBoundary(EQuantBoundary boundary) const",
+							"line": 33
+						},
+						{
+							"kind": "method",
+							"name": "NextBoundaryFrame",
+							"signature": "uint64_t NextBoundaryFrame(uint64_t nowFrame, EQuantBoundary boundary) const",
+							"doc": "The first boundary frame at or after `nowFrame`; `nowFrame` itself for\nImmediate or a grid with no tempo.",
+							"line": 55
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/Audio/Public/Audio/AudioCurve.h",
 			"include": "Audio/AudioCurve.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -515,27 +621,57 @@
 						},
 						{
 							"kind": "field",
+							"name": "Callbacks",
+							"signature": "uint64_t Callbacks = 0",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "Overruns",
+							"signature": "uint64_t Overruns = 0",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "WorstCallbackMs",
+							"signature": "double WorstCallbackMs = 0.0",
+							"line": 51
+						},
+						{
+							"kind": "field",
+							"name": "AverageLoad",
+							"signature": "double AverageLoad = 0.0",
+							"line": 52
+						},
+						{
+							"kind": "field",
+							"name": "LatencyMs",
+							"signature": "double LatencyMs = 0.0",
+							"line": 53
+						},
+						{
+							"kind": "field",
 							"name": "Spatializer",
 							"signature": "std::string Spatializer",
-							"line": 49
+							"line": 54
 						},
 						{
 							"kind": "field",
 							"name": "Submixes",
 							"signature": "std::vector<FAudioDebugSubmix> Submixes",
-							"line": 50
+							"line": 55
 						},
 						{
 							"kind": "field",
 							"name": "Groups",
 							"signature": "std::vector<FAudioDebugGroup> Groups",
-							"line": 51
+							"line": 56
 						},
 						{
 							"kind": "field",
 							"name": "Parameters",
 							"signature": "std::vector<FAudioDebugParameter> Parameters",
-							"line": 52
+							"line": 57
 						}
 					]
 				},
@@ -544,42 +680,42 @@
 					"name": "FAudioDebug",
 					"namespace": "Mowo",
 					"doc": "FAudioDebug — the debug surface. Capture() takes the snapshot; Format()\nturns it into the text the `au.Debug` console command prints and the\neditor's Audio panel shows; DrawAttenuation() draws every playing spatial\nvoice's min/max distance in the viewport while `au.Debug.Attenuation` is on\n(the Audio debug-draw category).",
-					"line": 60,
+					"line": 65,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Capture",
 							"signature": "static FAudioDebugStats Capture()",
 							"static": true,
-							"line": 62
+							"line": 67
 						},
 						{
 							"kind": "method",
 							"name": "Format",
 							"signature": "static std::string Format(const FAudioDebugStats& stats)",
 							"static": true,
-							"line": 63
+							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "RegisterConsoleCommands",
 							"signature": "static void RegisterConsoleCommands()",
 							"static": true,
-							"line": 65
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "IsAttenuationDrawEnabled",
 							"signature": "static bool IsAttenuationDrawEnabled()",
 							"static": true,
-							"line": 66
+							"line": 71
 						},
 						{
 							"kind": "method",
 							"name": "DrawAttenuation",
 							"signature": "static uint32_t DrawAttenuation()",
 							"static": true,
-							"line": 67
+							"line": 72
 						}
 					]
 				}
@@ -1787,448 +1923,505 @@
 						},
 						{
 							"kind": "method",
+							"name": "NoteCallback",
+							"signature": "void NoteCallback(uint32_t frames, double callbackMicros)",
+							"line": 138
+						},
+						{
+							"kind": "method",
+							"name": "GetTelemetry",
+							"signature": "FAudioTelemetry GetTelemetry() const",
+							"line": 139
+						},
+						{
+							"kind": "method",
+							"name": "ResetTelemetry",
+							"signature": "void ResetTelemetry()",
+							"line": 140
+						},
+						{
+							"kind": "method",
 							"name": "GetClockFrames",
 							"signature": "uint64_t GetClockFrames() const",
-							"line": 127
+							"line": 142
 						},
 						{
 							"kind": "method",
 							"name": "GetClockSeconds",
 							"signature": "double GetClockSeconds() const",
-							"line": 128
+							"line": 143
 						},
 						{
 							"kind": "method",
 							"name": "IsClockLive",
 							"signature": "bool IsClockLive() const",
-							"line": 129
+							"line": 144
 						},
 						{
 							"kind": "method",
 							"name": "PlayOneShot",
 							"signature": "AudioSource* PlayOneShot(const std::string& path, AudioBus bus, float volume, bool spatial, float x, float y, float z)",
 							"doc": "Fire-and-forget playback. The engine owns the voice, keeps it in a pool\nand reaps it once it finishes (UpdateVoices), so the caller does not have\nto hold an AudioSource alive for a one-shot. spatial=true positions the\nvoice at (x,y,z); spatial=false plays it 2D. Returns the voice (valid\nuntil it finishes) or nullptr when the clip fails to load.",
-							"line": 136
+							"line": 151
 						},
 						{
 							"kind": "method",
 							"name": "StopAll",
 							"signature": "void StopAll()",
 							"doc": "Stop all playing sounds (for PIE cleanup)",
-							"line": 139
+							"line": 154
 						},
 						{
 							"kind": "method",
 							"name": "CreateSubmix",
 							"signature": "AudioSubmix* CreateSubmix(const std::string& name, const std::string& parentName = \"Master\")",
 							"doc": "The submix tree. The five AudioBus values are the submixes the engine\ncreates first (\"Master\" is the root, the other four its children);\na project declares more in its config (`audio.submixes`, entries of\nthe form \"Name:Parent:Volume\") and code creates them at runtime.\nSources and sends name a submix by string, so a custom one is\naddressed exactly like a default bus. Removal refuses a default bus\nand a submix that still has sources or children attached.",
-							"line": 148
+							"line": 163
 						},
 						{
 							"kind": "method",
 							"name": "FindSubmix",
 							"signature": "AudioSubmix* FindSubmix(const std::string& name) const",
-							"line": 149
+							"line": 164
 						},
 						{
 							"kind": "method",
 							"name": "RemoveSubmix",
 							"signature": "bool RemoveSubmix(const std::string& name)",
-							"line": 150
+							"line": 165
 						},
 						{
 							"kind": "method",
 							"name": "GetBusSubmix",
 							"signature": "AudioSubmix* GetBusSubmix(AudioBus bus) const",
-							"line": 151
+							"line": 166
 						},
 						{
 							"kind": "method",
 							"name": "GetSubmixes",
 							"signature": "std::vector<AudioSubmix*> GetSubmixes() const",
-							"line": 152
+							"line": 167
 						},
 						{
 							"kind": "method",
 							"name": "BusName",
 							"signature": "static const char* BusName(AudioBus bus)",
 							"static": true,
-							"line": 153
+							"line": 168
 						},
 						{
 							"kind": "method",
 							"name": "ParseBus",
 							"signature": "static bool ParseBus(const std::string& name, AudioBus& outBus)",
 							"static": true,
-							"line": 154
+							"line": 169
 						},
 						{
 							"kind": "method",
 							"name": "BusOf",
 							"signature": "AudioBus BusOf(const AudioSubmix* submix) const",
 							"doc": "The default bus a submix budgets its voices against: itself when it\nis one, otherwise the nearest default bus above it (Master at worst).",
-							"line": 158
+							"line": 173
 						},
 						{
 							"kind": "method",
 							"name": "PauseAll",
 							"signature": "void PauseAll()",
 							"doc": "Pause/resume all sounds (for PIE pause)",
-							"line": 161
+							"line": 176
 						},
 						{
 							"kind": "method",
 							"name": "ResumeAll",
 							"signature": "void ResumeAll()",
-							"line": 162
+							"line": 177
 						},
 						{
 							"kind": "method",
 							"name": "IsInitialized",
 							"signature": "bool IsInitialized() const",
-							"line": 164
+							"line": 179
 						},
 						{
 							"kind": "method",
 							"name": "LoadVolumeSettings",
 							"signature": "void LoadVolumeSettings()",
-							"line": 168
+							"line": 183
 						},
 						{
 							"kind": "method",
 							"name": "CreateLowPassEffect",
 							"signature": "Ref<LowPassEffect> CreateLowPassEffect(float cutoffHz, uint32_t order = 4)",
 							"doc": "Factories. Each call init's the underlying ma_*_node against the engine's\nnode graph using the engine's channels + sample rate. Returns nullptr on\nfailure (init log goes through MOWO_LOG_ERROR). The returned effect is\nNOT yet attached — pass it to AddBusEffect to insert it into the audio\ngraph. There is no per-source chain attachment; the only per-source\neffect is the occlusion low-pass AudioSource manages itself.",
-							"line": 176
+							"line": 191
 						},
 						{
 							"kind": "method",
 							"name": "CreateHighPassEffect",
 							"signature": "Ref<HighPassEffect> CreateHighPassEffect(float cutoffHz, uint32_t order = 4)",
-							"line": 177
+							"line": 192
 						},
 						{
 							"kind": "method",
 							"name": "CreateBandPassEffect",
 							"signature": "Ref<BandPassEffect> CreateBandPassEffect(float cutoffHz, uint32_t order = 4)",
-							"line": 178
+							"line": 193
 						},
 						{
 							"kind": "method",
 							"name": "CreatePeakEqEffect",
 							"signature": "Ref<PeakEqEffect> CreatePeakEqEffect(float gainDb, float q, float frequencyHz)",
-							"line": 179
+							"line": 194
 						},
 						{
 							"kind": "method",
 							"name": "CreateLowShelfEffect",
 							"signature": "Ref<LowShelfEffect> CreateLowShelfEffect(float gainDb, float slope, float frequencyHz)",
-							"line": 180
+							"line": 195
 						},
 						{
 							"kind": "method",
 							"name": "CreateHighShelfEffect",
 							"signature": "Ref<HighShelfEffect> CreateHighShelfEffect(float gainDb, float slope, float frequencyHz)",
-							"line": 181
+							"line": 196
 						},
 						{
 							"kind": "method",
 							"name": "CreateDelayEffect",
 							"signature": "Ref<DelayEffect> CreateDelayEffect(float delaySeconds, float decay = 0.5f, float dryWet = 0.5f)",
-							"line": 182
+							"line": 197
 						},
 						{
 							"kind": "method",
 							"name": "CreateReverbEffect",
 							"signature": "Ref<ReverbEffect> CreateReverbEffect(float roomSize = 0.5f, float damping = 0.5f, float wet = 0.33f, float dry = 0.7f)",
-							"line": 183
+							"line": 198
 						},
 						{
 							"kind": "method",
 							"name": "CreateLimiterEffect",
 							"signature": "Ref<class LimiterEffect> CreateLimiterEffect(float ceilingDb = -1.0f, float lookAheadMs = 1.5f, float releaseMs = 80.0f)",
 							"doc": "Look-ahead brickwall limiter: the signal is delayed by lookAheadMs and the\ngain is brought down before a peak arrives, so nothing passes the ceiling.\nThe usual last link of the master chain.",
-							"line": 188
+							"line": 203
 						},
 						{
 							"kind": "method",
 							"name": "CreateCompressorEffect",
 							"signature": "Ref<CompressorEffect> CreateCompressorEffect(float thresholdDb = -20.0f, float ratio = 4.0f, float attackMs = 10.0f, float releaseMs = 100.0f, float kneeDb = 6.0f, float makeupDb = 0.0f)",
-							"line": 189
+							"line": 204
 						},
 						{
 							"kind": "method",
 							"name": "CreateConvolutionReverbEffect",
 							"signature": "Ref<ConvolutionReverbEffect> CreateConvolutionReverbEffect(const float* interleavedIR, uint32_t irFrames, uint32_t irChannels, float wet = 0.4f, float dry = 0.8f)",
 							"doc": "Convolution reverb. The raw overload takes interleaved f32 IR\nsamples; the VFS overload decodes any miniaudio-supported audio file\n(wav/flac/mp3) at the engine's sample rate, keeping the IR's native\nchannel count (true-stereo IRs map channel-for-channel).",
-							"line": 196
+							"line": 211
 						},
 						{
 							"kind": "method",
 							"name": "CreateConvolutionReverbEffectFromVFS",
 							"signature": "Ref<ConvolutionReverbEffect> CreateConvolutionReverbEffectFromVFS(const std::string& irPath, float wet = 0.4f, float dry = 0.8f)",
-							"line": 197
+							"line": 212
 						},
 						{
 							"kind": "method",
 							"name": "CreateEnvelopeFollowerEffect",
 							"signature": "Ref<EnvelopeFollowerEffect> CreateEnvelopeFollowerEffect(float attackMs = 5.0f, float releaseMs = 60.0f)",
-							"line": 198
+							"line": 213
 						},
 						{
 							"kind": "method",
 							"name": "AddBusEffect",
 							"signature": "bool AddBusEffect(AudioBus bus, Ref<AudioEffect> effect)",
 							"doc": "Per-bus effect chain. Insertion appends to the end of the chain (bus →\nexisting chain → new effect → endpoint). Removal pulls the effect out\nand re-wires neighbours. The Ref ownership keeps the effect alive while\nattached — caller may drop their own Ref after AddBusEffect.\n\n**Threading**: chain mutation must happen on the main thread. miniaudio's\nnode attach/detach is internally lock-safe but the chain bookkeeping\n(m_busEffects vector) is not.",
-							"line": 208
+							"line": 223
 						},
 						{
 							"kind": "method",
 							"name": "RemoveBusEffect",
 							"signature": "bool RemoveBusEffect(AudioBus bus, AudioEffect* effect)",
-							"line": 209
+							"line": 224
 						},
 						{
 							"kind": "method",
 							"name": "ClearBusEffects",
 							"signature": "void ClearBusEffects(AudioBus bus)",
-							"line": 210
+							"line": 225
 						},
 						{
 							"kind": "method",
 							"name": "GetBusEffectCount",
 							"signature": "size_t GetBusEffectCount(AudioBus bus) const",
-							"line": 211
+							"line": 226
 						},
 						{
 							"kind": "method",
 							"name": "GetBusEffect",
 							"signature": "AudioEffect* GetBusEffect(AudioBus bus, size_t index) const",
-							"line": 212
+							"line": 227
 						},
 						{
 							"kind": "method",
 							"name": "RegisterManagedEffect",
 							"signature": "void* RegisterManagedEffect(Ref<AudioEffect> effect)",
 							"doc": "Bridge surface for languages without RefCounted semantics. RegisterManaged\ntakes ownership of a Ref and returns a stable raw pointer a host\nlanguage can hold. The raw pointer stays valid until DestroyManaged is\ncalled (which also detaches the effect from any bus chain it's in).\n\nLifetime overlap with the bus chain: AddBusEffect bumps the ref count\n(the chain holds its own Ref), so a \"managed\" effect can be in both\nm_managedEffects AND m_busEffects[bus] simultaneously without leaking.",
-							"line": 222
+							"line": 237
 						},
 						{
 							"kind": "method",
 							"name": "DestroyManagedEffect",
 							"signature": "void DestroyManagedEffect(void* handle)",
-							"line": 223
+							"line": 238
 						},
 						{
 							"kind": "method",
 							"name": "RegisterVoice",
 							"signature": "VoiceHandle RegisterVoice(AudioSource* source, AudioBus bus)",
 							"doc": "Every AudioSource registers a voice on Load and drops it on Unload, so\nthe engine has the live-sound list miniaudio does not expose. The budget\npass (UpdateVoices, driven by AudioSystem each tick) ranks the playing\nvoices and keeps only the top `audio.max_voices` audible; the rest are\nVIRTUALIZED — their ma_sound is stopped so it costs no mixer time, while\nthe engine keeps advancing a wall-clock playback position. A voice that\nwins its slot back seeks to that position and resumes.\n\nScore = priority (0..100, per-source, dominates) + effective volume\n(0..1, base volume × distance attenuation to listener 0, tie-breaks).\nAudible voices carry a hysteresis bonus when ranked, so a voice sitting\non the budget boundary does not flip audible/virtual frame to frame.\n\nThese are the AudioSource↔engine plumbing calls — gameplay code drives\nAudioSource, not this.",
-							"line": 240
+							"line": 255
 						},
 						{
 							"kind": "method",
 							"name": "UnregisterVoice",
 							"signature": "void UnregisterVoice(VoiceHandle handle)",
-							"line": 241
+							"line": 256
 						},
 						{
 							"kind": "method",
 							"name": "RebindVoice",
 							"signature": "void RebindVoice(VoiceHandle handle, AudioSource* source)",
-							"line": 242
+							"line": 257
 						},
 						{
 							"kind": "method",
 							"name": "SetVoiceBus",
 							"signature": "void SetVoiceBus(VoiceHandle handle, AudioBus bus)",
-							"line": 243
+							"line": 258
 						},
 						{
 							"kind": "method",
 							"name": "NotifyVoiceStarted",
 							"signature": "void NotifyVoiceStarted(VoiceHandle handle)",
-							"line": 244
+							"line": 259
 						},
 						{
 							"kind": "method",
 							"name": "NotifyVoiceStopped",
 							"signature": "void NotifyVoiceStopped(VoiceHandle handle)",
-							"line": 245
+							"line": 260
 						},
 						{
 							"kind": "method",
 							"name": "SetVoicePriority",
 							"signature": "void SetVoicePriority(VoiceHandle handle, float priority)",
-							"line": 246
+							"line": 261
 						},
 						{
 							"kind": "method",
 							"name": "AdmitVoice",
 							"signature": "bool AdmitVoice(VoiceHandle handle)",
 							"doc": "Concurrency (FSoundClasses groups). Called by AudioSource::Play for a\nsource in a group: true lets it start — after stopping the victim the\ngroup's rule picks when the group is full — false refuses it.",
-							"line": 251
+							"line": 266
 						},
 						{
 							"kind": "method",
 							"name": "CountPlayingInGroup",
 							"signature": "uint32_t CountPlayingInGroup(const std::string& group) const",
-							"line": 252
+							"line": 267
 						},
 						{
 							"kind": "method",
 							"name": "GetVoicePriority",
 							"signature": "float GetVoicePriority(VoiceHandle handle) const",
-							"line": 253
+							"line": 268
 						},
 						{
 							"kind": "method",
 							"name": "UpdateVoices",
 							"signature": "void UpdateVoices(float deltaTime)",
 							"doc": "Re-rank + apply virtualization. deltaTime advances the virtual playback\nclock of every virtualized voice.",
-							"line": 257
+							"line": 272
 						},
 						{
 							"kind": "method",
 							"name": "IsVoiceVirtual",
 							"signature": "bool IsVoiceVirtual(VoiceHandle handle) const",
-							"line": 259
+							"line": 274
 						},
 						{
 							"kind": "method",
 							"name": "IsVoicePlaying",
 							"signature": "bool IsVoicePlaying(VoiceHandle handle) const",
-							"line": 260
+							"line": 275
 						},
 						{
 							"kind": "method",
 							"name": "GetVoicePositionSeconds",
 							"signature": "float GetVoicePositionSeconds(VoiceHandle handle) const",
-							"line": 261
+							"line": 276
 						},
 						{
 							"kind": "method",
 							"name": "GetVoiceScore",
 							"signature": "float GetVoiceScore(VoiceHandle handle) const",
-							"line": 262
+							"line": 277
 						},
 						{
 							"kind": "method",
 							"name": "SetMaxVoices",
 							"signature": "void SetMaxVoices(uint32_t maxVoices)",
-							"line": 264
+							"line": 279
 						},
 						{
 							"kind": "method",
 							"name": "GetMaxVoices",
 							"signature": "uint32_t GetMaxVoices() const",
-							"line": 265
+							"line": 280
 						},
 						{
 							"kind": "method",
 							"name": "SetBusMaxVoices",
 							"signature": "void SetBusMaxVoices(AudioBus bus, uint32_t maxVoices)",
 							"doc": "0 = unlimited. Applied on top of the global cap.",
-							"line": 269
+							"line": 284
 						},
 						{
 							"kind": "method",
 							"name": "GetBusMaxVoices",
 							"signature": "uint32_t GetBusMaxVoices(AudioBus bus) const",
-							"line": 270
+							"line": 285
 						},
 						{
 							"kind": "method",
 							"name": "SetVoiceHysteresis",
 							"signature": "void SetVoiceHysteresis(float margin)",
-							"line": 271
+							"line": 286
 						},
 						{
 							"kind": "method",
 							"name": "GetVoiceHysteresis",
 							"signature": "float GetVoiceHysteresis() const",
-							"line": 272
+							"line": 287
 						},
 						{
 							"kind": "method",
 							"name": "GetResidentBytes",
 							"signature": "uint64_t GetResidentBytes() const",
 							"doc": "Resident memory budget. Every clip held decoded in memory (a resident\n`.maudio`, a cooked DDC blob) is counted here; a load that would take\nthe total past the budget streams instead when the clip can stream, so\na level full of long beds degrades to disk reads rather than to an\nout-of-memory on a small device. The budget is `audio.resident_budget_mb`\nfrom the project config — per platform through its own config — and\nwhen that is 0 it is derived from the device (1/64 of physical memory\nthrough the PAL, clamped to 64..512 MB: 256 MB on a 16 GB handheld).\n-1 means unlimited.",
-							"line": 285
+							"line": 300
 						},
 						{
 							"kind": "method",
 							"name": "GetResidentBudgetBytes",
 							"signature": "uint64_t GetResidentBudgetBytes() const",
-							"line": 288
+							"line": 303
 						},
 						{
 							"kind": "method",
 							"name": "SetResidentBudgetBytes",
 							"signature": "void SetResidentBudgetBytes(uint64_t bytes)",
-							"line": 291
+							"line": 306
 						},
 						{
 							"kind": "method",
 							"name": "WouldExceedResidentBudget",
 							"signature": "bool WouldExceedResidentBudget(uint64_t additionalBytes) const",
-							"line": 294
+							"line": 309
 						},
 						{
 							"kind": "method",
 							"name": "AddResidentBytes",
 							"signature": "void AddResidentBytes(int64_t delta)",
-							"line": 295
+							"line": 310
 						},
 						{
 							"kind": "method",
 							"name": "GetStreamingVoiceCount",
 							"signature": "uint32_t GetStreamingVoiceCount() const",
-							"line": 296
+							"line": 311
 						},
 						{
 							"kind": "method",
 							"name": "GetForcedStreamCount",
 							"signature": "uint32_t GetForcedStreamCount() const",
-							"line": 297
+							"line": 312
 						},
 						{
 							"kind": "method",
 							"name": "NoteForcedStream",
 							"signature": "void NoteForcedStream()",
-							"line": 300
+							"line": 315
 						},
 						{
 							"kind": "method",
 							"name": "DefaultResidentBudgetForDevice",
 							"signature": "static uint64_t DefaultResidentBudgetForDevice(uint64_t physicalBytes)",
 							"static": true,
-							"line": 303
+							"line": 318
 						},
 						{
 							"kind": "method",
 							"name": "ForEachVoice",
 							"signature": "void ForEachVoice(const std::function<void(VoiceHandle handle, const AudioSource* source, bool playing, bool virtualized)>& visitor) const",
 							"doc": "Every registered voice, for the debug surface: the source, whether it is\nlogically playing and whether it is virtualized.",
-							"line": 307
+							"line": 322
 						},
 						{
 							"kind": "method",
 							"name": "GetLiveVoiceCount",
 							"signature": "uint32_t GetLiveVoiceCount() const",
-							"line": 309
+							"line": 324
 						},
 						{
 							"kind": "method",
 							"name": "GetAudibleVoiceCount",
 							"signature": "uint32_t GetAudibleVoiceCount() const",
-							"line": 310
+							"line": 325
 						},
 						{
 							"kind": "method",
 							"name": "GetVirtualVoiceCount",
 							"signature": "uint32_t GetVirtualVoiceCount() const",
-							"line": 311
+							"line": 326
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "AudioEngine::FAudioTelemetry",
+					"namespace": "Mowo",
+					"doc": "Output telemetry. Every device callback reports how long the mix took\nagainst the time its buffer lasts; a callback that used more than its\nbuffer is an overrun, the point where a device runs dry and clicks.\nLatencyMs is the queue the device settled on (period x periods).",
+					"line": 131,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Callbacks",
+							"signature": "uint64_t Callbacks = 0",
+							"line": 132
+						},
+						{
+							"kind": "field",
+							"name": "Overruns",
+							"signature": "uint64_t Overruns = 0",
+							"line": 133
+						},
+						{
+							"kind": "field",
+							"name": "WorstCallbackMs",
+							"signature": "double WorstCallbackMs = 0.0",
+							"line": 134
+						},
+						{
+							"kind": "field",
+							"name": "AverageLoad",
+							"signature": "double AverageLoad = 0.0",
+							"line": 135
+						},
+						{
+							"kind": "field",
+							"name": "LatencyMs",
+							"signature": "double LatencyMs = 0.0",
+							"line": 136
 						}
 					]
 				}
@@ -2793,477 +2986,484 @@
 						},
 						{
 							"kind": "method",
+							"name": "PlayAtFrame",
+							"signature": "void PlayAtFrame(uint64_t clockFrame)",
+							"doc": "Starts on a frame of the engine's PCM clock (AudioEngine::GetClockFrames):\nthe mixer holds the sound silent until that frame and begins it exactly\nthere. A frame already past plays at once.",
+							"line": 101
+						},
+						{
+							"kind": "method",
 							"name": "Stop",
 							"signature": "void Stop()",
-							"line": 98
+							"line": 102
 						},
 						{
 							"kind": "method",
 							"name": "Pause",
 							"signature": "void Pause()",
-							"line": 99
+							"line": 103
 						},
 						{
 							"kind": "method",
 							"name": "IsPlaying",
 							"signature": "bool IsPlaying() const",
 							"doc": "True while the voice is logically playing — including while virtualized,\nwhere the underlying ma_sound is stopped but the voice still owns a\nplayback position.",
-							"line": 103
+							"line": 107
 						},
 						{
 							"kind": "method",
 							"name": "IsAtEnd",
 							"signature": "bool IsAtEnd() const",
-							"line": 104
+							"line": 108
 						},
 						{
 							"kind": "method",
 							"name": "WasStopped",
 							"signature": "bool WasStopped() const",
 							"doc": "True after Stop() — this voice's or one a concurrency group issued to\nmake room — or when a full group refused Play(); false once it starts.\nStop() rewinds, so IsAtEnd alone cannot tell a stopped voice from a\npaused one.",
-							"line": 109
+							"line": 113
 						},
 						{
 							"kind": "method",
 							"name": "SetVolume",
 							"signature": "void SetVolume(float volume)",
-							"line": 113
+							"line": 117
 						},
 						{
 							"kind": "method",
 							"name": "GetVolume",
 							"signature": "float GetVolume() const",
-							"line": 114
+							"line": 118
 						},
 						{
 							"kind": "method",
 							"name": "SetPitch",
 							"signature": "void SetPitch(float pitch)",
-							"line": 116
+							"line": 120
 						},
 						{
 							"kind": "method",
 							"name": "GetPitch",
 							"signature": "float GetPitch() const",
-							"line": 117
+							"line": 121
 						},
 						{
 							"kind": "method",
 							"name": "SetLooping",
 							"signature": "void SetLooping(bool loop)",
-							"line": 119
+							"line": 123
 						},
 						{
 							"kind": "method",
 							"name": "IsLooping",
 							"signature": "bool IsLooping() const",
-							"line": 120
+							"line": 124
 						},
 						{
 							"kind": "method",
 							"name": "SetSpatial",
 							"signature": "void SetSpatial(bool spatial)",
 							"doc": "3D spatialization",
-							"line": 123
+							"line": 127
 						},
 						{
 							"kind": "method",
 							"name": "SetPosition",
 							"signature": "void SetPosition(float x, float y, float z)",
-							"line": 124
+							"line": 128
 						},
 						{
 							"kind": "method",
 							"name": "SetMinDistance",
 							"signature": "void SetMinDistance(float dist)",
-							"line": 125
+							"line": 129
 						},
 						{
 							"kind": "method",
 							"name": "SetMaxDistance",
 							"signature": "void SetMaxDistance(float dist)",
-							"line": 126
+							"line": 130
 						},
 						{
 							"kind": "method",
 							"name": "SetAttenuationModel",
 							"signature": "void SetAttenuationModel(int32_t model)",
 							"doc": "An ma_attenuation_model value.",
-							"line": 128
+							"line": 132
 						},
 						{
 							"kind": "method",
 							"name": "SetRolloff",
 							"signature": "void SetRolloff(float rolloff)",
-							"line": 129
+							"line": 133
 						},
 						{
 							"kind": "method",
 							"name": "SetVelocity",
 							"signature": "void SetVelocity(float x, float y, float z)",
-							"line": 131
+							"line": 135
 						},
 						{
 							"kind": "method",
 							"name": "GetVelocity",
 							"signature": "void GetVelocity(float& x, float& y, float& z) const",
-							"line": 132
+							"line": 136
 						},
 						{
 							"kind": "method",
 							"name": "SetDopplerFactor",
 							"signature": "void SetDopplerFactor(float factor)",
-							"line": 133
+							"line": 137
 						},
 						{
 							"kind": "method",
 							"name": "GetDopplerFactor",
 							"signature": "float GetDopplerFactor() const",
-							"line": 134
+							"line": 138
 						},
 						{
 							"kind": "method",
 							"name": "SetDirection",
 							"signature": "void SetDirection(float x, float y, float z)",
-							"line": 138
+							"line": 142
 						},
 						{
 							"kind": "method",
 							"name": "SetCone",
 							"signature": "void SetCone(float innerRadians, float outerRadians, float outerGain)",
-							"line": 139
+							"line": 143
 						},
 						{
 							"kind": "method",
 							"name": "FadeIn",
 							"signature": "void FadeIn(float durationMs)",
-							"line": 141
+							"line": 145
 						},
 						{
 							"kind": "method",
 							"name": "FadeOut",
 							"signature": "void FadeOut(float durationMs)",
-							"line": 142
+							"line": 146
 						},
 						{
 							"kind": "method",
 							"name": "FadeTo",
 							"signature": "void FadeTo(float targetVolume, float durationMs)",
-							"line": 143
+							"line": 147
 						},
 						{
 							"kind": "method",
 							"name": "SeekToFrame",
 							"signature": "void SeekToFrame(uint64_t frame)",
-							"line": 145
+							"line": 149
 						},
 						{
 							"kind": "method",
 							"name": "SeekToSeconds",
 							"signature": "void SeekToSeconds(float seconds)",
-							"line": 146
+							"line": 150
 						},
 						{
 							"kind": "method",
 							"name": "GetCursorInFrames",
 							"signature": "uint64_t GetCursorInFrames() const",
-							"line": 147
+							"line": 151
 						},
 						{
 							"kind": "method",
 							"name": "GetCursorInSeconds",
 							"signature": "float GetCursorInSeconds() const",
-							"line": 148
+							"line": 152
 						},
 						{
 							"kind": "method",
 							"name": "GetLengthInSeconds",
 							"signature": "float GetLengthInSeconds() const",
-							"line": 149
+							"line": 153
 						},
 						{
 							"kind": "method",
 							"name": "SetLowPassCutoff",
 							"signature": "void SetLowPassCutoff(float cutoffHz)",
 							"doc": "Per-source low-pass filter (used by occlusion). Cutoff >= 19999 Hz\nremoves the filter entirely (source plays through the bus directly);\nany lower value inserts/maintains a LowPassEffect between the sound\nand its bus group. Safe to call repeatedly from the same thread —\nre-attaches only when crossing the \"enabled / disabled\" boundary.",
-							"line": 156
+							"line": 160
 						},
 						{
 							"kind": "method",
 							"name": "GetLowPassCutoff",
 							"signature": "float GetLowPassCutoff() const",
-							"line": 157
+							"line": 161
 						},
 						{
 							"kind": "method",
 							"name": "AddEffect",
 							"signature": "bool AddEffect(Ref<AudioEffect> effect)",
 							"doc": "Ordered source effect chain (UE's Source Effect Chain): sound →\nocclusion/distance low-pass → effects[0] → effects[1] → … → envelope tap\n→ sends/submix. The low-pass slot stays its own, so occlusion never\ncompetes with an authored filter for it. An effect lives in one chain;\nadding one already in this chain is refused. Effects come from the\nAudioEngine::Create*Effect factories and survive a reload of the clip.",
-							"line": 167
+							"line": 171
 						},
 						{
 							"kind": "method",
 							"name": "InsertEffect",
 							"signature": "bool InsertEffect(size_t index, Ref<AudioEffect> effect)",
-							"line": 168
+							"line": 172
 						},
 						{
 							"kind": "method",
 							"name": "RemoveEffect",
 							"signature": "bool RemoveEffect(AudioEffect* effect)",
-							"line": 169
+							"line": 173
 						},
 						{
 							"kind": "method",
 							"name": "ClearEffects",
 							"signature": "void ClearEffects()",
-							"line": 170
+							"line": 174
 						},
 						{
 							"kind": "method",
 							"name": "GetEffectCount",
 							"signature": "size_t GetEffectCount() const",
-							"line": 171
+							"line": 175
 						},
 						{
 							"kind": "method",
 							"name": "GetEffect",
 							"signature": "AudioEffect* GetEffect(size_t index) const",
-							"line": 174
+							"line": 178
 						},
 						{
 							"kind": "method",
 							"name": "AddParameterBinding",
 							"signature": "void AddParameterBinding(const FAudioParameterBinding& binding)",
 							"doc": "Parameter modulation (FAudioParameters). Bindings stack: Volume and\nPitch bindings multiply onto the authored volume and pitch (Get/SetVolume\nand Get/SetPitch keep meaning the authored values), and the darkest\nLowPassCutoff binding sits under whatever SetLowPassCutoff asked for.\nAudioEngine::UpdateVoices re-evaluates every live source each tick.",
-							"line": 181
+							"line": 185
 						},
 						{
 							"kind": "method",
 							"name": "ClearParameterBindings",
 							"signature": "void ClearParameterBindings()",
-							"line": 182
+							"line": 186
 						},
 						{
 							"kind": "method",
 							"name": "GetParameterBindingCount",
 							"signature": "size_t GetParameterBindingCount() const",
-							"line": 183
+							"line": 187
 						},
 						{
 							"kind": "method",
 							"name": "ApplyParameterBindings",
 							"signature": "void ApplyParameterBindings()",
-							"line": 186
+							"line": 190
 						},
 						{
 							"kind": "method",
 							"name": "GetParameterVolumeScale",
 							"signature": "float GetParameterVolumeScale() const",
-							"line": 187
+							"line": 191
 						},
 						{
 							"kind": "method",
 							"name": "GetParameterPitchScale",
 							"signature": "float GetParameterPitchScale() const",
-							"line": 190
+							"line": 194
 						},
 						{
 							"kind": "method",
 							"name": "GetAssetPitch",
 							"signature": "float GetAssetPitch() const",
 							"doc": "The clip's authored default pitch (its header), applied under SetPitch.",
-							"line": 194
+							"line": 198
 						},
 						{
 							"kind": "method",
 							"name": "GetParameterCutoff",
 							"signature": "float GetParameterCutoff() const",
-							"line": 197
+							"line": 201
 						},
 						{
 							"kind": "method",
 							"name": "IsLoaded",
 							"signature": "bool IsLoaded() const",
-							"line": 201
+							"line": 205
 						},
 						{
 							"kind": "method",
 							"name": "IsStreaming",
 							"signature": "bool IsStreaming() const",
 							"doc": "True when the clip reads from disk as it plays rather than being\nresident. Set by Load(), from the cook's decision: a compressed source\ngoes through miniaudio's own streaming decoder, a cooked .maudio through\nFMaudioFileStream.",
-							"line": 208
+							"line": 212
 						},
 						{
 							"kind": "method",
 							"name": "GetLoudnessGainDb",
 							"signature": "float GetLoudnessGainDb() const",
 							"doc": "The normalisation gain the cook stored in the clip, in dB. Applied under\nthe authored volume, so SetVolume/GetVolume keep meaning what the caller\nasked for.",
-							"line": 215
+							"line": 219
 						},
 						{
 							"kind": "method",
 							"name": "GetResidentBytes",
 							"signature": "uint64_t GetResidentBytes() const",
 							"doc": "Decoded bytes this source holds in memory, counted against the engine's\nresident budget; 0 for a streaming or live source.",
-							"line": 221
+							"line": 225
 						},
 						{
 							"kind": "method",
 							"name": "SetPriority",
 							"signature": "void SetPriority(float priority)",
 							"doc": "Priority is the primary ranking key of the voice budget (0..100, higher\nwins; effective volume breaks ties). A source over budget is virtualized:\nits ma_sound stops feeding the mixer while AudioEngine keeps advancing\nthe playback position, so de-virtualization resumes where it would have\nbeen had it never dropped out.",
-							"line": 230
+							"line": 234
 						},
 						{
 							"kind": "method",
 							"name": "GetPriority",
 							"signature": "float GetPriority() const",
-							"line": 231
+							"line": 235
 						},
 						{
 							"kind": "method",
 							"name": "IsVirtual",
 							"signature": "bool IsVirtual() const",
-							"line": 234
+							"line": 238
 						},
 						{
 							"kind": "method",
 							"name": "GetPlaybackPositionSeconds",
 							"signature": "float GetPlaybackPositionSeconds() const",
 							"doc": "Virtual-aware cursor: the tracked position while virtualized, the real\nma_sound cursor otherwise.",
-							"line": 239
+							"line": 243
 						},
 						{
 							"kind": "method",
 							"name": "GetVoiceHandle",
 							"signature": "VoiceHandle GetVoiceHandle() const",
-							"line": 241
+							"line": 245
 						},
 						{
 							"kind": "method",
 							"name": "ApplyExternalSpatialization",
 							"signature": "void ApplyExternalSpatialization(float gain, float pan, float lowPassHz)",
 							"doc": "External spatialization (FAudioSpatialization). While a non-native\nspatializer runs, miniaudio's own spatializer is off for this voice and\nthe plugin's gain, pan and low-pass apply instead; Clear hands the voice\nback to miniaudio. AudioEngine::UpdateVoices drives both.",
-							"line": 249
+							"line": 253
 						},
 						{
 							"kind": "method",
 							"name": "ClearExternalSpatialization",
 							"signature": "void ClearExternalSpatialization()",
-							"line": 250
+							"line": 254
 						},
 						{
 							"kind": "method",
 							"name": "ApplyBufferSpatialization",
 							"signature": "void ApplyBufferSpatialization(class IAudioSpatializer& spatializer, const struct FSpatializeInput& input)",
 							"doc": "Buffer-level spatialization: inserts the spatializer's per-voice node\nahead of the effect chain (creating it on first use, dropping it when the\nspatializer has no voice to offer) and publishes the voice's transform.",
-							"line": 254
+							"line": 258
 						},
 						{
 							"kind": "method",
 							"name": "HasSpatializerNode",
 							"signature": "bool HasSpatializerNode() const",
-							"line": 255
+							"line": 259
 						},
 						{
 							"kind": "method",
 							"name": "IsExternallySpatialized",
 							"signature": "bool IsExternallySpatialized() const",
-							"line": 256
+							"line": 260
 						},
 						{
 							"kind": "method",
 							"name": "GetExternalGain",
 							"signature": "float GetExternalGain() const",
-							"line": 259
+							"line": 263
 						},
 						{
 							"kind": "method",
 							"name": "GetExternalPan",
 							"signature": "float GetExternalPan() const",
-							"line": 262
+							"line": 266
 						},
 						{
 							"kind": "method",
 							"name": "SetSoundClass",
 							"signature": "void SetSoundClass(const std::string& className)",
 							"doc": "Sound class (FSoundClasses): its volume/pitch/low-pass, and every\nancestor's and active mix's, ride on this source's modulation each tick.\nConcurrency group: a full group applies its rule when Play is called.",
-							"line": 269
+							"line": 273
 						},
 						{
 							"kind": "method",
 							"name": "GetSoundClass",
 							"signature": "const std::string& GetSoundClass() const",
-							"line": 272
+							"line": 276
 						},
 						{
 							"kind": "method",
 							"name": "SetConcurrencyGroup",
 							"signature": "void SetConcurrencyGroup(const std::string& group)",
-							"line": 275
+							"line": 279
 						},
 						{
 							"kind": "method",
 							"name": "GetConcurrencyGroup",
 							"signature": "const std::string& GetConcurrencyGroup() const",
-							"line": 278
+							"line": 282
 						},
 						{
 							"kind": "method",
 							"name": "SetCaptionTag",
 							"signature": "void SetCaptionTag(const std::string& caption)",
 							"doc": "What this voice is, for the acoustic compass (AudioEngine::QueryAudible):\na captioned cue tags every voice it starts with its caption.",
-							"line": 284
+							"line": 288
 						},
 						{
 							"kind": "method",
 							"name": "GetCaptionTag",
 							"signature": "const std::string& GetCaptionTag() const",
-							"line": 287
+							"line": 291
 						},
 						{
 							"kind": "method",
 							"name": "IsSpatialized",
 							"signature": "bool IsSpatialized() const",
-							"line": 291
+							"line": 295
 						},
 						{
 							"kind": "method",
 							"name": "GetPosition",
 							"signature": "void GetPosition(float& x, float& y, float& z) const",
-							"line": 294
+							"line": 298
 						},
 						{
 							"kind": "method",
 							"name": "GetMinDistance",
 							"signature": "float GetMinDistance() const",
-							"line": 295
+							"line": 299
 						},
 						{
 							"kind": "method",
 							"name": "GetMaxDistance",
 							"signature": "float GetMaxDistance() const",
-							"line": 298
+							"line": 302
 						},
 						{
 							"kind": "method",
 							"name": "VirtualizeVoice",
 							"signature": "void VirtualizeVoice()",
 							"doc": "AudioEngine's budget pass drives these three — do not call them from\ngameplay code, they bypass the registry's playing/virtual bookkeeping.",
-							"line": 304
+							"line": 308
 						},
 						{
 							"kind": "method",
 							"name": "DevirtualizeVoice",
 							"signature": "void DevirtualizeVoice(float positionSeconds)",
-							"line": 305
+							"line": 309
 						},
 						{
 							"kind": "method",
 							"name": "EndVirtualVoice",
 							"signature": "void EndVirtualVoice()",
-							"line": 306
+							"line": 310
 						}
 					]
 				},
@@ -5922,6 +6122,67 @@
 							"name": "GetGainReductionDb",
 							"signature": "float GetGainReductionDb() const",
 							"line": 31
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Audio/Public/Audio/LoudnessMeter.h",
+			"include": "Audio/LoudnessMeter.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FLoudnessMeter",
+					"namespace": "Mowo",
+					"doc": "ITU-R BS.1770 / EBU R128 loudness of an interleaved stream: K-weighting\n(a high shelf and the RLB high-pass), 400 ms blocks on a 100 ms hop,\nmomentary and short-term loudness, integrated loudness through the -70 LUFS\nabsolute and -10 LU relative gates, and a true peak read from a 4x\noversampled signal. Up to two channels (left and right, weight 1). Feed it\nthe master mix and compare against -23 LUFS (broadcast) or -16 (games).",
+					"line": 17,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Init",
+							"signature": "void Init(uint32_t sampleRate, uint32_t channels)",
+							"line": 19
+						},
+						{
+							"kind": "method",
+							"name": "Reset",
+							"signature": "void Reset()",
+							"line": 20
+						},
+						{
+							"kind": "method",
+							"name": "Process",
+							"signature": "void Process(const float* interleaved, uint32_t frames)",
+							"line": 22
+						},
+						{
+							"kind": "method",
+							"name": "GetMomentaryLufs",
+							"signature": "float GetMomentaryLufs() const",
+							"doc": "LUFS over the last 400 ms and 3 s; -120 before enough audio has arrived.",
+							"line": 25
+						},
+						{
+							"kind": "method",
+							"name": "GetShortTermLufs",
+							"signature": "float GetShortTermLufs() const",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "GetIntegratedLufs",
+							"signature": "float GetIntegratedLufs() const",
+							"line": 27
+						},
+						{
+							"kind": "method",
+							"name": "GetTruePeakDb",
+							"signature": "float GetTruePeakDb() const",
+							"doc": "dBTP, the highest oversampled peak since Init or Reset.",
+							"line": 30
 						}
 					]
 				}
@@ -8638,75 +8899,90 @@
 							"line": 94
 						},
 						{
+							"kind": "field",
+							"name": "kDiffractionWavelength",
+							"signature": "static constexpr float kDiffractionWavelength = 1.7f",
+							"static": true,
+							"doc": "Diffraction round a portal's edge (Maekawa): the wavelength it is\nevaluated at (about 200 Hz, where an opening still bends the sound) and the most it may take off.",
+							"line": 98
+						},
+						{
+							"kind": "field",
+							"name": "kMaxDiffractionDb",
+							"signature": "static constexpr float kMaxDiffractionDb = 6.0f",
+							"static": true,
+							"line": 99
+						},
+						{
 							"kind": "method",
 							"name": "Build",
 							"signature": "void Build(World& world)",
-							"line": 96
+							"line": 101
 						},
 						{
 							"kind": "method",
 							"name": "Clear",
 							"signature": "void Clear()",
-							"line": 97
+							"line": 102
 						},
 						{
 							"kind": "method",
 							"name": "GetRooms",
 							"signature": "const std::vector<FSoundRoom>& GetRooms() const",
-							"line": 99
+							"line": 104
 						},
 						{
 							"kind": "method",
 							"name": "GetPortals",
 							"signature": "const std::vector<FSoundPortal>& GetPortals() const",
-							"line": 102
+							"line": 107
 						},
 						{
 							"kind": "method",
 							"name": "RoomAt",
 							"signature": "int32_t RoomAt(const Vec3& point) const",
 							"doc": "-1 when the point is outside every room.",
-							"line": 107
+							"line": 112
 						},
 						{
 							"kind": "method",
 							"name": "FindRoomById",
 							"signature": "int32_t FindRoomById(const std::string& roomId) const",
-							"line": 108
+							"line": 113
 						},
 						{
 							"kind": "method",
 							"name": "FindPortal",
 							"signature": "const FSoundPortal* FindPortal(EntityID entity) const",
-							"line": 109
+							"line": 114
 						},
 						{
 							"kind": "method",
 							"name": "FindCrossedPortal",
 							"signature": "const FSoundPortal* FindCrossedPortal(const Vec3& from, const Vec3& to) const",
 							"doc": "The least lossy linking portal whose opening the straight segment passes\nthrough, or null.",
-							"line": 113
+							"line": 118
 						},
 						{
 							"kind": "method",
 							"name": "FindRoute",
 							"signature": "bool FindRoute(int32_t fromRoom, const Vec3& from, int32_t toRoom, const Vec3& to, FSoundPath& outPath) const",
 							"doc": "The quietest-loss chain of portals between two rooms; false when none.",
-							"line": 116
+							"line": 121
 						},
 						{
 							"kind": "method",
 							"name": "Evaluate",
 							"signature": "FSoundPath Evaluate(const PhysicsWorld* physics, const Vec3& from, const Vec3& to, uint32_t layerMask) const",
 							"doc": "`physics` may be null — then only the portal graph answers.",
-							"line": 119
+							"line": 124
 						},
 						{
 							"kind": "method",
 							"name": "Evaluate",
 							"signature": "FSoundPath Evaluate(const IAcousticGeometry& geometry, const Vec3& from, const Vec3& to) const",
 							"doc": "The straight route traced against acoustic geometry (the scan\nhierarchy) instead of the physics scene.",
-							"line": 123
+							"line": 128
 						},
 						{
 							"kind": "method",
@@ -8714,14 +8990,14 @@
 							"signature": "static FSoundPath Evaluate(World& world, const Vec3& from, const Vec3& to, uint32_t layerMask)",
 							"static": true,
 							"doc": "The world's live graph and the geometry its sound is traced against:\nthe acoustic geometry installed for it (FGeometricAcoustics) when there\nis one and audio.Acoustics is on, else its physics scene; the straight\ntrace alone when the world runs no FSoundPropagationSystem. The layer\nmask filters physics only — acoustic geometry carries its own layers.",
-							"line": 130
+							"line": 135
 						},
 						{
 							"kind": "method",
 							"name": "Evaluate",
 							"signature": "static FSoundPath Evaluate(World& world, const Vec3& from, const Vec3& to)",
 							"static": true,
-							"line": 131
+							"line": 136
 						},
 						{
 							"kind": "method",
@@ -8729,14 +9005,14 @@
 							"signature": "static void MixPortal(float openFraction, float openDb, float openCutoffHz, float closedDb, float closedCutoffHz, float& outDb, float& outCutoffHz)",
 							"static": true,
 							"doc": "The open/closed energy mix of one opening.",
-							"line": 134
+							"line": 139
 						},
 						{
 							"kind": "method",
 							"name": "DrawDebug",
 							"signature": "void DrawDebug() const",
 							"doc": "Rooms as boxes, portals as their opening, and a line from every portal\nto the centres of the rooms it joins — under the Audio debug category.",
-							"line": 138
+							"line": 143
 						}
 					]
 				},
@@ -8745,38 +9021,38 @@
 					"name": "FSoundPropagationSystem",
 					"namespace": "Mowo",
 					"bases": "public System",
-					"line": 148,
+					"line": 153,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Initialize",
 							"signature": "void Initialize(World* world) override",
-							"line": 150
+							"line": 155
 						},
 						{
 							"kind": "method",
 							"name": "Update",
 							"signature": "void Update(float deltaTime) override",
-							"line": 151
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "Shutdown",
 							"signature": "void Shutdown() override",
-							"line": 152
+							"line": 157
 						},
 						{
 							"kind": "method",
 							"name": "GetGraph",
 							"signature": "const FSoundPropagation& GetGraph() const",
-							"line": 154
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "Rebuild",
 							"signature": "void Rebuild()",
 							"doc": "Rebuild now, for a caller that just moved a door and wants the next\nquery this frame to see it.",
-							"line": 160
+							"line": 165
 						}
 					]
 				}
