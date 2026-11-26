@@ -4,13 +4,14 @@ description: Let a client pick up and carry a networked physics item with no rou
 order: 4
 sources:
   - Engine/Source/Runtime/Game/Public/Game/GrabLeaseBridge.h
+  - Engine/Source/Runtime/Game/Public/Game/PushLeasePolicy.h
   - Engine/Source/Runtime/Networking/Public/Networking/Components/AuthorityLeaseComponent.h
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/AuthorityLease.h
   - Engine/Source/Runtime/Networking/Public/Networking/Components/NetworkObjectComponent.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
   - Engine/Source/Runtime/Game/Public/Game/MAuthorityLeaseSubsystem.h
   - Engine/Source/Runtime/Physics/Public/Physics/PhysicsSystem.h
-verifiedAt: 588510704
+verifiedAt: 19288b386
 ---
 
 In a listen-server game the host owns every physics item. If the host simulated an item a client was carrying, the client would feel a full round trip of delay every time it moved it. An **authority lease** fixes that: the client asks the host for temporary authority over one item, simulates it on its own physics world while it holds it, and the host checks everything the client reports. When the lease ends, the item goes back to host simulation without a jump.
@@ -45,6 +46,19 @@ Whatever ends the lease also ends the carry: expiry, a disconnect, refused poses
 ## Grabbing a leased prop
 
 A spring grab (`MGrabStatics::GrabActor`, `GrabActorAt`) on an item that carries an `AuthorityLease` asks for its lease first. The grabbing client simulates the prop at once; the host gives it to the first claim and refuses the rest, and a client whose claim is refused lets go of its spring. While it holds the lease its poses reach the host and every other machine, rotation and velocity included, so two players can each reach for the same crate and exactly one drags it. `ReleaseActor` hands the lease back with the prop's current velocity, so a throw carries on under the host. A lease the host takes away (expiry, a higher-priority claim, a disconnect) releases the spring on the machine that held it. An item without the component, or a grab outside a session, stays a plain local grab.
+
+## Pushing a leasable prop
+
+A prop the host simulates alone reacts to a player's shove one round trip late, plus the interpolation delay. So a client that walks into a leasable prop asks for its lease on contact <Source symbol="FPushLeasePolicy" />: the owner's own physics answers the push at once, the host checks the pose stream like any lease, and every other machine sees the host's body through ordinary snapshots. When the pawn has been off the prop for `net.PushLeaseReleaseDelay` the client hands the lease back with the prop's pose and velocity, so a prop that is still rolling carries on under the host. The policy is ticked by the world's `MAuthorityLeaseSubsystem`; there is nothing to call. It only releases leases it took itself, so a carried or grabbed prop keeps its own lease.
+
+Contact means the pawn is walking toward a leasable dynamic body within `net.PushLeaseReach` meters of its capsule. A refusal (another player holds the prop, the host's player does) puts the prop on `net.PushLeaseCooldown` seconds, so the pawn does not ask every frame. Only a client runs the policy; the host simulates props natively.
+
+| Cvar | Default | Meaning |
+|---|---|---|
+| `net.PushLease` | `1` | Ask for the lease of a prop the owner's pawn pushes. `0` leaves pushed props to the host alone. |
+| `net.PushLeaseReach` | `0.35` | How far, in meters, beyond the pawn's body a prop may be and still count as pushed. |
+| `net.PushLeaseReleaseDelay` | `0.4` | Seconds off the prop before the lease is handed back. |
+| `net.PushLeaseCooldown` | `1` | Seconds a refused prop is left alone before the pawn asks again. |
 
 ## How a lease runs
 

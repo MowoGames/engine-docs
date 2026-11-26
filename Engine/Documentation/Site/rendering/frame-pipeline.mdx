@@ -8,7 +8,7 @@ sources:
   - Engine/Source/Runtime/RHI/Public/RHI/RenderGraph.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ShadingPath.h
-verifiedAt: 6a299562a
+verifiedAt: d9e4287db
 ---
 
 `SceneRenderer` is a deferred renderer. Opaque geometry writes a G-Buffer, lighting runs once per pixel over it, translucent surfaces are drawn forward afterward, and post-processing finishes the frame. It records a whole frame in `SceneRenderer::RenderFrame`, after the host has called `BeginScene`, submitted its draws and called `EndScene`. This page walks through that function in the order the passes run. Use it to find where an effect happens, what it depends on, and what replaces it on another tier.
@@ -75,6 +75,8 @@ The mobile frame shares the setup above (culling, uniforms, cascades, light list
 | C | RGBA16F | Emissive, material AO |
 | D | Extended pack | Clear coat, anisotropy, light channels and the shading-model code |
 | Depth | D32F | Scene depth |
+
+The albedo target is the one sRGB-format entry of the G-Buffer, and a graph resource aliases another only when their formats match exactly, because a physical image carries one format. The decal pass copies albedo into a transient of the same sRGB format, so the lens flare composite (a plain `RGBA8` display-format transient) no longer shares that copy's memory and keeps one frame's allocation of its own; the frame graph viewer shows the logical and physical totals.
 
 ## 3. Lighting
 

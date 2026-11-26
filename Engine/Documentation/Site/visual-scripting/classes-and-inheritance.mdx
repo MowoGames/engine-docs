@@ -6,11 +6,12 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassRegistry.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClassValidator.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptInterface.h
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptCharacter.h
   - Engine/Source/Runtime/Game/Public/Game/MVisualScriptHostComponent.h
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptNativeDefaults.h
-verifiedAt: 500ca4e36
+verifiedAt: b37bbf0e2
 ---
 
 Every visual class has a parent: a native C++ class or another visual class. The class inherits graphs, functions, variables and component slots from it. This page explains how that chain resolves, which native class actually runs an instance, where class defaults live, how a class tunes the C++ class it extends, and how component slots give a class its mesh, light or trigger.
@@ -166,7 +167,23 @@ The standalone **Actor Editor** also edits a `.vscript` class's slots, their att
 
 ## Interfaces
 
-A class can list named interfaces it implements, in **Class settings**. **Implements Interface** reports whether a class does. With an object on its Target pin, it asks about that object: a visual class's declared interfaces, or a C++ class's `MIMPLEMENTS` list.
+An interface is a named list of function signatures. Define one in its own `.vscript` file whose root is `VisualScriptInterface`: a name and, for each function, its parameters and return type. A class lists the interfaces it implements in **Class settings**. **Implements Interface** reports whether a class does. With an object on its Target pin, it asks about that object: a visual class's declared interfaces, or a C++ class's `MIMPLEMENTS` list.
+
+The editor's palette lists every function of every interface under **Interfaces** as **Call Interface Function**. The node takes the object to call as its Target pin and one input per parameter, and its output is the function's return value. It runs the function the target declares under that name, and skips the call with a warning when the target does not implement the interface, so a graph can call into any actor without casting first.
+
+The load check holds each implementation to the interface:
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `VS4101` | Error | The class declares the function but its parameters or return type differ from the interface's. That function does not run. |
+| `VS4102` | Warning | The class implements the interface but declares no such function. Registration adds an empty function of that name that returns the default value, so a call through the interface still works. The stub is never saved. |
+| `VS4103` | Error | A Call Interface node names no interface or no function. |
+| `VS4104` | Error or warning | The node's function is not in its interface (error), or the interface is not loaded (warning: the call resolves at run time). |
+| `VS4105` | Error | The node supplies a different number of arguments than the interface function takes. |
+
+An interface that is not loaded yet is not an error for the classes that name it, because the plugin or module that supplies it may arrive later; they are checked as soon as it is.
+
+Changing an interface changes the cache key of every class that implements it or calls through it, so a cooked program built against the old signature is never used.
 
 ## Next
 

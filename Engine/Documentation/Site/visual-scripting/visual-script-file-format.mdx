@@ -6,9 +6,11 @@ order: 12
 sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptGraphSerializer.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptGraph.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptInterface.h
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptUnitLoader.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptMigration.h
   - Engine/Source/Runtime/MDF/Public/mdf/mdf.h
-verifiedAt: bb3cd1f16
+verifiedAt: 291f774e1
 ---
 
 A visual class is saved as one `.vscript` file. The file is text [MDF](/docs/content-pipeline/mdf/), the engine's own data format, so it diffs and merges like source code. This page describes the schema so you can read a class in a code review, fix a merge conflict, or generate a class from a tool.
@@ -143,6 +145,31 @@ The root node is `VisualScriptClass`. The serializer writes its parts in a fixed
 | `Graph` | An event graph: `event` plus the graph body. |
 
 A **graph body** is `entry`, the index of the entry node, followed by `Node` children. Functions and macros use the same body, written by the same helper.
+
+## Interface files
+
+A `.vscript` can hold more than a class. A file whose root is `VisualScriptInterface` declares an interface: `schema`, `interface` (its name) and one `Function` child per signature, each with `name`, `ret` and `Param` children (`name`, `vtype`).
+
+```mdf title="Content/IHittable.vscript"
+VisualScriptInterface {
+    schema: 11
+    interface: "IHittable"
+    Function {
+        name: "TakeHit"
+        ret: "Int"
+        Param {
+            name: "amount"
+            vtype: "Int"
+        }
+    }
+}
+```
+
+A class names the interfaces it implements with `Interface` children, as above. The loader tells the roots apart by the root node, and a class loader that meets an interface file finds no `class` name and skips it, so an interface never registers as an actor. A `Call Interface` node (`kind: CallInterface`) keeps the interface in `var`, the function in `function` and its target and arguments in `Input` children.
+
+### Library files
+
+A file whose root is `VisualScriptLibrary` declares a function library. It carries `schema`, `library` (its name) and the same `Function` and `Macro` children a class has, written by the same code. It has no `parent`, `class`, variables or event graphs, and it names itself `library` rather than `class` so a class loader that meets one finds no class name and skips it. A `Call Library Function` node (`kind: CallLibraryFunction`) keeps the library in `var`, the function in `function` and the arguments in `Input` children; a macro instance of a library macro names it `function: "Library::Macro"`.
 
 ## Nodes
 

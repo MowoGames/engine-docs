@@ -8580,71 +8580,117 @@
 							"kind": "alias",
 							"name": "FBaseOfFn",
 							"signature": "using FBaseOfFn = bool (*)(World& world, uint64_t pawn, uint32_t& baseNetworkId, Vec3& offset)",
-							"doc": "The movement base seam. The defaults read the character's ground body and\nthe replication manager's network ids; a test swaps them for a scripted\nplatform. Server resolver: the base of `pawn` and the pawn's offset from\nit. World resolver: where a base is right now in this world.",
-							"line": 136
+							"doc": "The movement base seam. The defaults read the character's ground body and\nthe replication manager's network ids; a test swaps them for a scripted\nplatform. Server resolver: the base of `pawn` and the pawn's offset from\nit. World resolver: where a base is right now in this world.\nThe offset is in the base's own frame (the pawn's world offset rotated by\nthe inverse of the base's rotation), so a turning platform keeps it\nconstant for a pawn standing still on it; the world resolver returns the\nbase's pose so a correction can turn that offset back into a world spot.",
+							"line": 140
 						},
 						{
 							"kind": "alias",
 							"name": "FBaseWorldFn",
-							"signature": "using FBaseWorldFn = bool (*)(World& world, uint32_t baseNetworkId, Vec3& baseWorldPosition)",
-							"line": 137
+							"signature": "using FBaseWorldFn = bool (*)(World& world, uint32_t baseNetworkId, Vec3& baseWorldPosition, Quat& baseWorldRotation)",
+							"line": 141
 						},
 						{
 							"kind": "method",
 							"name": "SetBaseResolvers",
 							"signature": "static void SetBaseResolvers(FBaseOfFn baseOf, FBaseWorldFn baseWorld)",
 							"static": true,
-							"line": 138
+							"line": 142
 						},
 						{
 							"kind": "method",
 							"name": "ResetBaseResolvers",
 							"signature": "static void ResetBaseResolvers()",
 							"static": true,
-							"line": 139
+							"line": 143
 						},
 						{
 							"kind": "method",
 							"name": "GetBaseCorrectionCount",
 							"signature": "uint32_t GetBaseCorrectionCount() const",
-							"line": 140
+							"line": 144
 						},
 						{
 							"kind": "alias",
 							"name": "FGoodMoveSendFn",
 							"signature": "using FGoodMoveSendFn = std::function<void(uint32_t peerId, uint32_t goodTick)>",
 							"doc": "Server: how a verified move reaches its client (the replication manager\nsends a MoveAck). Client: retire saved moves through a tick the server\nconfirmed, with no reconcile.",
-							"line": 147
+							"line": 151
 						},
 						{
 							"kind": "method",
 							"name": "SetGoodMoveSendFunction",
 							"signature": "void SetGoodMoveSendFunction(FGoodMoveSendFn fn)",
-							"line": 148
+							"line": 152
 						},
 						{
 							"kind": "method",
 							"name": "ClientApplyGoodMove",
 							"signature": "void ClientApplyGoodMove(uint32_t goodTick)",
-							"line": 151
+							"line": 155
 						},
 						{
 							"kind": "method",
 							"name": "GetGoodMoveCount",
 							"signature": "uint32_t GetGoodMoveCount() const",
-							"line": 152
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "GetUnverifiedMoveCount",
 							"signature": "uint32_t GetUnverifiedMoveCount() const",
-							"line": 155
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "GetPredictedStepCount",
 							"signature": "size_t GetPredictedStepCount() const",
-							"line": 159
+							"line": 163
+						},
+						{
+							"kind": "alias",
+							"name": "FRootMotionReadFn",
+							"signature": "using FRootMotionReadFn = bool (*)(World& world, uint64_t pawn, uint32_t& sourceId, float& playhead)",
+							"doc": "The root-motion montage seam. A move names the montage the pawn was in and\nthe playhead it reached (ReplicationInputBody::rmSourceId / rmPlayhead);\nthe Game module installs the two functions over the animator and the\nfixed-step root-motion stepper. Read: the montage a pawn is in now (false\nwhen none plays with root motion). Sample: the root displacement, in the\npawn's local space, and the yaw the montage's root path adds between two\nplayheads (false when the pawn cannot resolve the source).",
+							"line": 174
+						},
+						{
+							"kind": "alias",
+							"name": "FRootMotionSampleFn",
+							"signature": "using FRootMotionSampleFn = bool (*)(World& world, uint64_t pawn, uint32_t sourceId, float fromPlayhead, float toPlayhead, Vec3& localDelta, float& yawDelta)",
+							"line": 175
+						},
+						{
+							"kind": "method",
+							"name": "SetRootMotionHooks",
+							"signature": "static void SetRootMotionHooks(FRootMotionReadFn read, FRootMotionSampleFn sample)",
+							"static": true,
+							"line": 176
+						},
+						{
+							"kind": "method",
+							"name": "ResetRootMotionHooks",
+							"signature": "static void ResetRootMotionHooks()",
+							"static": true,
+							"line": 177
+						},
+						{
+							"kind": "method",
+							"name": "GetStepRootMotion",
+							"signature": "const Vec3& GetStepRootMotion() const",
+							"doc": "The root motion of the move being stepped right now, for a step function\nthat does not run the real movement code.",
+							"line": 181
+						},
+						{
+							"kind": "method",
+							"name": "GetStepRootMotionYaw",
+							"signature": "float GetStepRootMotionYaw() const",
+							"line": 184
+						},
+						{
+							"kind": "method",
+							"name": "GetRootMotionMoveCount",
+							"signature": "uint32_t GetRootMotionMoveCount() const",
+							"line": 187
 						}
 					]
 				}
@@ -11291,107 +11337,107 @@
 					"name": "ReplicationPacketType",
 					"namespace": "Mowo",
 					"bases": "uint8_t",
-					"line": 65,
+					"line": 68,
 					"members": [
 						{
 							"kind": "enumerator",
 							"name": "Spawn",
 							"signature": "Spawn = 1",
 							"doc": "Server → all clients. Tell the client to create a ghost entity\nwith the assigned network id + the prefab path or class id that\nthe client should instantiate locally. Sent on entity creation\nwhen a NetworkObjectComponent is added. Since v4 the tail also carries\nthe authored placed-object GUID (see ReplicationSpawnBody).",
-							"line": 71
+							"line": 74
 						},
 						{
 							"kind": "enumerator",
 							"name": "Destroy",
 							"signature": "Destroy = 2",
 							"doc": "Server → all clients. Tell clients to remove the ghost. Sent on\nentity destruction or when NetworkObjectComponent is removed.",
-							"line": 75
+							"line": 78
 						},
 						{
 							"kind": "enumerator",
 							"name": "Snapshot",
 							"signature": "Snapshot = 3",
 							"doc": "Server → clients, UNRELIABLE channel. Field-level delta of the\nCONTINUOUS replicated fields (position / rotation / velocity) of a\nbatch of (network object, component) pairs, diffed against the\nper-peer ACKNOWLEDGED baseline. Entries are\n[networkId][uint8 componentSlot][uint16 deltaLen][PropertyReplicator\ndelta]; the slot names a type in FReplicatedComponentRegistry and the\nfield indices inside the delta come from that type's reflected\nTypeDescriptor, so adding a replicated POD field — or a whole\nreplicated component — needs no codec edit.",
-							"line": 86
+							"line": 89
 						},
 						{
 							"kind": "enumerator",
 							"name": "Rpc",
 							"signature": "Rpc = 4",
 							"doc": "Either direction. Reflected MFUNCTION invocation with marshalled\narguments (FRpcDispatcher). The body names a (componentId, methodIndex)\npair: methodId is the target component's id (or a session event id for\nthe join protocol), methodIndex is the position of the method in the\ncomponent's reflected FunctionInfo table. Routing is manual: the sender\npicks SendRpcToServer / ToClient / ToAllClients. Client→server calls are\nDEFAULT-DENIED and must be allow-listed per (componentId, methodIndex)\nvia ReplicationManager::AllowClientRpc.",
-							"line": 96
+							"line": 99
 						},
 						{
 							"kind": "enumerator",
 							"name": "Input",
 							"signature": "Input = 5",
 							"doc": "Client → server. Player input — fed into the server's simulation and\nreplayed locally for client-side prediction.",
-							"line": 100
+							"line": 103
 						},
 						{
 							"kind": "enumerator",
 							"name": "StateSnapshot",
 							"signature": "StateSnapshot = 6",
 							"doc": "Server → clients, RELIABLE channel. Delta of the DISCRETE replicated\nfields (health / ammo / state enums) that must never be lost, in the\nsame [networkId][uint8 componentSlot][uint16 deltaLen][delta] entry\nshape as Snapshot. The\ncontinuous transform rides the Unreliable Snapshot and self-heals;\ndiscrete state cannot, so it ships reliably-until-acked (the transport\nretransmits until the peer confirms) and the per-object state baseline\nonly advances once the field has been handed to a guaranteed channel.",
-							"line": 110
+							"line": 113
 						},
 						{
 							"kind": "enumerator",
 							"name": "Ack",
 							"signature": "Ack = 7",
 							"doc": "Client → server, UNRELIABLE. Acknowledges the highest Snapshot\npacketId the client has received. The server advances a peer's\nper-object delta baseline ONLY on the ack, never on the send — without\nit, an object that moves and then stops strands any peer that dropped\nthe final datagram at the second-to-last pose forever. Losing an ack\ncosts one redundant resend, nothing more.",
-							"line": 118
+							"line": 121
 						},
 						{
 							"kind": "enumerator",
 							"name": "FastArrayDelta",
 							"signature": "FastArrayDelta = 8",
 							"doc": "Server → clients, RELIABLE channel. One fast array's per-item delta\n(FNetFastArrayBase::BuildDelta): [networkId][uint16 arrayId][delta\nbits]. Items added, changed and removed since this peer's last delta,\ninstead of the whole vector an MREPLICATED std::vector re-sends.",
-							"line": 124
+							"line": 127
 						},
 						{
 							"kind": "enumerator",
 							"name": "Blob",
 							"signature": "Blob = 9",
-							"line": 126
+							"line": 129
 						},
 						{
 							"kind": "enumerator",
 							"name": "BlobAck",
 							"signature": "BlobAck = 10",
-							"line": 128
+							"line": 131
 						},
 						{
 							"kind": "enumerator",
 							"name": "OwnerChange",
 							"signature": "OwnerChange = 11",
-							"line": 130
+							"line": 133
 						},
 						{
 							"kind": "enumerator",
 							"name": "SpatialData",
 							"signature": "SpatialData = 12",
 							"doc": "Server -> client / client -> server, UNRELIABLE (or BulkReliable for a\npacket above one MTU). The body is an FSpatialStream packet verbatim.",
-							"line": 134
+							"line": 137
 						},
 						{
 							"kind": "enumerator",
 							"name": "SpatialAck",
 							"signature": "SpatialAck = 13",
-							"line": 136
+							"line": 139
 						},
 						{
 							"kind": "enumerator",
 							"name": "SpatialInterest",
 							"signature": "SpatialInterest = 14",
-							"line": 138
+							"line": 141
 						},
 						{
 							"kind": "enumerator",
 							"name": "MoveAck",
 							"signature": "MoveAck = 15",
 							"doc": "Server -> client, UNRELIABLE. Header only: lastProcessedInputTick names\nthe latest input tick whose result the server checked against the\nclient's own prediction and found equal. The client drops its saved\nmoves through that tick without reconciling.",
-							"line": 144
+							"line": 147
 						}
 					]
 				},
@@ -11400,47 +11446,47 @@
 					"name": "ReplicationPacketHeader",
 					"namespace": "Mowo",
 					"doc": "Fixed-size header in front of every packet body. We don't put length\nhere because the transport layer already framing-delimits messages.",
-					"line": 158,
+					"line": 161,
 					"members": [
 						{
 							"kind": "field",
 							"name": "type",
 							"signature": "ReplicationPacketType type",
-							"line": 159
+							"line": 162
 						},
 						{
 							"kind": "field",
 							"name": "protocolVersion",
 							"signature": "uint8_t protocolVersion = REPLICATION_PROTOCOL_VERSION",
 							"doc": "Free padding in v1, load-bearing now: the two fields a receiver checks\nbefore it decodes a single entry. protocolVersion catches a peer on\nanother build of the packet layout; schemaId catches a peer whose\nreplicated-component set or field layout differs, which would otherwise\ndecode a delta into the wrong component slot.",
-							"line": 166
+							"line": 169
 						},
 						{
 							"kind": "field",
 							"name": "schemaId",
 							"signature": "uint16_t schemaId = 0",
-							"line": 167
+							"line": 170
 						},
 						{
 							"kind": "field",
 							"name": "serverTick",
 							"signature": "uint32_t serverTick = 0",
 							"doc": "server's tick counter at send time",
-							"line": 168
+							"line": 171
 						},
 						{
 							"kind": "field",
 							"name": "lastProcessedInputTick",
 							"signature": "uint32_t lastProcessedInputTick = 0",
 							"doc": "Per-peer acknowledgement piggybacked on every server→client packet:\nthe highest client input tick the server has processed for THIS peer.\nThe client uses it to retire acknowledged pending inputs and to drive\nreconciliation (replay the still-unacked inputs from authoritative\nstate). 0 = the server has processed no input from this peer yet.",
-							"line": 175
+							"line": 178
 						},
 						{
 							"kind": "field",
 							"name": "packetId",
 							"signature": "uint32_t packetId = 0",
 							"doc": "Per-peer, monotonically increasing id of THIS packet. Only\nSnapshot packets carry a non-zero value; the client echoes the highest\nit has seen back in an Ack, and that ack is what advances the server's\nper-peer delta baselines. 0 = \"not ack-tracked\" (StateSnapshot rides a\nreliable channel and needs no ack of its own; Spawn/Destroy likewise).",
-							"line": 182
+							"line": 185
 						}
 					]
 				},
@@ -11449,52 +11495,52 @@
 					"name": "ReplicationSpawnBody",
 					"namespace": "Mowo",
 					"doc": "Layout: header | SpawnBody | prefabPath (variable-length, length-prefixed\nuint16) | placedGuid (uint64, v4+). Variable bits live AFTER the fixed\nstruct so SpawnBody itself stays trivially-copyable.",
-					"line": 190,
+					"line": 193,
 					"members": [
 						{
 							"kind": "field",
 							"name": "networkId",
 							"signature": "NetworkId networkId = INVALID_NETWORK_ID",
-							"line": 191
+							"line": 194
 						},
 						{
 							"kind": "field",
 							"name": "_pad",
 							"signature": "uint16_t _pad = 0",
-							"line": 192
+							"line": 195
 						},
 						{
 							"kind": "field",
 							"name": "ownerPeerId",
 							"signature": "uint32_t ownerPeerId = 0",
 							"doc": "0 = server-owned",
-							"line": 193
+							"line": 196
 						},
 						{
 							"kind": "field",
 							"name": "positionMm",
 							"signature": "int64_t positionMm[3] =",
 							"doc": "Initial transform sent so the client can\nplace the ghost without waiting for the next snapshot.",
-							"line": 196
+							"line": 199
 						},
 						{
 							"kind": "field",
 							"name": "rotation",
 							"signature": "float rotation[3] =",
-							"line": 197
+							"line": 200
 						},
 						{
 							"kind": "field",
 							"name": "scale",
 							"signature": "float scale[3] =",
-							"line": 198
+							"line": 201
 						},
 						{
 							"kind": "field",
 							"name": "netState",
 							"signature": "uint32_t netState = 0",
 							"doc": "Discrete replicated state at spawn time so a newly-relevant client\nstarts with the correct value — the reliable StateSnapshot stream then\nonly ships subsequent CHANGES, never per-relevant-pair full state.",
-							"line": 202
+							"line": 205
 						}
 					]
 				},
@@ -11502,25 +11548,25 @@
 					"kind": "struct",
 					"name": "ReplicationOwnerChangeBody",
 					"namespace": "Mowo",
-					"line": 212,
+					"line": 215,
 					"members": [
 						{
 							"kind": "field",
 							"name": "networkId",
 							"signature": "NetworkId networkId = INVALID_NETWORK_ID",
-							"line": 213
+							"line": 216
 						},
 						{
 							"kind": "field",
 							"name": "_pad",
 							"signature": "uint16_t _pad = 0",
-							"line": 214
+							"line": 217
 						},
 						{
 							"kind": "field",
 							"name": "ownerPeerId",
 							"signature": "uint32_t ownerPeerId = 0",
-							"line": 215
+							"line": 218
 						}
 					]
 				},
@@ -11528,19 +11574,19 @@
 					"kind": "struct",
 					"name": "ReplicationDestroyBody",
 					"namespace": "Mowo",
-					"line": 219,
+					"line": 222,
 					"members": [
 						{
 							"kind": "field",
 							"name": "networkId",
 							"signature": "NetworkId networkId = INVALID_NETWORK_ID",
-							"line": 220
+							"line": 223
 						},
 						{
 							"kind": "field",
 							"name": "_pad",
 							"signature": "uint16_t _pad = 0",
-							"line": 221
+							"line": 224
 						}
 					]
 				},
@@ -11549,37 +11595,37 @@
 					"name": "ReplicationSnapshotEntry",
 					"namespace": "Mowo",
 					"doc": "The full-pose entry. The live Snapshot packet ships field-level deltas\ninstead (see ReplicationPacketType::Snapshot); this struct is the\nfixed-layout pose record the server's lag-compensation history stores.",
-					"line": 227,
+					"line": 230,
 					"members": [
 						{
 							"kind": "field",
 							"name": "networkId",
 							"signature": "NetworkId networkId = INVALID_NETWORK_ID",
-							"line": 228
+							"line": 231
 						},
 						{
 							"kind": "field",
 							"name": "_pad",
 							"signature": "uint16_t _pad = 0",
-							"line": 229
+							"line": 232
 						},
 						{
 							"kind": "field",
 							"name": "position",
 							"signature": "float position[3]",
-							"line": 230
+							"line": 233
 						},
 						{
 							"kind": "field",
 							"name": "rotation",
 							"signature": "float rotation[3]",
-							"line": 231
+							"line": 234
 						},
 						{
 							"kind": "field",
 							"name": "scale",
 							"signature": "float scale[3]",
-							"line": 232
+							"line": 235
 						}
 					]
 				},
@@ -11588,13 +11634,13 @@
 					"name": "ReplicationAckBody",
 					"namespace": "Mowo",
 					"doc": "Client → server. Cumulative in effect: the server confirms every baseline\nwhose carrying packetId is <= this one, so a lost ack is covered by the\nnext.",
-					"line": 240,
+					"line": 243,
 					"members": [
 						{
 							"kind": "field",
 							"name": "packetId",
 							"signature": "uint32_t packetId = 0",
-							"line": 241
+							"line": 244
 						}
 					]
 				},
@@ -11602,33 +11648,33 @@
 					"kind": "struct",
 					"name": "ReplicationRpcBody",
 					"namespace": "Mowo",
-					"line": 244,
+					"line": 247,
 					"members": [
 						{
 							"kind": "field",
 							"name": "networkId",
 							"signature": "NetworkId networkId = INVALID_NETWORK_ID",
-							"line": 245
+							"line": 248
 						},
 						{
 							"kind": "field",
 							"name": "methodId",
 							"signature": "uint16_t methodId = 0",
 							"doc": "Component id for a component RPC, or a session event id (>= 0x8000) for\nthe join / gameplay-event protocol, which carries no method index.",
-							"line": 248
+							"line": 251
 						},
 						{
 							"kind": "field",
 							"name": "methodIndex",
 							"signature": "uint16_t methodIndex = 0",
 							"doc": "Index of the method in the target component's reflected FunctionInfo\ntable. The receiver resolves the method by this index and the authority\npolicy keys on (methodId, methodIndex). 0 for session events.",
-							"line": 252
+							"line": 255
 						},
 						{
 							"kind": "field",
 							"name": "argByteLen",
 							"signature": "uint16_t argByteLen = 0",
-							"line": 253
+							"line": 256
 						}
 					]
 				},
@@ -11636,76 +11682,89 @@
 					"kind": "struct",
 					"name": "ReplicationInputBody",
 					"namespace": "Mowo",
-					"line": 257,
+					"line": 260,
 					"members": [
 						{
 							"kind": "field",
 							"name": "clientTick",
 							"signature": "uint32_t clientTick = 0",
-							"line": 258
+							"line": 261
 						},
 						{
 							"kind": "field",
 							"name": "buttonMask",
 							"signature": "uint16_t buttonMask = 0",
-							"line": 259
+							"line": 262
 						},
 						{
 							"kind": "field",
 							"name": "dtTenthMs",
 							"signature": "uint16_t dtTenthMs = 0",
 							"doc": "The time this move covers on the client, in tenths of a millisecond\n(6.5 s at most). The server steps the move with exactly this, not with\nits own frame time.",
-							"line": 263
+							"line": 266
 						},
 						{
 							"kind": "field",
 							"name": "moveAxisX",
 							"signature": "float moveAxisX = 0",
-							"line": 264
+							"line": 267
 						},
 						{
 							"kind": "field",
 							"name": "moveAxisY",
 							"signature": "float moveAxisY = 0",
-							"line": 265
+							"line": 268
 						},
 						{
 							"kind": "field",
 							"name": "lookAxisX",
 							"signature": "float lookAxisX = 0",
-							"line": 266
+							"line": 269
 						},
 						{
 							"kind": "field",
 							"name": "lookAxisY",
 							"signature": "float lookAxisY = 0",
-							"line": 267
+							"line": 270
 						},
 						{
 							"kind": "field",
 							"name": "prevTick",
 							"signature": "uint32_t prevTick = 0",
 							"doc": "The move before this one (0 = none) and where the client's prediction\nleft the pawn after it. The client only learns a move's resulting pose\nwhen it sends the next one, so the check travels one move late.",
-							"line": 271
+							"line": 274
 						},
 						{
 							"kind": "field",
 							"name": "prevPosition",
 							"signature": "float prevPosition[3] =",
-							"line": 272
+							"line": 275
 						},
 						{
 							"kind": "field",
 							"name": "prevBaseId",
 							"signature": "uint32_t prevBaseId = 0",
 							"doc": "The base the pawn stood on after that move and its offset from it (0 = the\nworld). With a base the server compares offsets, not world positions.",
-							"line": 275
+							"line": 278
 						},
 						{
 							"kind": "field",
 							"name": "prevBaseOffset",
 							"signature": "float prevBaseOffset[3] =",
-							"line": 276
+							"line": 279
+						},
+						{
+							"kind": "field",
+							"name": "rmSourceId",
+							"signature": "uint32_t rmSourceId = 0",
+							"doc": "The root-motion montage the pawn was playing when this move ended (a hash\nof its name, 0 = none) and the playhead it had reached, in clip seconds.\nThe span from the move before to this one is what the move's root motion\ncovers; the server samples that span itself and bounds it by the move's\nown time, so a claim can start a montage a registered pawn owns but not\nskip through it.",
+							"line": 286
+						},
+						{
+							"kind": "field",
+							"name": "rmPlayhead",
+							"signature": "float rmPlayhead = 0.0f",
+							"line": 287
 						}
 					]
 				},
@@ -11714,19 +11773,19 @@
 					"name": "FPendingInput",
 					"namespace": "Mowo",
 					"doc": "One client-predicted input awaiting server acknowledgement — buffered by\nReplicationManager, replayed by FCharacterPrediction::Reconcile. Lives\nwith the wire structs so the prediction code needs no Game headers.",
-					"line": 282,
+					"line": 293,
 					"members": [
 						{
 							"kind": "field",
 							"name": "clientTick",
 							"signature": "uint32_t clientTick",
-							"line": 283
+							"line": 294
 						},
 						{
 							"kind": "field",
 							"name": "body",
 							"signature": "ReplicationInputBody body",
-							"line": 284
+							"line": 295
 						}
 					]
 				}
@@ -11735,47 +11794,47 @@
 				{
 					"kind": "field",
 					"name": "REPLICATION_PROTOCOL_VERSION",
-					"signature": "constexpr uint8_t REPLICATION_PROTOCOL_VERSION = 11",
-					"doc": "Bumped whenever the packet layout changes incompatibly. Every header\ncarries it and a peer speaking another version is refused with an error\nrather than decoded — a mismatched delta would write foreign bytes into\nlive components.\n\n1 — transform-only snapshots, entries were [networkId][len][delta]\n2 — arbitrary replicated components, entries carry a component slot\n3 — the Rpc body names a (componentId, methodIndex) pair; the authority\npolicy keys on both, so a grant opens one method rather than every\nMFUNCTION on the component\n4 — Spawn carries the authored placed-object GUID after the prefab path,\nso a client adopts its scene-placed twin by identity instead of by\nproximity. Appended at the tail and decoded tolerantly: a body that\nends early yields 0, which is exactly what an unauthored (pre-v4)\nscene stores, so the receiver falls back to the positional match.\n5 — an RPC names its component by a stable wire id\n(FReplicatedComponentRegistry::ToRpcWireId), not by the sender's\nfirst-use ComponentID.\n6 — snapshot entries carry the packed delta (changemask + bit-packed,\nMNET_QUANTIZE-narrowed fields, struct and array-of-struct values)\ninstead of [uint16 index][raw bytes] per field.\n7 — an Input packet carries [uint8 count] and then up to\nkMaxInputMovesPerPacket moves, oldest first, each stamped with its own\ndelta time (ReplicationInputBody::dtTenthMs); the server steps every\nmove exactly once, in order.\n8 — Blob / BlobAck carry a large reliable RPC in chunks under flow\ncontrol, an Rpc body whose argByteLen is 0xFFFF is followed by a\nuint32 length, and OwnerChange tells clients an object's new owner.\n9 — SpatialData / SpatialAck / SpatialInterest carry the keyed delta\nstream (FSpatialStreamServer / Client), which does its own\nacknowledgement and resend.\n10 — a world position travels as absolute int64 millimetres (the sender's\nwhole-metre origin added in integers), in the packed Transform delta\nand in the Spawn body, so a position 500 km out keeps millimetres.\n11 — an Input move carries the tick of the move before it and where the\nclient's prediction left the pawn after it, and the server answers a\nmove it verified with a header-only MoveAck, so the client retires its\nsaved moves without waiting for a snapshot.",
-					"line": 60
+					"signature": "constexpr uint8_t REPLICATION_PROTOCOL_VERSION = 12",
+					"doc": "Bumped whenever the packet layout changes incompatibly. Every header\ncarries it and a peer speaking another version is refused with an error\nrather than decoded — a mismatched delta would write foreign bytes into\nlive components.\n\n1 — transform-only snapshots, entries were [networkId][len][delta]\n2 — arbitrary replicated components, entries carry a component slot\n3 — the Rpc body names a (componentId, methodIndex) pair; the authority\npolicy keys on both, so a grant opens one method rather than every\nMFUNCTION on the component\n4 — Spawn carries the authored placed-object GUID after the prefab path,\nso a client adopts its scene-placed twin by identity instead of by\nproximity. Appended at the tail and decoded tolerantly: a body that\nends early yields 0, which is exactly what an unauthored (pre-v4)\nscene stores, so the receiver falls back to the positional match.\n5 — an RPC names its component by a stable wire id\n(FReplicatedComponentRegistry::ToRpcWireId), not by the sender's\nfirst-use ComponentID.\n6 — snapshot entries carry the packed delta (changemask + bit-packed,\nMNET_QUANTIZE-narrowed fields, struct and array-of-struct values)\ninstead of [uint16 index][raw bytes] per field.\n7 — an Input packet carries [uint8 count] and then up to\nkMaxInputMovesPerPacket moves, oldest first, each stamped with its own\ndelta time (ReplicationInputBody::dtTenthMs); the server steps every\nmove exactly once, in order.\n8 — Blob / BlobAck carry a large reliable RPC in chunks under flow\ncontrol, an Rpc body whose argByteLen is 0xFFFF is followed by a\nuint32 length, and OwnerChange tells clients an object's new owner.\n9 — SpatialData / SpatialAck / SpatialInterest carry the keyed delta\nstream (FSpatialStreamServer / Client), which does its own\nacknowledgement and resend.\n10 — a world position travels as absolute int64 millimetres (the sender's\nwhole-metre origin added in integers), in the packed Transform delta\nand in the Spawn body, so a position 500 km out keeps millimetres.\n11 — an Input move carries the tick of the move before it and where the\nclient's prediction left the pawn after it, and the server answers a\nmove it verified with a header-only MoveAck, so the client retires its\nsaved moves without waiting for a snapshot.\n12 — an Input move names the root-motion montage it ended in and the\nplayhead it ended at (rmSourceId, rmPlayhead), so the server steps the\nsame sampled span of the montage's root path the owner predicted.",
+					"line": 63
 				},
 				{
 					"kind": "field",
 					"name": "kMaxInputMovesPerPacket",
 					"signature": "constexpr uint8_t kMaxInputMovesPerPacket = 3",
 					"doc": "The unacknowledged moves a client repeats in every Input packet, so one lost\ndatagram costs the server no move.",
-					"line": 64
+					"line": 67
 				},
 				{
 					"kind": "alias",
 					"name": "NetworkId",
 					"signature": "using NetworkId = uint16_t",
 					"doc": "Compact identifier for a replicated entity within a single session.\nEntityID is a 64-bit UUID, but bandwidth-sensitive snapshot loops\nbenefit from a smaller per-session id assigned at spawn. 16-bit\nsupports 65k concurrent network objects per game — plenty for any\nrealistic deathmatch / MMO shard, and 2 bytes per snapshot entry\nadds up at 20 Hz.",
-					"line": 153
+					"line": 156
 				},
 				{
 					"kind": "field",
 					"name": "INVALID_NETWORK_ID",
 					"signature": "constexpr NetworkId INVALID_NETWORK_ID = 0",
-					"line": 154
+					"line": 157
 				},
 				{
 					"kind": "function",
 					"name": "static_assert",
 					"signature": "static_assert(sizeof(ReplicationPacketHeader) == 16, \"ReplicationPacketHeader must stay 16 bytes — wire format\")",
-					"line": 184
+					"line": 187
 				},
 				{
 					"kind": "function",
 					"name": "static_assert",
 					"signature": "static_assert(sizeof(ReplicationOwnerChangeBody) == 8, \"ReplicationOwnerChangeBody is wire format\")",
-					"line": 217
+					"line": 220
 				},
 				{
 					"kind": "function",
 					"name": "static_assert",
 					"signature": "static_assert(sizeof(ReplicationSnapshotEntry) == 40, \"ReplicationSnapshotEntry layout drift — break wire format\")",
-					"line": 234
+					"line": 237
 				}
 			]
 		},

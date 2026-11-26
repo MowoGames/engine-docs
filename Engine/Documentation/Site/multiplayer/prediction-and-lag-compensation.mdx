@@ -15,7 +15,7 @@ sources:
   - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterMovementComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MCharacterMovementComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/AbilitySystemStateComponent.h
-verifiedAt: 3b05108e7
+verifiedAt: 19288b386
 ---
 
 Two problems appear as soon as there is latency between a client and the host. Your own movement feels late if the client waits for the host to answer, and your shots miss if the host checks them against where targets are now rather than where you saw them. Mowo solves the first with **client prediction and reconciliation**, and the second with **server rewind**.
@@ -24,7 +24,9 @@ Two problems appear as soon as there is latency between a client and the host. Y
 
 The client does not wait for a round trip before moving its own pawn. It applies input immediately, sends the same input to the host, and later compares its guess with the host's answer. Remote pawns are different: they are drawn from the [interpolation buffer](/docs/multiplayer/replication/#client-interpolation), not predicted.
 
-A pawn standing on a networked body that moves (a platform, a vehicle with a `NetworkObject`) is reconciled in that body's space. On the client the platform is itself a ghost drawn behind its host position, so a pawn riding it trails the host's pawn by the platform's speed times the interpolation delay; compared in the world that would read as a misprediction on every move. The host replicates the base's network id and the pawn's offset from it to the owner, the client saves the same pair with each predicted move, and the correction check and the good-move acknowledgement compare offsets when both ends name the same base. A base the client no longer has falls back to the world comparison.
+A pawn standing on a networked body that moves (a platform, a vehicle with a `NetworkObject`) is reconciled in that body's space. On the client the platform is itself a ghost drawn behind its host position, so a pawn riding it trails the host's pawn by the platform's speed times the interpolation delay; compared in the world that would read as a misprediction on every move. The host replicates the base's network id and the pawn's offset from it to the owner, the client saves the same pair with each predicted move, and the correction check and the good-move acknowledgement compare offsets when both ends name the same base. A base the client no longer has falls back to the world comparison. The offset is kept in the base's own frame: a platform that turns carries a pawn standing on it round with the same offset on both ends, and a correction turns the host's offset back through the client's copy of the base's rotation to find the spot.
+
+A pawn that plays a root-motion montage is predicted through it as well. Each move carries the montage the pawn was in when the move ended and the playhead it had reached; the host samples the same stretch of the montage's root path, bounded by the move's own time, and a correction in the middle of a lunge replays every saved move's stretch, so the rest of the lunge is not lost <Source symbol="FCharacterNetDriver::SetRootMotionHooks" />.
 
 For character pawns you do not wire any of this yourself. `FCharacterNetDriver` is a scene system that owns the whole loop <Source symbol="FCharacterNetDriver" />:
 
@@ -47,6 +49,7 @@ Because the replay runs the same Jolt character step as normal movement, a corre
 | `net.ExtrapolationSeconds` | `0.2` | How long a remote character keeps moving along its replicated velocity when the snapshot stream stalls, before it holds. Only a character (one that carries `NetMovementState`) coasts: the velocity is what tells a pawn that stopped from one still moving, so a stopped pawn is never carried past its stop. `0` holds every object at its newest sample. |
 | `net.GoodMoveAck` | `1` | The host checks the pose a client predicted for each move against its own simulation and, when they agree within `net.GoodMoveTolerance`, sends a small `MoveAck` so the client drops its saved moves at once instead of waiting for a snapshot. A move whose prediction was off is never acknowledged and is replayed by the reconcile as before. |
 | `net.GoodMoveTolerance` | `0.02` | How far, in meters, the client's predicted pose may be from the host's for the move to count as good. |
+| `net.MaxRootMotionRate` | `2` | How fast, in playhead seconds per second, a move may claim a root-motion montage advanced. The host bounds each move's sampled stretch by the move's time times this, so a client cannot skip through a montage. |
 | `net.CharacterPrediction` | `1` | Client prediction with host reconciliation. `0` makes every pawn an interpolated ghost and installs no input receiver. |
 | `net.PredictionTolerance` | `0.25` | Divergence in meters that triggers a restore and replay. |
 | `net.PredictionSendHz` | `60` | Client move send rate. |
@@ -68,6 +71,7 @@ Everything the character movement step simulates predicts and reconciles, becaus
 
 - **Every movement mode**: walking, falling, flying, swimming, mantling, ladders, and custom modes. Register a custom mode with `FCustomMovementModes::Register(id, fn, name)` <Source symbol="FCustomMovementModes" /> and enter it with `MCharacterMovementComponent::SetCustomMovementMode(id)`. The step function must read only the character's own components and the move's time.
 - **Root-motion sources**: `ApplyDash`, `ApplyJumpForce` and `ApplyMoveTo` on `MCharacterMovementComponent` <Source symbol="MCharacterMovementComponent" /> add a source that every movement step advances, in every movement mode including flying, swimming and ladders. Apply it on the client when the ability is predicted and on the host when it activates.
+- **Root-motion montages**: a montage that moves the capsule (an animator with root motion from montages only) predicts on the owner and is sampled by the host through the same fixed-step root-motion stepper, so a lunge felt on the owner is not a correction. Register the montage on the pawn's `NetAnimationState` on both ends; moves that carry a montage are never combined. The first blend-in frames are sampled at full weight on the host, so they can differ from the owner's by centimetres, well inside `net.PredictionTolerance`.
 - **Jumps**: `maxJumpCount` (air jumps), `jumpHoldTime` (variable height while the button is held; `StopJumping` releases) and `coyoteTime` (a ground jump just after walking off a ledge) on the character movement component.
 
 ### Predicting something other than a character

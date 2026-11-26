@@ -7,7 +7,8 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptClass.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptDispatcherRegistry.h
-verifiedAt: 5922e6e5e
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptLibrary.h
+verifiedAt: 291f774e1
 ---
 
 Once a graph grows past a screen, factor it. Visual Scripting gives you two tools with different rules: a **function** is called, and a **macro** is pasted in. A third tool, the **event dispatcher**, lets one actor announce something and any number of others respond.
@@ -84,6 +85,26 @@ Two macros ship with the engine and appear under **Macros (Standard)** in every 
 | --- | --- | --- | --- |
 | `IsValidBranch` | `In` (exec), `Object` | `IsValid`, `NotValid` (exec) | Checks an object and branches in one node. |
 | `ForEachWithBreak` | `In` (exec), `Array`, `Break` (exec) | `LoopBody` (exec), `Element`, `Index`, `Completed` (exec) | A For Each whose body can fire `Break` to stop early. |
+
+## Function libraries
+
+A function library holds functions and macros that belong to no class, so any class can use them (the Blueprint function library). Define one in its own `.vscript` file whose root is `VisualScriptLibrary`; it lists functions and macros the same way a class does and has no parent, variables or event graphs.
+
+A library function is **static**: it runs with no object. It cannot read or write variables, properties or dispatchers, cannot use **Self**, cannot wait (**Delay**, **Timeline**, async actions), and calls into native code only by a class-qualified name (`Class::Function`), because an unqualified name resolves against the calling object. A node that breaks one of those rules is error `VS4201` on that node. Within a library, a function calls its sibling functions by plain name with **Call Graph Function**, and a macro names another macro of the same library with the library prefix.
+
+Use a library from a class in two ways:
+
+- **Call Library Function** (palette category **Libraries**) calls one function. The node has one input per parameter and no target, and its output is the return value. It runs on the exec chain, like **Call Graph Function** on an impure function.
+- A library macro is listed in the palette as `Library::Macro` under **Macros (Libraries)**. It is inlined when the class compiles, exactly like a macro the class declares, so the library is a compile-time dependency of every class that uses one.
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `VS4201` | Error | A library function uses a node that needs an instance or waits. |
+| `VS4202` | Error | A Call Library Function node names no library or no function. |
+| `VS4203` | Error or warning | The library has no such function (error), or the library is not loaded (warning: the call is skipped at run time). |
+| `VS4204` | Error | The node supplies a different number of arguments than the function takes. |
+
+A class that calls a library, or inlines one of its macros, changes its program cache key whenever the library file changes, so a cooked program is rebuilt rather than served stale. `mbt visual-scripts compile` compiles every library of the project beside its classes and writes each library's program next to its file.
 
 ## Choose between them
 

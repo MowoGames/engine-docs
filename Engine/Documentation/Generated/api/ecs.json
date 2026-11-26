@@ -679,73 +679,79 @@
 					"kind": "class",
 					"name": "TEntityHandleMap",
 					"namespace": "Mowo",
-					"template": "template<typename V>",
-					"doc": "Per-entity data kept by the entity's World slot instead of by hashing its\n64-bit id: a lookup is the world's slot index plus one array read, and a\nwalk is a linear pass over a dense vector. A cell remembers the id it was\nwritten for, so a slot the world recycled for a new entity never answers\nfor the old one; Prune drops the cells of entities that no longer exist.\n\nThe slot comes from World::GetSlotHint, which is one hash probe in the\nworld's own table — it is still cheaper than std::unordered_map's node\nchase, and a caller that already holds a hint passes it to skip the probe.",
-					"line": 21,
+					"template": "template<typename V, bool StableAddresses = false>",
+					"doc": "Per-entity data kept by the entity's World slot instead of by hashing its\n64-bit id: a lookup is the world's slot index plus one array read, and a\nwalk is a linear pass over a dense vector. A cell remembers the id it was\nwritten for, so a slot the world recycled for a new entity never answers\nfor the old one; Prune drops the cells of entities that no longer exist.\n\nThe slot comes from World::GetSlotHint, which is one hash probe in the\nworld's own table — it is still cheaper than std::unordered_map's node\nchase, and a caller that already holds a hint passes it to skip the probe.\nStableAddresses keeps the cells in a deque, whose growth never moves a cell\nalready stored: an API that hands out a pointer into per-entity state (a\nperceiver's known-actor list, a resident's search points) stays valid while\nlater entities add their own cells. The default vector storage reallocates on\ngrowth, so a pointer into it dies the moment another entity is first seen.",
+					"line": 28,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Find",
 							"signature": "V* Find(const World& world, EntityID id)",
-							"line": 24
+							"line": 31
 						},
 						{
 							"kind": "method",
 							"name": "Find",
 							"signature": "const V* Find(const World& world, EntityID id) const",
-							"line": 28
+							"line": 35
 						},
 						{
 							"kind": "method",
 							"name": "FindAt",
 							"signature": "V* FindAt(uint32_t slot, EntityID id)",
-							"line": 32
+							"line": 39
 						},
 						{
 							"kind": "method",
 							"name": "FindOrAdd",
 							"signature": "V* FindOrAdd(const World& world, EntityID id)",
 							"doc": "The value for `id`, default-constructed when absent. False from the\nentity not existing in `world` is reported as a null result.",
-							"line": 42
+							"line": 49
 						},
 						{
 							"kind": "method",
 							"name": "Erase",
 							"signature": "bool Erase(const World& world, EntityID id)",
 							"doc": "A destroyed entity has no slot to look up, so its cell is found by a scan:\ncallers erase an id that may already be dead (a claim being cleaned up\nafter its owner), and that must not leave the cell behind.",
-							"line": 68
+							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "Prune",
 							"signature": "size_t Prune(const World& world)",
 							"doc": "Drops every cell whose entity is gone, or whose slot now holds another.",
-							"line": 92
+							"line": 99
 						},
 						{
 							"kind": "method",
 							"name": "ForEachErase",
 							"signature": "template<typename Fn> void ForEachErase(Fn&& fn)",
 							"doc": "Calls fn(EntityID, V&) for every live cell; fn returns true to erase it.",
-							"line": 106
+							"line": 113
 						},
 						{
 							"kind": "method",
 							"name": "ForEach",
 							"signature": "template<typename Fn> void ForEach(Fn&& fn)",
-							"line": 115
+							"line": 122
+						},
+						{
+							"kind": "method",
+							"name": "ForEach",
+							"signature": "template<typename Fn> void ForEach(Fn&& fn) const",
+							"line": 131
 						},
 						{
 							"kind": "method",
 							"name": "Size",
 							"signature": "size_t Size() const",
-							"line": 124
+							"line": 140
 						},
 						{
 							"kind": "method",
 							"name": "Clear",
 							"signature": "void Clear()",
-							"line": 128
+							"line": 144
 						}
 					]
 				}

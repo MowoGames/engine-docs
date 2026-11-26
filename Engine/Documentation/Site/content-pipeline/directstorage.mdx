@@ -5,7 +5,7 @@ description: What Windows DirectStorage speeds up in a Mowo game, how to turn it
 order: 13
 sources:
   - Engine/Documentation/Generated/console.json
-verifiedAt: 727ceee93
+verifiedAt: 0a71b1974
 ---
 
 On Windows, a game reads its streamed files through Microsoft DirectStorage when the machine has it. DirectStorage batches many reads into the drive's queue, keeps NVMe drives busy, and can hand the bytes straight to the GPU. You change nothing in your project: a packaged game uses it automatically, and falls back to the ordinary file reads when it cannot.
@@ -14,6 +14,19 @@ On Windows, a game reads its streamed files through Microsoft DirectStorage when
 
 Level loads and streaming read many files at once: scene preloads, texture and mesh streaming, asset loads started with `RequestAsyncLoad`, and anything else that goes through the engine's IO queue. With DirectStorage on, those reads of loose files and of uncompressed archive entries go to DirectStorage instead of the engine's own read threads. The bytes are identical; only how they reach memory changes.
 
+## Which streamers use it
+
+| Streamer | What it reads through the IO queue |
+|---|---|
+| Texture streaming | The mip range a texture needs, at the priority the caller asks for. A newer request for the same texture cancels the older read. |
+| World partition cells | The cell's data file, parsed on a worker thread. A cell whose read fails is loaded the ordinary way. |
+| Mesh streaming | A level that a view wants but that does not fit the frame's restore budget has its vertex and index spans read ahead, in one batch, and is restored from them a frame or two later. A mesh that goes away takes its pending reads with it. |
+| Audio streaming | The next chunk of a streamed clip is read while the current one plays. A seek drops the pending read. |
+
+Mesh and audio streaming keep the bytes they read in a small, capped memory budget until they are used, and give it back when the read is used, cancelled or fails. Every one of them falls back to the read it always did when a request is refused (the queue is not running, the budget is full, or `io.ReadAhead` is 0), is cancelled or fails, so the bytes a streamer ends up with are the same with or without DirectStorage. If DirectStorage (or any read backend) returns a span short, the engine reads it again the ordinary way.
+
+Two things are not read through the queue: the shader archive, which is memory-mapped, and the pipeline-state record file, which is a few kilobytes. `io.ReadAhead` (default 1) turns the mesh and audio read-ahead off for A/B runs; the shutdown log prints how many read-aheads were used, read the old way, failed or cancelled.
+
 What stays on the ordinary path, because the engine has to process the bytes before anything can use them:
 
 - Archive entries that are block-compressed, encrypted or integrity-checked. They are read and decoded as before.
@@ -21,6 +34,18 @@ What stays on the ordinary path, because the engine has to process the bytes bef
 - Files the platform cannot open for DirectStorage.
 
 The gain depends on the drive. An NVMe drive with a deep queue gains the most, and a level load that is mostly many mid-size files gains more than one that is a few huge files. On a SATA SSD or a hard disk the drive is the limit and the difference is small. A machine that has just written or read the same files can serve them from the operating system's file cache, which hides the difference completely.
+
+## What it measured
+
+The engine's `streamer-read-ahead-bench` row replays the two patterns the stock streamers use against a cold file: an audio stream consuming consecutive 64 KB chunks with a quarter millisecond of decode work per chunk, and a mesh restore pass reading 8 levels (a 192 KB vertex span and a 48 KB index span each) from scattered offsets. Best of the runs on one development machine, debug build, small data set (8 MiB of audio, 48 mesh levels), Windows 11 with an NVMe drive:
+
+| How the streamer reads | Audio stream | Mesh levels |
+|---|---|---|
+| Reads when it needs the bytes (before) | 63-80 ms | 69-73 ms |
+| Read ahead, engine's async file reads | 43-48 ms | 31-35 ms |
+| Read ahead, through DirectStorage | 52-58 ms | 32-35 ms |
+
+Most of the gain is reading ahead: the audio stream overlaps the next chunk with the decode of the current one, and the mesh pass sends all its spans to the drive at once instead of one at a time. On this NVMe drive DirectStorage and the engine's own async reads came out about level for these small reads; DirectStorage's advantage shows with large sets and many requests in flight (see the load numbers in the engine's `directstorage-load-bench` row), and a debug build on one drive is not a promise for yours. The bytes the streamers received were identical in all three modes.
 
 ## Turning it off
 
@@ -45,7 +70,7 @@ If DirectStorage fails a read it was handed, the engine reads that file again th
 
 ## Loading straight to the GPU
 
-On the D3D12 backend the engine can also read a file range directly into a buffer or a texture, with the DirectStorage runtime decompressing GDeflate data on the GPU and zstd data on the CPU. The renderer reports a DirectStorage capability that is false on Vulkan, Metal and D3D11 and on a Windows machine without the DirectStorage DLLs; engine code checks it before using this path. This is an engine-level service; the stock texture and mesh streamers still upload through the CPU.
+On the D3D12 backend the engine can also read a file range directly into a buffer or a texture, with the DirectStorage runtime decompressing GDeflate data on the GPU and zstd data on the CPU. The renderer reports a DirectStorage capability that is false on Vulkan, Metal and D3D11 and on a Windows machine without the DirectStorage DLLs; engine code checks it before using this path. This is an engine-level service; the stock texture and mesh streamers still read into memory first and upload from there.
 
 ## Per-vendor notes
 
