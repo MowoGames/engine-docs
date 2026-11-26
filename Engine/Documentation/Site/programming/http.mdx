@@ -5,9 +5,10 @@ order: 14
 sources:
   - Engine/Source/Runtime/Http/Public/Http/HttpClient.h
   - Engine/Source/Runtime/Http/Public/Http/HttpRetry.h
+  - Engine/Source/Runtime/Http/Public/Http/HttpRequestLog.h
   - Engine/Source/Runtime/Http/Public/Http/HttpWebSocketConnection.h
   - Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h
-verifiedAt: 7890cf887
+verifiedAt: 7a674450c
 ---
 
 The **Http** module wraps a vendored, statically linked libcurl. Every HTTP request the engine makes goes through it, from crash uploads to the games launcher and GameNet's WebSockets. Add `"Http"` to your module's dependencies to use it. <Source symbol="HttpClient" />
@@ -45,6 +46,12 @@ const Mowo::HttpResponse page = Mowo::HttpClient::Request("GET", "https://exampl
 | `Download(url, filePath, options, resume)` | Stream a body to a file, resuming a partial file |
 
 `HttpResponse` carries the status code (0 for a transport failure), the body, a curl error message, and `nameNotResolved`, set when the host name did not resolve: usually a wrong URL rather than a network outage. `retryAfterMs` holds the server's `Retry-After` when it sent one as a number of seconds (0 otherwise; the HTTP-date form is ignored).
+
+## Watching requests
+
+Every request the engine makes through `HttpClient` is recorded in a bounded log (the last 512). Each record keeps the method, URL, status and error, bytes sent and received, the masked request headers (credentials are replaced with `<redacted>`), the first 4 KB of the response, and the time split into DNS, connect, TLS, wait for the first byte and transfer. <Source symbol="FHttpRequestLog" /> `FHttpRequestLog::ComputeStats` gives the count, error rate, average, median and 95th percentile latency, and `BandwidthSeries` gives bytes per second over time.
+
+In the editor, **Window ▸ Debug ▸ Web Requests** shows the same data live: totals and latency figures, a 60 second bandwidth graph, a list of requests, and for the selected one its timing bar, headers and sizes. The log can be switched off with `FHttpRequestLog::Get().SetEnabled(false)`.
 
 ## Retrying transient failures
 

@@ -6,9 +6,11 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/DeviceProfiles.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/QualityAutoTier.h
   - Engine/Config/BaseDeviceProfiles.ini
+  - Engine/Config/android-arm64/android-arm64Engine.ini
+  - Engine/Config/ios-arm64/ios-arm64Engine.ini
   - Engine/Source/Runtime/Game/Public/Streaming/VramPressureGovernor.h
   - Engine/Source/Runtime/Game/Public/Streaming/TextureStreamingManager.h
-verifiedAt: 0136869de
+verifiedAt: 3d16633d7
 ---
 
 A device profile is a rule that recognises a GPU and adjusts the engine for it: it caps the [quality tier](/docs/rendering/quality-tiers/) the auto-detection may pick and sets console variables. It is Mowo's form of Unreal Engine's `DeviceProfiles.ini`. The same files carry a **driver blocklist** that names driver versions known to break the engine and tells the player what to do.
@@ -51,7 +53,7 @@ TierCap=High
 | `MinVramMB`, `MaxVramMB` | dedicated video memory is inside the bounds (an unknown size never meets `MaxVramMB`) |
 | `MinDriver`, `MaxDriver` | the vendor driver version is inside the bounds, compared field by field (`566.36`) |
 | `Integrated` | `True` for integrated or unified-memory GPUs only, `False` for discrete only |
-| `+Platforms` | `win-x64`, `linux-x64`, `osx-arm64`, `android-arm64`, or a family prefix (`win`, `linux`, `osx`, `android`) |
+| `+Platforms` | `win-x64`, `linux-x64`, `osx-arm64`, `android-arm64`, `ios-arm64`, or a family prefix (`win`, `linux`, `osx`, `android`, `ios`) |
 | `+GraphicsApis` | `D3D12`, `D3D11`, `Vulkan` or `Metal` |
 
 `NameContains`, `DeviceIds`, `SocContains` and `SteamDeck` are alternatives: a rule can name a GPU family by marketing name and by PCI id range, and a device that reports either matches. Every other key that is set must hold. Among the rules that match, the highest `Priority` wins; a tie goes to the rule with more criteria, then to the one written first.
@@ -88,8 +90,12 @@ What a rule does:
 | `Android_Xclipse_Flagship`, `Android_Xclipse` | Samsung Xclipse 940 and newer; 920 and 930 | High; Medium |
 | `Android_PowerVR` | Imagination PowerVR | Low |
 | `Android_Generic` | any Android device the rows above do not name | Medium |
+| `iOS_Apple_A15_Plus`, `iOS_Apple_A13_A14`, `iOS_Apple_Legacy` | Apple A15 and newer; A13 and A14; A12 and older (platform `ios-arm64`, Metal) | High; Medium; Low |
+| `iOS_Generic` | any iPhone or iPad GPU the rows above do not name | Medium |
 
 On Blackwell, Ada and RDNA 4 (`NVIDIA_RTX50`, `NVIDIA_RTX40`, `AMD_RX9000`) the profile also holds a High-plus-hardware-ray-tracing row, a window of exactly the High tier: `r.GI.HWRTGather=1` and `r.RTReflections=1` trace the scene instead of the SDF gather and SSR, and `r.RTShadows=0` leaves sun shadows on the shadow maps. Epic and Cinematic set the same features from their own tier, and a project that has not enabled ray tracing (`r.RayTracing.EnableForProject`) strips them whatever the profile says. Ampere is left out until the rows are measured cheaper than SSR on the RTX 3050.
+
+The iOS profiles follow the same pattern: Metal reports the GPU as `Apple A15 GPU`, and the iPad M-series chips match `Apple_M` and its High cap. A profile's platform token is `ios-arm64` there and `android-arm64` on Android. The Android and iOS platform config (`Engine/Config/android-arm64/android-arm64Engine.ini`, `Engine/Config/ios-arm64/ios-arm64Engine.ini`) sets `r.ShadingPath 1`, so those platforms draw with the [mobile forward path](/docs/rendering/frame-pipeline/#mobile-forward-path) and use the mobile rows of the [quality tiers](/docs/rendering/quality-tiers/).
 
 The Android profiles set a render scale (0.7 at Low, 0.8 at Medium, 0.9 at High), a shadow distance and a texture pool each, because a phone's memory bandwidth, not its shader rate, is what a tier runs out of first. The caps are first guesses by GPU generation: they have not been measured on a phone, and a project rule of a higher priority replaces any of them. The device's GPU name comes from Vulkan; the SoC names come from the system properties `ro.board.platform` and `ro.hardware`.
 

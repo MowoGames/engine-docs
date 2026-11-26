@@ -2,7 +2,7 @@
 title: World building
 description: Place actors, sculpt and paint terrain, edit water and splines, paint foliage and props, bake navigation, and set up world partition streaming and data layers.
 order: 6
-verifiedAt: 620f5a46f
+verifiedAt: 7c1571dee
 ---
 
 World building is the set of tools for shaping a level rather than editing single actors: placing actors from a palette, sculpting and painting terrain, drawing water and splines, scattering props and foliage, baking navigation, and splitting a large world into streamed cells. Each terrain or painting tool is a viewport **tool mode**: it takes over the mouse while active and gives it back to selection when you leave it.
@@ -18,7 +18,7 @@ The rail on the far left switches the Modes panel beside it:
 | Select | **Place actors**: the placeable actor palette |
 | Land | The Landscape panel: Sculpt, Paint and Manage |
 | Foliage | The foliage tools, brush and palette |
-| Paint | Terrain layer and vertex colour painting with a target layer and brush |
+| Paint | Terrain layer painting, or vertex colour painting on editable shapes, with a brush |
 | Model | Level geometry modeling; see [Geometry tools](/docs/editor/geometry-tools/) |
 
 ## Placing actors
@@ -72,6 +72,22 @@ Switch to **Paint**, choose a layer and stroke. Painting the visibility layer cu
 </Steps>
 
 Each stroke is one undo entry, whatever its length.
+
+### Painting vertex colours on a mesh
+
+**Paint** has two targets, chosen in its **Target** row: **Terrain** paints layers as above, **Mesh** paints the vertex colours of an editable shape (a shape made in Model mode). Mesh paint needs no landscape. Click a shape to make it the target, then drag across it. The ring on the surface is the brush, and its inner ring is where the falloff starts.
+
+| Control | Effect |
+| --- | --- |
+| Mode | **Paint** blends toward the colour; **Erase** blends back toward the unpainted white |
+| Radius | Brush radius in metres, measured in the world, so a scaled shape paints the disc the ring shows |
+| Strength | How far one dab moves a vertex toward the colour, 0 to 1 |
+| Falloff | 0 is a hard disc; 1 fades from the centre to the rim |
+| Red, Green, Blue, Alpha | The colour painted |
+| Write R, G, B, A | Which channels a stroke writes. A stroke with only G ticked leaves red, blue and alpha as they were, so each channel can carry its own mask |
+| Whole mesh | The bucket fills every vertex with the colour; the eraser restores every vertex. Both respect the channel mask |
+
+A stroke, a fill and an erase are each one undo entry. The colours live on the shape itself, so they save with the level and render through the mesh's vertex colour, which materials read as the vertex colour node.
 
 ### Layer tiling, cliffs and distance variation
 
@@ -183,6 +199,14 @@ After you move streamable actors, use **Regenerate streaming**.
 - Buttons add a new layer and add or remove the selected actors from the layer under the cursor.
 - The level instance button places another level inside this one: its actors join at load, offset by the instance's position, and stay edited in their own level.
 - One instance can differ from the others without forking the level: an override replaces a property of one actor of the instanced level (for example a light's intensity) in this instance only, and an instance can leave an actor out, with the actors parented to it. Both are written with the instance in the level's own file and are set over MCP (`level_instance_set_override`, `level_instance_set_removed`).
+
+#### Editing a level instance in place
+
+Right-click an actor that came from a level instance in the Outliner and choose **Edit Level Instance**. A banner with **Commit** and **Discard** opens above the tree and the instance's actors are drawn in the accent colour; move, change or delete them like any other actor.
+
+- **Commit** writes the differences as this instance's overrides (a changed property) and removals (a deleted actor), so the instanced level itself and every other instance stay as they were. An actor you moved is stored in the instanced level's own space, so a turned or scaled instance still puts it where you dragged it. One Commit is one undo step.
+- **Discard** throws the changes away and respawns the instance from the level.
+- Actors you add while editing are not part of the instance; add them to the instanced level to share them. Only one instance is edited at a time, and opening another level ends the edit without writing anything.
 
 Layers and membership are written to the level's own files, so they merge per actor under source control. Every change here, from adding a layer to moving or removing a level instance, is one step in the undo history, so Ctrl+Z puts the files and the open level back.
 

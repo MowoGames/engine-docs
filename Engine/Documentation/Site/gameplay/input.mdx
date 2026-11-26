@@ -5,6 +5,7 @@ order: 4
 sources:
   - Engine/Source/Runtime/Input/Public/Input/InputAction.h
   - Engine/Source/Runtime/Input/Public/Input/InputActionSystem.h
+  - Engine/Source/Runtime/Input/Public/Input/GamepadInput.h
   - Engine/Source/Runtime/Game/Public/Game/MPlayerInput.h
   - Engine/Source/Runtime/Game/Public/Game/MEnhancedInputSubsystem.h
   - Engine/Source/Runtime/Game/Public/Game/APlayerController.h
@@ -17,7 +18,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/MInputStatics.h
   - Engine/Source/Runtime/Core/Public/Core/ProjectLayout.h
   - Engine/Source/Runtime/Input/Public/Input/InputBindingsConfig.h
-verifiedAt: 8aa26dab6
+verifiedAt: d88a3aec9
 ---
 
 Mowo's input system follows Unreal's Enhanced Input. You describe **what** the player can do as input action assets, describe **which hardware** triggers each action in input mapping context assets, and bind gameplay callbacks to actions and trigger events. Gameplay code never polls keys directly.
@@ -148,7 +149,22 @@ A `Hold` trigger with `allowToggle` set respects the player's hold-to-toggle acc
 
 - Add a context with `AddMappingContext(imc, priority)` and remove it with `RemoveMappingContext(imc)`. When the controller unpossesses its pawn, it clears all mapping contexts.
 - A context that consumes input blocks the contexts below it. <Source symbol="APlayerController" />
+- Inside one context, actions that share a key are ordered by their `priority` (default 0; `priority: 5` on an `Action` in the context's config file, or the Priority field of an Input Action asset). An action with Consume input takes its keys from every action of strictly lower priority in the same context; equal priorities keep sharing the key. <Source symbol="InputAction" />
 - For named contexts defined in project config, use `APlayerController::PushInputContext` and `PopInputContext`. The controller pops whatever it pushed at `EndPlay`. <Source symbol="APlayerController" />
+
+## Phone sensors
+
+`FDeviceSensors::Get()` reads the device's own sensors, separate from a gamepad's gyro. Call `HasAccelerometer()`, `HasGyroscope()`, `HasCompass()` and `HasLocation()` first: a sensor the device lacks reads as absent, never as an error. <Source symbol="FDeviceSensors" />
+
+| Read | Gives |
+|---|---|
+| `GetAcceleration()`, `GetRotationRate()` | Raw accelerometer (m/s^2, gravity included) and gyroscope (rad/s) in device axes |
+| `GetGravity()` | Unit vector pointing down in device axes |
+| `GetPitchDegrees()`, `GetRollDegrees()` | Tilt from gravity: 0 flat face up, pitch positive with the top edge raised, roll positive with the right edge raised |
+| `GetCompassHeadingDegrees()` | Degrees clockwise from magnetic north that the top edge points to, corrected for tilt |
+| `GetLatitude()`, `GetLongitude()`, `GetAltitudeMeters()`, `GetLocationAccuracyMeters()` | The last location fix |
+
+On Android and iOS the accelerometer and gyroscope come from SDL. SDL has no magnetometer or location API, so the compass and location read as absent until the game installs its own source with `SetSource` (an `IDeviceSensorSource`); the same call lets a test feed fixed readings. Desktop builds read nothing by default.
 
 ## Player rebinding
 
@@ -222,6 +238,7 @@ An event counts as consumed only when a widget handled it, not when a widget mer
 
 - **Deadzones** belong to the device, not to each binding: `i.StickDeadzone` (default 0.15) and `i.TriggerDeadzone` (default 0.05) apply to every pad, and `i.Gamepad0.StickDeadzone` to `i.Gamepad3.TriggerDeadzone` override one slot. Project Settings › Engine › Input writes them. Per-binding `DeadZone` modifiers still apply on top.
 - **Gamepad slots**: up to four pads, addressed by player slot. The player's slot choice is remembered per device in the same `InputUser.mdfb` file.
+- **Triggers as buttons**: `GamepadInput::IsTriggerDown`, `IsTriggerPressed` and `IsTriggerReleased` read `LeftTrigger` or `RightTrigger` like a button. They press at 0.5 and release at 0.35 of the pad's trigger range after the trigger deadzone, so an analog trigger resting near the edge does not chatter, and a pad with digital triggers (0 or full) presses once. Presses and releases are kept for the frame like button edges. On Android, controller triggers and rumble arrive through the same SDL gamepad mapping as on desktop.
 - **Rumble**: `InputManager::RumbleGamepad(slot, low, high, ms)` and `RumbleGamepadTriggers`. `i.RumbleScale` scales all rumble.
 - **Motion**: pads with a gyro or accelerometer (DualShock 4, DualSense, Switch, Steam Deck) report them through `InputManager::GetGamepadGyro(slot, sample)` (rad/s) and `GetGamepadAccel` (m/s^2). The first read starts the pad's sensor stream, so a game that never asks pays nothing; each call returns false until the pad delivers the sensor. `i.GamepadMotion` turns the sensors off for every pad. Scripts read the same values through `MInputStatics::GetGamepadGyro`, `GetGamepadAccel` and `HasGamepadGyro`.
 - **Light bar**: `InputManager::SetGamepadLed(slot, r, g, b)` (0..1), or `MInputStatics::SetGamepadLightColor`, tints the light of pads that have an RGB LED (DualShock 4, DualSense, Steam Deck) and returns false on the rest. The colour is re-sent when the pad reconnects. Use it for scanner or health state; the colour is always a secondary cue.

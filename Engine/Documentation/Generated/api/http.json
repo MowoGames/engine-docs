@@ -286,48 +286,100 @@
 			"types": [
 				{
 					"kind": "struct",
+					"name": "HttpTiming",
+					"namespace": "Mowo",
+					"doc": "Where a request's time went, in milliseconds. Phases do not overlap: TotalMs is\ntheir sum (a backend that cannot split the phases reports only TotalMs).",
+					"line": 21,
+					"members": [
+						{
+							"kind": "field",
+							"name": "DnsMs",
+							"signature": "double DnsMs = 0.0",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "ConnectMs",
+							"signature": "double ConnectMs = 0.0",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "TlsMs",
+							"signature": "double TlsMs = 0.0",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "WaitMs",
+							"signature": "double WaitMs = 0.0",
+							"doc": "request sent to first response byte",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "TransferMs",
+							"signature": "double TransferMs = 0.0",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "TotalMs",
+							"signature": "double TotalMs = 0.0",
+							"line": 27
+						}
+					]
+				},
+				{
+					"kind": "struct",
 					"name": "HttpResponse",
 					"namespace": "Mowo",
-					"line": 19,
+					"line": 30,
 					"members": [
 						{
 							"kind": "field",
 							"name": "statusCode",
 							"signature": "long statusCode = 0",
 							"doc": "HTTP status; 0 = transport-level failure",
-							"line": 20
+							"line": 31
 						},
 						{
 							"kind": "field",
 							"name": "body",
 							"signature": "std::string body",
-							"line": 21
+							"line": 32
 						},
 						{
 							"kind": "field",
 							"name": "error",
 							"signature": "std::string error",
 							"doc": "non-empty on transport error (curl message)",
-							"line": 22
+							"line": 33
 						},
 						{
 							"kind": "field",
 							"name": "nameNotResolved",
 							"signature": "bool nameNotResolved = false",
 							"doc": "The host (or proxy) name did not resolve. Separated from the other\ntransport failures because it is the one that usually means the URL is\nwrong rather than the network being down, and a caller that retries on\na schedule wants to treat the two differently.",
-							"line": 28
+							"line": 39
 						},
 						{
 							"kind": "field",
 							"name": "retryAfterMs",
 							"signature": "int32_t retryAfterMs = 0",
-							"line": 30
+							"line": 41
+						},
+						{
+							"kind": "field",
+							"name": "timing",
+							"signature": "HttpTiming timing",
+							"line": 43
 						},
 						{
 							"kind": "method",
 							"name": "Ok",
 							"signature": "bool Ok() const",
-							"line": 32
+							"line": 45
 						}
 					]
 				},
@@ -335,26 +387,26 @@
 					"kind": "struct",
 					"name": "HttpMultipartFile",
 					"namespace": "Mowo",
-					"line": 37,
+					"line": 50,
 					"members": [
 						{
 							"kind": "field",
 							"name": "fieldName",
 							"signature": "std::string fieldName",
-							"line": 38
+							"line": 51
 						},
 						{
 							"kind": "field",
 							"name": "filePath",
 							"signature": "std::string filePath",
 							"doc": "absolute path on disk",
-							"line": 39
+							"line": 52
 						},
 						{
 							"kind": "field",
 							"name": "contentType",
 							"signature": "std::string contentType = \"application/octet-stream\"",
-							"line": 40
+							"line": 53
 						}
 					]
 				},
@@ -362,50 +414,50 @@
 					"kind": "struct",
 					"name": "HttpTransferOptions",
 					"namespace": "Mowo",
-					"line": 43,
+					"line": 56,
 					"members": [
 						{
 							"kind": "field",
 							"name": "headers",
 							"signature": "std::vector<std::string> headers",
-							"line": 44
+							"line": 57
 						},
 						{
 							"kind": "field",
 							"name": "connectTimeoutSeconds",
 							"signature": "int32_t connectTimeoutSeconds = 10",
-							"line": 45
+							"line": 58
 						},
 						{
 							"kind": "field",
 							"name": "stallTimeoutSeconds",
 							"signature": "int32_t stallTimeoutSeconds = 30",
-							"line": 46
+							"line": 59
 						},
 						{
 							"kind": "field",
 							"name": "maxBytesPerSecond",
 							"signature": "int64_t maxBytesPerSecond = 0",
-							"line": 47
+							"line": 60
 						},
 						{
 							"kind": "field",
 							"name": "cancel",
 							"signature": "const std::atomic<bool>* cancel = nullptr",
-							"line": 48
+							"line": 61
 						},
 						{
 							"kind": "field",
 							"name": "onProgress",
 							"signature": "std::function<void(uint64_t received, uint64_t total)> onProgress",
-							"line": 49
+							"line": 62
 						},
 						{
 							"kind": "field",
 							"name": "httpsOnly",
 							"signature": "bool httpsOnly = false",
 							"doc": "Update and manifest traffic: the first URL must be https (http only to\nloopback) and a redirect may never downgrade, so a network attacker cannot\nswap the payload the signature check then has to catch.",
-							"line": 54
+							"line": 67
 						}
 					]
 				},
@@ -413,61 +465,61 @@
 					"kind": "struct",
 					"name": "HttpDownloadResult",
 					"namespace": "Mowo",
-					"line": 57,
+					"line": 70,
 					"members": [
 						{
 							"kind": "field",
 							"name": "statusCode",
 							"signature": "int32_t statusCode = 0",
-							"line": 58
+							"line": 71
 						},
 						{
 							"kind": "field",
 							"name": "bytesWritten",
 							"signature": "uint64_t bytesWritten = 0",
-							"line": 59
+							"line": 72
 						},
 						{
 							"kind": "field",
 							"name": "fileSize",
 							"signature": "uint64_t fileSize = 0",
-							"line": 60
+							"line": 73
 						},
 						{
 							"kind": "field",
 							"name": "resumed",
 							"signature": "bool resumed = false",
-							"line": 61
+							"line": 74
 						},
 						{
 							"kind": "field",
 							"name": "cancelled",
 							"signature": "bool cancelled = false",
-							"line": 62
+							"line": 75
 						},
 						{
 							"kind": "field",
 							"name": "nameNotResolved",
 							"signature": "bool nameNotResolved = false",
-							"line": 63
+							"line": 76
 						},
 						{
 							"kind": "field",
 							"name": "error",
 							"signature": "std::string error",
-							"line": 64
+							"line": 77
 						},
 						{
 							"kind": "field",
 							"name": "errorBody",
 							"signature": "std::string errorBody",
-							"line": 65
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "Ok",
 							"signature": "bool Ok() const",
-							"line": 67
+							"line": 80
 						}
 					]
 				},
@@ -476,7 +528,7 @@
 					"name": "HttpClient",
 					"namespace": "Mowo",
 					"doc": "Minimal libcurl-backed client. Each call owns its own easy handle, so the\nstatic methods are safe to call from multiple threads concurrently.",
-					"line": 74,
+					"line": 87,
 					"members": [
 						{
 							"kind": "method",
@@ -484,14 +536,14 @@
 							"signature": "static void GlobalInit()",
 							"static": true,
 							"doc": "Process-wide curl init/teardown. Idempotent; the request methods call\nGlobalInit() lazily, so explicit use is optional.",
-							"line": 78
+							"line": 91
 						},
 						{
 							"kind": "method",
 							"name": "GlobalShutdown",
 							"signature": "static void GlobalShutdown()",
 							"static": true,
-							"line": 79
+							"line": 92
 						},
 						{
 							"kind": "method",
@@ -499,7 +551,7 @@
 							"signature": "static bool IsSecureOrLoopbackUrl(const std::string& url)",
 							"static": true,
 							"doc": "True for https, and for http to localhost / 127.0.0.1 / [::1].",
-							"line": 82
+							"line": 95
 						},
 						{
 							"kind": "method",
@@ -507,7 +559,7 @@
 							"signature": "static HttpResponse Post(const std::string& url, const std::string& body, const std::vector<std::string>& headers = {}, long timeoutSeconds = 15)",
 							"static": true,
 							"doc": "POST a raw string body.",
-							"line": 85
+							"line": 98
 						},
 						{
 							"kind": "method",
@@ -515,7 +567,7 @@
 							"signature": "static HttpResponse Request(const std::string& method, const std::string& url, const std::string& body = \"\", const std::vector<std::string>& headers = {}, long timeoutSeconds = 15)",
 							"static": true,
 							"doc": "Any HTTP verb (\"GET\", \"POST\", \"PUT\", \"PATCH\", \"DELETE\", ...). An empty\nbody sends no payload; GET with a body is refused by construction (a\nbody on GET is undefined per RFC 9110 and proxies drop it silently).",
-							"line": 93
+							"line": 106
 						},
 						{
 							"kind": "method",
@@ -523,28 +575,280 @@
 							"signature": "static HttpResponse PostMultipart(const std::string& url, const std::map<std::string, std::string>& fields, const std::vector<HttpMultipartFile>& files, const std::vector<std::string>& headers = {}, long timeoutSeconds = 30)",
 							"static": true,
 							"doc": "multipart/form-data POST: form fields + file attachments. Used by the\nSentry minidump upload.",
-							"line": 101
+							"line": 114
 						},
 						{
 							"kind": "method",
 							"name": "Fetch",
 							"signature": "static HttpResponse Fetch(const std::string& url, const HttpTransferOptions& options)",
 							"static": true,
-							"line": 107
+							"line": 120
 						},
 						{
 							"kind": "method",
 							"name": "RequestWithRetry",
 							"signature": "static HttpResponse RequestWithRetry(const std::string& method, const std::string& url, const std::string& body, const std::vector<std::string>& headers, long timeoutSeconds, const FHttpRetryPolicy& policy, const std::atomic<bool>* cancel = nullptr)",
 							"static": true,
-							"line": 109
+							"line": 122
 						},
 						{
 							"kind": "method",
 							"name": "Download",
 							"signature": "static HttpDownloadResult Download(const std::string& url, const std::string& filePath, const HttpTransferOptions& options, bool resume = true)",
 							"static": true,
-							"line": 111
+							"line": 124
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/Http/Public/Http/HttpRequestLog.h",
+			"include": "Http/HttpRequestLog.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "struct",
+					"name": "FHttpRequestRecord",
+					"namespace": "Mowo",
+					"line": 20,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Id",
+							"signature": "uint64_t Id = 0",
+							"line": 21
+						},
+						{
+							"kind": "field",
+							"name": "Method",
+							"signature": "std::string Method",
+							"line": 22
+						},
+						{
+							"kind": "field",
+							"name": "Url",
+							"signature": "std::string Url",
+							"line": 23
+						},
+						{
+							"kind": "field",
+							"name": "StatusCode",
+							"signature": "int32_t StatusCode = 0",
+							"doc": "0 = transport failure",
+							"line": 24
+						},
+						{
+							"kind": "field",
+							"name": "Error",
+							"signature": "std::string Error",
+							"line": 25
+						},
+						{
+							"kind": "field",
+							"name": "RequestBytes",
+							"signature": "uint64_t RequestBytes = 0",
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "ResponseBytes",
+							"signature": "uint64_t ResponseBytes = 0",
+							"line": 27
+						},
+						{
+							"kind": "field",
+							"name": "StartSeconds",
+							"signature": "double StartSeconds = 0.0",
+							"doc": "steady clock, seconds",
+							"line": 28
+						},
+						{
+							"kind": "field",
+							"name": "Timing",
+							"signature": "HttpTiming Timing",
+							"line": 29
+						},
+						{
+							"kind": "field",
+							"name": "RequestHeaders",
+							"signature": "std::vector<std::string> RequestHeaders",
+							"line": 30
+						},
+						{
+							"kind": "field",
+							"name": "ResponsePreview",
+							"signature": "std::string ResponsePreview",
+							"line": 31
+						},
+						{
+							"kind": "method",
+							"name": "Failed",
+							"signature": "bool Failed() const",
+							"doc": "A transport failure or a 4xx/5xx answer.",
+							"line": 34
+						},
+						{
+							"kind": "method",
+							"name": "EndSeconds",
+							"signature": "double EndSeconds() const",
+							"line": 38
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "FHttpRequestStats",
+					"namespace": "Mowo",
+					"line": 43,
+					"members": [
+						{
+							"kind": "field",
+							"name": "Count",
+							"signature": "int32_t Count = 0",
+							"line": 44
+						},
+						{
+							"kind": "field",
+							"name": "Failures",
+							"signature": "int32_t Failures = 0",
+							"line": 45
+						},
+						{
+							"kind": "field",
+							"name": "ErrorRate",
+							"signature": "double ErrorRate = 0.0",
+							"line": 46
+						},
+						{
+							"kind": "field",
+							"name": "AverageMs",
+							"signature": "double AverageMs = 0.0",
+							"line": 47
+						},
+						{
+							"kind": "field",
+							"name": "P50Ms",
+							"signature": "double P50Ms = 0.0",
+							"line": 48
+						},
+						{
+							"kind": "field",
+							"name": "P95Ms",
+							"signature": "double P95Ms = 0.0",
+							"line": 49
+						},
+						{
+							"kind": "field",
+							"name": "MaxMs",
+							"signature": "double MaxMs = 0.0",
+							"line": 50
+						},
+						{
+							"kind": "field",
+							"name": "TotalBytes",
+							"signature": "uint64_t TotalBytes = 0",
+							"line": 51
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FHttpRequestLog",
+					"namespace": "Mowo",
+					"line": 54,
+					"members": [
+						{
+							"kind": "field",
+							"name": "kCapacity",
+							"signature": "static constexpr size_t kCapacity = 512",
+							"static": true,
+							"line": 56
+						},
+						{
+							"kind": "field",
+							"name": "kPreviewBytes",
+							"signature": "static constexpr size_t kPreviewBytes = 4096",
+							"static": true,
+							"line": 57
+						},
+						{
+							"kind": "method",
+							"name": "Get",
+							"signature": "static FHttpRequestLog& Get()",
+							"static": true,
+							"line": 59
+						},
+						{
+							"kind": "method",
+							"name": "SetEnabled",
+							"signature": "void SetEnabled(bool enabled)",
+							"doc": "Recording costs one lock and a copy per request; the panel switches it\non while it is open, tooling can leave it on.",
+							"line": 63
+						},
+						{
+							"kind": "method",
+							"name": "IsEnabled",
+							"signature": "bool IsEnabled() const",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "Record",
+							"signature": "uint64_t Record(FHttpRequestRecord record)",
+							"doc": "Assigns the id; the oldest record is dropped once kCapacity is reached.",
+							"line": 67
+						},
+						{
+							"kind": "method",
+							"name": "Snapshot",
+							"signature": "std::vector<FHttpRequestRecord> Snapshot() const",
+							"line": 69
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 70
+						},
+						{
+							"kind": "method",
+							"name": "TimingFromCumulative",
+							"signature": "static HttpTiming TimingFromCumulative(double nameLookup, double connect, double appConnect, double startTransfer, double total)",
+							"static": true,
+							"doc": "Cumulative curl times (seconds since the start of the transfer, 0 when a\nphase did not happen) split into non-overlapping phases.",
+							"line": 74
+						},
+						{
+							"kind": "method",
+							"name": "ComputeStats",
+							"signature": "static FHttpRequestStats ComputeStats(const std::vector<FHttpRequestRecord>& records)",
+							"static": true,
+							"line": 76
+						},
+						{
+							"kind": "method",
+							"name": "BandwidthBytesPerSecond",
+							"signature": "static double BandwidthBytesPerSecond(const std::vector<FHttpRequestRecord>& records, double nowSeconds, double windowSeconds)",
+							"static": true,
+							"doc": "Bytes (request + response) of requests that finished inside\n(now - window, now], per second.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "BandwidthSeries",
+							"signature": "static std::vector<float> BandwidthSeries(const std::vector<FHttpRequestRecord>& records, double nowSeconds, double bucketSeconds, int32_t bucketCount)",
+							"static": true,
+							"doc": "bucketCount bytes-per-second values, oldest first, each covering bucketSeconds and ending at now.",
+							"line": 83
+						},
+						{
+							"kind": "method",
+							"name": "NowSeconds",
+							"signature": "static double NowSeconds()",
+							"static": true,
+							"line": 85
 						}
 					]
 				}

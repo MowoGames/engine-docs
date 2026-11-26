@@ -10,7 +10,7 @@ sources:
   - Engine/Source/Runtime/Core/Public/Core/Constants.h
   - Engine/Source/Runtime/Http/Public/Http/SentryCrashUploader.h
   - Engine/Config/CrashReporting.example.ini
-verifiedAt: f6c565a6a
+verifiedAt: 07f302f7c
 ---
 
 When a packaged game crashes, Mowo writes a report to disk and shows the player a crash dialog. With the player's consent the report goes to your own Sentry project, and with the build's symbols uploaded too, Sentry turns the raw dump into a readable call stack. A game that names no Sentry project keeps its reports on the player's disk.
@@ -26,6 +26,8 @@ This page follows a crash from the fault to the server, then covers what you con
 **The watchdog.** On Windows, `Install()` also starts the crash reporter executable in watchdog mode. When the game faults, the watchdog writes the minidump of the crashed process from outside, so the dump survives heap and stack corruption the crashed process could not write around. Without a watchdog, the handler writes the dump itself.
 
 **Hangs.** The main loop sends a heartbeat every frame. If it stops for 60 seconds, the watchdog writes a hang report with every thread's stack, without killing the game.
+
+**Fast-fails.** A stack-buffer check, a control-flow-guard violation or a C runtime abort ends the process without running any exception handler, so the game cannot write its own report and no dump can be taken once it is gone. The watchdog reads the exit status instead: a process that ended with a fatal status (`0xC...`) without signalling writes `crash_<time>_fastfail.txt` with that status and the game's product and version, and the report goes to the same endpoint as any other.
 
 **Ensures.** `MOWO_ENSURE(expr)` and `MOWO_ENSURE_MSG(expr, ...)` write a non-fatal report the first time a call site fails, and let execution continue <Source path="Engine/Source/Runtime/Core/Public/Core/FAssertions.h" />.
 

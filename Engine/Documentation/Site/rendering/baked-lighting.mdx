@@ -7,7 +7,9 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/LightmapScene.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/LightmapFormat.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/LightmapAtlasPacker.h
-verifiedAt: 55f27937c
+  - Engine/Source/Runtime/SceneTypes/Public/Renderer/SceneEnvironment.h
+  - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/LightmapBakeTypes.h
+verifiedAt: 1dfcae5e8
 ---
 
 The Low quality tier runs no [Global Illumination](/docs/rendering/global-illumination/). Baked lighting gives its static meshes the indirect light they would otherwise lose: the editor path-traces the level once, stores the result in lightmap atlases, and the renderer adds it to the lit image where Global Illumination is off.
@@ -54,25 +56,61 @@ Choose **Build > Bake Lighting**, or press the sun button on the level toolbar. 
 
 The bake:
 
-1. Reads every enabled light and the scene's sky colour.
+1. Reads every enabled light and the scene's sky colour. Which part of each light is baked depends on its **Mobility** and the level's [lighting mode](#lighting-mode).
 2. Unwraps each mesh instance into its own chart layout, so no two instances share lightmap texels.
 3. Packs the tiles into atlases up to `r.Lightmap.Bake.MaxAtlasSize` wide, with a gutter around each tile.
-4. Path-traces direct light, `r.Lightmap.Bake.Bounces` bounces of indirect light and the sky for every texel, then denoises each tile (`r.Lightmap.Bake.Denoise`).
+4. Path-traces direct light where the mode asks for it, `r.Lightmap.Bake.Bounces` bounces of indirect light and the sky for every texel, then denoises each tile (`r.Lightmap.Bake.Denoise`).
 5. Encodes the atlases as BC6H textures and writes them with a `.lightmap` file to `Content/Lightmaps/`, named after the level. The `.lightmap` file is built data: every bake rewrites it, it is never locked or edited, and it keys each entry on the actor's id, which is the id the level loads the actor with, so the entries still apply after a reload.
 
 The bake assigns the set to the baked meshes. **Save the level** to keep the assignment. **Build > Clear Baked Lighting** removes it.
 
 The bake uses each light's colour and intensity as the renderer does. Photometric units are converted the same way, but the baked result is a diffuse approximation: it carries no specular and no light cookies, IES profiles or light functions.
 
+## Lighting mode
+
+**World Settings > Lighting > Lighting Mode** chooses how the level is lit.
+
+| Mode | Behaviour |
+|---|---|
+| Dynamic GI (default) | [Global Illumination](/docs/rendering/global-illumination/) runs as the quality tier allows. A baked set is drawn only where the tier has Global Illumination off, as described below. |
+| Baked | Global Illumination is off on every tier, so the world SDF, the probe grid, the screen probes and the reflections that trace the SDF allocate nothing. The sky's diffuse light is off too, because the sky is part of the bake. Lights whose **Mobility** is **Static** are no longer drawn at runtime: their light lives in the lightmaps. Baked lightmaps are always drawn. |
+
+What a bake stores follows the mode, so the renderer never adds a light twice:
+
+| Light mobility | Dynamic GI level | Baked level |
+|---|---|---|
+| Static | Bounced light only. The light itself is still drawn every frame. | Direct and bounced light. The light is left out of the light loop. |
+| Stationary | Bounced light only. | Bounced light only. The light and its shadows stay dynamic. |
+| Movable | Bounced light only. | Not baked. |
+
+Each Stationary light is given one channel (R, G, B or A) of a shadow mask for its static shadows, and at most four lights that can reach the same texel share the four channels. When more than four overlap, the bake logs a warning naming how many lights got no channel, and those lights keep their dynamic shadows.
+
+The `.lightmap` file records the mode it was baked for, and changing a light's mobility or the level's mode marks the bake out of date. Rebake after switching modes. Baked lighting is dimmer than it used to be on the Low tier in a Dynamic GI level: earlier bakes stored each light's direct light as well, which the renderer then added a second time.
+
+A level saved without the setting is Dynamic GI. There is no mode that mixes baked lighting with Global Illumination on the same pixels: two indirect terms would count the same bounce twice. In a Baked level, a Static light lights only the baked meshes; a Movable mesh gets no light from it until baked probe volumes land.
+
 ## When the baked light is used
 
-`r.Lightmap.Mode` decides:
+In a Dynamic GI level, `r.Lightmap.Mode` decides:
 
 | Value | Behaviour |
 |---|---|
 | `0` | Never draw baked lighting. |
 | `1` (default) | Draw it only when the active quality row has Global Illumination off, which is the Low tier. |
 | `2` | Always draw it, on top of whatever Global Illumination adds. |
+
+### Where the baked light is added
+
+`r.Lightmap.ProxyPass` chooses how a baked mesh receives its light:
+
+| Value | Behaviour |
+|---|---|
+| `1` (default) | A pass after lighting redraws each baked mesh's proxy geometry and adds the light, with a depth match against the G-Buffer. |
+| `0` | The G-Buffer fill samples the atlas itself, at the mesh's own second UV set. The light is added as emissive (`albedo * (1 - metallic) * baked`), so it works with alpha-tested materials and level-of-detail changes and costs no second geometry pass. |
+
+With `0`, the pixels of a lightmapped, uncoated Default Lit surface also lose their own diffuse sky ambient, because the bake already holds the sky. Classic and auto-instanced draws of the standard material take this path, on devices with a bindless texture table. Skinned meshes, foliage, terrain, graph materials, meshlet draws, directional or spherical-harmonic sets and every device without the table keep the proxy pass; a mesh with a lightmap is drawn by the ordinary triangle path rather than meshlets. One clear-coat value is reserved as the marker: a Default Lit material with a clear-coat roughness of exactly 1/255 and no clear coat reads as lightmapped to the lighting pass.
+
+The mobile forward path always samples in the shading pass whatever `r.Lightmap.ProxyPass` says: its forward shader reads the same atlas through the bindless table and replaces the flat ambient with the baked diffuse, for static opaque surfaces with a plain lightmap tile. See the mobile rendering guide.
 
 `r.Lightmap.Intensity` scales the baked light. The pass runs after direct lighting and before the sky, and a baked pixel multiplies the baked value by the surface's own albedo, so the lightmap follows material changes without a re-bake.
 
@@ -86,6 +124,7 @@ Each baked entry remembers the transform, density and mesh it was baked against.
 |---|---|---|
 | `r.Lightmap.Mode` | 1 | Whether baked lighting is drawn. |
 | `r.Lightmap.Intensity` | 1 | Scale of the baked light. |
+| `r.Lightmap.ProxyPass` | 1 | 1 adds baked light with the proxy pass, 0 samples it in the G-Buffer fill. |
 | `r.Lightmap.DefaultDensity` | 4 | Texels per meter for a mesh whose density is 0. |
 | `r.Lightmap.Bake.SamplesPerTexel` | 128 | Path samples per texel. |
 | `r.Lightmap.Bake.Bounces` | 2 | Indirect bounces. |

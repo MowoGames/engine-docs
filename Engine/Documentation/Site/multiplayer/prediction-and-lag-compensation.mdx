@@ -15,7 +15,7 @@ sources:
   - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterMovementComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MCharacterMovementComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/AbilitySystemStateComponent.h
-verifiedAt: 588510704
+verifiedAt: 3b05108e7
 ---
 
 Two problems appear as soon as there is latency between a client and the host. Your own movement feels late if the client waits for the host to answer, and your shots miss if the host checks them against where targets are now rather than where you saw them. Mowo solves the first with **client prediction and reconciliation**, and the second with **server rewind**.
@@ -23,6 +23,8 @@ Two problems appear as soon as there is latency between a client and the host. Y
 ## Client prediction
 
 The client does not wait for a round trip before moving its own pawn. It applies input immediately, sends the same input to the host, and later compares its guess with the host's answer. Remote pawns are different: they are drawn from the [interpolation buffer](/docs/multiplayer/replication/#client-interpolation), not predicted.
+
+A pawn standing on a networked body that moves (a platform, a vehicle with a `NetworkObject`) is reconciled in that body's space. On the client the platform is itself a ghost drawn behind its host position, so a pawn riding it trails the host's pawn by the platform's speed times the interpolation delay; compared in the world that would read as a misprediction on every move. The host replicates the base's network id and the pawn's offset from it to the owner, the client saves the same pair with each predicted move, and the correction check and the good-move acknowledgement compare offsets when both ends name the same base. A base the client no longer has falls back to the world comparison.
 
 For character pawns you do not wire any of this yourself. `FCharacterNetDriver` is a scene system that owns the whole loop <Source symbol="FCharacterNetDriver" />:
 
@@ -42,6 +44,9 @@ Because the replay runs the same Jolt character step as normal movement, a corre
 
 | Cvar | Default | Meaning |
 |---|---|---|
+| `net.ExtrapolationSeconds` | `0.2` | How long a remote character keeps moving along its replicated velocity when the snapshot stream stalls, before it holds. Only a character (one that carries `NetMovementState`) coasts: the velocity is what tells a pawn that stopped from one still moving, so a stopped pawn is never carried past its stop. `0` holds every object at its newest sample. |
+| `net.GoodMoveAck` | `1` | The host checks the pose a client predicted for each move against its own simulation and, when they agree within `net.GoodMoveTolerance`, sends a small `MoveAck` so the client drops its saved moves at once instead of waiting for a snapshot. A move whose prediction was off is never acknowledged and is replayed by the reconcile as before. |
+| `net.GoodMoveTolerance` | `0.02` | How far, in meters, the client's predicted pose may be from the host's for the move to count as good. |
 | `net.CharacterPrediction` | `1` | Client prediction with host reconciliation. `0` makes every pawn an interpolated ghost and installs no input receiver. |
 | `net.PredictionTolerance` | `0.25` | Divergence in meters that triggers a restore and replay. |
 | `net.PredictionSendHz` | `60` | Client move send rate. |

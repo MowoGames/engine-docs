@@ -5,7 +5,7 @@ order: 1
 sources:
   - Engine/Source/Runtime/Project/Public/Project/PackagingSettings.h
   - Samples/SampleProject/SampleProject.mproject
-verifiedAt: 3b6981812
+verifiedAt: 16c8f4830
 ---
 
 This guide takes a project from the editor to a folder you can hand to a player. It targets Windows, the platform packaging is finished for. macOS, Linux, Android and iOS are covered at the end, with what does not work yet.
@@ -172,6 +172,38 @@ cookOutputDir=Saved/Cooked
 
 `mbt package` reads `outputDir`, `monolithic`, `targetPlatforms`, and the keys only it uses: `ioStore`, `vcRedist` and `vcRedistInstaller`. Packaging for a platform the list does not name works from the command line, with a warning. Per-user choices, such as the skip toggles, go to `Saved/Config/Editor/Packaging.ini` instead.
 
+### Build profiles
+
+A team that ships several variants (a demo, a store build, a CI build) keeps each as a partial preset in `Config/PackagingProfiles/<Name>.ini`. A preset has the same `[packaging]` section as `Packaging.ini`, holding only the keys that variant changes, and an optional `[profile]` section whose `include=` lists shared presets that apply first:
+
+```ini title="Config/PackagingProfiles/Demo.ini"
+[profile]
+include=Common
+
+[packaging]
+maps=Content/Maps/Demo.mmap
+zip=false
+```
+
+`mbt package --build-profile Demo` lays `Common` and then `Demo` over `Config/Packaging.ini`; a key the presets do not name keeps the project's value, and a command-line flag such as `--output` still wins over all of them. A missing preset, or includes that loop, stop the command before anything is built, naming the presets that exist.
+
+A preset can also carry a settings container, a partial `Engine.ini` named `<Name>.Engine.ini` beside it. It holds only the Graphics, Quality or other settings that preset changes, for example `[Render]` with a lower `Scale` for a console profile. The packager merges the containers of the profile and everything it includes, includes first, into the `Engine.ini` it stages, key by key: a key a container names replaces the project's value, a new key joins its section, and a new section is appended. Your project's own `Config/Engine.ini` is not touched. One container such as `Quality.Engine.ini` is written once and shared by every profile that includes `Quality`.
+
+### Smaller fonts
+
+A font with thousands of glyphs is most of a small game's text cost. With `fontSubset=true` in `Config/Packaging.ini`, `mbt package` and `mbt package-android` ship every TrueType font (`.ttf`) in `Content/` reduced to the characters the project can show:
+
+```ini title="Config/Packaging.ini"
+[packaging]
+fontSubset=true
+fontSubsetKeep=U+0400-04FF,€
+fontSubsetFullFonts=NotoSans-Regular.ttf
+```
+
+The characters are every one found in the text files of `Content/` (UI, localization and data files), Basic Latin and Latin-1 (names, numbers and typed text), and whatever `fontSubsetKeep` adds: ranges as `U+0400-04FF` or literal characters. That list is how you cover dynamic text the content cannot show, such as player names or chat in another script. A font named in `fontSubsetFullFonts` ships whole, and is the fallback for text you cannot predict. A character that was dropped is reported as missing, so the engine's font fallback draws it from another font instead of showing an empty glyph.
+
+Fonts the packager cannot reduce safely ship whole: OpenType (`.otf`) and collection files, and any font when the characters include a script that needs OpenType shaping (Arabic, Hebrew, the Indic scripts, Thai, Khmer and Burmese). Ligature and alternate-glyph substitutions (the `GSUB` table) are not kept in a reduced font. Changing the text in `Content/` re-cooks the fonts at the next package.
+
 ## When a package fails
 
 | Message | What to do |
@@ -185,7 +217,7 @@ cookOutputDir=Saved/Cooked
 | Monolithic verification FAILED | See [Targets and link modes](/docs/shipping/targets-and-modes/#the-import-table-check). |
 | A release package whose symbols did not reach the crash server … | Retry the upload with `mbt symbols <archive> --wait`, or package with `--no-symbols`. See [Crash reporting](/docs/shipping/crash-reporting/#symbols). |
 
-`--strict-refs` turns quiet degradations into failures: an asset reference that resolves to nothing, or a texture or mesh cook that could not run. Use it on release builds. `--no-validate` skips the asset-validation gate that runs before the cook, and with it the Visual Script compile: a class with an error stops `mbt cook` and `mbt package`, and the programs of the others are packed beside their `.vscript` by `mbt cook`.
+`--strict-refs` turns quiet degradations into failures: an asset reference that resolves to nothing, or a texture or mesh cook that could not run. Use it on release builds. `--no-validate` skips the asset-validation gate that runs before the cook, and with it the Visual Script compile: a class with an error stops `mbt cook` and `mbt package`, and the programs of the others are packed beside their `.vscript`, so the shipped game loads them without compiling at start.
 
 ## macOS, Linux, Android and iOS
 

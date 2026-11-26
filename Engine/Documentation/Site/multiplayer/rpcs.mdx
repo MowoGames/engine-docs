@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetSessionTypes.h
   - Engine/Source/Runtime/Networking/Public/Networking/Session/NetEventCodec.h
   - Engine/Source/Runtime/Game/Public/Game/AVisualScriptActor.h
-verifiedAt: 588510704
+verifiedAt: 3f2696775
 ---
 
 Replication keeps state in sync. RPCs and events carry the other kind of traffic: "this happened". A client asks the host to fire, the host checks the request, and the host tells every peer. RPCs and gameplay events ride the same packet type, so they share one authority gate and one set of rate limits.
@@ -217,6 +217,8 @@ static void ReportDoorOpened(Mowo::FNetSession& session, uint32_t doorId) {
 
 <Callout type="tip">
 `LeaveSession` clears every handler and client event policy you installed, because they usually live in a hot-reloadable game module. Install them each time you start a session, not once per process <Source symbol="FNetSession::ClearGameCallbacks" />.
+
+A system that installs its routing once, when its scene starts, should not use these two calls: an allow-list entry made before hosting is applied to a manager that does not exist yet, and `LeaveSession` would drop both. `RegisterPersistentEvent(eventId, function, ownerOnly)` keeps a plain function and its allow-list entry for the life of the process, reinstates the entry whenever a session starts, and drops them when the module that owns the function unloads.
 </Callout>
 
 ## RPCs from Visual Scripting graphs

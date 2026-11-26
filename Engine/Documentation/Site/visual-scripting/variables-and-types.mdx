@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptPinTyper.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptSpawnParams.h
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
-verifiedAt: a64c79b7d
+verifiedAt: c183c40ef
 ---
 
 Variables are the state a class keeps between events. Set a value in `BeginPlay`, read it again in `Tick`. Each variable has a name, a type and a default that seeds every new instance. This page covers the types a pin can carry, containers, struct and object values, and the flags that change how a variable behaves.
@@ -116,6 +116,16 @@ Transform values have their Make and Break functions in `MMathStatics`. For `Vec
 ## Object references
 
 An object pin holds a weak handle, never a raw pointer and never a garbage-collection root. If the actor it points at is destroyed or collected, the pin reads null the next time anything resolves it.
+
+An object **variable** can hold its target more firmly. Its reference strength is saved as `ref` in the `.vscript` file (see the [file format](/docs/visual-scripting/visual-script-file-format/)):
+
+| Strength | Behaviour |
+| --- | --- |
+| Weak (the default; no `ref` in the file) | Reads back null once the object is gone. |
+| Strong | The variable keeps the object alive. The collector follows it from the instance that owns the variable, so the object survives until the variable is cleared, overwritten or the instance goes away. |
+| Soft | Stored and saved, and treated as weak at run time for now. |
+
+Only the variable store holds an object; pins and the values a graph passes around stay weak. A Set Variable that runs while the collector is in the middle of a cycle is safe: storing an object into a variable marks it for that cycle, whichever strength the variable has. Weak and Strong behave the same on the node walker and the compiled interpreter.
 
 An object constant in a saved graph cannot be a pointer, because the object does not exist when the file loads. It is saved as a symbolic reference and resolved against the world when the graph runs:
 

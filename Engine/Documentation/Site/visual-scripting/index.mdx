@@ -13,7 +13,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/VisualScriptRuntime.h
   - Engine/Source/Runtime/Game/Public/Game/FVisualScriptRuntimeLoader.h
   - Engine/Source/Runtime/Game/Public/Game/PieHotReload.h
-verifiedAt: 5922e6e5e
+verifiedAt: 351cb3037
 ---
 
 Visual Scripting lets you build gameplay logic by wiring nodes on a canvas instead of writing C++. The result is a real gameplay class: it has a name, it spawns, it ticks, it replicates, and other code finds it by name. If you have used Unreal Blueprints, the model is familiar.
@@ -68,9 +68,10 @@ There is no native back end: a packaged game runs every visual class on the same
 
 When you compile a class without errors, the editor pushes it live. The registry keeps the same `MClass` object and swaps the definition behind it. Each running instance notices the swap on its next graph run and rebinds without being respawned:
 
-- Variables you changed on the instance keep their values.
+- Variables you changed on the instance keep their values, by name. A variable whose type you changed takes its new default, and the log says so.
 - Variables still equal to the old class default take the new default. This is how raising a default reaches every placed instance that never touched it.
-- Pending `Delay` and `Timeline` runs, and `Do Once`, `Gate` and other latch states, reset. Their state was keyed by node position in the old graphs.
+- The editor compiles the class when it reloads it, between frames, so a compile problem shows in the log at the save rather than when the first actor reaches the class.
+- A `Delay`, `Timeline` or async action that is waiting carries on when the saved class compiles to the very program it was waiting in (you moved nodes, edited a comment or changed nothing the program reads). When the program changed there is no instruction to continue at: the waiting actions stop, the log names the class and how many stopped, and `Do Once`, `Gate` and other latch states reset, because their state was keyed by node position in the old graphs.
 - Cross-actor dispatcher bindings move to the new definition.
 
 In a multiplayer Play-In-Editor session, the server and the extra clients are separate processes. When you save a `.vscript` while the session runs, the editor reloads it and publishes the change on the session's reload channel, and every process of the session reloads the same class between frames <Source symbol="FPieHotReload" />.

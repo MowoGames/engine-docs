@@ -15,7 +15,7 @@ sources:
   - Engine/Source/Runtime/Audio/Public/Audio/Components/AudioSourceComponent.h
   - Engine/Source/Runtime/Game/Public/Gameplay/GeometricAcousticsSystem.h
   - Engine/Source/Runtime/Game/Public/Game/MAcousticsStatics.h
-verifiedAt: 46183d4eb
+verifiedAt: ff67285f8
 ---
 
 Mowo works out how sound travels from the level's geometry. One occlusion rule applies to every sound, including world sources, proximity voice chat, radio speakers and AI hearing, so the creature on the far side of a door hears exactly what the player does.
@@ -38,9 +38,9 @@ Turn occlusion on per source with `useOcclusion`; `occlusionSmoothing` sets how 
 Walls alone get doorways wrong: the wall beside an open door is concrete, but a voice in the next room comes round through the opening almost untouched. Add the architecture with two components: <Source symbol="FSoundPropagation" />
 
 - **RoomVolume**: an oriented box named by `roomId`. When rooms nest, higher `priority` wins, then the smaller volume. <Source symbol="RoomVolumeComponent" />
-- **Portal**: an opening of `width` by `height` between two rooms. It finds them by probing `probeDepth` either side, or by naming them in `roomA` and `roomB`. `openFraction` is how far a door stands open; the open and closed loss and cutoff are the portal's own, so a heavy fire door can say so. <Source symbol="PortalComponent" />
+- **Portal**: an opening of `width` by `height` between two rooms. It finds them by probing `probeDepth` either side, or by naming them in `roomA` and `roomB`. `openFraction` is how far a door stands open; the open and closed loss and cutoff are the portal's own, so a heavy fire door can say so. A door can drive itself: name a game parameter in `openParameter` (0 shut to 1 open) and the door moves toward its value over `openSeconds`, or call `SetTargetOpen(fraction)` from C++ or Visual Scripting and it glides there; with neither, `openFraction` is whatever its owner writes. <Source symbol="PortalComponent" />
 
-Propagation takes the louder of the straight path through the walls and the path through the portals. The way round loses its spreading (20 log10 of the route over the straight distance) and, on top, a diffraction loss from the detour: Maekawa's law on the path difference at 200 Hz, `10 log10(1 + 20 N/3)` with `N = 2 delta / lambda`, capped at 6 dB, with the cutoff falling as `8000 / (1 + N)`. A short detour barely costs, and a long one never beats a plain wall by more than the wall's own loss.
+Propagation takes the louder of the straight path through the walls and the path through the portals. The way round loses its spreading (20 log10 of the route over the straight distance) and, on top, a diffraction loss from the detour: Maekawa's law on the path difference at 200 Hz, `10 log10(1 + 20 N/3)` with `N = 2 delta / lambda`, capped at 6 dB, with the cutoff falling as `8000 / (1 + N)`. A short detour barely costs, and a long one never beats a plain wall by more than the wall's own loss. The door is an input: a door actor writes `openFraction` each frame and the next query sees it, a more open door never makes the next room quieter, and the result is deterministic, pinned by a hash over a grid of source and listener positions in the engine's tests.
 
 ## Reverb zones
 

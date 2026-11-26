@@ -7,7 +7,8 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/RenderPassExtension.h
   - Engine/Source/Runtime/RHI/Public/RHI/RenderGraph.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
-verifiedAt: 6b36ef087
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ShadingPath.h
+verifiedAt: 6a299562a
 ---
 
 `SceneRenderer` is a deferred renderer. Opaque geometry writes a G-Buffer, lighting runs once per pixel over it, translucent surfaces are drawn forward afterward, and post-processing finishes the frame. It records a whole frame in `SceneRenderer::RenderFrame`, after the host has called `BeginScene`, submitted its draws and called `EndScene`. This page walks through that function in the order the passes run. Use it to find where an effect happens, what it depends on, and what replaces it on another tier.
@@ -29,6 +30,14 @@ Three facts shape the order:
 - Temporal upscalers resolve before tonemapping, on the linear HDR image. Built-in TAA and the spatial upscaler run after it.
 
 The six [render-pass extension](/docs/rendering/extending-the-renderer/) points are marked in the tables below.
+
+## Mobile forward path
+
+Android and iOS draw with a second frame structure, selected by `r.ShadingPath`. `0` is the deferred frame described on this page; `1` is the mobile forward frame, which the Android and iOS platform config sets and which any desktop build can switch on to preview it. The value is read once when a renderer starts, so change it before the viewport or game creates its renderer. Any other value stays deferred.
+
+The path belongs to the platform, not to the level. `SceneEnvironment::renderMode` is deprecated and nothing reads it: every saved level carries Forward, so honouring it would move all of them onto the mobile path.
+
+The mobile frame shares the setup above (culling, uniforms, cascades, light lists) and then draws its own passes. The live Global Illumination, ambient occlusion, reflection, volumetric and cinematic-post passes do not run on it. One render pass draws the sky and every opaque surface into multisampled colour and depth, resolves the colour into the HDR image, and the post chain runs from there. See [Mobile rendering](/docs/rendering/mobile-rendering/) for what the path covers so far.
 
 ## 1. Before geometry
 
@@ -61,7 +70,7 @@ The six [render-pass extension](/docs/rendering/extending-the-renderer/) points 
 
 | Target | Format | Contents |
 |---|---|---|
-| A | RGBA8 | Albedo, metallic |
+| A | RGBA8 sRGB | Albedo (stored sRGB-encoded so dark albedos keep precision; every pass samples it back as linear), metallic (linear, in alpha) |
 | B | RGBA16F | World normal, roughness |
 | C | RGBA16F | Emissive, material AO |
 | D | Extended pack | Clear coat, anisotropy, light channels and the shading-model code |

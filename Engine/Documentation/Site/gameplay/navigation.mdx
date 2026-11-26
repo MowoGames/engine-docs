@@ -18,7 +18,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshLinkComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshModifierComponent.h
   - Engine/Source/Runtime/Game/Public/Game/Components/NavMeshObstacleComponent.h
-verifiedAt: ac53762bc
+verifiedAt: df11bd6b5
 ---
 
 Agents find their way over a navigation mesh baked from the level with Recast, and move with Detour's crowd steering, which adds local avoidance so agents walk round each other.
@@ -86,6 +86,10 @@ An agent's position is its feet: the crowd puts it on the navigation mesh surfac
 - `QueryPathLength(start, end)` returns a path length at once.
 - `ProjectPoint(point, verticalExtent, out)` snaps a point onto the mesh.
 
+### Paths from jobs
+
+The mesh's shared query object keeps search state between calls, so two threads must not use it. For many NPCs pathing at once, give each job its own `FNavQuerySession` over the baked mesh and call `FindPath(start, end, waypoints)`. A session is one per thread and not re-entrant. Finish the batch before the next navigation update, because obstacle and tile-cache changes run on the game thread and the mesh must not change while a session is searching. <Source symbol="FNavQuerySession" />
+
 ## Shape the mesh
 
 | Component | Does |
@@ -96,14 +100,15 @@ An agent's position is its feet: the crowd puts it on the navigation mesh surfac
 
 ## Rebuild at runtime
 
-On a tiled mesh, the rebuild system watches for static geometry that moved, appeared or disappeared, and rebakes the touched tiles on a worker once things settle. Gameplay can mark an area dirty itself, for a door or a deployed barricade. <Source symbol="NavMeshRebuildSystem" />
+On a tiled mesh, the rebuild system watches for static geometry that moved, appeared or disappeared, and rebakes the touched tiles on a worker once things settle. The system keeps a cache of each static mesh in world space and refreshes only the meshes that changed, a bounded number of vertices per frame; the bake reads that cache on the worker, so the game thread never copies the level when a rebuild starts. A rebuild waits until the cache has caught up. Meshes on dynamic rigid bodies, characters and nav agents are not part of the cached level. Gameplay can mark an area dirty itself, for a door or a deployed barricade. <Source symbol="NavMeshRebuildSystem" /> A mesh baked with dynamic obstacles rebuilds too: its cache tiles are swapped while no obstacle is active, and an area that meets a live obstacle is queued again for the next settled pass instead of being lost.
 
 | Console variable | Default | Effect |
 | --- | --- | --- |
 | `nav.Rebuild` | 1 | Runtime rebuild on or off |
 | `nav.Rebuild.SettleTime` | 0.3 | Seconds the change must stay still |
 | `nav.Rebuild.MaxDelay` | 2.0 | Rebuild anyway after this long |
-| `nav.Rebuild.MaxTiles` | 16 | Tiles per pass |
+| `nav.Rebuild.GeometryVertices` | 20000 | Mesh vertices re-transformed into the cache per frame |
+| `nav.Rebuild.MaxTiles` | 16 | Tiles baked at a time. A larger dirty area is split into chunks that bake one after another, so no tile is skipped |
 | `nav.UseCrowd` | 1 | 0 uses single-agent path following without avoidance |
 
 ## Navigation invokers

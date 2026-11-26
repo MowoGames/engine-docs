@@ -8,7 +8,7 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptExpression.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptDapServer.h
-verifiedAt: 3f3a08d31
+verifiedAt: 528c37116
 ---
 
 You debug a graph the way you debug code: breakpoints, a call stack, stepping and live values. There are two front ends, the Visual Scripting editor and any IDE that speaks the Debug Adapter Protocol (DAP). Both drive the same debugger in the engine.
@@ -18,6 +18,8 @@ You debug a graph the way you debug code: breakpoints, a call stack, stepping an
 <Flow steps={["VM reaches an exec node", "Breakpoint or step?", "Capture frame and pause", "Editor or DAP client shows it", "Resume request queued", "Game thread resumes the run"]} highlight={2} caption="A cooperative pause" />
 
 The VM calls the debugger before it runs every exec node <Source symbol="VisualScriptVM" />. If the node has a breakpoint whose condition holds, or a step is in progress, the debugger captures the exec stack, node outputs and locals as frames and pauses.
+
+Both backends stop at the same nodes. On the compiled interpreter the debugger parks the function's position and registers instead of an exec stack; a call a paused function made returns its value into the caller when the run resumes, so Step Over, Step Into and Step Out walk the same sequence of stops as on the node walker. Pin values show the return of every call node; a loop's index pin is not kept by the interpreter and reads as empty while paused.
 
 The pause is cooperative. The VM returns normally with its state saved, so the game thread is never blocked and the renderer keeps drawing. Resume requests are queued, and the owner of the paused frame applies them at a safe point.
 

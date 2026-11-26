@@ -5,8 +5,18 @@ order: 16
 sources:
   - Engine/Source/Runtime/Audio/Public/Audio/AudioEngine.h
   - Engine/Source/Runtime/Audio/Public/Audio/AudioSubmix.h
+  - Engine/Source/Runtime/Audio/Public/Audio/AudioEffect.h
+  - Engine/Source/Runtime/Audio/Public/Audio/DspEffects.h
+  - Engine/Source/Runtime/Audio/Public/Audio/AudioStreamCache.h
   - Engine/Source/Runtime/Audio/Public/Audio/AudioSource.h
   - Engine/Source/Runtime/Audio/Public/Audio/AudioSystem.h
+  - Engine/Source/Runtime/Audio/Public/Audio/AmbienceZones.h
+  - Engine/Source/Runtime/Audio/Public/Audio/Components/AudioAmbienceZoneComponent.h
+  - Engine/Source/Runtime/Audio/Public/Audio/AudioVolumes.h
+  - Engine/Source/Runtime/Audio/Public/Audio/Components/AudioVolumeComponent.h
+  - Engine/Source/Runtime/Audio/Public/Audio/NetAudioEvent.h
+  - Engine/Source/Runtime/Audio/Public/Audio/Components/AudioEventComponent.h
+  - Engine/Source/Runtime/Game/Public/Game/NetAudioEventRelay.h
   - Engine/Source/Runtime/Audio/Public/Audio/AudioAttenuation.h
   - Engine/Source/Runtime/Audio/Public/Audio/AudioParameters.h
   - Engine/Source/Runtime/Audio/Public/Audio/AudioDebug.h
@@ -22,7 +32,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/AAmbientSoundActor.h
   - Engine/Source/Runtime/Game/Public/Game/Components/FootstepComponent.h
   - Engine/Source/Runtime/Game/Public/Audio/FootstepSystem.h
-verifiedAt: 11e9af9a3
+verifiedAt: ff67285f8
 ---
 
 Mowo's audio runs on [miniaudio](https://miniaud.io/). An audio engine owns the output device and a tree of submixes; sound sources play clips into it; and an `AudioSource` ECS component, wrapped by `MAudioComponent` on actors, brings sound into a scene. Source files can be WAV, MP3, FLAC, Ogg Vorbis or Opus; they import as `.sound` assets.
@@ -84,6 +94,34 @@ A `LimiterEffect` (`AudioEngine::CreateLimiterEffect(ceilingDb, lookAheadMs, rel
 
 For whole-mix states such as a pause menu or underwater, use mix snapshots; see [Music and mixing](/docs/gameplay/music-and-mixing/).
 
+### Wet/dry mix on every effect
+
+Every effect, on a bus or in a source's effect chain, has a `Mix` (`AudioEffect::SetMix`, 0 to 1) that blends the whole effect against the signal that reached it: 1 is the effect alone (the default), 0 is the unprocessed signal, bit-exact with the effect not being there. The effect keeps running at 0, so raising the mix again does not click. In a source's `effectChain` the entry's `Mix` field sets it. The blend is the effect's own, on top of any internal levels (a reverb's wet and dry). A look-ahead effect such as the limiter delays its wet side, so a partial mix of it combs; use its mix at 1 or 0. <Source symbol="AudioEffect" /> <Source symbol="FAudioSourceEffectDesc" />
+
+## Speaker layout
+
+The mix is built for the layout in `audio.speaker_layout`: `stereo` (the default), `5.1`, `7.1` or `7.1.4`, in the usual channel order (L, R, C, LFE, then the surrounds; 7.1.4 appends top-front and top-rear height pairs). The device converts to what it really has, so a 5.1 mix on a stereo output is folded down rather than refused. `FAudioSpeakerLayout::Downmix` folds a multichannel mix to stereo with the BS.775 coefficients (centre, surrounds and heights at -3 dB, LFE dropped) and `Upmix` spreads stereo over a layout (the centre takes the mono sum, the LFE and surrounds stay empty). A host can ask for a layout before `Initialize` with `AudioEngine::RequestSpeakerLayout`. `FAudioSpeakerLayout::PanVbap(layout, azimuth, spread, gains)` is a 2D vector-base amplitude panner: the two speakers either side of a direction share it at unit total power (a sweep keeps its loudness), `spread` blends toward every speaker, and the LFE and height channels are never panned. Stereo folds a source from behind to its front pair. On a 5.1, 7.1 or 7.1.4 mix, spatial voices are placed with it by default (`audio.VbapPanning`, on): a per-voice node reads the emitter's direction relative to the listener and pans the voice over the speaker ring, with inverse-distance gain. Turn it off to leave surround placement to miniaudio, or pick another spatializer in `audio.Spatializer`. <Source symbol="FAudioSpeakerLayout" />
+
+## Ambience zones
+
+An `AudioAmbienceZone` component gives a region its own sound: a looping `bedPath` that fades in as the listener enters, and `oneShotPaths` (semicolon-separated clips) scattered at random bearings within `oneShotRadius` of the listener every `oneShotMinInterval` to `oneShotMaxInterval` seconds, seeded by `seed` so the same zone replays the same ambience. The zone is a box or sphere with a `fadeDistance` edge. Where zones overlap, the highest `priority` sounds and the others glide out at their `crossfadeRate`, an equal-power crossfade (two beds whose gains sum to one keep constant power); a zone that is not on top fires no one-shots. <Source symbol="AudioAmbienceZoneComponent" /> <Source symbol="FAmbienceZoneSolver" />
+
+## Audio volumes
+
+An `AudioVolume` component changes how everything sounds while the listener is inside it: `lowPassHz` and `highPassHz` put a filter on the world buses (a muffled tunnel, a thin radio room), `reverbSend` sends the world into a reverb, and `rolloffScale` multiplies every source's distance rolloff (above 1 sounds fall off faster). A cutoff of 20000 (low-pass) or 20 (high-pass) leaves that side alone. The volume is a box or sphere with a `fadeDistance` edge. Overlapping volumes follow the ambience-zone rules: the highest `priority` takes over and the others glide out at their `crossfadeRate`, with cutoffs blending in log frequency so a sweep sounds even. <Source symbol="AudioVolumeComponent" /> <Source symbol="FAudioVolumeSolver" />
+
+## Replicated audio events
+
+A one-shot that every nearby player should hear (a door slam, a shot) travels as an audio event. A client calls `FNetAudioEventRelay::Request` with a cue id, a position, a seed and a volume; the request is the `ServerRequestAudioEvent` function on the `AudioEvent` component, flagged `MFUNCTION(Server)`, so it is client-callable and only for the peer that owns the object. A reflected function with no direction flag is never client-callable, and the server-to-client `MulticastPlayAudioEvent` is refused when a client sends it. The replication layer's packet rate limit applies first. The server then runs the event through `FNetAudioEventGate`, which passes only a cue the server registered with `RegisterCue`, a finite position within `SetMaxClaimDistance` of the sender's own pawn, a volume up to 2, and no more than the sender's bucket (`SetRate`) allows, and counts every refusal by reason. What passes is sent, droppable, to each other peer whose pawn is within the cue's radius; a peer out of earshot is not sent it. Each receiver plays the variant `PickVariant(seed, count)` names, so all peers hear the same take. <Source symbol="FNetAudioEventGate" /> <Source symbol="AudioEventComponent" /> <Source symbol="FNetAudioEventRelay" />
+
+### Chorus, flanger, phaser, distortion, expander and EQ
+
+`AudioEngine::CreateDspEffect` (and the matching entries in a source's `effectChain`) adds six more effects, each with three parameters A, B and C. Chorus: rate Hz, depth ms, base delay ms. Flanger: rate Hz, depth ms, feedback. Phaser (four all-pass stages): rate Hz, depth 0 to 1, feedback. Distortion: drive, mode (0 tanh, 1 hard clip, 2 fold), output level. Expander (downward, 1 ms attack): threshold dB, ratio, release ms; it quiets what falls under the threshold. EQ (three bands): low shelf dB at 150 Hz, mid bell dB at 1 kHz, high shelf dB at 6 kHz. They take `SetParams` live, and the `Mix` above blends each against the dry sound. <Source symbol="DspEffect" />
+
+### Load behaviour and the stream cache
+
+A sound asset's import sidecar can set `load_behavior`: `on_demand` (the default, decoded when a source plays it and dropped with the last source), `on_level_load` (decoded when the level that lists it loads, released when that level ends), `retain` (decoded on first play and kept until the budget needs the room) or `prime` (decoded up front and never evicted). `FAudioStreamCache` holds them under a byte budget (`SetBudgetBytes`, 0 for none), evicting the least recently used Retain or level clip first, and counts hits, misses and evictions. `Preload`, `BeginLevel` and `EndLevel` drive it from code. <Source symbol="FAudioStreamCache" />
+
 ## Voice budget
 
 Only the highest-scoring voices are audible. Each playing voice scores its `priority` plus its effective volume at the listener. The top `audio.max_voices` (default 32) play; per-bus caps `audio.max_voices_sfx`, `audio.max_voices_music` and so on apply on top. Voices below the cap are **virtualized**: they cost no mixing, but their playback position keeps advancing, so a voice that wins its slot back resumes where it would have been.
@@ -113,6 +151,12 @@ A `Footstep` component plays a cue each time the character travels a stride, pic
 
 A MetaSound (`.metasound`) is a DSP graph that synthesizes or processes sound live. Play one with a `MetaSound` component (`metaSoundPath`, `bus`, `volume`, `spatial`, `playOnCreate`); its inputs can be set from code or bound to game parameters. <Source symbol="MetaSoundComponent" />
 
+Beyond the oscillator, envelope, LFO, filter, gain, mixer, add and multiply nodes and the wave player, the graph has `Noise` (seeded, so a seed replays the same noise), `Subtract`, `Divide` (a zero divisor is silence), `Abs`, `Clamp`, `MapRange`, `Delay` (up to 2 s, with feedback and mix), `WaveShaper` (tanh) and `Bitcrusher` (bit depth and sample-hold). Inputs are typed over one float: `SetInput`, `SetInputBool` and `SetInputInt`, plus `Trigger`. `ApplyPreset` layers a set of named input values over a graph, before it is prepared or live, so one graph serves many sounds. `SeekWave` moves a wave player's read position.
+
+`TriggerAt(name, sampleOffset)` fires a trigger that many samples into the next block, and an `ADSR` wired to it starts its attack on that sample; a plain `Trigger` fires at the block's first sample. A `Pan` node (equal power) splits a signal into `out` and `out_r`; the `Output` node's `in` and `in_r` carry the left and right channels, and `OutputRight` returns the right one (a copy of the left when nothing is wired to `in_r`). The audition voice still plays the left channel.
+
+Presets are saved with the graph: `CapturePreset(name)` stores every non-trigger input's value, `ApplyNamedPreset(name)` layers it back, and the asset keeps them in a `Preset` entry each. In the MetaSound editor the Members list has a Presets group: click a preset to apply it, or "Save current values as a preset" to capture a new one; both are undoable. <Source symbol="FMetaSoundGraph" />
+
 ## Game parameters
 
 Audio parameters are named floats that gameplay sets and sources read, like Wwise RTPCs: tension, health, speed. `MAudioStatics::SetAudioParameter(name, value)` sets one and `SetAudioParameterSmoothing` glides it. A source modulates by the parameter named in `modulationParameter`. <Source symbol="MAudioStatics" />
@@ -128,6 +172,8 @@ Audio parameters are named floats that gameplay sets and sources read, like Wwis
 ## Measuring loudness
 
 `FLoudnessMeter` is an ITU-R BS.1770 / EBU R128 meter: K-weighting, momentary (400 ms) and short-term (3 s) LUFS, integrated LUFS through the absolute and relative gates, and a 4x oversampled true peak in dBTP. `Init(sampleRate, channels)`, then `Process` interleaved frames (the master mix read from `AudioEngine::ReadFrames`, or any capture). A -20 dBFS 997 Hz sine in one channel reads -23.0 LUFS and a full-scale stereo sine 0 LUFS. <Source symbol="FLoudnessMeter" />
+
+Set `audio.LoudnessMeter 1` to meter the master mix and every default bus live: a `LoudnessTapEffect` is placed at the end of each bus chain (the audio passes through untouched) and `au.Debug` prints a Loudness table of momentary, short-term and integrated LUFS and dBTP per bus. Turning it off removes the taps.
 
 ## Debugging
 

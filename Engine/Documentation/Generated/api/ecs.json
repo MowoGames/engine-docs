@@ -16,13 +16,36 @@
 					"name": "BitsetHash",
 					"namespace": "Mowo",
 					"doc": "bitset<MAX_COMPONENTS> has no built-in std::hash, so the archetype map keys on this:\n64-bit chunks mixed boost-style. Runs on archetype lookup only, never in\nthe GetComponent hot path.",
-					"line": 19,
+					"line": 20,
 					"members": [
 						{
 							"kind": "method",
 							"name": "operator",
 							"signature": "size_t operator()(const std::bitset<MAX_COMPONENTS>& bs) const noexcept",
-							"line": 20
+							"line": 21
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"name": "FChangeTick",
+					"namespace": "Mowo",
+					"doc": "The frame counter component rows are stamped with: when a row was added and\nwhen it was last marked changed. World::Update advances it once a frame.\nA reader keeps the tick it last saw, asks for rows stamped at or after it\n(Query::EachChanged / EachAdded), and sets its marker to Advance() so nothing\nwritten after it is missed and nothing it already saw comes back.",
+					"line": 45,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Current",
+							"signature": "static uint32_t Current()",
+							"static": true,
+							"line": 47
+						},
+						{
+							"kind": "method",
+							"name": "Advance",
+							"signature": "static uint32_t Advance()",
+							"static": true,
+							"line": 48
 						}
 					]
 				},
@@ -31,97 +54,116 @@
 					"name": "IComponentColumn",
 					"namespace": "Mowo",
 					"doc": "Type-erased column: one per ComponentID an Archetype tracks. Components are\nstored contiguously and matched 1:1 with the archetype's entity list by row\nindex, so World can hold heterogeneous columns in one map without losing SoA.",
-					"line": 42,
+					"line": 54,
 					"members": [
 						{
 							"kind": "method",
 							"name": "~IComponentColumn",
 							"signature": "virtual ~IComponentColumn() = default",
-							"line": 44
+							"line": 56
 						},
 						{
 							"kind": "method",
 							"name": "Size",
 							"signature": "virtual size_t Size() const = 0",
-							"line": 46
+							"line": 58
 						},
 						{
 							"kind": "method",
 							"name": "EmplaceDefault",
 							"signature": "virtual size_t EmplaceDefault() = 0",
 							"doc": "Appends a default-constructed slot for migration to fill; returns its row.",
-							"line": 49
+							"line": 61
 						},
 						{
 							"kind": "method",
 							"name": "PopBack",
 							"signature": "virtual void PopBack() = 0",
-							"line": 51
+							"line": 63
 						},
 						{
 							"kind": "method",
 							"name": "MoveAssignFromOther",
 							"signature": "virtual void MoveAssignFromOther(size_t dstRow, IComponentColumn& src, size_t srcRow) = 0",
 							"doc": "Both columns must hold the same component type — the caller checks\nComponentID equality. Used for cross-archetype migration.",
-							"line": 55
+							"line": 67
 						},
 						{
 							"kind": "method",
 							"name": "MoveAssignInternal",
 							"signature": "virtual void MoveAssignInternal(size_t dstRow, size_t srcRow) = 0",
 							"doc": "Swap-remove: move the last row into the removed row's slot, then PopBack.",
-							"line": 58
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "Raw",
 							"signature": "virtual void* Raw(size_t row) = 0",
 							"doc": "Callers that know the type cast to T*; World hides the cast behind\nGetComponent<T>().",
-							"line": 62
+							"line": 74
 						},
 						{
 							"kind": "method",
 							"name": "Raw",
 							"signature": "virtual const void* Raw(size_t row) const = 0",
-							"line": 63
+							"line": 75
 						},
 						{
 							"kind": "method",
 							"name": "Data",
 							"signature": "virtual void* Data() = 0",
 							"doc": "Start of the contiguous buffer, for iteration without a per-row indirection.",
-							"line": 66
+							"line": 78
 						},
 						{
 							"kind": "method",
 							"name": "Data",
 							"signature": "virtual const void* Data() const = 0",
-							"line": 67
+							"line": 79
 						},
 						{
 							"kind": "method",
 							"name": "ElementSize",
 							"signature": "virtual size_t ElementSize() const = 0",
-							"line": 69
+							"line": 81
 						},
 						{
 							"kind": "method",
 							"name": "ComponentId",
 							"signature": "virtual ComponentID ComponentId() const = 0",
-							"line": 70
+							"line": 82
 						},
 						{
 							"kind": "method",
 							"name": "MakeEmptyOfSameType",
 							"signature": "virtual std::unique_ptr<IComponentColumn> MakeEmptyOfSameType() const = 0",
 							"doc": "A migration target needs columns for every component in the source's\nsignature but can't know the C++ types; only the source column does.",
-							"line": 74
+							"line": 86
 						},
 						{
 							"kind": "method",
 							"name": "CloneDeep",
 							"signature": "virtual std::unique_ptr<IComponentColumn> CloneDeep() const = 0",
-							"line": 76
+							"line": 88
+						},
+						{
+							"kind": "method",
+							"name": "AddedTick",
+							"signature": "virtual uint32_t AddedTick(size_t row) const = 0",
+							"doc": "Per-row stamps. Migration carries them with the data, so a component that\nonly moved archetypes does not look new or changed.",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "ChangedTick",
+							"signature": "virtual uint32_t ChangedTick(size_t row) const = 0",
+							"line": 93
+						},
+						{
+							"kind": "method",
+							"name": "MarkChanged",
+							"signature": "virtual void MarkChanged(size_t row) = 0",
+							"line": 94
 						}
 					]
 				},
@@ -132,116 +174,134 @@
 					"template": "template<typename T>",
 					"bases": "public IComponentColumn",
 					"doc": "One per (Archetype, ComponentID) pair.",
-					"line": 80,
+					"line": 98,
 					"members": [
 						{
 							"kind": "method",
 							"name": "Size",
 							"signature": "size_t Size() const override",
-							"line": 83
+							"line": 101
 						},
 						{
 							"kind": "method",
 							"name": "EmplaceDefault",
 							"signature": "size_t EmplaceDefault() override",
-							"line": 87
+							"line": 105
 						},
 						{
 							"kind": "method",
 							"name": "PopBack",
 							"signature": "void PopBack() override",
-							"line": 92
+							"line": 111
 						},
 						{
 							"kind": "method",
 							"name": "MoveAssignFromOther",
 							"signature": "void MoveAssignFromOther(size_t dstRow, IComponentColumn& src, size_t srcRow) override",
-							"line": 98
+							"line": 119
 						},
 						{
 							"kind": "method",
 							"name": "MoveAssignInternal",
 							"signature": "void MoveAssignInternal(size_t dstRow, size_t srcRow) override",
-							"line": 103
+							"line": 126
+						},
+						{
+							"kind": "method",
+							"name": "AddedTick",
+							"signature": "uint32_t AddedTick(size_t row) const override",
+							"line": 132
+						},
+						{
+							"kind": "method",
+							"name": "ChangedTick",
+							"signature": "uint32_t ChangedTick(size_t row) const override",
+							"line": 135
+						},
+						{
+							"kind": "method",
+							"name": "MarkChanged",
+							"signature": "void MarkChanged(size_t row) override",
+							"line": 138
 						},
 						{
 							"kind": "method",
 							"name": "Raw",
 							"signature": "void* Raw(size_t row) override",
-							"line": 107
+							"line": 142
 						},
 						{
 							"kind": "method",
 							"name": "Raw",
 							"signature": "const void* Raw(size_t row) const override",
-							"line": 110
+							"line": 145
 						},
 						{
 							"kind": "method",
 							"name": "Data",
 							"signature": "void* Data() override",
-							"line": 114
+							"line": 149
 						},
 						{
 							"kind": "method",
 							"name": "Data",
 							"signature": "const void* Data() const override",
-							"line": 117
+							"line": 152
 						},
 						{
 							"kind": "method",
 							"name": "ElementSize",
 							"signature": "size_t ElementSize() const override",
-							"line": 121
+							"line": 156
 						},
 						{
 							"kind": "method",
 							"name": "ComponentId",
 							"signature": "ComponentID ComponentId() const override",
-							"line": 124
+							"line": 159
 						},
 						{
 							"kind": "method",
 							"name": "MakeEmptyOfSameType",
 							"signature": "std::unique_ptr<IComponentColumn> MakeEmptyOfSameType() const override",
-							"line": 128
+							"line": 163
 						},
 						{
 							"kind": "method",
 							"name": "CloneDeep",
 							"signature": "std::unique_ptr<IComponentColumn> CloneDeep() const override",
-							"line": 132
+							"line": 167
 						},
 						{
 							"kind": "method",
 							"name": "At",
 							"signature": "T* At(size_t row)",
-							"line": 142
+							"line": 179
 						},
 						{
 							"kind": "method",
 							"name": "At",
 							"signature": "const T* At(size_t row) const",
-							"line": 145
+							"line": 182
 						},
 						{
 							"kind": "method",
 							"name": "TypedData",
 							"signature": "T* TypedData()",
-							"line": 148
+							"line": 185
 						},
 						{
 							"kind": "method",
 							"name": "TypedData",
 							"signature": "const T* TypedData() const",
-							"line": 151
+							"line": 188
 						},
 						{
 							"kind": "method",
 							"name": "EmplaceBack",
 							"signature": "template<typename... Args> size_t EmplaceBack(Args&&... args)",
 							"doc": "Returns the new row. Avoids the default-construct + move-assign pair\nwhen the caller already has the final value (the AddComponent hot path).",
-							"line": 157
+							"line": 194
 						}
 					]
 				},
@@ -250,59 +310,72 @@
 					"name": "Archetype",
 					"namespace": "Mowo",
 					"doc": "Entities sharing a component signature. Every entity with signature S lives\nin exactly one Archetype keyed by S, and its columns are the only storage for\nthose components. AddComponent / RemoveComponent migrate the entity's data to\nanother archetype, which invalidates any component pointer held across it.",
-					"line": 171,
+					"line": 217,
 					"members": [
 						{
 							"kind": "field",
 							"name": "signature",
 							"signature": "std::bitset<MAX_COMPONENTS> signature",
-							"line": 172
+							"line": 218
 						},
 						{
 							"kind": "field",
 							"name": "columns",
 							"signature": "std::unordered_map<ComponentID, std::unique_ptr<IComponentColumn>> columns",
-							"line": 173
+							"line": 219
 						},
 						{
 							"kind": "field",
 							"name": "columnIndex",
 							"signature": "std::array<IComponentColumn*, MAX_COMPONENTS> columnIndex",
 							"doc": "Dense ComponentID-indexed view of `columns` so the read hot path resolves\na column with one array index instead of a hashed lookup. Kept in sync by\nPutColumn — columns are only ever added to an archetype, never removed.",
-							"line": 177
+							"line": 223
 						},
 						{
 							"kind": "field",
 							"name": "entities",
 							"signature": "std::vector<EntityID> entities",
 							"doc": "Positions here correspond 1:1 with row indices into every column.",
-							"line": 179
+							"line": 225
 						},
 						{
 							"kind": "field",
 							"name": "slots",
 							"signature": "std::vector<uint32_t> slots",
 							"doc": "The World slot of each row's entity, parallel to `entities`. A\nswap-remove fixes the moved entity's row through it with an index, and\na ForEach hands it to Entity as a lookup hint — where a reverse\nid → row hash map used to be.",
-							"line": 184
+							"line": 230
+						},
+						{
+							"kind": "field",
+							"name": "addEdges",
+							"signature": "std::unordered_map<ComponentID, Archetype*> addEdges",
+							"doc": "Where a one-component structural change from this archetype lands, filled\nthe first time the move is made. Archetypes live until the World resets,\nwhich drops every edge with them, so an edge never dangles. A repeated\nspawn then skips the signature copy, the hash and the map lookup.",
+							"line": 236
+						},
+						{
+							"kind": "field",
+							"name": "removeEdges",
+							"signature": "std::unordered_map<ComponentID, Archetype*> removeEdges",
+							"line": 237
 						},
 						{
 							"kind": "method",
 							"name": "Column",
 							"signature": "IComponentColumn* Column(ComponentID cid) const",
-							"line": 186
+							"line": 239
 						},
 						{
 							"kind": "method",
 							"name": "ColumnData",
 							"signature": "template<typename T> T* ColumnData() const",
 							"doc": "Start of T's column, or null when this archetype does not carry T —\nhow a chunk pass reads an optional component without a per-entity lookup.",
-							"line": 192
+							"line": 245
 						},
 						{
 							"kind": "method",
 							"name": "PutColumn",
 							"signature": "void PutColumn(ComponentID cid, std::unique_ptr<IComponentColumn> col)",
-							"line": 198
+							"line": 251
 						}
 					]
 				}
@@ -598,6 +671,88 @@
 			"free": []
 		},
 		{
+			"path": "Engine/Source/Runtime/ECS/Public/ECS/EntityHandleMap.h",
+			"include": "ECS/EntityHandleMap.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "TEntityHandleMap",
+					"namespace": "Mowo",
+					"template": "template<typename V>",
+					"doc": "Per-entity data kept by the entity's World slot instead of by hashing its\n64-bit id: a lookup is the world's slot index plus one array read, and a\nwalk is a linear pass over a dense vector. A cell remembers the id it was\nwritten for, so a slot the world recycled for a new entity never answers\nfor the old one; Prune drops the cells of entities that no longer exist.\n\nThe slot comes from World::GetSlotHint, which is one hash probe in the\nworld's own table — it is still cheaper than std::unordered_map's node\nchase, and a caller that already holds a hint passes it to skip the probe.",
+					"line": 21,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "V* Find(const World& world, EntityID id)",
+							"line": 24
+						},
+						{
+							"kind": "method",
+							"name": "Find",
+							"signature": "const V* Find(const World& world, EntityID id) const",
+							"line": 28
+						},
+						{
+							"kind": "method",
+							"name": "FindAt",
+							"signature": "V* FindAt(uint32_t slot, EntityID id)",
+							"line": 32
+						},
+						{
+							"kind": "method",
+							"name": "FindOrAdd",
+							"signature": "V* FindOrAdd(const World& world, EntityID id)",
+							"doc": "The value for `id`, default-constructed when absent. False from the\nentity not existing in `world` is reported as a null result.",
+							"line": 42
+						},
+						{
+							"kind": "method",
+							"name": "Erase",
+							"signature": "bool Erase(const World& world, EntityID id)",
+							"doc": "A destroyed entity has no slot to look up, so its cell is found by a scan:\ncallers erase an id that may already be dead (a claim being cleaned up\nafter its owner), and that must not leave the cell behind.",
+							"line": 68
+						},
+						{
+							"kind": "method",
+							"name": "Prune",
+							"signature": "size_t Prune(const World& world)",
+							"doc": "Drops every cell whose entity is gone, or whose slot now holds another.",
+							"line": 92
+						},
+						{
+							"kind": "method",
+							"name": "ForEachErase",
+							"signature": "template<typename Fn> void ForEachErase(Fn&& fn)",
+							"doc": "Calls fn(EntityID, V&) for every live cell; fn returns true to erase it.",
+							"line": 106
+						},
+						{
+							"kind": "method",
+							"name": "ForEach",
+							"signature": "template<typename Fn> void ForEach(Fn&& fn)",
+							"line": 115
+						},
+						{
+							"kind": "method",
+							"name": "Size",
+							"signature": "size_t Size() const",
+							"line": 124
+						},
+						{
+							"kind": "method",
+							"name": "Clear",
+							"signature": "void Clear()",
+							"line": 128
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
 			"path": "Engine/Source/Runtime/ECS/Public/ECS/EntitySlotMap.h",
 			"include": "ECS/EntitySlotMap.h",
 			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
@@ -685,17 +840,38 @@
 						},
 						{
 							"kind": "method",
+							"name": "EachMarking",
+							"signature": "template<typename Fn> void EachMarking(Fn&& fn)",
+							"doc": "Each() that also stamps every visited row of every queried component as\nchanged this frame: the system that writes through the references says so\nonce, instead of calling MarkChanged per entity.",
+							"line": 64
+						},
+						{
+							"kind": "method",
+							"name": "EachChanged",
+							"signature": "template<typename Fn> void EachChanged(uint32_t since, Fn&& fn)",
+							"doc": "Rows where any queried component was added or changed at or after `since`.\nKeep the value FChangeTick::Advance() returned after your last pass and\npass it back here; 0 reports everything.",
+							"line": 80
+						},
+						{
+							"kind": "method",
+							"name": "EachAdded",
+							"signature": "template<typename Fn> void EachAdded(uint32_t since, Fn&& fn)",
+							"doc": "Rows where any queried component was added at or after `since`.",
+							"line": 86
+						},
+						{
+							"kind": "method",
 							"name": "Count",
 							"signature": "size_t Count()",
 							"doc": "Match count without dispatching the callback.",
-							"line": 62
+							"line": 92
 						},
 						{
 							"kind": "method",
 							"name": "Invalidate",
 							"signature": "void Invalidate()",
 							"doc": "Forces a rebuild on the next Each(); normally the version-mismatch check\ndoes this. For tests and code that knows something skipped a version bump.",
-							"line": 73
+							"line": 103
 						}
 					]
 				}
@@ -706,7 +882,7 @@
 					"name": "MakeQuery",
 					"signature": "template<typename... Ts> inline auto World::MakeQuery()",
 					"doc": "The World.h declaration returns `auto` because it can't name Query yet, so\nthis definition must deduce too — spelling Query<Ts...> as the return type\nis a declaration mismatch under MSVC.",
-					"line": 141
+					"line": 203
 				}
 			]
 		},
@@ -1562,167 +1738,187 @@
 						},
 						{
 							"kind": "method",
+							"name": "MarkComponentChanged",
+							"signature": "bool MarkComponentChanged(EntityID entity, ComponentID compId)",
+							"doc": "Stamps the entity's component as changed this frame, for code that wrote\nthrough a pointer; Query::EachChanged then reports it. False when the\nentity does not carry the component.",
+							"line": 184
+						},
+						{
+							"kind": "method",
+							"name": "MarkChanged",
+							"signature": "template<typename T> bool MarkChanged(EntityID entity)",
+							"line": 186
+						},
+						{
+							"kind": "method",
+							"name": "AddComponentsByID",
+							"signature": "size_t AddComponentsByID(EntityID entity, const ComponentID* compIds, size_t count)",
+							"doc": "Adds every listed component in one archetype migration, so an entity\nbuilt from N components passes through one new archetype instead of N-1\nintermediate ones (each of which would be created, and each of which\ninvalidates the Query caches). Ids the entity already has or that have no\ncolumn factory are skipped; returns how many were added.",
+							"line": 196
+						},
+						{
+							"kind": "method",
 							"name": "RemoveComponentByID",
 							"signature": "bool RemoveComponentByID(EntityID entity, ComponentID compId)",
-							"line": 180
+							"line": 197
 						},
 						{
 							"kind": "method",
 							"name": "AddSystem",
 							"signature": "template<typename T, typename... Args> T* AddSystem(Args&&... args)",
-							"line": 182
+							"line": 199
 						},
 						{
 							"kind": "method",
 							"name": "GetSystem",
 							"signature": "template<typename T> T* GetSystem()",
-							"line": 185
+							"line": 202
 						},
 						{
 							"kind": "method",
 							"name": "RemoveSystem",
 							"signature": "template<typename T> void RemoveSystem()",
-							"line": 188
+							"line": 205
 						},
 						{
 							"kind": "method",
 							"name": "SetParallelSystems",
 							"signature": "void SetParallelSystems(bool enabled)",
 							"doc": "When enabled, Update runs each phase's conflict-free system batches on\nthe job system. Only systems that declare component access are eligible;\nan undeclared system conflicts with everything, so with none declared\nevery batch is one system and Update matches the serial phase loop.\nFan-out is also skipped when Update itself runs on a job worker.",
-							"line": 196
+							"line": 213
 						},
 						{
 							"kind": "method",
 							"name": "GetParallelSystems",
 							"signature": "bool GetParallelSystems() const",
-							"line": 199
+							"line": 216
 						},
 						{
 							"kind": "method",
 							"name": "GetEntityCount",
 							"signature": "size_t GetEntityCount() const",
-							"line": 203
+							"line": 220
 						},
 						{
 							"kind": "method",
 							"name": "ForEach",
 							"signature": "template<typename T, typename Func> void ForEach(Func&& func)",
-							"line": 207
+							"line": 224
 						},
 						{
 							"kind": "method",
 							"name": "ForEachWith",
 							"signature": "template<typename... Ts, typename Func> void ForEachWith(Func&& func)",
 							"doc": "Any number of required components; the lambda receives (Entity, Ts&...)\nin declaration order. Widening a two-component pass to also fetch the\nextra components it needs per entity beats per-entity GetComponent calls\ninside the lambda.",
-							"line": 214
+							"line": 231
 						},
 						{
 							"kind": "method",
 							"name": "ForEachChunk",
 							"signature": "template<typename... Ts, typename Func> void ForEachChunk(Func&& func)",
 							"doc": "Archetype-at-a-time form of ForEachWith: the lambda receives\n(Archetype&, Ts*...) — the start of each required column, rows\n[0, arch.entities.size()). A pass that also wants an OPTIONAL component\nreads it once per archetype through arch.ColumnData<T>() instead of a\nhashed GetComponent per entity. Same thread and mutation rules as ForEach.",
-							"line": 222
+							"line": 239
 						},
 						{
 							"kind": "method",
 							"name": "ParallelForEachWith",
 							"signature": "template<typename... Ts, typename Func> void ParallelForEachWith(uint32_t rowsPerJob, Func&& func)",
 							"doc": "ForEachWith across the JobSystem: the rows of every matching archetype\ncut into runs of `rowsPerJob` and spread over the pool, the calling\nthread running its share (JobSystem::WaitForCounter helps). The lambda\ngets (Entity, Ts&...) like ForEachWith and must write only the row it is\nhanded and read state nothing else writes meanwhile — the contract a\ndeclared system in a parallel batch already keeps. Runs serially when the\npool is down, on a worker (a system already inside a parallel batch), or\nwhen everything fits one job. Main-thread only, like ForEach.",
-							"line": 233
+							"line": 250
 						},
 						{
 							"kind": "method",
 							"name": "GetLastParallelRunCount",
 							"signature": "uint32_t GetLastParallelRunCount() const",
 							"doc": "Row runs the most recent ParallelForEachWith handed to the job pool; 0\nwhen it ran serially. Diagnostics and tests only.",
-							"line": 238
+							"line": 255
 						},
 						{
 							"kind": "method",
 							"name": "ForEachEntity",
 							"signature": "template<typename Func> void ForEachEntity(Func&& func) const",
 							"doc": "Every living entity, unfiltered. Main-thread only. Order is defined:\narchetype creation order then row order, then component-less entities\nin creation order. It walks a snapshot, so the callback may add or\nremove components; an entity it destroys is skipped, one it creates is\nnot visited.",
-							"line": 247
+							"line": 264
 						},
 						{
 							"kind": "method",
 							"name": "MakeQuery",
 							"signature": "template<typename... Ts> auto MakeQuery()",
 							"doc": "Declared here so callers need no extra include; the body lives in Query.h.",
-							"line": 251
+							"line": 268
 						},
 						{
 							"kind": "method",
 							"name": "IsIterating",
 							"signature": "bool IsIterating() const",
 							"doc": "True while a ForEach / ForEachWith pass is running on any thread. The\nstructural mutators MOWO_CHECK this is false: mutating from inside a\nForEach lambda swap-removes the very row the loop cached a raw column\npointer into, so the guard aborts loudly instead of corrupting it.",
-							"line": 258
+							"line": 275
 						},
 						{
 							"kind": "method",
 							"name": "GetSignature",
 							"signature": "std::bitset<MAX_COMPONENTS> GetSignature(EntityID id) const",
 							"doc": "Empty bitset if the entity has no components yet (the row only exists\nafter the first AddComponent), which matches a no-requirements query.",
-							"line": 264
+							"line": 281
 						},
 						{
 							"kind": "method",
 							"name": "GetSignatureVersion",
 							"signature": "uint64_t GetSignatureVersion() const",
 							"doc": "Bumped on every entity creation, destruction, AddComponent, RemoveComponent.",
-							"line": 274
+							"line": 291
 						},
 						{
 							"kind": "method",
 							"name": "GetArchetypeVersion",
 							"signature": "uint64_t GetArchetypeVersion() const",
 							"doc": "Bumped ONLY when a new archetype is created; archetypes are never pruned\nat runtime. A Query's cached (archetype, columns) buckets go stale only\nwhen a new archetype appears, not when entities move between existing\nones (Each() reads live entity counts), so queries key their cache on\nthis instead of the per-mutation signature version.",
-							"line": 283
+							"line": 300
 						},
 						{
 							"kind": "method",
 							"name": "ForEachMatchingArchetype",
 							"signature": "template<typename Func> void ForEachMatchingArchetype(const std::bitset<MAX_COMPONENTS>& required, Func&& func) const",
 							"doc": "Every archetype whose signature is a superset of `required`, so a query\nrebuild walks matching archetypes instead of every entity's signature.",
-							"line": 289
+							"line": 306
 						},
 						{
 							"kind": "method",
 							"name": "SubmitDeferred",
 							"signature": "void SubmitDeferred(std::function<void(World*)> cmd)",
 							"doc": "Threads that can't take the World mutex — because a ForEach is up the\nstack, or to batch many small mutations — submit a callable instead.\nSubmit is thread-safe; the lambda runs on the main thread and may call\nany World API. FlushDeferred runs at the end of World::Update, after\nevery system and outside any ForEach. Calling it manually elsewhere is\nfine, but never re-enter it from inside a ForEach lambda.",
-							"line": 298
+							"line": 315
 						},
 						{
 							"kind": "method",
 							"name": "FlushDeferred",
 							"signature": "void FlushDeferred()",
-							"line": 299
+							"line": 316
 						},
 						{
 							"kind": "method",
 							"name": "SetOriginOffset",
 							"signature": "void SetOriginOffset(double x, double y, double z)",
 							"doc": "Where this world's local origin sits in absolute space (absolute = local +\noffset). Scene origin rebasing keeps it current; code that exchanges\npositions with another world (replication) converts through it, so two\nworlds that rebased independently still agree on where things are.\nDoubles: a float offset past 2^24 m stops being exact.",
-							"line": 306
+							"line": 323
 						},
 						{
 							"kind": "method",
 							"name": "GetOriginOffset",
 							"signature": "const double* GetOriginOffset() const",
-							"line": 311
+							"line": 328
 						},
 						{
 							"kind": "method",
 							"name": "CaptureSnapshot",
 							"signature": "WorldSnapshot CaptureSnapshot() const",
-							"line": 315
+							"line": 332
 						},
 						{
 							"kind": "method",
 							"name": "RestoreSnapshot",
 							"signature": "void RestoreSnapshot(const WorldSnapshot& snapshot)",
-							"line": 316
+							"line": 333
 						}
 					]
 				}
@@ -1732,200 +1928,200 @@
 					"kind": "function",
 					"name": "AddComponent",
 					"signature": "template<typename T, typename... Args> T& World::AddComponent(EntityID entity, Args&&... args)",
-					"line": 499
+					"line": 521
 				},
 				{
 					"kind": "function",
 					"name": "RemoveComponent",
 					"signature": "template<typename T> void World::RemoveComponent(EntityID entity)",
-					"line": 590
+					"line": 608
 				},
 				{
 					"kind": "function",
 					"name": "GetComponent",
 					"signature": "template<typename T> T* World::GetComponent(EntityID entity)",
-					"line": 646
+					"line": 661
 				},
 				{
 					"kind": "function",
 					"name": "GetComponent",
 					"signature": "template<typename T> const T* World::GetComponent(EntityID entity) const",
-					"line": 651
+					"line": 666
 				},
 				{
 					"kind": "function",
 					"name": "GetComponent",
 					"signature": "template<typename T> T* World::GetComponent(FEntityHandle handle)",
-					"line": 656
+					"line": 671
 				},
 				{
 					"kind": "function",
 					"name": "GetComponent",
 					"signature": "template<typename T> const T* World::GetComponent(FEntityHandle handle) const",
-					"line": 661
+					"line": 676
 				},
 				{
 					"kind": "function",
 					"name": "GetComponentHinted",
 					"signature": "template<typename T> T* World::GetComponentHinted(EntityID entity, uint32_t& slotHint)",
-					"line": 666
+					"line": 681
 				},
 				{
 					"kind": "function",
 					"name": "GetHandle",
 					"signature": "inline FEntityHandle World::GetHandle(EntityID entity) const",
-					"line": 673
+					"line": 688
 				},
 				{
 					"kind": "function",
 					"name": "IsHandleValid",
 					"signature": "inline bool World::IsHandleValid(FEntityHandle handle) const",
-					"line": 686
+					"line": 701
 				},
 				{
 					"kind": "function",
 					"name": "GetEntityID",
 					"signature": "inline EntityID World::GetEntityID(FEntityHandle handle) const",
-					"line": 690
+					"line": 705
 				},
 				{
 					"kind": "function",
 					"name": "GetComponents",
 					"signature": "template<typename... Ts> void World::GetComponents(EntityID entity, Ts*&... out)",
-					"line": 696
+					"line": 711
 				},
 				{
 					"kind": "function",
 					"name": "GetComponents",
 					"signature": "template<typename... Ts> void World::GetComponents(FEntityHandle handle, Ts*&... out)",
-					"line": 702
+					"line": 717
 				},
 				{
 					"kind": "function",
 					"name": "GetComponentsHinted",
 					"signature": "template<typename... Ts> void World::GetComponentsHinted(EntityID entity, uint32_t& slotHint, Ts*&... out)",
-					"line": 708
+					"line": 723
 				},
 				{
 					"kind": "function",
 					"name": "HasComponent",
 					"signature": "template<typename T> bool World::HasComponent(EntityID entity) const",
-					"line": 714
+					"line": 729
 				},
 				{
 					"kind": "function",
 					"name": "HasComponent",
 					"signature": "template<typename T> bool World::HasComponent(FEntityHandle handle) const",
-					"line": 721
+					"line": 736
 				},
 				{
 					"kind": "function",
 					"name": "HasComponentHinted",
 					"signature": "template<typename T> bool World::HasComponentHinted(EntityID entity, uint32_t slotHint) const",
-					"line": 728
+					"line": 743
 				},
 				{
 					"kind": "function",
 					"name": "AddSystem",
 					"signature": "template<typename T, typename... Args> T* World::AddSystem(Args&&... args)",
-					"line": 735
+					"line": 750
 				},
 				{
 					"kind": "function",
 					"name": "GetSystem",
 					"signature": "template<typename T> T* World::GetSystem()",
-					"line": 747
+					"line": 762
 				},
 				{
 					"kind": "function",
 					"name": "RemoveSystem",
 					"signature": "template<typename T> void World::RemoveSystem()",
-					"line": 756
+					"line": 771
 				},
 				{
 					"kind": "function",
 					"name": "AddComponent",
 					"signature": "template<typename T, typename... Args> T& Entity::AddComponent(Args&&... args)",
-					"line": 779
+					"line": 794
 				},
 				{
 					"kind": "function",
 					"name": "RemoveComponent",
 					"signature": "template<typename T> void Entity::RemoveComponent()",
-					"line": 784
+					"line": 799
 				},
 				{
 					"kind": "function",
 					"name": "GetComponent",
 					"signature": "template<typename T> T* Entity::GetComponent()",
-					"line": 789
+					"line": 804
 				},
 				{
 					"kind": "function",
 					"name": "GetComponent",
 					"signature": "template<typename T> const T* Entity::GetComponent() const",
-					"line": 794
+					"line": 809
 				},
 				{
 					"kind": "function",
 					"name": "HasComponent",
 					"signature": "template<typename T> bool Entity::HasComponent() const",
-					"line": 801
+					"line": 816
 				},
 				{
 					"kind": "function",
 					"name": "IsAlive",
 					"signature": "inline bool Entity::IsAlive() const",
-					"line": 806
+					"line": 821
 				},
 				{
 					"kind": "function",
 					"name": "Destroy",
 					"signature": "inline void Entity::Destroy()",
-					"line": 810
+					"line": 825
 				},
 				{
 					"kind": "function",
 					"name": "GetMatchList",
 					"signature": "inline const std::vector<Archetype*>& World::GetMatchList(const ComponentID* ids, size_t count)",
 					"doc": "The cache clear/build races only with itself (two iterations starting\nconcurrently after a structural change), never with a live consumer: the\nversion can only move via structural ops, which MOWO_CHECK !IsIterating(),\nso an in-flight pass pins the version and no concurrent GetMatchList can\nclear the entry it iterates. Mapped vectors are reference-stable across\ninserts, so the returned reference survives other lists being cached.",
-					"line": 824
+					"line": 839
 				},
 				{
 					"kind": "function",
 					"name": "ForEach",
 					"signature": "template<typename T, typename Func> void World::ForEach(Func&& func)",
-					"line": 862
+					"line": 877
 				},
 				{
 					"kind": "function",
 					"name": "ForEachWith",
 					"signature": "template<typename... Ts, typename Func> void World::ForEachWith(Func&& func)",
-					"line": 894
+					"line": 909
 				},
 				{
 					"kind": "function",
 					"name": "ForEachChunk",
 					"signature": "template<typename... Ts, typename Func> void World::ForEachChunk(Func&& func)",
-					"line": 942
+					"line": 957
 				},
 				{
 					"kind": "function",
 					"name": "ParallelForEachWith",
 					"signature": "template<typename... Ts, typename Func> void World::ParallelForEachWith(uint32_t rowsPerJob, Func&& func)",
-					"line": 969
+					"line": 984
 				},
 				{
 					"kind": "function",
 					"name": "ForEachEntity",
 					"signature": "template<typename Func> void World::ForEachEntity(Func&& func) const",
-					"line": 1038
+					"line": 1053
 				},
 				{
 					"kind": "function",
 					"name": "ForEachMatchingArchetype",
 					"signature": "template<typename Func> void World::ForEachMatchingArchetype(const std::bitset<MAX_COMPONENTS>& required, Func&& func) const",
-					"line": 1057
+					"line": 1072
 				}
 			]
 		}

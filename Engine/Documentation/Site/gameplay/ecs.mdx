@@ -14,7 +14,7 @@ sources:
   - Engine/Source/Runtime/Game/Public/Game/MWorld.h
   - Engine/Source/Runtime/Components/Public/Components/TransformComponent.h
   - Engine/Source/Runtime/ECS/Public/ECS/EntityCommandBuffer.h
-verifiedAt: 1cbbecbe4
+verifiedAt: 418d6d5f7
 ---
 
 Underneath actors, Mowo stores scene data in an entity-component system. An entity is an ID, a component is a plain struct, and a system is a class whose `Update` walks every entity with a given set of components. The renderer, physics, animation and most engine subsystems work at this level. You drop down to it when you have data on many entities that you want to process in a tight loop.
@@ -34,7 +34,7 @@ An actor's ECS world is reachable through `MWorld::GetECSWorld()`, and `MWorld::
 
 ## Archetype storage
 
-Entities with exactly the same set of components share an **archetype**. Inside an archetype each component type is stored in its own contiguous array, so iterating one component type walks packed memory. Adding or removing a component moves the entity to a different archetype.
+Entities with exactly the same set of components share an **archetype**. Inside an archetype each component type is stored in its own contiguous array, so iterating one component type walks packed memory. Adding or removing a component moves the entity to a different archetype. To give an entity several components at once, such as when a loader builds it from a saved list, call `World::AddComponentsByID(entity, ids, count)`: it makes one move to the final archetype instead of creating an intermediate archetype for every component. <Source symbol="World" />
 
 <Flow steps={["Entity gains a component", "New signature", "Find or create archetype", "Move component rows", "Old row swap-removed"]} highlight={3} caption="A structural change moves the entity's data between archetypes. That is why structural changes are forbidden during iteration." />
 
@@ -201,6 +201,16 @@ query.Each([&moving](Mowo::EntityID id, Mowo::TransformComponent& transform) {
 	}
 });
 ```
+
+### Change detection
+
+Every component row remembers the frame it was added in and the frame it was last marked changed in. `World::Update` advances the frame counter once per tick. To walk only what moved, keep the value `FChangeTick::Advance()` returned after your last pass and hand it to the query:
+
+- `query.EachAdded(since, fn)` visits rows where any queried component was added at or after `since`.
+- `query.EachChanged(since, fn)` visits rows added or marked changed at or after `since`. Pass `0` to see everything.
+- `world->MarkChanged<T>(entity)` stamps a component you wrote through a pointer; `query.EachMarking(fn)` is `Each` that stamps every row it visits.
+
+Moving an entity between archetypes keeps its stamps, so a component that only changed archetype is not reported as changed. <Source symbol="FChangeTick" />
 
 ## Register a system with the scene
 

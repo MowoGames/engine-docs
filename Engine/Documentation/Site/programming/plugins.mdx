@@ -5,6 +5,7 @@ order: 7
 sources:
   - Engine/Source/Runtime/Project/Public/Project/PluginManager.h
   - Engine/Source/Runtime/Project/Public/Project/PluginManifestSchema.h
+  - Engine/Source/Runtime/Project/Public/Project/PluginSecurity.h
   - Engine/Source/Runtime/Core/Public/Core/ConfigIni.h
   - Engine/Source/Runtime/AssetFormats/Public/AssetFormats/ImportTranslator.h
   - Engine/Source/Editor/EditorFramework/Public/EditorFramework/EditorPluginExtensions.h
@@ -18,7 +19,7 @@ sources:
   - Engine/Source/Runtime/Project/Public/Project/FeatureModules.h
   - Engine/Source/Runtime/Core/Public/Core/EngineCapabilities.h
   - Engine/Source/Runtime/Core/Public/Core/EngineFeatureRequirements.h
-verifiedAt: c6c835140
+verifiedAt: 7a674450c
 ---
 
 A plugin is a folder with a `.mplugin` manifest and, usually, C++ modules and a `Content/` folder. When a project enables it, its content mounts into the virtual filesystem, its modules load and register their types, and its editor module (if it has one) extends the editor. The engine ships <Fact id="plugins.length" /> plugins in `Engine/Plugins/`, opt-in except Editor Utility Scripting, which is editor-only and on by default, and lists its feature modules beside them.
@@ -72,6 +73,8 @@ A plugin lives either in `Engine/Plugins/<Name>/` (shared by every project on th
 | `dependencies` | Plugins that must be enabled and loadable first: a name, or an object with `name`, `optional` and `version` |
 | `modules` | The C++ modules to load: a name, or an object with `name`, `type`, `loadingPhase`, `platforms` and `targets` |
 | `supportedPlatforms`, `supportedTargets` | Where the plugin may be live; see [Platforms and targets](#platforms-and-targets) |
+| `nativeDependencies` | Gradle, manifest, CocoaPods and Swift package entries for Android and iOS; see [Native dependencies](#native-dependencies) |
+| `capabilities` | What the plugin needs the project to allow: `network`, `filesystem`, `process`, `native-code`, `editor-scripting`; see [Trusting third-party plugins](#trusting-third-party-plugins) |
 | `category` | One of the fixed categories below |
 | `requiresOnline`, `server`, `dlc`, `beta`, `marketplaceUrl`, `docsUrl`, `supportUrl` | Flags and links the Plugins window and packaging read |
 
@@ -110,6 +113,41 @@ A dependency never loads in a later phase than the plugin that needs it: such a 
 `supportedPlatforms` (`win-x64`, `linux-x64`, `osx-arm64`, `android-arm64`, `ios-arm64`) and `supportedTargets` (`Game`, `Server`, `Editor`) limit where the plugin may be live; an empty list means everywhere. A plugin outside its lists is blocked with the platform or target named, and packaging leaves it out. A module takes its own `platforms` and `targets` lists on top.
 
 A project can also switch a plugin per platform: `Config/<Platform>/<Platform>Plugins.ini` has the same `[enabled]` section as `Plugins.ini` and wins over it when running or packaging for that platform.
+
+### Native dependencies
+
+A plugin that wraps a native library declares what Android and iOS must pull in, in the manifest, instead of asking every game to edit the generated projects:
+
+```json
+"nativeDependencies": {
+  "android": {
+    "gradle": ["com.acme:voice:2.1.0"],
+    "repositories": ["https://maven.acme.example/releases"],
+    "manifest": ["<uses-permission android:name=\"android.permission.RECORD_AUDIO\" />"],
+    "application": ["<meta-data android:name=\"acme.key\" android:value=\"k\" />"]
+  },
+  "ios": {
+    "pods": ["AcmeVoice", { "name": "Zlib", "version": "~> 1.2" }],
+    "spm": [{ "url": "https://github.com/acme/voice-swift", "version": "3.0.0", "product": "AcmeVoice" }]
+  }
+}
+```
+
+`mbt package-android` adds the `gradle` coordinates and `repositories` to the app's `build.gradle`, and the `manifest` and `application` elements inside the `<manifest>` and `<application>` of `AndroidManifest.xml`. `mbt package-ios` writes a `Podfile` and a `SwiftPackageDependencies.txt` next to the staged app. Only plugins the project has enabled for that platform contribute; two plugins asking for the same library produce one entry, and a malformed coordinate or element is a manifest error.
+
+### Trusting third-party plugins
+
+A plugin installed from outside the engine can say what it needs in `capabilities`. Declaring a capability grants nothing: the project decides, in `Config/Plugins.ini`:
+
+```ini title="Config/Plugins.ini"
+[security]
+signedOnly=true
+
+[allowedCapabilities]
+VoiceChat=network,process
+```
+
+`allowedCapabilities` lists, per plugin, the capabilities the project accepts (`*` accepts all). With `signedOnly=true`, a plugin without a signing key (`publicKey`) is flagged. The Plugins window shows the findings in amber under the plugin's name, for example "This plugin uses 'process', which this project has not allowed". Plugins that ship with the engine are exempt, and findings never stop a plugin from loading, so a warning is something to review or to turn into a check in your own pipeline.
 
 ## Enabling a plugin
 

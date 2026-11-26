@@ -19,7 +19,11 @@ sources:
   - Engine/Source/Runtime/Game/Public/Animation/AnimationSystem.h
   - Engine/Source/Runtime/Game/Public/Game/MSkeletalMeshComponent.h
   - Engine/Source/Runtime/Physics/Public/Physics/Components/CharacterMovementComponent.h
-verifiedAt: 5922e6e5e
+<<<<<<< HEAD
+verifiedAt: 29c2cbb77
+=======
+verifiedAt: 7c1571dee
+>>>>>>> dev
 ---
 
 A skinned character plays animation through an **Animator** component. The Animator holds the skeleton, the clips and an animation graph, and the animation system turns them into one set of bone matrices per frame for the renderer. This page covers the base pipeline. One-shot animations are on [Montages and notifies](/docs/gameplay/montages-and-notifies/), and IK, retargeting and motion matching on [IK, retargeting and motion matching](/docs/gameplay/ik-and-retargeting/).
@@ -37,6 +41,7 @@ Every animated character goes through the same steps each frame. Only the pose s
 | Skeleton | `.skel` | Bone hierarchy and bind pose <Source symbol="Skeleton" /> |
 | Animation sequence | `.anim` | Keyframed bone tracks, curves and notifies <Source symbol="AnimationClip" /> |
 | Animation graph | `.animgraph` | State machine, blend spaces, graph nodes, mirror tables and blend profiles <Source symbol="AnimationController" /> |
+| Blend space | `.mblendspace` | A 1D or 2D blend space shared by graph nodes <Source symbol="FBlendSpaceAssetData" /> |
 | Montage | `.montage` | A one-shot animation with sections |
 | Pose asset | `.pose` | Named poses, applied as deltas or full poses <Source symbol="FPoseAsset" /> |
 | Mirror table | `.mirror` | Left/right bone pairs for mirroring <Source symbol="FMirrorTable" /> |
@@ -94,7 +99,7 @@ A state can blend between several clips by parameter instead of playing one. <So
 - **1D**: two bracketing clips along one axis, such as idle, walk and run by speed.
 - **2D**: up to three nearest clips on a grid, such as eight-way strafing by forward and sideways speed. A 2D space takes precedence when both are set.
 
-Blend-space clips are sampled at the same normalized phase, so a short walk and a long run stay foot-synced instead of sliding. Author blend spaces in the **Blend Space** editor.
+Blend-space clips are sampled at the same normalized phase, so a short walk and a long run stay foot-synced instead of sliding. Author blend spaces in the **Blend Space** editor, either inside the state or as a `.mblendspace` asset that a Blend Space Player node names.
 
 ### Sync groups
 
@@ -117,6 +122,10 @@ Beyond the state machine, the `.animgraph` holds a node network that runs after 
 When `rootMotionEnabled` is set on the Animator, the root bone's movement each frame is extracted instead of played. Set `useRootMotion` on the character's `CharacterMovement` component and that movement drives the capsule: horizontal speed comes from the clip, so turn-in-place, pivots and stops match the animation. See [Character movement](/docs/gameplay/character-movement/). Motion warping bends root motion onto a gameplay target; see [Montages and notifies](/docs/gameplay/montages-and-notifies/).
 
 For root motion in multiplayer, see [Multiplayer](/docs/multiplayer/).
+
+## Animated capsule
+
+A clip can carry a curve named `CapsuleHeightScale` (0.3 to 1). While it plays, the character's capsule shrinks to that fraction of its height, which suits a slide or a roll. The shrink goes through the same path as crouching, so growing back under a low ceiling is refused until there is room, and the capsule never ends up inside the geometry. When the curve is absent the capsule keeps its full height.
 
 ## Performance
 

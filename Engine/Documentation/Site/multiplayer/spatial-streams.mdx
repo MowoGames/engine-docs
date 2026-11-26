@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/ReplicationManager.h
   - Engine/Source/Runtime/Networking/Public/Networking/Replication/NetBlobChannel.h
   - Engine/Source/Runtime/ECS/Public/ECS/World.h
-verifiedAt: 5f421cb37
+verifiedAt: d967688f6
 ---
 
 Entity replication suits things that move. A sandbox world is different: the terrain is generated on every machine from a shared seed, and only the **edits** made to it need to travel. A spatial stream carries exactly that: versioned deltas, each filed under a key (a chunk coordinate, a navigation tile), delivered only to the clients whose interest set contains that key.
@@ -68,7 +68,7 @@ A scene rebases its origin by default once the main camera drifts 8192 m from it
 
 Replicated transforms travel in **absolute world space**: the sender adds its world's origin offset to each position, the receiver subtracts its own. The two sides may rebase at different times and by different amounts and still agree, and a rebase that moves the local position and the offset together changes no bytes on the wire, so it costs no bandwidth.
 
-- **Precision.** Positions are single-precision floats on the wire, with 1 mm steps from `MNET_QUANTIZE(Milli)`. At 20 km a float resolves about 2 mm and at 80 km about 8 mm; stay inside roughly 100 km of the absolute origin to keep ghosts within a centimetre.
+- **Precision.** `TransformComponent` position is marked `MNET_WORLD_POSITION`, so it travels as absolute integer millimetres: the sender adds its whole-metre origin in 64-bit integers and the receiver subtracts its own, with no float in between. A ghost keeps 1 mm agreement with the host at any distance up to about 70,000 km; the ghost's own float position is exact to about 1 mm within 16 km of its local origin, which rebasing guarantees.
 - **Prediction.** The predicted positions a client keeps for reconciliation shift with each rebase, so the first acknowledgement after a rebase is not mistaken for a misprediction a whole grid cell wide.
 - **Reading a ghost's pose.** `TryGetAuthoritativeTransform` returns the position in the client's current local frame.
 - **Your own caches.** Anything else that stores a world position across frames (particles in world space, audio emitters with velocity history) should be shifted by the same amount when the scene rebases. `World::GetOriginOffset` holds the accumulated offset.

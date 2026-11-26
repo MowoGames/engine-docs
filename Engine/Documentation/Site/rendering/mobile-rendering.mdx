@@ -1,0 +1,60 @@
+---
+title: Mobile rendering
+description: How Android and iOS games draw with the mobile forward path, which desktop features it turns off, and how to preview it on a PC.
+order: 20
+sources:
+  - Engine/Source/Runtime/RHI/Public/RHI/RenderGraph.h
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ShadingPath.h
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/MobileFeatureGates.h
+  - Engine/Source/Runtime/SceneRenderer/Public/Renderer/MobilePostChain.h
+  - Engine/Source/Runtime/RHI/Public/RHI/RenderGraphExecutor.h
+  - Engine/Config/android-arm64/android-arm64Engine.ini
+  - Engine/Config/ios-arm64/ios-arm64Engine.ini
+  - Engine/Config/BaseDeviceProfiles.ini
+verifiedAt: 242e1e6a1
+---
+
+Phones and tablets draw with a second frame structure, the **mobile forward path**. The desktop renderer is deferred: it writes a wide G-buffer to memory and reads it back for lighting. A phone GPU renders in small tiles held in on-chip memory, and every byte that leaves the chip costs battery and heat, so the mobile path keeps a frame's colour and depth in those tiles and writes only the finished image out.
+
+## Which path a game uses
+
+`r.ShadingPath` picks the path when a renderer starts: `0` is deferred, `1` is mobile forward. The Android and iOS platform config sets it to `1`; desktop leaves it at `0`. Set it before the renderer is created, because a running renderer keeps the path it started with. The level does not choose: the old `renderMode` field on the scene environment is deprecated and ignored.
+
+To preview the mobile path on a PC, run the editor or game with `--cvar=r.ShadingPath=1`. The preview is for checking content, not a shipping option for desktop games.
+
+## What the mobile path turns off
+
+A tier row cannot turn these back on; the mobile composition closes them and the renderer allocates none of their targets.
+
+| Feature | Mobile |
+|---|---|
+| Global Illumination (DDGI, SDF, screen probes, SSGI) | Off: baked lighting stands in |
+| Virtual shadow maps, PCSS, SDF shadow tail | Off: cascades with PCF |
+| Meshlets and mesh shaders | Off |
+| Ray tracing and ray query | Off |
+| Volumetric fog and clouds | Off: analytic height fog |
+| SSR, SSAO, GTAO | Off |
+| TAA and TSR | Off: MSAA instead, which resolves on chip |
+| Motion blur, depth of field | Off |
+| Bloom | Medium and High |
+| Decals | High, and only on a device with tile-local reads |
+| Hair strands, multi-layer Substrate, screen-space subsurface | Off |
+
+## Quality on mobile
+
+Mobile has three tiers, Low, Medium and High; Epic and Cinematic clamp to High. The rows are listed under [Mobile rows](/docs/rendering/quality-tiers/#mobile-rows), and [device profiles](/docs/rendering/device-profiles/) cap the tier a given phone may pick. A renderer on the mobile path composes its quality preset from those rows: the render scale, shadow cascades and shadow map size, and bloom come from the mobile row, and every feature in the table above is closed in the resulting options whatever the tier says.
+
+The render graph also infers what a raster pass should do with an attachment it writes: a transient target that no later pass touches is not written back (`DontCare`), an imported one always is, and a transient's first write has nothing to load. `RenderGraph::StoreOp` and `LoadOp` answer it after `Compile`, and a pass body reads the answer for its own attachment through `RenderGraphExecutor::GetStoreOp` and `GetLoadOp`. The inference sees only the graph, so an image that code outside the graph touches after the slice must not be wrapped with it; the hand-built mobile pass above declares its intent by hand.
+
+## Post chain
+
+After the main pass resolves, `FMobilePostChain::Plan` names the post passes a tier runs, in order, and the frame executes exactly that list. Medium and High run a bloom bright pass and a four-level half-resolution down and up chain; every tier then runs the tonemap with its colour-grading LUT; the Low tier, which has one sample, adds FXAA when no upscale follows; and any render scale below 1 ends with the edge-adaptive spatial upscale (EASU with RCAS), which replaces the final pass that carries FXAA. A pass the plan does not name does not run: bloom runs only when the plan has it, FXAA follows the plan rather than the scene's anti-aliasing mode, there is no temporal resolve (the path has no motion vectors, so a temporal upscaler selected on a mobile frame is replaced by the spatial one), and the sky is the gradient sky on every tier because the atmosphere composite is a deferred pass. `SceneRenderer::GetMobilePostTrace` reports the passes the last mobile frame ran. The `mobile-post-chain-test` row pins the lists, and `mobile-post-plan-test` renders Low, Medium and High, plus Low at the Performance upscaler quality, on both backends: the trace has to equal the plan, and each picture holds its golden luminance grid within 6 of 255.
+
+## Half precision
+
+The forward shader has a `MOBILE` permutation that computes the local-light colour terms (the BRDF response, the light's radiance, its attenuation and shadow) in half precision, through the `mhalf` aliases in `Public/MowoPrecision.hlsli`. On desktop builds `mhalf` is `float`; in the permutation it is `min16float`, which the SPIR-V compiler marks relaxed-precision and a phone GPU narrows, and the Metal translation emits as `half`. Positions, depth and shadow comparisons stay full precision. The mobile path loads the permutation by default; `r.Mobile.HalfPrecision 0` selects the full-precision shader, which the `mobile-half-precision-test` row compares it against (the region means differ by far less than 1/255).
+
+## Current state
+
+The path is being built up in steps. A mobile frame now draws the sky and every opaque surface in one render pass into multisampled colour and depth (the tier's sample count: 1, 2 or 4), resolves the colour into the HDR image, and runs the post chain from there. Surfaces are shaded with the forward shader the translucent pass uses: the sun with its cascades, the clustered local lights, and the material's colour, emissive and textures. The `mobile-forward-lighting-test` row lights a dark room with two coloured point lights and a spot, plus twenty faint lights that push the list past the fixed arrays, and holds each region's colour to the deferred image. Alpha-blended translucent surfaces draw after the opaque ones in the same pass, back to front over the opaque depth without writing it. Skinned meshes draw through the same shader's skinning permutation, reading the frame's bone palette arena (motion vectors stay off), and `mobile-skinned-test` holds a bent two-bone limb to the deferred image. A material graph draws through its forward permutation over the multisampled pass, and a graph that has no forward shader yet draws its flat lit surface and logs that once; `mobile-material-graph-render` checks the compiled graph drives the pixels. Additive and modulate materials blend with their own states, and water draws its waves and fresnel without refraction by default, because the pass keeps no scene colour copy to refract through. `r.Mobile.WaterRefraction` (default 0) turns refraction on: when a frame has water, the opaque surfaces also go through the G-Buffer once for a single-sample depth, the main pass ends after the opaque surfaces and stores its samples and depth, the resolved colour is copied, and the translucents draw in a second pass that loads the first one's samples and sends water through the refraction permutation of the forward shader against that copy and depth. `mobile-water-refraction-test` holds the floor's two colours under a refracting water plane on both backends. Baked lightmaps are on the path: a static opaque surface with a plain lightmap tile samples its atlas in the forward shader through the bindless table (the LIGHTMAP permutation), replaces its flat ambient with albedo times the baked light, and reads the same per-draw record the G-Buffer fill reads; `r.Mobile.Lightmap` (default 1) switches the sampling off, and `r.Lightmap.ProxyPass` does not apply, because the proxy pass needs the deferred albedo and normals, and the baked sampling follows the mobile row's global-illumination-off state, so it is on at every tier. `mobile-lightmap-test` holds a lightmapped cube and its unlit neighbour to the deferred image. Surfaces take the sky's image-based lighting as the deferred pass does: the irradiance cubemap replaces the flat hemisphere ambient, and the prefiltered cubemap with the split-sum BRDF, energy compensation and specular occlusion gives the specular lobe, so a metallic sphere reflects the sky's hues and `mobile-ibl-test` holds it to the deferred frame within 0.08 on each channel. The reflection-capture block and its four cubes are bound in the same set and sampled with the deferred pass's blend and box or sphere parallax correction, and `mobile-reflection-capture-test` holds a captured red wall on a metallic sphere's flank to the deferred frame within 0.1 (Vulkan; on D3D12 a baked capture samples black in the deferred lighting pass and has no effect on the mobile shader, which is an open defect, so the row skips there with that reason). Directional and spherical-harmonic lightmap sets, the baked probe volume and the tile-local tonemap are not on the path yet. This page changes with each.

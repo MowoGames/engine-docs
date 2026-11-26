@@ -12,7 +12,7 @@ sources:
   - Engine/Source/Runtime/RHI/Public/RHI/RenderPassAttachments.h
   - Engine/Source/Runtime/RHI/Public/RHI/GpuLifecycle.h
   - Engine/Source/Runtime/Game/Public/Game/MRenderingStatics.h
-verifiedAt: 5ed3914f0
+verifiedAt: a81180dc6
 ---
 
 Mowo has four rendering backends behind one RHI: <Fact id="rhiBackends" />. The renderer, Global Illumination, the editor and the tests run the same code on each. What changes between them is the feature ceiling, and which one starts by default on each platform.
@@ -195,6 +195,10 @@ CPU-written dynamic buffers (uniform, dynamic vertex and dynamic index) go to th
 ### Attachments that never leave the pass
 
 A render pass can declare what happens to an attachment's contents: a `DontCare` store action (nothing reads it afterwards), a `DontCare` load (the pass writes every pixel), or a transient attachment (it lives and dies inside the pass and is never sampled or copied). `FRenderPassAttachmentPolicy` turns the declaration into what the device does, from the capability bits: Vulkan sets the attachment's load and store operations, D3D12 discards the resource at the start or end of the pass, Metal sets the load and store actions, and D3D11 ignores them. A transient attachment is backed by lazily allocated memory where Vulkan reports a memory type for it, by no memory at all on Metal (`StorageModeMemoryless`), and by an ordinary target everywhere else, so a desktop device draws the same image. `TransientAttachments`, `MemorylessAttachments` and `LoadStoreActions` are the bits; a framebuffer that wraps images it did not create stays ordinary, and `ValidateReadAfterPass` refuses a declaration whose attachment a later pass reads. The `rdg-transient-attachments` row creates such a framebuffer on the live device and checks it reports what the device promised.
+
+### Multisampled attachments and resolve
+
+A framebuffer asking for `Samples` above 1 renders into multisampled colour and depth images and resolves the colour into a single-sample image when the pass ends. `GetColorAttachment` answers that resolved image, so later passes read it as they would any other target; `ResolveTargets` names images to resolve into (the mobile path resolves straight into the HDR image) and the framebuffer allocates them otherwise. The default store action for a multisampled attachment is `Resolve`: the samples are averaged into the resolved image and dropped, so on a tile GPU they never leave the chip; `Store` keeps them as well. The depth image is never resolved or sampled. `RendererCapabilities::MaxMsaaSamples` is what the device creates (Vulkan reads it from the framebuffer sample-count limits, D3D12 reports 4, and a backend without multisampling reports 1); the framebuffer and the pipelines that draw into it both take the largest power of two at or below the request and that limit, so a request the device cannot meet renders single-sample. A multisampled framebuffer cannot wrap external colours. The `rhi-attachment-ops-test` row checks, on D3D12 and Vulkan, that a pass stored `DontCare` followed by a cleared one renders correctly, that a 4x resolve matches the single-sample image in the interior and conserves coverage at the edges, and that a transient colour attachment renders while `MemorylessAttachments` reports false.
 
 ### What D3D11 costs you
 

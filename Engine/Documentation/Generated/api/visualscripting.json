@@ -1609,56 +1609,87 @@
 					"kind": "struct",
 					"name": "VisualScriptDebugFrame",
 					"namespace": "Mowo",
-					"line": 16,
+					"line": 17,
 					"members": [
 						{
 							"kind": "field",
 							"name": "graph",
 							"signature": "const VisualScriptGraph* graph = nullptr",
-							"line": 17
+							"line": 18
 						},
 						{
 							"kind": "field",
 							"name": "functionName",
 							"signature": "std::string functionName",
-							"line": 18
+							"line": 19
 						},
 						{
 							"kind": "field",
 							"name": "stack",
 							"signature": "std::vector<VisualScriptExecItem> stack",
-							"line": 19
+							"line": 20
 						},
 						{
 							"kind": "field",
 							"name": "outputs",
 							"signature": "std::vector<VisualScriptValue> outputs",
-							"line": 20
+							"line": 21
 						},
 						{
 							"kind": "field",
 							"name": "locals",
 							"signature": "FVisualScriptFrame locals",
 							"doc": "The paused call's parameters and locals by slot, in declaration order.",
-							"line": 22
+							"line": 23
 						},
 						{
 							"kind": "field",
 							"name": "returnValue",
 							"signature": "VisualScriptValue returnValue",
-							"line": 23
+							"line": 24
 						},
 						{
 							"kind": "field",
 							"name": "callNode",
 							"signature": "int callNode = -1",
-							"line": 24
+							"line": 25
 						},
 						{
 							"kind": "field",
 							"name": "pausedNode",
 							"signature": "int pausedNode = -1",
-							"line": 25
+							"line": 26
+						},
+						{
+							"kind": "field",
+							"name": "program",
+							"signature": "std::shared_ptr<const FVisualScriptLinkedProgram> program",
+							"doc": "A frame the bytecode interpreter paused parks here instead of in `stack`/`outputs`: the program\nit runs (kept alive by the shared pointer), the function's code, where to continue and the\nregisters as they were. `callDst` is the register the paused child call's return lands in when\nthis frame resumes (kVisualScriptNone when this frame itself is the paused one). `outputs` is\nrebuilt from the registers at the pause so the pin views read the same call results.",
+							"line": 33
+						},
+						{
+							"kind": "field",
+							"name": "code",
+							"signature": "const FVisualScriptFunctionCode* code = nullptr",
+							"line": 34
+						},
+						{
+							"kind": "field",
+							"name": "pc",
+							"signature": "uint32_t pc = 0",
+							"line": 35
+						},
+						{
+							"kind": "field",
+							"name": "callDst",
+							"signature": "uint32_t callDst = 0xFFFFFFFFu",
+							"line": 36
+						},
+						{
+							"kind": "field",
+							"name": "regs",
+							"signature": "std::vector<VisualScriptValue> regs",
+							"line": 37
 						}
 					]
 				},
@@ -1666,31 +1697,31 @@
 					"kind": "struct",
 					"name": "VisualScriptTraceEntry",
 					"namespace": "Mowo",
-					"line": 28,
+					"line": 40,
 					"members": [
 						{
 							"kind": "field",
 							"name": "cls",
 							"signature": "const VisualScriptClass* cls = nullptr",
-							"line": 29
+							"line": 41
 						},
 						{
 							"kind": "field",
 							"name": "graph",
 							"signature": "const VisualScriptGraph* graph = nullptr",
-							"line": 30
+							"line": 42
 						},
 						{
 							"kind": "field",
 							"name": "node",
 							"signature": "int node = -1",
-							"line": 31
+							"line": 43
 						},
 						{
 							"kind": "field",
 							"name": "time",
 							"signature": "double time = 0.0",
-							"line": 32
+							"line": 44
 						}
 					]
 				},
@@ -1698,21 +1729,21 @@
 					"kind": "class",
 					"name": "VisualScriptDebugger",
 					"namespace": "Mowo",
-					"line": 35,
+					"line": 47,
 					"members": [
 						{
 							"kind": "method",
 							"name": "SetEnabled",
 							"signature": "static void SetEnabled(bool enabled)",
 							"static": true,
-							"line": 37
+							"line": 49
 						},
 						{
 							"kind": "method",
 							"name": "IsEnabled",
 							"signature": "static bool IsEnabled()",
 							"static": true,
-							"line": 38
+							"line": 50
 						},
 						{
 							"kind": "method",
@@ -1720,112 +1751,112 @@
 							"signature": "static void AddSession()",
 							"static": true,
 							"doc": "External debug sessions (the DAP server) hold the debugger open\nindependently of the editor's SetEnabled toggle: the effective state is\n\"editor asked for it OR at least one session is attached\". Without the\nrefcount the editor's per-tick toggle would disable an attached IDE.",
-							"line": 44
+							"line": 56
 						},
 						{
 							"kind": "method",
 							"name": "RemoveSession",
 							"signature": "static void RemoveSession()",
 							"static": true,
-							"line": 45
+							"line": 57
 						},
 						{
 							"kind": "method",
 							"name": "SessionCount",
 							"signature": "static int32_t SessionCount()",
 							"static": true,
-							"line": 46
+							"line": 58
 						},
 						{
 							"kind": "method",
 							"name": "IsPaused",
 							"signature": "static bool IsPaused()",
 							"static": true,
-							"line": 48
+							"line": 60
 						},
 						{
 							"kind": "method",
 							"name": "PauseSerial",
 							"signature": "static uint64_t PauseSerial()",
 							"static": true,
-							"line": 49
+							"line": 61
 						},
 						{
 							"kind": "method",
 							"name": "Frames",
 							"signature": "static const std::vector<VisualScriptDebugFrame>& Frames()",
 							"static": true,
-							"line": 50
+							"line": 62
 						},
 						{
 							"kind": "method",
 							"name": "PausedContext",
 							"signature": "static const VisualScriptContext& PausedContext()",
 							"static": true,
-							"line": 51
+							"line": 63
 						},
 						{
 							"kind": "method",
 							"name": "PausedGraph",
 							"signature": "static const VisualScriptGraph* PausedGraph()",
 							"static": true,
-							"line": 52
+							"line": 64
 						},
 						{
 							"kind": "method",
 							"name": "PausedNode",
 							"signature": "static int PausedNode()",
 							"static": true,
-							"line": 53
+							"line": 65
 						},
 						{
 							"kind": "method",
 							"name": "PausedClassName",
 							"signature": "static std::string PausedClassName()",
 							"static": true,
-							"line": 54
+							"line": 66
 						},
 						{
 							"kind": "method",
 							"name": "PausedGraphName",
 							"signature": "static std::string PausedGraphName()",
 							"static": true,
-							"line": 55
+							"line": 67
 						},
 						{
 							"kind": "method",
 							"name": "PausedFunctionName",
 							"signature": "static std::string PausedFunctionName()",
 							"static": true,
-							"line": 56
+							"line": 68
 						},
 						{
 							"kind": "method",
 							"name": "CollectPulseNodes",
 							"signature": "static bool CollectPulseNodes(const std::string& className, const std::string& graphName, double maxAgeSeconds, std::vector<int>& out)",
 							"static": true,
-							"line": 58
+							"line": 70
 						},
 						{
 							"kind": "method",
 							"name": "RequestContinue",
 							"signature": "static void RequestContinue()",
 							"static": true,
-							"line": 60
+							"line": 72
 						},
 						{
 							"kind": "method",
 							"name": "RequestStepOver",
 							"signature": "static void RequestStepOver()",
 							"static": true,
-							"line": 61
+							"line": 73
 						},
 						{
 							"kind": "method",
 							"name": "RequestStepInto",
 							"signature": "static void RequestStepInto()",
 							"static": true,
-							"line": 62
+							"line": 74
 						},
 						{
 							"kind": "method",
@@ -1833,7 +1864,7 @@
 							"signature": "static void RequestStepOut()",
 							"static": true,
 							"doc": "Runs until control leaves the innermost paused frame (the DAP stepOut).\nAt the outermost frame there is nothing to step out of, so it behaves\nlike Continue.",
-							"line": 67
+							"line": 79
 						},
 						{
 							"kind": "method",
@@ -1841,49 +1872,49 @@
 							"signature": "static void RequestBreakNext()",
 							"static": true,
 							"doc": "Asynchronous break: arms a one-shot stop on the next exec node any graph\nreaches. No effect while already paused.",
-							"line": 71
+							"line": 83
 						},
 						{
 							"kind": "method",
 							"name": "IsBreakNextArmed",
 							"signature": "static bool IsBreakNextArmed()",
 							"static": true,
-							"line": 72
+							"line": 84
 						},
 						{
 							"kind": "method",
 							"name": "HasPendingResume",
 							"signature": "static bool HasPendingResume()",
 							"static": true,
-							"line": 74
+							"line": 86
 						},
 						{
 							"kind": "method",
 							"name": "PumpResume",
 							"signature": "static bool PumpResume()",
 							"static": true,
-							"line": 75
+							"line": 87
 						},
 						{
 							"kind": "method",
 							"name": "CancelPaused",
 							"signature": "static void CancelPaused()",
 							"static": true,
-							"line": 76
+							"line": 88
 						},
 						{
 							"kind": "method",
 							"name": "EvaluateOutput",
 							"signature": "static bool EvaluateOutput(size_t frameIdx, int node, int pin, VisualScriptValue& out)",
 							"static": true,
-							"line": 78
+							"line": 90
 						},
 						{
 							"kind": "method",
 							"name": "EvaluateInput",
 							"signature": "static bool EvaluateInput(size_t frameIdx, int node, int inputIdx, VisualScriptValue& out)",
 							"static": true,
-							"line": 79
+							"line": 91
 						},
 						{
 							"kind": "method",
@@ -1891,7 +1922,7 @@
 							"signature": "static bool EvaluateExpression(size_t frameIdx, const std::string& expression, VisualScriptValue& out, std::string* outError = nullptr)",
 							"static": true,
 							"doc": "Visual Script expression text (the grammar breakpoint conditions use) evaluated\nin a paused frame. An identifier that names no variable, param or local\nis an error rather than a silent default, so a typo never reads as 0.",
-							"line": 84
+							"line": 96
 						},
 						{
 							"kind": "method",
@@ -1899,7 +1930,7 @@
 							"signature": "static bool SetVariable(size_t frameIdx, const std::string& name, const std::string& valueText, bool instanceScope, VisualScriptValue* outNewValue = nullptr, std::string* outError = nullptr)",
 							"static": true,
 							"doc": "Writes a variable of a paused frame: a function frame's param/local, or\n(instanceScope, or no such local) the instance variable store. The text\nis coerced to the variable's current type — numbers and bools go through\nthe expression evaluator, so \"Health - 10\" works; vectors take \"x, y, z\";\nstrings take the text verbatim (surrounding quotes stripped).",
-							"line": 91
+							"line": 103
 						},
 						{
 							"kind": "method",
@@ -1907,42 +1938,79 @@
 							"signature": "static uint64_t LogpointCount()",
 							"static": true,
 							"doc": "Logpoint output. Every consumer (the editor, each DAP session) keeps its\nown cursor, so one reader never eats another's lines. Only the most\nrecent lines are retained.",
-							"line": 96
+							"line": 108
 						},
 						{
 							"kind": "method",
 							"name": "LogpointMessagesSince",
 							"signature": "static std::vector<std::string> LogpointMessagesSince(uint64_t& cursor)",
 							"static": true,
-							"line": 97
+							"line": 109
 						},
 						{
 							"kind": "method",
 							"name": "Now",
 							"signature": "static double Now()",
 							"static": true,
-							"line": 99
+							"line": 111
 						},
 						{
 							"kind": "method",
 							"name": "RecentTrace",
 							"signature": "static std::vector<VisualScriptTraceEntry> RecentTrace(double maxAgeSeconds)",
 							"static": true,
-							"line": 100
+							"line": 112
 						},
 						{
 							"kind": "method",
 							"name": "ResolveGraphName",
 							"signature": "static std::string ResolveGraphName(const VisualScriptClass* cls, const VisualScriptGraph* graph)",
 							"static": true,
-							"line": 102
+							"line": 114
 						},
 						{
 							"kind": "method",
 							"name": "FormatValue",
 							"signature": "static std::string FormatValue(const VisualScriptValue& v)",
 							"static": true,
-							"line": 103
+							"line": 115
+						}
+					]
+				}
+			],
+			"free": []
+		},
+		{
+			"path": "Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptDependencyGraph.h",
+			"include": "VisualScripting/VisualScriptDependencyGraph.h",
+			"doc": "Copyright 2025 Mowo Games. All Rights Reserved.",
+			"types": [
+				{
+					"kind": "class",
+					"name": "FVisualScriptDependencyGraph",
+					"namespace": "Mowo",
+					"line": 21,
+					"members": [
+						{
+							"kind": "method",
+							"name": "Build",
+							"signature": "static FVisualScriptDependencyGraph Build(const std::vector<std::pair<std::string, const VisualScriptClass*>>& classes)",
+							"static": true,
+							"line": 23
+						},
+						{
+							"kind": "method",
+							"name": "DirectDependents",
+							"signature": "std::vector<std::string> DirectDependents(const std::string& className) const",
+							"doc": "Classes that use `className` directly, in class-name order.",
+							"line": 26
+						},
+						{
+							"kind": "method",
+							"name": "Dependents",
+							"signature": "std::vector<std::string> Dependents(const std::string& className) const",
+							"doc": "Every class a change in `className` can reach, itself excluded, nearest first.",
+							"line": 29
 						}
 					]
 				}
@@ -4501,54 +4569,81 @@
 						{
 							"kind": "method",
 							"name": "Link",
-							"signature": "static std::shared_ptr<const FVisualScriptLinkedProgram> Link(std::shared_ptr<const FVisualScriptProgram> program)",
+							"signature": "static std::shared_ptr<const FVisualScriptLinkedProgram> Link(std::shared_ptr<const FVisualScriptProgram> program, const std::string& className = std::string(), const FVisualScriptLinkedProgram* previous = nullptr)",
 							"static": true,
-							"line": 143
+							"doc": "`className` names the profiler zones (\"VS <Class>::<Function>\"); `previous`, when the program is\nrelinked, hands over the node heat so a registry revision does not zero it.",
+							"line": 145
 						},
 						{
 							"kind": "method",
 							"name": "IsCurrent",
 							"signature": "bool IsCurrent() const",
 							"doc": "False once a class registered, unregistered or was rebuilt since this was linked.",
-							"line": 146
+							"line": 148
 						},
 						{
 							"kind": "method",
 							"name": "FindCode",
 							"signature": "const FVisualScriptFunctionCode* FindCode(const std::string& name, bool isEvent) const",
 							"doc": "The code of the named event graph or function, null when the program has none.",
-							"line": 149
+							"line": 151
 						},
 						{
 							"kind": "field",
 							"name": "program",
 							"signature": "std::shared_ptr<const FVisualScriptProgram> program",
-							"line": 151
+							"line": 153
 						},
 						{
 							"kind": "field",
 							"name": "revision",
 							"signature": "uint64_t revision = 0",
-							"line": 152
+							"line": 154
 						},
 						{
 							"kind": "field",
 							"name": "natives",
 							"signature": "std::vector<FNative> natives",
 							"doc": "By link index; only Native links with a qualified name resolve here.",
-							"line": 154
+							"line": 156
 						},
 						{
 							"kind": "field",
 							"name": "events",
 							"signature": "std::unordered_map<std::string, uint32_t> events",
-							"line": 155
+							"line": 157
 						},
 						{
 							"kind": "field",
 							"name": "functions",
 							"signature": "std::unordered_map<std::string, uint32_t> functions",
-							"line": 156
+							"line": 158
+						},
+						{
+							"kind": "method",
+							"name": "ScopeName",
+							"signature": "const char* ScopeName(const FVisualScriptFunctionCode& code) const",
+							"doc": "The profiler zone name of function `code` of this program.",
+							"line": 161
+						},
+						{
+							"kind": "method",
+							"name": "NodeHits",
+							"signature": "uint64_t* NodeHits(const FVisualScriptFunctionCode& code) const",
+							"doc": "The instruction count per source-map entry of `code`, sized on first use; counted only while\nvs.ProfileNodes is on. Mutable: counting is bookkeeping on a program that is otherwise shared\nand read-only.",
+							"line": 165
+						},
+						{
+							"kind": "field",
+							"name": "scopeNames",
+							"signature": "std::vector<std::string> scopeNames",
+							"line": 167
+						},
+						{
+							"kind": "field",
+							"name": "nodeHits",
+							"signature": "mutable std::vector<std::vector<uint64_t>> nodeHits",
+							"line": 168
 						}
 					]
 				},
@@ -6157,18 +6252,46 @@
 						},
 						{
 							"kind": "method",
+							"name": "ProfileNodes",
+							"signature": "static bool ProfileNodes()",
+							"static": true,
+							"line": 352
+						},
+						{
+							"kind": "method",
+							"name": "SetProfileNodes",
+							"signature": "static void SetProfileNodes(bool enabled)",
+							"static": true,
+							"line": 353
+						},
+						{
+							"kind": "method",
+							"name": "NodeHeat",
+							"signature": "static std::vector<FNodeHeat> NodeHeat(const VisualScriptClass& cls)",
+							"static": true,
+							"line": 354
+						},
+						{
+							"kind": "method",
+							"name": "ResetNodeHeat",
+							"signature": "static void ResetNodeHeat(const VisualScriptClass& cls)",
+							"static": true,
+							"line": 355
+						},
+						{
+							"kind": "method",
 							"name": "SetDebugHook",
 							"signature": "static void SetDebugHook(const VisualScriptDebugHook& hook)",
 							"static": true,
 							"doc": "Install/clear the process-wide debug hook. Not thread-safe with\nconcurrent VM runs — install while the game thread is idle.",
-							"line": 343
+							"line": 359
 						},
 						{
 							"kind": "method",
 							"name": "ClearDebugHook",
 							"signature": "static void ClearDebugHook()",
 							"static": true,
-							"line": 344
+							"line": 360
 						},
 						{
 							"kind": "method",
@@ -6176,7 +6299,7 @@
 							"signature": "static void SetRandomSeed(uint32_t seed)",
 							"static": true,
 							"doc": "Seed the RandomInt/RandomFloat/MultiGate-random stream for the CALLING\nthread (state is thread-local, so runs on other threads keep their own\nsequence). Deterministic replays and tests seed before executing; a\nseed of 0 restores the default stream.",
-							"line": 350
+							"line": 366
 						},
 						{
 							"kind": "method",
@@ -6184,7 +6307,7 @@
 							"signature": "static uint32_t RandomBits()",
 							"static": true,
 							"doc": "The raw xorshift draw behind RandomInt / RandomFloat / MultiGate-random.\nExposed so TRANSPILED classes draw from the same seeded per-thread stream\nthe VM does — a native body with its own generator would diverge from the\ninterpreted one the moment a test seeded it.",
-							"line": 356
+							"line": 372
 						},
 						{
 							"kind": "method",
@@ -6192,7 +6315,7 @@
 							"signature": "static VisualScriptValue ApplyPureOp(VisualScriptPureOp op, const VisualScriptValue& a, const VisualScriptValue& b, const VisualScriptValue& c)",
 							"static": true,
 							"doc": "The interpreter's own table for a Pure node, so the compiler folds constants with exactly the\narithmetic, coercions and divide-by-zero results the walker has. The random ops draw from the\nstream and are never folded.",
-							"line": 361
+							"line": 377
 						},
 						{
 							"kind": "method",
@@ -6200,7 +6323,7 @@
 							"signature": "static size_t PooledFrameCapacity()",
 							"static": true,
 							"doc": "Node-output slots held by the calling thread's reusable run frames. A\nrun borrows the frame for its nesting depth and hands it back emptied,\nso this stops growing once the deepest graph has run once.",
-							"line": 366
+							"line": 382
 						},
 						{
 							"kind": "method",
@@ -6208,7 +6331,7 @@
 							"signature": "static uint64_t ResolveCacheMisses()",
 							"static": true,
 							"doc": "Name resolutions (reflected function or property by name) the calling\nthread did NOT find in its cache. A graph calling the same function a\nthousand times resolves it once, until a class registers, unregisters\nor a Visual Script class is rebuilt.",
-							"line": 372
+							"line": 388
 						},
 						{
 							"kind": "method",
@@ -6216,7 +6339,46 @@
 							"signature": "static uint64_t DataPinCopies()",
 							"static": true,
 							"doc": "Data-pin reads on the calling thread that copied a value out of where\nit lives (a variable, a parameter, a stored output). Node evaluation\nreads those in place; what is left here is the by-value API at the\nedges (call arguments, setters, the debugger).",
-							"line": 378
+							"line": 394
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"name": "VisualScriptVM::FNodeHeat",
+					"namespace": "Mowo",
+					"doc": "The `vs.ProfileNodes` console variable (default 0): while it is on the interpreter counts the\ninstructions each source node runs. NodeHeat reads the counts of a class's program, highest\nfirst, and ResetNodeHeat zeroes them; a class with no program has none.",
+					"line": 344,
+					"members": [
+						{
+							"kind": "field",
+							"name": "function",
+							"signature": "std::string function",
+							"line": 345
+						},
+						{
+							"kind": "field",
+							"name": "isEvent",
+							"signature": "bool isEvent = true",
+							"line": 346
+						},
+						{
+							"kind": "field",
+							"name": "node",
+							"signature": "int32_t node = -1",
+							"line": 347
+						},
+						{
+							"kind": "field",
+							"name": "nodeGuid",
+							"signature": "std::string nodeGuid",
+							"line": 348
+						},
+						{
+							"kind": "field",
+							"name": "instructions",
+							"signature": "uint64_t instructions = 0",
+							"line": 349
 						}
 					]
 				}

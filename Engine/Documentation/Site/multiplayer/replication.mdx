@@ -14,7 +14,7 @@ sources:
   - Engine/Source/Runtime/Reflection/Public/Reflection/PropertyInfo.h
   - Engine/Source/Runtime/Reflection/Public/Reflection/NetBitStream.h
   - Engine/Source/Runtime/Components/Public/Components/TransformComponent.h
-verifiedAt: 128187f9d
+verifiedAt: d967688f6
 ---
 
 Replication is how the host keeps each client's copy of the world in sync. Every networked entity has an authoritative version on the host and a **ghost** on each client. The host sends only the fields that changed, and the client applies them to its ghost. Which fields travel is decided by reflection: you mark a field, and it replicates.
@@ -113,7 +113,9 @@ Asset references, custom types, maps and sets are refused. A struct with a membe
 | `Angle` | 16 bits per radian component, wrapped to one turn. |
 | `SmallestThree` | A unit quaternion in three 15-bit components plus a 2-bit index. |
 
-Change detection compares the quantized encodings, so jitter below the quantum costs nothing. `TransformComponent` position and rotation ship as `Milli`.
+Change detection compares the quantized encodings, so jitter below the quantum costs nothing. `TransformComponent` rotation ships as `Milli`.
+
+`MNET_WORLD_POSITION` marks a replicated `Vec3` that is a position in the world <Source symbol="PropertyFlags" />. It implies `MREPLICATED` and replaces the quantizer: the value ships as absolute 64-bit millimetres (the sender adds its world origin in integers, the receiver subtracts its own), so a position far from the origin keeps millimetre precision. `TransformComponent` position uses it. Spawn packets carry the position the same way.
 
 ### Conditions
 

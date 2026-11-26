@@ -7,7 +7,7 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptProgram.h
   - Engine/Source/Runtime/VisualScriptCompiler/Public/VisualScriptCompiler/VisualScriptCompiler.h
-verifiedAt: 60cdf7435
+verifiedAt: a6d4724a3
 ---
 
 A Visual Script class is compiled before it runs: its graphs are checked, macros are inlined, every pin gets a type, and the result is a compact register program that a small interpreter runs. The program is plain data, so it can be cached or shipped next to the class as a `.vsprog` file.
@@ -21,14 +21,17 @@ The console variable `vs.Backend` chooses between two ways of running the same g
 | 0 | The node walker, which follows the graph's nodes directly. | The reference the interpreter is judged against; it is removed after 2027-04-19. |
 | 1 (default) | The bytecode interpreter, which runs the compiled program. | What a game runs. |
 
-A class the compiler cannot lower yet (a node it has no lowering for, or a constant that has no stored form) is not an error: the editor's Compile button reports a warning and that class keeps running on the node walker, whatever `vs.Backend` says. The same happens while the Visual Script debugger is enabled.
+A class the compiler cannot lower yet (a node it has no lowering for, or a constant that has no stored form) is not an error: the editor's Compile button reports a warning and that class keeps running on the node walker, whatever `vs.Backend` says. The debugger works on both backends: breakpoints, stepping and the variable views behave the same on the interpreter as on the walker.
 
 ## Where the program comes from
 
 The first time a class runs under backend 1 the engine looks for a program in this order.
 
 1. A `.vsprog` file next to the `.vscript`, when its events and functions are exactly the class's.
-2. The compiler, run on the spot when the class loads.
+2. The project's derived data cache, under a key made from the class, its parent classes' signatures, the native functions its call nodes resolve to and the compiler's version.
+3. The compiler, run on the spot when the class loads. Its program is stored in the derived data cache for the next run.
+
+The key changes when you edit the class, change a parent class's functions or variables, or change the signature of a C++ function a node calls (so a rebuilt game module never serves a program compiled against the old one). A new engine version with a different compiler never reads an older entry. `mbt ddc purge` empties the cache.
 
 A compiled program is relinked against the live classes whenever a class registers or unregisters, so a hot reload never leaves a call pointing at a function that no longer exists.
 
@@ -56,3 +59,9 @@ Every diagnostic prints on one line: `Content/BP_Door.vscript(graph=Open,node=4F
 ## Waiting nodes
 
 Delay, Timeline and async actions park the program's registers and its position when they suspend, and continue from there on a later frame, the same way they do on the node walker.
+
+## Profiling
+
+Every event and every function the interpreter runs is a profiler zone named `VS <Class>::<Event or Function>` in the Script category, so the profiler overlay and Tracy show script time by name, with a function's zone nested in the zone of the graph that called it. `stat game` lists `VisualScriptEvent`, the time spent in event graphs.
+
+For a finer look, set `vs.ProfileNodes` to 1. The interpreter then counts the instructions each node of each graph runs, and `VisualScriptVM::NodeHeat` returns the counts of a class, hottest first, each with the function or event, the node index and the node's guid, which is what a heat overlay needs; `ResetNodeHeat` zeroes them. Counting runs the interpreter's slower instantiation, so leave it at 0 (the default) outside a profiling session. The counts survive the program being relinked.

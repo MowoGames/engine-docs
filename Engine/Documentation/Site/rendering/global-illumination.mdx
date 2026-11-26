@@ -6,7 +6,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/ScalabilityTiers.h
   - Engine/Source/Runtime/RHI/Public/RHI/ProjectRenderFeatures.h
   - Engine/Source/Runtime/Renderer/Public/Renderer/DdgiBake.h
-verifiedAt: bcdfcfa55
+verifiedAt: ceb9c45fb
 ---
 
 Global Illumination is Mowo's real-time indirect lighting. It combines a camera-centred signed distance field, a grid of irradiance probes, a radiance cache, a mesh-card surface cache and a screen-space probe gather, with temporal denoising on top. At Epic it can also trace its gather rays through the hardware ray-tracing scene. Nothing has to be baked for it to work; a baked field is only a fallback for tiers that turn the live system off.
@@ -14,7 +14,7 @@ Global Illumination is Mowo's real-time indirect lighting. It combines a camera-
 Global Illumination is **off for a new project**. Turn it on in **Project Settings > Rendering > Features > Global Illumination** (`r.GlobalIllumination.EnableForProject 1`). Until you do, no tier, device profile or `r.*` cvar runs it, and the renderer builds none of its pipelines, volumes or probes. Once it is on it runs from the **Medium** tier up; Low turns it off and samples a [baked field](#bake-a-fallback-for-low) instead when the scene has one.
 
 <Callout type="note">
-The switch covers everything that traces the Global Illumination distance field: DDGI and screen probes, SSGI, the neural cache, SDF reflections, the translucent SDF reflections and the far sun shadows past the cascades. The hardware ray-traced gather also needs [Ray Tracing](/docs/rendering/ray-tracing/) on.
+The switch covers everything that traces the Global Illumination distance field: DDGI and screen probes, SSGI, SDF reflections, the translucent SDF reflections and the far sun shadows past the cascades. The hardware ray-traced gather also needs [Ray Tracing](/docs/rendering/ray-tracing/) on.
 </Callout>
 
 ## How it fits into the frame
@@ -68,7 +68,7 @@ The gathered light goes through a velocity-aware temporal pass and a variance-gu
 
 ### Composite
 
-The composite multiplies the gathered irradiance by the surface's diffuse albedo: the base colour times one minus metallic. This holds for world probes, screen probes and the neural cache alike. A fully metallic surface has no diffuse albedo, so it takes no diffuse indirect light or sky fill; its indirect light comes from reflections.
+The composite multiplies the gathered irradiance by the surface's diffuse albedo: the base colour times one minus metallic. This holds for world probes and screen probes alike. A fully metallic surface has no diffuse albedo, so it takes no diffuse indirect light or sky fill; its indirect light comes from reflections.
 
 AO from GTAO or ray-traced AO darkens the indirect light here. `r.GI.AOWeight` (default 1) scales a plain AO multiply. `r.GI.BentNormalAO` (default 1) adds cone occlusion along the AO pass's bent normal, the average unoccluded direction, so creases and contacts lose indirect light while an open floor keeps its sky fill.
 
@@ -111,7 +111,7 @@ To keep a tier's shadows and resolution but drop the cost of Global Illumination
 
 **Beyond the probe window.** The live world-probe gather (Medium and the Steam Deck row) only knows the probes around the camera. Past the outermost probes the field now fades out over one probe cell and the sky's mean radiance, leaned toward the upward hemisphere, fills the rest, so a floor 100 m away no longer wears the lighting of the window's border. `r.GI.WorldProbeFarField 0` brings back the old clamp. The fill does not look at the distance field, so a far surface under cover reads as open sky; the ambient occlusion pass still darkens it. The screen-probe gather (High and up) has a far cascade instead and is not affected.
 
-**Bounce energy.** A closed room lit by one lamp is the energy check: with the walls at albedo 0.5 the gather returns about half of the lamp-lit wall radiance a second time on Medium and High, about 0.4 of it on Epic and Cinematic under Vulkan, and the bounce grows with the wall colour. Every gather clamps a single ray or pixel at 64 times the scene unit; the clamps were 8 on the hardware-traced gather and the final screen-probe write, which capped a bright lamp room at a fraction of its bounce.
+**Bounce energy.** A closed room lit by one lamp is the energy check: with the walls at albedo 0.5 the gather returns about half of the lamp-lit wall radiance a second time on Medium and High, about 0.4 of it on Epic and Cinematic on both Direct3D 12 and Vulkan, and the bounce grows with the wall colour. Every gather clamps a single ray or pixel at 64 times the scene unit; the clamps were 8 on the hardware-traced gather and the final screen-probe write, which capped a bright lamp room at a fraction of its bounce.
 
 **Probe levels.** The world-probe field has up to three levels. Level 0 is the near window around the camera. Levels 1 and 2 are the same field at 4 times and 16 times the spacing (`r.GI.FarCascadeScale`; about 64 m and 256 m at Medium), each following the camera in whole steps of its own spacing. They exist only while the scene is wider than the near window, and `r.GI.WorldProbeLevels` sets how many run: 1 is the single near window with the fade to the sky, and it is the switch to reach for when you suspect the coarse levels. A coarse level traces at most `r.GI.DDGI.ProbeBudget` probes per frame once it is built. A scheduler picks them: a new level and the planes a scroll exposes go first and may exceed the budget, then the probes near the camera, then the probes that have waited longest, so every probe is revisited within a few frames. Everything that samples the probe field reads all the levels, blending each by how far inside its window the point sits: the world-probe gather, the specular environment pass, forward-lit translucents, the fog, the card relight, the radiance cache bake, the probe bounce and the reflection and planar captures. The screen-probe gather's own per-pixel world fallback reads the near window only. Coarse levels are not relocated away from geometry, so a probe inside a wall just carries little weight.
 
@@ -122,7 +122,7 @@ To keep a tier's shadows and resolution but drop the cost of Global Illumination
 
 **Screen-probe rays at large resolutions.** The tier's rays per screen probe are sized for 1080p. Above 1080p of allocated render extent they fall in proportion, so a 4K frame traces about as many rays per frame as a 1080p one, with a floor of 32 rays per probe. `r.GI.ScreenProbes.RayBudgetPixels` sets the pixel count the rays are sized for (2073600 by default), and 0 turns the scaling off.
 
-**Which lights feed the caches.** The caches are shaded by at most 32 lights. When a scene has more, they are ranked by power weighed against the distance from the camera to the edge of the light's reach, so one strong far light no longer evicts the lamp in the room you stand in. `r.GI.LightSelection 0` restores the global power order and `r.GI.LightSelection.Radius` sets the distance past which a light is last in line. Each light has an **Indirect Lighting Intensity** (Details > Advanced): it scales that light's contribution to the bounce, and 0 keeps the light out of the caches.
+**Which lights feed the caches.** The caches are shaded by at most 64 lights. When a scene has more, they are ranked by power weighed against the distance from the camera to the edge of the light's reach, so one strong far light no longer evicts the lamp in the room you stand in. `r.GI.LightSelection 0` restores the global power order and `r.GI.LightSelection.Radius` sets the distance past which a light is last in line. Each light has an **Indirect Lighting Intensity** (Details > Advanced): it scales that light's contribution to the bounce, and 0 keeps the light out of the caches.
 
 **Volume overrides.** A volume profile has a **Global Illumination** group with **Indirect Intensity** and **Bounce** multipliers that blend by priority and distance like the other overrides; the renderer still caps the bounce below 1.
 
@@ -177,10 +177,6 @@ Run **Build Lighting** from the command palette. The editor turns the live syste
 The `.mgi` file sits next to the scene file and ships with it. Rebuild after you change lighting or geometry.
 </Step>
 </Steps>
-
-## Neural irradiance cache <Status />
-
-`r.GI.NeuralCache 1` replaces the gather with a small network trained online on the GPU from rays traced off the G-Buffer. It is off by default and console-only: it costs much more than the gather and its colour does not yet match. Do not ship with it.
 
 ## Limits
 

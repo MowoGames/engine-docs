@@ -9,7 +9,7 @@ sources:
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/QualityAutoTier.h
   - Engine/Source/Runtime/SceneRenderer/Public/Renderer/DeviceProfiles.h
   - Engine/Config/BaseDeviceProfiles.ini
-verifiedAt: f1dfd4d02
+verifiedAt: 3d16633d7
 ---
 
 A quality tier is one setting that decides which rendering features run and how much each one may spend. Mowo has five tiers: **Low, Medium, High, Epic and Cinematic** (). High is the code default.
@@ -280,6 +280,23 @@ r.Shadow.MaxDistance=250
 
 Values from this file sit below every other INI and below the player's own settings.
 
+## Mobile rows
+
+Android and iOS draw with the [mobile forward path](/docs/rendering/frame-pipeline/#mobile-forward-path) (`r.ShadingPath 1`) and read a separate, smaller set of rows: `FScalabilityTiers::GetMobile`. Mobile has three tiers; Epic and Cinematic clamp to High. `FScalabilityTiers::GetComposed(base, EShadingPath::MobileForward)` is the desktop row with the render scale, cascade count, shadow map size and bloom replaced by these.
+
+| Row | Low | Medium | High |
+|---|---|---|---|
+| Render scale | 0.7 | 0.85 | 1.0 |
+| MSAA samples | 1 | 2 | 4 |
+| Shadow cascades | 1 | 2 | 3 |
+| Shadow map resolution | 1024 | 1024 | 2048 |
+| Clustered lights per cluster | 8 | 16 | 32 |
+| Shadowed local lights | 0 | 0 | 4 |
+| Reflection probes blended | 1 | 1 | 2 |
+| Bloom | Off | On | On |
+
+These are starting values, to be set by measurement on a device. The [device profiles](/docs/rendering/device-profiles/) cap the tier a phone may pick.
+
 ## Dynamic resolution
 
 `r.DynamicRes 1` steers the render scale toward a GPU frame-time target between `r.DynamicRes.MinScale` and `r.DynamicRes.MaxScale`. The default, `-1`, turns it on in the shipped game and off in the editor viewport.
@@ -294,6 +311,8 @@ Values from this file sit below every other INI and below the player's own setti
 | `r.DynamicRes.GI.MinShare` | 0.2 | Share of the GPU frame the screen-probe passes must take before a density step is worth it |
 
 A device that runs hot gives quality back before the OS throttles it. `thermal.Governor` (default 1) reads the thermal state the platform reports (the Android thermal status, the macOS thermal state) and lowers the dynamic resolution ceiling to 0.9, 0.75 and 0.6 of the band at fair, serious and critical, and tightens the GPU time target to 0.85 and 0.7 at serious and critical. It takes quality away at once and gives one level back after `thermal.RelaxSeconds` (20) of a cooler reading; `thermal.PollSeconds` (1) is how often the state is read, and `thermal.Force` (0 to 3) replaces the reading to try a level on a desk. It acts only while dynamic resolution is on.
+
+The same governor also watches the heat forecast. Where the platform gives one (Android, 10 seconds ahead; `FPlatformHardwareSensors::ReadThermalHeadroom`), a headroom above 0.85 or a serious thermal state steps the frame-rate cap to 60, then 45, then 30 fps, one step at once and each further step after `thermal.CapStepSeconds` (10) of continued pressure, and lowers the dynamic resolution floor to `thermal.DynResFloor` (0.5). A step comes back only after `thermal.CapRelaxSeconds` (10) below 0.7; between 0.7 and 0.85 the cap holds. A platform with no forecast uses the thermal state instead: a fair or nominal reading counts as cool. The cap joins `t.MaxFPS` and the battery-saver cap as the lowest of them, and the editor readout names it "Thermal".
 
 The band is per upscaler preset: Quality (0.667) moves between 0.5 and 0.667, Performance (0.5) between 0.375 and 0.5 under TSR. TAA and no upscaler render at the output scale and leave the band alone. A frame that takes no step keeps the scale exactly, so the preset's own scale is held without snapping to the 0.05 grid.
 

@@ -11,7 +11,7 @@ sources:
   - Engine/Source/Runtime/Animation/Public/Animation/Components/AnimatorComponent.h
   - Engine/Source/Runtime/Game/Public/Game/MSkeletalMeshComponent.h
   - Engine/Source/Runtime/Game/Public/AssetSystem/AssetPackageObjects.h
-verifiedAt: c1d08db53
+verifiedAt: 4da33f6ab
 ---
 
 A **montage** is a one-shot animation played on top of whatever the animation graph is doing: an attack, a hit reaction, an interaction or an emote. The character keeps walking underneath, because the montage only overrides the pose by its blend weight. **Notifies** are markers on a clip or montage timeline that fire gameplay at an exact frame.
@@ -77,6 +77,10 @@ animator->montage.onEnded = []() {
 
 Each named slot is an independent montage player with an optional bone mask, so a full-body dodge and an upper-body reload can play at the same time. A montage plays on the slot it names; override that with `AnimatorComponent::PlayMontageOnSlot`, and restrict a slot with `SetMontageSlotBoneMask`. <Source symbol="AnimatorComponent::PlayMontageOnSlot" /> A `Slot` node in the animation graph decides where in the graph a slot's pose is composed; slots no node claims are blended on top at the end.
 
+### Root motion from montages
+
+With root motion on the animator and `rootMotionFromMontagesOnly` set, the capsule moves by the playing montage's root motion and by nothing else. This covers montages started with `PlayMontage` and `PlayMontageAsset`, which play in a slot; with several slots playing, the heaviest one drives it. <Source symbol="AnimatorComponent" />
+
 ### Branching points
 
 A plain notify is handled after the frame's update, so a section jump decided from it lands a frame late. Mark a notify as a **branching point** and the update is split at its exact time, so a jump or stop decided there happens on the frame it was authored for. <Source symbol="Montage::AddNotify" />
@@ -84,6 +88,8 @@ A plain notify is handled after the frame's update, so a section jump decided fr
 ## Notifies
 
 A notify fires once each time playback crosses it, and loops are handled. A **notify state** has a begin and an end time and fires `Begin`, `Tick` and `End`. <Source symbol="AnimNotify" />
+
+Clips played by nodes in the animation graph fire their notifies too: a Clip node fires its clip's notifies once per loop, and a one-shot Clip node held on its last frame never fires the end notify again. A Blend Space Player and a Random Player fire their clips' notifies the same way. A clip's weight is its share of the final pose through every blend above it (a Blend By Float, Blend By Bool or Layered Blend), and a clip under 10 percent fires nothing, so a fading clip does not play a footstep nobody sees.
 
 Notifies are data-driven: set a notify's kind and the engine performs the action with no code.
 
@@ -109,6 +115,10 @@ Mowo::AnimatorComponent* animator = nullptr;
 animator->eventCallbacks["Hit"] = [](const std::string& name, const std::unordered_map<std::string, Mowo::AnimEventParam>& params) {
 };
 ```
+
+## Montages in multiplayer
+
+A networked character with a `NetAnimationState` component replicates its montage to every client. That covers the montages `PlayMontage` and `PlayMontageAsset` start, which play in a slot: the component's `replicatedSlot` (default `DefaultSlot`) names the slot that is mirrored, and the montage's id, section, playhead and play rate follow it. A client that joins in the middle of a montage starts it at the server's section and playhead, already past the blend-in, and a server stop blends the client's copy out. A montage asset registers itself on both ends; one still living in a model's sidecar must be registered with `RegisterMontage`.
 
 ## Motion warping
 
