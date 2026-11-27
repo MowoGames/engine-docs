@@ -5,7 +5,7 @@ description: What Windows DirectStorage speeds up in a Mowo game, how to turn it
 order: 13
 sources:
   - Engine/Documentation/Generated/console.json
-verifiedAt: 0a71b1974
+verifiedAt: 57e6266a3
 ---
 
 On Windows, a game reads its streamed files through Microsoft DirectStorage when the machine has it. DirectStorage batches many reads into the drive's queue, keeps NVMe drives busy, and can hand the bytes straight to the GPU. You change nothing in your project: a packaged game uses it automatically, and falls back to the ordinary file reads when it cannot.
@@ -37,15 +37,15 @@ The gain depends on the drive. An NVMe drive with a deep queue gains the most, a
 
 ## What it measured
 
-The engine's `streamer-read-ahead-bench` row replays the two patterns the stock streamers use against a cold file: an audio stream consuming consecutive 64 KB chunks with a quarter millisecond of decode work per chunk, and a mesh restore pass reading 8 levels (a 192 KB vertex span and a 48 KB index span each) from scattered offsets. Best of the runs on one development machine, debug build, small data set (8 MiB of audio, 48 mesh levels), Windows 11 with an NVMe drive:
+The engine's `streamer-read-ahead-bench` row replays the two patterns the stock streamers use against a cold file: an audio stream consuming consecutive 64 KB chunks with a quarter millisecond of decode work per chunk, and a mesh restore pass reading 8 levels (a 192 KB vertex span and a 48 KB index span each) from scattered offsets. Best of three rounds on one development machine, dev build, 48 MiB of audio and 192 mesh levels, Windows 11 with an NVMe drive (five runs, the range is shown):
 
 | How the streamer reads | Audio stream | Mesh levels |
 |---|---|---|
-| Reads when it needs the bytes (before) | 63-80 ms | 69-73 ms |
-| Read ahead, engine's async file reads | 43-48 ms | 31-35 ms |
-| Read ahead, through DirectStorage | 52-58 ms | 32-35 ms |
+| Reads when it needs the bytes (before) | 330-353 ms | 213-232 ms |
+| Read ahead, engine's async file reads | 218-234 ms | 103-109 ms |
+| Read ahead, through DirectStorage | 248-291 ms | 106-114 ms |
 
-Most of the gain is reading ahead: the audio stream overlaps the next chunk with the decode of the current one, and the mesh pass sends all its spans to the drive at once instead of one at a time. On this NVMe drive DirectStorage and the engine's own async reads came out about level for these small reads; DirectStorage's advantage shows with large sets and many requests in flight (see the load numbers in the engine's `directstorage-load-bench` row), and a debug build on one drive is not a promise for yours. The bytes the streamers received were identical in all three modes.
+Most of the gain is reading ahead: the audio stream overlaps the next chunk with the decode of the current one, and the mesh pass sends all its spans to the drive at once instead of one at a time. On this NVMe drive DirectStorage and the engine's own async reads came out about level for these small reads; DirectStorage's advantage shows with large sets and many requests in flight (see the load numbers in the engine's `directstorage-load-bench` row), and one drive is not a promise for yours. DirectStorage was slightly behind the async path on the audio pattern here: each 64 KB chunk is one request, and the engine's own async read has less per-request overhead. The bytes the streamers received were identical in all three modes.
 
 ## Turning it off
 

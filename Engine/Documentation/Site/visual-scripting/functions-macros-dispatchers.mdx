@@ -8,7 +8,8 @@ sources:
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptVM.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptDispatcherRegistry.h
   - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptLibrary.h
-verifiedAt: 291f774e1
+  - Engine/Source/Runtime/VisualScripting/Public/VisualScripting/VisualScriptValue.h
+verifiedAt: a10209a6e
 ---
 
 Once a graph grows past a screen, factor it. Visual Scripting gives you two tools with different rules: a **function** is called, and a **macro** is pasted in. A third tool, the **event dispatcher**, lets one actor announce something and any number of others respond.
@@ -146,6 +147,21 @@ Bindings are safe to leave behind:
 - When an actor ends play, every binding that mentions it is removed.
 - On hot reload, bindings move to the new class definition.
 - More than 32 nested cross-actor broadcasts are refused <Source symbol="VisualScriptDispatcherRegistry" />.
+
+## Delegates
+
+A delegate is a function of an object as a value: a target and the name of one of its functions. **Make Delegate** builds one from the function you name and an optional **Target** pin (an empty or null target is the graph's own object, so a delegate to one of the class's functions needs no Self node). The delegate leaves the node on a Delegate pin, which links only to another Delegate pin.
+
+- **Call Delegate** calls the delegate on its first pin, with the remaining pins as the function's arguments, and returns the function's value. Use **Add Input Pin** in the node's context menu to add an argument. A delegate whose target has been destroyed, or an unset pin, is skipped with a warning. Calling a delegate to a function of another visual object runs it in that object's own context, like **Call On Target**.
+- **Bind Delegate To Event** binds a delegate to a dispatcher, so a broadcast of the dispatcher calls it. Its **Owner** pin names the object that owns the dispatcher (empty is this object). The delegate has to name a function of the graph's own object; a delegate to another object is refused with a warning and nothing is bound.
+
+A delegate lives for the run that made it: it is not saved with a variable or an object's state, and an Object variable does not accept one, so build the delegate where you call or bind it.
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `VS4301` | Error | A Make Delegate node names no function. |
+| `VS4302` | Error | A delegate on the graph's own object names a function the class chain does not declare. |
+| `VS4303` | Warning | A Call Delegate or Bind Delegate To Event node has its delegate pin unset. |
 
 ## Next
 

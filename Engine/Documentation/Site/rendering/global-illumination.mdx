@@ -70,7 +70,7 @@ The gathered light goes through a velocity-aware temporal pass and a variance-gu
 
 The composite multiplies the gathered irradiance by the surface's diffuse albedo: the base colour times one minus metallic. This holds for world probes and screen probes alike. A fully metallic surface has no diffuse albedo, so it takes no diffuse indirect light or sky fill; its indirect light comes from reflections.
 
-AO from GTAO or ray-traced AO darkens the indirect light here. `r.GI.AOWeight` (default 1) scales a plain AO multiply. `r.GI.BentNormalAO` (default 1) adds cone occlusion along the AO pass's bent normal, the average unoccluded direction, so creases and contacts lose indirect light while an open floor keeps its sky fill.
+AO from GTAO or ray-traced AO darkens the indirect light here. `r.GI.AOWeight` scales a plain AO multiply. Its default, -1, picks 0.35 when the screen-probe gather runs with ray-traced AO (Epic and above) and 1 otherwise. The screen probes already see every surface their rays hit, so a full AO multiply on top counted the same occluder twice; with ray-traced AO it made the floor beside a box read 16 to 18% darker than a path-traced reference, and the weighting brings Epic and Cinematic within 10% of it. `r.GI.BentNormalAO` (default 1) adds cone occlusion along the AO pass's bent normal, the average unoccluded direction, so creases and contacts lose indirect light while an open floor keeps its sky fill.
 
 <Callout type="note">
 In earlier versions metal surfaces such as a mirror floor picked up grey diffuse sky fill, and GTAO's bent normal on open floors pointed into the surface, which occluded most of their indirect light. Both are fixed: scenes tuned against the old look may show brighter non-metal floors and darker metals.
@@ -150,7 +150,7 @@ To keep a tier's shadows and resolution but drop the cost of Global Illumination
 Make sure **Global Illumination** is on in Project Settings and the tier is Medium or higher, or force it with `r.DDGI 1`. Switch the viewport to the **Global Illumination** buffer view (or set `r.ViewMode 14`) to see the indirect light on its own.
 </Step>
 <Step title="Balance sky and AO">
-`r.GI.SkyScale` (default 1) scales how much sky light fills outdoor shadows. `r.GI.AOWeight` (default 1) controls how strongly AO darkens the indirect light. Neither changes metals: a fully metallic surface takes no diffuse fill, so light it through its reflections instead.
+`r.GI.SkyScale` (default 1) scales how much sky light fills outdoor shadows. `r.GI.AOWeight` (default -1, the tier's weight) controls how strongly AO darkens the indirect light. Neither changes metals: a fully metallic surface takes no diffuse fill, so light it through its reflections instead.
 </Step>
 <Step title="Adjust the indirect intensity">
 `SceneRenderer::Options::DdgiIntensity` is an artist gain on indirect diffuse.

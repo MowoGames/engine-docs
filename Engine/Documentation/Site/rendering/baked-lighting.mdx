@@ -85,6 +85,8 @@ What a bake stores follows the mode, so the renderer never adds a light twice:
 
 Each Stationary light is given one channel (R, G, B or A) of a shadow mask for its static shadows, and at most four lights that can reach the same texel share the four channels. When more than four overlap, the bake logs a warning naming how many lights got no channel, and those lights keep their dynamic shadows.
 
+The bake writes the mask as an extra RGBA8 atlas beside each lightmap atlas (`.maskN`), one visibility value per Stationary light per texel, and records which light owns which channel in the `.lightmap`. At runtime a Stationary sun multiplies its light by the mask on every lightmapped pixel, on top of the dynamic shadows, so a baked wall shadow stays sharp and reaches past the shadow cascades while a movable object's shadow still comes from the cascades. Only the directional light uses the mask today; a Stationary point or spot light keeps its dynamic shadows.
+
 The `.lightmap` file records the mode it was baked for, and changing a light's mobility or the level's mode marks the bake out of date. Rebake after switching modes. Baked lighting is dimmer than it used to be on the Low tier in a Dynamic GI level: earlier bakes stored each light's direct light as well, which the renderer then added a second time.
 
 A level saved without the setting is Dynamic GI. There is no mode that mixes baked lighting with Global Illumination on the same pixels: two indirect terms would count the same bounce twice. In a Baked level, a Static light lights only the baked meshes; a Movable mesh gets no light from it until baked probe volumes land.
@@ -118,6 +120,12 @@ The mobile forward path always samples in the shading pass whatever `r.Lightmap.
 
 Each baked entry remembers the transform, density and mesh it was baked against. When a baked mesh moves, or its density changes, the entry no longer matches: the renderer stops drawing it, so a stale layout never lights the wrong place, and the **Lightmap Baker** panel reports how many objects need a rebuild. Bake again to bring them back. The bake also remembers the sky, every enabled light, and each Static mesh's placement, density and material colours. When any of them changes, the level is out of date: baked meshes are outlined in orange in the viewport, the **Lightmap Baker** panel says so, the toolbar button highlights and a warning is logged. Bake again to clear it.
 
+## Streaming worlds
+
+In a world that streams by sectors, a bake groups the meshes of each streaming cell into atlases of their own, so a cell's lightmaps load with the cell and unload with it: the renderer uploads a cell's atlases when streaming makes the cell resident and releases them when it stops being resident. Meshes the baker could not place in a cell, and every mesh in a project with no streaming grid, go in an always-resident group.
+
+The atlases kept resident across all cells are capped by `r.Lightmap.StreamingBudgetMB`. A cell whose atlases would pass the cap stays unloaded and its meshes fall back to the ordinary ambient light. The always-resident group does not count against the cap.
+
 ## Console variables
 
 | Variable | Default | Effect |
@@ -126,6 +134,7 @@ Each baked entry remembers the transform, density and mesh it was baked against.
 | `r.Lightmap.Intensity` | 1 | Scale of the baked light. |
 | `r.Lightmap.ProxyPass` | 1 | 1 adds baked light with the proxy pass, 0 samples it in the G-Buffer fill. |
 | `r.Lightmap.DefaultDensity` | 4 | Texels per meter for a mesh whose density is 0. |
+| `r.Lightmap.StreamingBudgetMB` | 512 | Most megabytes of lightmap atlases kept resident across streamed cells, 0 for no limit. |
 | `r.Lightmap.Bake.SamplesPerTexel` | 128 | Path samples per texel. |
 | `r.Lightmap.Bake.Bounces` | 2 | Indirect bounces. |
 | `r.Lightmap.Bake.MaxAtlasSize` | 2048 | Largest atlas edge. |
